@@ -1,9 +1,9 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v318"
-# TLO-GI package version: v318
-__version_summary__ = 'Adds CorruptFlacs.txt logging for FLAC tagging failures and hidden --myTLO support to TLO Search.'
-# TLO-GI version summary: Adds CorruptFlacs.txt logging for FLAC tagging failures and hidden --myTLO support to TLO Search.
+__version__ = "v319"
+# TLO-GI package version: v319
+__version_summary__ = 'Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.'
+# TLO-GI version summary: Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.
 
 import multiprocessing
 
@@ -69,6 +69,8 @@ from tlo_runtime_control import (
     clear_cancel_request,
     request_cancel,
     request_cancel_and_terminate_active_executor,
+    terminate_all_children,
+    flush_standard_streams,
     request_pause,
     clear_pause,
     is_pause_requested,
@@ -905,6 +907,11 @@ class App:
             pass
         return deleted
 
+    def _force_exit_after_child_cleanup(self, code: int = 130):
+        terminate_all_children()
+        flush_standard_streams()
+        os._exit(code)
+
     def _handle_sigint(self, _signum, _frame):
         self._cancel_active_inventory_and_clean_logs()
         try:
@@ -912,7 +919,7 @@ class App:
             self.root.destroy()
         except tk.TclError:
             pass
-        os._exit(130)
+        self._force_exit_after_child_cleanup(130)
 
     def _on_quit(self):
         inventory_complete = bool(getattr(self.current_config, "inventory_complete", False))
@@ -940,7 +947,7 @@ class App:
                 self.root.destroy()
             except tk.TclError:
                 pass
-            os._exit(130)
+            self._force_exit_after_child_cleanup(130)
 
         if worker_alive and not inventory_complete and scanning_complete:
             if self.current_config is not None:
@@ -950,7 +957,7 @@ class App:
                 self.root.destroy()
             except tk.TclError:
                 pass
-            os._exit(130)
+            self._force_exit_after_child_cleanup(130)
 
         try:
             self.root.quit()

@@ -1,9 +1,9 @@
 """Tagging engine for standalone Tag runs and inventory-time tag/copy/move workflows."""
 
-__version__ = "v318"
-# TLO-GI package version: v318
-__version_summary__ = 'Adds CorruptFlacs.txt logging for FLAC tagging failures and hidden --myTLO support to TLO Search.'
-# TLO-GI version summary: Adds CorruptFlacs.txt logging for FLAC tagging failures and hidden --myTLO support to TLO Search.
+__version__ = "v319"
+# TLO-GI package version: v319
+__version_summary__ = 'Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.'
+# TLO-GI version summary: Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.
 
 import os
 import re
@@ -1981,6 +1981,7 @@ def _format_tag_file_error_line(path_name: str, error_text: str, code: str = "ER
 
 
 CORRUPT_FLACS_FILENAME = "CorruptFlacs.txt"
+SHN_CONVERSION_TIMEOUT_SECONDS = 30 * 60
 
 
 def _corrupt_flacs_log_path(config: Config) -> str:
@@ -2484,7 +2485,16 @@ def convert_shn_to_flac(path_name: str, emit: Optional[Callable[[str], None]] = 
         if os.path.exists(temp_target):
             os.remove(temp_target)
         command = [converter, "-nostdin", "-y", "-i", source, "-compression_level", "5", temp_target]
-        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            result = subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=SHN_CONVERSION_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise TaggerError(f"bundled SHN converter timed out after {SHN_CONVERSION_TIMEOUT_SECONDS} seconds") from exc
         if result.returncode != 0:
             details = compact_ws((result.stderr or result.stdout or "").splitlines()[-1] if (result.stderr or result.stdout) else "")
             raise TaggerError(f"bundled SHN converter failed with exit code {result.returncode}" + (f": {details}" if details else ""))

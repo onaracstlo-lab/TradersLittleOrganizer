@@ -24,10 +24,10 @@ Important:
 
 from __future__ import annotations
 
-__version__ = "v318"
-# TLO-GI package version: v318
-__version_summary__ = 'Adds CorruptFlacs.txt logging for FLAC tagging failures and hidden --myTLO support to TLO Search.'
-# TLO-GI version summary: Adds CorruptFlacs.txt logging for FLAC tagging failures and hidden --myTLO support to TLO Search.
+__version__ = "v319"
+# TLO-GI package version: v319
+__version_summary__ = 'Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.'
+# TLO-GI version summary: Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.
 
 
 import argparse

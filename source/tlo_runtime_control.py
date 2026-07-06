@@ -1,8 +1,9 @@
-__version__ = "v318"
-# TLO-GI package version: v318
-__version_summary__ = 'Adds CorruptFlacs.txt logging for FLAC tagging failures and hidden --myTLO support to TLO Search.'
-# TLO-GI version summary: Adds CorruptFlacs.txt logging for FLAC tagging failures and hidden --myTLO support to TLO Search.
+__version__ = "v319"
+# TLO-GI package version: v319
+__version_summary__ = 'Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.'
+# TLO-GI version summary: Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.
 
+import multiprocessing
 import os
 import sys
 import threading
@@ -196,6 +197,62 @@ def request_cancel_and_terminate_active_executor(join_timeout=1.0):
         pass
 
     return process_count
+
+
+def terminate_all_children(join_timeout=1.0, kill_timeout=0.5):
+    """Best-effort terminate/join/kill sweep for multiprocessing children.
+
+    This is the hard-exit backstop used before os._exit() and in CLI Ctrl-C
+    handling.  It catches ProcessPoolExecutor workers plus multiprocessing.Manager
+    server processes even if a caller forgot to register them with runtime_control.
+    It intentionally does not manage subprocess.Popen children such as ffmpeg;
+    those need their own timeout/kill handling at the subprocess call site.
+    """
+    try:
+        children = list(multiprocessing.active_children())
+    except Exception:
+        return 0
+
+    terminated = 0
+    for child in children:
+        try:
+            if child.is_alive():
+                child.terminate()
+                terminated += 1
+        except Exception:
+            pass
+
+    for child in children:
+        try:
+            child.join(timeout=join_timeout)
+        except Exception:
+            pass
+
+    for child in children:
+        try:
+            if child.is_alive() and hasattr(child, "kill"):
+                child.kill()
+                terminated += 1
+        except Exception:
+            pass
+
+    for child in children:
+        try:
+            child.join(timeout=kill_timeout)
+        except Exception:
+            pass
+
+    return terminated
+
+
+def flush_standard_streams():
+    """Best-effort flush before a forced process exit."""
+    for stream in (getattr(sys, "stdout", None), getattr(sys, "stderr", None)):
+        try:
+            if stream is not None:
+                stream.flush()
+        except Exception:
+            pass
 
 
 def _windows_set_priority(priority_class):

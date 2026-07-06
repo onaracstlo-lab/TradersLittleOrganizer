@@ -1,16 +1,16 @@
 """Command-line inventory orchestration: startup checks, scan execution, postprocess, cleanup, and timing output."""
 
-__version__ = "v318"
-# TLO-GI package version: v318
-__version_summary__ = 'Adds CorruptFlacs.txt logging for FLAC tagging failures and hidden --myTLO support to TLO Search.'
-# TLO-GI version summary: Adds CorruptFlacs.txt logging for FLAC tagging failures and hidden --myTLO support to TLO Search.
+__version__ = "v319"
+# TLO-GI package version: v319
+__version_summary__ = 'Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.'
+# TLO-GI version summary: Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.
 
 import sys
 import time
 
 from console_output_lib import console_emit, console_print
 from logging_lib import delete_logs_for_tokens, setup_logging
-from tlo_runtime_control import clear_cancel_request, request_cancel_and_terminate_active_executor, apply_process_priority
+from tlo_runtime_control import clear_cancel_request, request_cancel_and_terminate_active_executor, terminate_all_children, apply_process_priority
 from tlo_db_validation import validate_required_databases
 from tlo_options import apply_lookup_dependency
 from tlo_version import DISPLAY_VERSION
@@ -83,7 +83,12 @@ def run_inventory(config) -> int:
         if config is not None:
             config.cancel_requested = True
             request_cancel_and_terminate_active_executor()
-            delete_logs_for_tokens(config.TLOHome, getattr(config, "active_log_tokens", []))
+            terminate_all_children()
+            tokens = getattr(config, "newly_allocated_log_tokens", [])
+            delete_logs_for_tokens(config.TLOHome, tokens)
+        else:
+            request_cancel_and_terminate_active_executor()
+            terminate_all_children()
     except Exception as exc:
         exit_code = 1
         if config is None or not getattr(config, "silent", False):
