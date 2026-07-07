@@ -177,11 +177,15 @@ build_one() {
 
 INVENTORY_ICON=""
 SEARCH_ICON=""
+TAG_ICON=""
 if icon_candidate="$(find_optional_icon tlo-inventory-icon.icns)"; then
     INVENTORY_ICON="$icon_candidate"
 fi
 if icon_candidate="$(find_optional_icon tlo-search-icon.icns)"; then
     SEARCH_ICON="$icon_candidate"
+fi
+if icon_candidate="$(find_optional_icon tlo-tag-icon.icns)"; then
+    TAG_ICON="$icon_candidate"
 fi
 
 build_one "$(find_script search-artist-db.py)" yes
@@ -191,9 +195,16 @@ build_windowed_with_optional_icon "$(find_script tlo-ggi.py)" "$INVENTORY_ICON" 
     --collect-all mutagen \
     --collect-all imageio_ffmpeg \
     --collect-all tkinterdnd2
-build_one "$(find_script tlo-tag.py)" no \
-    --collect-all mutagen \
-    --collect-all imageio_ffmpeg
+if [[ -n "$TAG_ICON" ]]; then
+    build_one "$(find_script tlo-tag.py)" no \
+        --icon "$TAG_ICON" \
+        --collect-all mutagen \
+        --collect-all imageio_ffmpeg
+else
+    build_one "$(find_script tlo-tag.py)" no \
+        --collect-all mutagen \
+        --collect-all imageio_ffmpeg
+fi
 
 EXPECTED_EXECUTABLES=(
     search-artist-db

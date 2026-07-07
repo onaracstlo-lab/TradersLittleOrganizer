@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-__version__ = "v319"
-# TLO-GI package version: v319
+__version__ = "v320"
+# TLO-GI package version: v320
 __version_summary__ = 'Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.'
 # TLO-GI version summary: Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.
 

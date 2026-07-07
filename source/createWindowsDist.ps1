@@ -18,7 +18,7 @@ if ([string]::IsNullOrWhiteSpace($DistRoot)) {
 $TargetDir = Join-Path $DistRoot 'apps\Windows'
 $ReportPath = Join-Path $DistRoot 'scan-reports\windows.json'
 $ScanScript = Join-Path $SourceRoot 'scan_release_artifacts.py'
-$IconRoot = Join-Path $SourceRoot 'UtilityData-Apps\iconInfo'
+$IconRoot = Join-Path $SourceRoot 'icons'
 
 function Get-PythonRunner {
     $py = Get-Command py -ErrorAction SilentlyContinue
@@ -101,22 +101,26 @@ if (Test-Path -LiteralPath $TargetDir) {
 New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
 New-Item -ItemType Directory -Path (Split-Path -Parent $ReportPath) -Force | Out-Null
 
-$InventoryIcon = Join-Path $IconRoot 'tlo-inventory_icon.ico'
-$SearchIcon = Join-Path $IconRoot 'tlo-search_icon.ico'
-$ArtistIcon = Join-Path $IconRoot 'tlo-artistDB_icon.ico'
+$InventoryIcon = Join-Path $IconRoot 'tlo-inventory-icon.ico'
+$SearchIcon = Join-Path $IconRoot 'tlo-search-icon.ico'
+$TagIcon = Join-Path $IconRoot 'tlo-tag-icon.ico'
+
+foreach ($RequiredIcon in @($InventoryIcon, $SearchIcon, $TagIcon)) {
+    if (-not (Test-Path -LiteralPath $RequiredIcon -PathType Leaf)) {
+        throw "Required Windows icon file not found: $RequiredIcon"
+    }
+}
 
 $ArtistArgs = @('--windowed')
-if (Test-Path -LiteralPath $ArtistIcon -PathType Leaf) { $ArtistArgs += @('--icon', $ArtistIcon) }
-$SearchArgs = @('--windowed')
-if (Test-Path -LiteralPath $SearchIcon -PathType Leaf) { $SearchArgs += @('--icon', $SearchIcon) }
-$GuiArgs = @('--windowed', '--collect-all', 'mutagen', '--collect-all', 'imageio_ffmpeg', '--collect-all', 'tkinterdnd2')
-if (Test-Path -LiteralPath $InventoryIcon -PathType Leaf) { $GuiArgs += @('--icon', $InventoryIcon) }
+$SearchArgs = @('--windowed', "--icon=$SearchIcon")
+$GuiArgs = @('--windowed', '--collect-all', 'mutagen', '--collect-all', 'imageio_ffmpeg', '--collect-all', 'tkinterdnd2', "--icon=$InventoryIcon")
+$TagArgs = @('--collect-all', 'mutagen', '--collect-all', 'imageio_ffmpeg', "--icon=$TagIcon")
 
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'search-artist-db.py') -AdditionalArgs $ArtistArgs
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-gsi.py') -AdditionalArgs $SearchArgs
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-gi.py')
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-ggi.py') -AdditionalArgs $GuiArgs
-Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-tag.py') -AdditionalArgs @('--collect-all', 'mutagen', '--collect-all', 'imageio_ffmpeg')
+Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-tag.py') -AdditionalArgs $TagArgs
 
 # Optional Authenticode signing. Set TLO_WINDOWS_CERT_SHA1 to the certificate
 # thumbprint and ensure signtool.exe is in PATH. Signing occurs before scanning.
