@@ -1,7 +1,7 @@
 """Tagging engine for standalone Tag runs and inventory-time tag/copy/move workflows."""
 
-__version__ = "v320"
-# TLO-GI package version: v320
+__version__ = "v321"
+# TLO-GI package version: v321
 __version_summary__ = 'Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.'
 # TLO-GI version summary: Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.
 

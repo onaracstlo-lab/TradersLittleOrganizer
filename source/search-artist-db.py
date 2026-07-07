@@ -31,8 +31,8 @@ Notes for the new schema:
 
 from __future__ import annotations
 
-__version__ = "v320"
-# TLO-GI package version: v320
+__version__ = "v321"
+# TLO-GI package version: v321
 
 import argparse
 import os
@@ -47,7 +47,7 @@ from tkinter import scrolledtext
 try:
     from tlo_version import DISPLAY_VERSION
 except ImportError:
-    DISPLAY_VERSION = "v1.0 Build 320"
+    DISPLAY_VERSION = "v1.0 Build 321"
 
 TLOHOME_ENV_VAR = "TLOHome"
 WINDOW_TITLE = f"Artist DB Search - {DISPLAY_VERSION}"
