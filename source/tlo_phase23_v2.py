@@ -1,9 +1,9 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v321"
-# TLO-GI package version: v321
-__version_summary__ = 'Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.'
-# TLO-GI version summary: Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.
+__version__ = "v322"
+# TLO-GI package version: v322
+__version_summary__ = 'Preserves trailing parenthetical show-name suffixes across compliant Add Shows, full inventory rename/tag, and standalone tagging.'
+# TLO-GI version summary: Preserves trailing parenthetical show-name suffixes across compliant Add Shows, full inventory rename/tag, and standalone tagging.
 
 import json
 import os
@@ -1882,13 +1882,16 @@ def _set_compliant_string2_raw(record: ShowMetadata, string2: str, parenthetical
 def _build_compliant_string2_show_name(record: ShowMetadata) -> str:
     if not record.artist or not record.date:
         return ""
-    return compact_ws(" ".join(part for part in [record.artist, record.date, record.venue] if part))
+    return _append_parentheticals_to_show_name(
+        compact_ws(" ".join(part for part in [record.artist, record.date, record.venue] if part)),
+        record.parentheticals,
+    )
 
 
 def _build_compliant_dash_show_name(record: ShowMetadata) -> str:
     if not record.artist or not record.venue:
         return ""
-    return compact_ws(f"{record.artist} - {record.venue}")
+    return _append_parentheticals_to_show_name(compact_ws(f"{record.artist} - {record.venue}"), record.parentheticals)
 
 
 def _build_dash_album_show_name(record: ShowMetadata) -> str:

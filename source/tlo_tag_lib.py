@@ -1,9 +1,9 @@
 """Tagging engine for standalone Tag runs and inventory-time tag/copy/move workflows."""
 
-__version__ = "v321"
-# TLO-GI package version: v321
-__version_summary__ = 'Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.'
-# TLO-GI version summary: Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.
+__version__ = "v322"
+# TLO-GI package version: v322
+__version_summary__ = 'Preserves trailing parenthetical show-name suffixes across compliant Add Shows, full inventory rename/tag, and standalone tagging.'
+# TLO-GI version summary: Preserves trailing parenthetical show-name suffixes across compliant Add Shows, full inventory rename/tag, and standalone tagging.
 
 import os
 import re
@@ -2224,6 +2224,18 @@ def safe_compliant_folder_name(show_name: str, fallback: str = "TLO Show") -> st
     return value or fallback_ascii or "TLO Show"
 
 
+def _show_name_with_parentheticals(show_name: str, parentheticals: str) -> str:
+    value = compact_ws(str(show_name or ""))
+    suffix = compact_ws(str(parentheticals or ""))
+    if value and suffix and not value.endswith(suffix):
+        return compact_ws(f"{value} {suffix}")
+    return value
+
+
+def _compliant_rename_show_name_from_record(record) -> str:
+    return _show_name_with_parentheticals(getattr(record, "show_name", ""), getattr(record, "parentheticals", ""))
+
+
 def _unique_destination_path(parent_dir: str, folder_name: str) -> str:
     base = safe_compliant_folder_name(folder_name)
     candidate = os.path.normpath(os.path.join(parent_dir, base))
@@ -2355,7 +2367,7 @@ def prepare_inventory_copy_delete_target(
         raise TaggerError("Tag Copy and Delete destination must not be the source folder or a child of it")
 
     source_leaf = os.path.basename(source_root) or compact_ws(getattr(record, "main_dir_name", "")) or "TLO Show"
-    show_name = compact_ws(getattr(record, "show_name", ""))
+    show_name = _compliant_rename_show_name_from_record(record)
     use_compliant_name = bool(getattr(config, "rename_compliantly", False)) and bool(show_name)
     destination_leaf = safe_compliant_folder_name(show_name if use_compliant_name else source_leaf, fallback=source_leaf)
     destination_root = _unique_destination_path(destination_parent, destination_leaf)
@@ -2394,7 +2406,7 @@ def prepare_inventory_tagging_target(
     if not source_root or not os.path.isdir(source_root):
         return group, record
 
-    show_name = compact_ws(getattr(record, "show_name", ""))
+    show_name = _compliant_rename_show_name_from_record(record)
     original_name = os.path.basename(source_root) or compact_ws(getattr(record, "main_dir_name", "")) or "TLO Show"
     use_compliant_name = bool(getattr(config, "rename_compliantly", False)) and bool(show_name)
     target_name = safe_compliant_folder_name(show_name if use_compliant_name else original_name, fallback=original_name)

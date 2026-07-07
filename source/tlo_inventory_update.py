@@ -1,7 +1,7 @@
-__version__ = "v321"
-# TLO-GI package version: v321
-__version_summary__ = 'Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.'
-# TLO-GI version summary: Hardens cleanup on forced GUI/CLI exits, SHN conversion timeouts, and setlist file reads.
+__version__ = "v322"
+# TLO-GI package version: v322
+__version_summary__ = 'Preserves trailing parenthetical show-name suffixes across compliant Add Shows, full inventory rename/tag, and standalone tagging.'
+# TLO-GI version summary: Preserves trailing parenthetical show-name suffixes across compliant Add Shows, full inventory rename/tag, and standalone tagging.
 
 import csv
 import glob
@@ -557,6 +557,18 @@ def _safe_compliant_folder_name(show_name: str, fallback: str = "TLO Show") -> s
     return value or fallback_value or "TLO Show"
 
 
+def _show_name_with_parentheticals(show_name: str, parentheticals: str) -> str:
+    value = re.sub(r"\s+", " ", str(show_name or "")).strip()
+    suffix = re.sub(r"\s+", " ", str(parentheticals or "")).strip()
+    if value and suffix and not value.endswith(suffix):
+        return f"{value} {suffix}".strip()
+    return value
+
+
+def _compliant_rename_show_name_from_record_dict(record_dict: Dict[str, str]) -> str:
+    return _show_name_with_parentheticals(record_dict.get("show_name", ""), record_dict.get("parentheticals", ""))
+
+
 def _rewrite_path_under_root(path_name: str, old_root: str, new_root: str) -> str:
     if not path_name:
         return path_name
@@ -592,7 +604,7 @@ def _rename_add_shows_folder_compliantly(config, folder_path: str, record_dict: 
     """Rename an Add Shows source folder in place when Rename Compliantly is enabled."""
     if not bool(getattr(config, "rename_compliantly", False)):
         return folder_path
-    show_name = (record_dict.get("show_name") or "").strip()
+    show_name = _compliant_rename_show_name_from_record_dict(record_dict)
     if not show_name:
         return folder_path
     source_root = os.path.normpath(folder_path)

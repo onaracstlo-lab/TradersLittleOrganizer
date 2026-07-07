@@ -1,4 +1,4 @@
-TLO Source and Utilities Bundle v321
+TLO Source and Utilities Bundle v322
 
 This source bundle contains the TLO Inventory source tree and companion build utilities.
 
@@ -11,15 +11,15 @@ Important files:
 - createLinuxDist.sh: generic Linux distribution helper.
 - createMacOSDist.sh: macOS distribution helper.
 - TLO-FAQ.txt: FAQ displayed from the main GUI hamburger menu.
-- TLO_Inventory_User_Manual_v321.rtf: current end-user manual.
-- TLO_Inventory_Requirements_Working_v321.docx: current requirements/development document.
+- TLO_Inventory_User_Manual_v322.rtf: current end-user manual.
+- TLO_Inventory_Requirements_Working_v322.docx: current requirements/development document.
 
 Bundle notes:
-- Source bundle label: v321
-- Public application version: v1.0 Build 321
-- Internal source code version: v321
+- Source bundle label: v322
+- Public application version: v1.0 Build 322
+- Internal source code version: v322
 
-v321 rebuilds the packaged Windows .ico assets as DIB/BMP-based multi-image ICO files and strengthens Windows EXE icon verification so GitHub-built executables must contain the exact packaged custom icons.
+v322 preserves trailing parenthetical show-name suffixes in compliant Add Shows, full inventory Rename Compliantly, Tag in Place, Tag Copy, and Copy/Delete destination names.
 
 Packaged icon assets:
 - icons/tlo-inventory-icon.png/.ico/.icns
