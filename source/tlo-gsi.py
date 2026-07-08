@@ -14,8 +14,8 @@ Tkinter GUI that:
 
 from __future__ import annotations
 
-__version__ = "v325"
-# TLO-GI package version: v325
+__version__ = "v327"
+# TLO-GI package version: v327
 
 import csv
 import os
@@ -33,7 +33,7 @@ APP_FILE_NAME = "tlo-gsi.py"
 try:
     from tlo_version import DISPLAY_VERSION
 except ImportError:
-    DISPLAY_VERSION = "v1.1 Build 325"
+    DISPLAY_VERSION = "v1.1 Build 327"
 try:
     from tlo_github_updates import (
         check_for_updates,
@@ -381,6 +381,8 @@ class BootlistSearchApp:
         self.hamburger_menu.add_checkbutton(label="Auto update", variable=self.auto_update_var, command=lambda: self._run_after_menu_closes(self._toggle_auto_update))
         self.hamburger_button.configure(menu=self.hamburger_menu)
         self.hamburger_button.pack(side="right", anchor="e")
+
+        ttk.Label(outer, text=f"TLOHome: {self.paths.tlohome}").pack(anchor="w", pady=(0, 8))
 
         search_frame = ttk.Frame(outer)
         search_frame.pack(fill="x", expand=True)

@@ -1,11 +1,12 @@
-__version__ = "v325"
-# TLO-GI package version: v325
-__version_summary__ = 'Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.'
-# TLO-GI version summary: Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.
+__version__ = "v327"
+# TLO-GI package version: v327
+__version_summary__ = 'Serializes same-physical-drive labeled volume work, fixes Add Shows delete backups, and restores read-only TLOHome GUI labels.'
+# TLO-GI version summary: Serializes same-physical-drive labeled volume work, fixes Add Shows delete backups, and restores read-only TLOHome GUI labels.
 
 import csv
 import glob
 import json
+import ntpath
 import os
 import platform
 import re
@@ -644,14 +645,108 @@ def create_or_replace_generated_setlist(tlo_home: str, record_dict: Dict[str, st
     return target
 
 
+
+_WINDOWS_DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:(?:[\\/].*)?$")
+_WSL_MOUNT_PATH_RE = re.compile(r"^/mnt/[A-Za-z](?:/.*)?$", re.IGNORECASE)
+
+
+def _is_rooted_storage_path(path_text: str) -> bool:
+    text = str(path_text or "").strip()
+    return bool(_WINDOWS_DRIVE_PATH_RE.match(text) or _WSL_MOUNT_PATH_RE.match(text) or os.path.isabs(text))
+
+
+def _is_safe_delete_rooted_path(path_text: str) -> bool:
+    """Return True only when a bootlist path carries a usable drive/mount root.
+
+    Legacy Add Shows rows could contain values such as ``[Backup] /Artist``
+    because the old current-storage logic stripped the drive/mount prefix.  An
+    absolute-looking POSIX value is not automatically safe to delete unless it
+    identifies a known mounted volume root.  This keeps deleteBackupFolders from
+    inventing targets from the current storage selection or from legacy
+    drive-stripped rows.
+    """
+    text = str(path_text or "").strip()
+    if not text:
+        return False
+    if _WINDOWS_DRIVE_PATH_RE.match(text) or _WSL_MOUNT_PATH_RE.match(text):
+        return True
+    normalized = text.replace("\\", "/")
+    return normalized.startswith(("/Volumes/", "/media/", "/run/media/"))
+
+
+def _join_storage_root(root_path: str, folder_leaf: str) -> str:
+    root = str(root_path or "").strip()
+    leaf = str(folder_leaf or "").strip().strip("\\/")
+    if not root:
+        return leaf
+    if _WINDOWS_DRIVE_PATH_RE.match(root):
+        root = root.replace("/", "\\")
+        if len(root) == 2 and root[1] == ":":
+            root += "\\"
+        return ntpath.normpath(ntpath.join(root, leaf))
+    return os.path.normpath(os.path.join(root, leaf))
+
+
+def _resolve_storage_label_for_root(root_path: str) -> str:
+    if not root_path:
+        return ""
+    try:
+        from tlo_bootlist_volume_policy import os_volume_label_for_path
+        return os_volume_label_for_path(root_path)
+    except Exception:
+        return ""
+
+
+def _split_storage_designation(value: str) -> Tuple[str, str]:
+    """Return (visible volume label, physical drive/root) from Add Shows input.
+
+    Supported examples:
+      Backup-1                    -> label only, no root
+      [Backup-1]E:                -> label plus Windows drive
+      [Backup-1]E:\\Music          -> label plus Windows path
+      [Backup-1]/mnt/e            -> label plus WSL/Linux root
+      E: or /mnt/e                -> OS label if resolvable, plus root
+    """
+    text = str(value or "").strip()
+    if not text:
+        return "", ""
+    if text.startswith("["):
+        label, path_part = parse_volume_path_value(text)
+        return label.strip(), path_part.strip()
+    if _is_rooted_storage_path(text):
+        return _resolve_storage_label_for_root(text), text
+    return text, ""
+
+
+def _format_add_shows_volume_path(current_storage: str, folder_leaf: str) -> str:
+    label, root_path = _split_storage_designation(current_storage)
+    if root_path:
+        # Add Shows backup rows must retain the drive/mount root so later
+        # deleteBackupFolders commands can target the actual old backup folder.
+        return f"[{str(label or '').strip()}] {_join_storage_root(root_path, folder_leaf)}"
+    return _format_bootlist_volume_path(label, folder_leaf)
+
+
+def _delete_path_from_bootlist_volume_path(volume_path: str) -> str:
+    _volume_label, path_to_delete = parse_volume_path_value(volume_path)
+    path_to_delete = str(path_to_delete or "").strip()
+    if not path_to_delete:
+        return ""
+    # A safe delete command requires the bootlist row to contain its drive/root.
+    # Do not fall back to the current Add Shows storage field; duplicate rows may
+    # refer to a different backup volume than the one currently being added.
+    if _is_safe_delete_rooted_path(path_to_delete):
+        return os.path.normpath(path_to_delete)
+    return ""
+
 def _add_bootlist_row_for_record(tlo_home: str, record_dict: Dict[str, str], current_volume: str, folder_leaf: str) -> None:
-    show = (record_dict.get("show_name") or "").strip()
+    show = _adjust_show_name_for_output(dict(record_dict))
     if not show:
         raise InventoryUpdateError(f"Unable to create show name for {record_dict.get('main_dir_path') or folder_leaf}")
     rows = read_bootlist(tlo_home)
     rows.append({
         "Show": show,
-        "VolumePath": _format_bootlist_volume_path(current_volume, folder_leaf),
+        "VolumePath": _format_add_shows_volume_path(current_volume, folder_leaf),
     })
     write_bootlist(tlo_home, rows)
 
@@ -713,8 +808,8 @@ def _append_delete_command(script_path: str, path_to_delete: str) -> None:
     is_bat = script_path.lower().endswith(".bat")
     existed = os.path.exists(script_path)
     with open(script_path, "a", encoding="utf-8", newline="\n") as outfile:
-        if not existed:
-            outfile.write("@echo off\n" if is_bat else "#!/bin/sh\n")
+        if not existed and not is_bat:
+            outfile.write("#!/bin/sh\n")
         if is_bat:
             outfile.write(f'rmdir /s /q "{path_to_delete}"\n')
         else:
@@ -933,7 +1028,7 @@ def process_duplicate_folder(config, item: Dict[str, object], selected_rows: Seq
     record = dict(item.get("record") or {})
     deleted_old = 0
     for row in selected_rows:
-        _volume, path_to_delete = parse_volume_path_value(row.get("VolumePath", ""))
+        path_to_delete = _delete_path_from_bootlist_volume_path(row.get("VolumePath", ""))
         if path_to_delete:
             _append_delete_command(script_path, path_to_delete)
             deleted_old += 1

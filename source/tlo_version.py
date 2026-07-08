@@ -1,10 +1,10 @@
 """Central release-version constants for the TLO Inventory bundle."""
 
-VERSION = "v325"
+VERSION = "v327"
 __version__ = VERSION
-BUNDLE_BUILD = 325
+BUNDLE_BUILD = 327
 DISPLAY_VERSION = f"v1.1 Build {BUNDLE_BUILD}"
-VERSION_SUMMARY = 'Removes the editable TLOHome fields from the Inventory and Search GUIs while preserving myTLO/TLOHome/environment precedence.'
+VERSION_SUMMARY = 'Updates source version stamping and release-test compatibility for the injected GitHub release builder.'
 def versioned_title(base_title: str) -> str:
     """Return a GUI title containing the public version/build string."""
     base = str(base_title or "").strip()

@@ -5,7 +5,7 @@ Q: Does TLO do a good job of inventory and tagging?
 A: TLO does a better job of identifying show metadata than LiveShowTagger.
 
 Q: Do I need to define TLOHome before I do anything?
-A: Yes, TLOHome is where all the internal files live. It can be set as an environment variable or on the command line. The Inventory and Search GUIs use the TLOHome value resolved at startup and no longer include an editable TLOHome box. It can be added to the command line of a shortcut in Windows.
+A: Yes, TLOHome is where all the internal files live. It can be set as an environment variable or on the command line. The Inventory and Search GUIs use the TLOHome value resolved at startup, show it as a read-only TLOHome: <path> label, and no longer include an editable TLOHome box. It can be added to the command line of a shortcut in Windows.
 
 Q: Is there anything else I need to do, other than define TLOHome, before I start?
 A: No, there are no hard requirements.  However, you might want to set an environment variable for the drive where you're currently storing new downloads, and get a setlist.fm user key and set the environment variable for that, too.

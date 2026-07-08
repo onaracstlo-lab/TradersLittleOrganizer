@@ -1,9 +1,9 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v325"
-# TLO-GI package version: v325
-__version_summary__ = 'Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.'
-# TLO-GI version summary: Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.
+__version__ = "v327"
+# TLO-GI package version: v327
+__version_summary__ = 'Serializes same-physical-drive labeled volume work, fixes Add Shows delete backups, and restores read-only TLOHome GUI labels.'
+# TLO-GI version summary: Serializes same-physical-drive labeled volume work, fixes Add Shows delete backups, and restores read-only TLOHome GUI labels.
 
 import multiprocessing
 
@@ -353,6 +353,14 @@ class App:
         self.hamburger_button.grid(row=row, column=2, sticky="e", padx=6, pady=(0, 4))
         row += 1
 
+        try:
+            tlohome_display = self._resolve_gui_tlo_home(error_type=ValueError)
+        except Exception:
+            tlohome_display = self._cli_my_tlo_value() or self._cli_tlo_home_value() or os.environ.get("TLOHome", "") or "(not set)"
+        ttk.Label(frm, text=f"TLOHome: {tlohome_display}", style="Main.TLabel").grid(
+            row=row, column=0, columnspan=3, sticky="w", padx=6, pady=(0, 8)
+        )
+        row += 1
 
         ttk.Label(frm, text="Search Path", style="Main.TLabel").grid(row=row, column=0, sticky="w", padx=6, pady=(4, 1))
         self.search_path_entry = ttk.Entry(frm, textvariable=self.vars["search_path_override"], width=92, style="Main.TEntry")

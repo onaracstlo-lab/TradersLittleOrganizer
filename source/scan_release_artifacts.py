@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
 
-__version__ = "v325"
+__version__ = "v327"
 
 REPORT_VERSION = 1
 PLATFORMS = ("windows", "macos", "linux", "final")

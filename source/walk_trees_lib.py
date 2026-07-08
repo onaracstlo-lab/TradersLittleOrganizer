@@ -1,7 +1,7 @@
-__version__ = "v325"
-# TLO-GI package version: v325
-__version_summary__ = 'Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.'
-# TLO-GI version summary: Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.
+__version__ = "v327"
+# TLO-GI package version: v327
+__version_summary__ = 'Serializes same-physical-drive labeled volume work, fixes Add Shows delete backups, and restores read-only TLOHome GUI labels.'
+# TLO-GI version summary: Serializes same-physical-drive labeled volume work, fixes Add Shows delete backups, and restores read-only TLOHome GUI labels.
 import multiprocessing
 import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -13,6 +13,7 @@ from inventory_list_lib import prepare_inventory_items
 from tlo_artist_db import load_artist_matcher
 from logging_lib import allocate_log_tokens
 from tlo_search_path_runner import run_search_path, run_search_path_group_job
+from tlo_volume_label import resolve_physical_drive_id
 from tlo_runtime_control import (
     is_cancel_requested,
     register_active_executor,
@@ -172,24 +173,23 @@ def _canonical_path_key(path_name):
 
 
 def _split_serial_and_parallel_items(config, inventory_items):
-    """Split roots by their resolved visible volume label.
+    """Split roots into blank-label and named-label phases.
 
-    Empty-volume roots are deliberately searched one at a time. Every root with
-    a non-empty volume label is eligible for named-volume parallel work. Roots
-    that share the same named volume are grouped later and remain serial within
-    that one volume worker so shared log files are never written concurrently.
+    Blank-label roots are deliberately searched one at a time and are run after
+    named-volume work. Named roots are eligible for parallel work, but a later
+    grouping pass serializes named volumes that are on the same physical disk.
     """
     del config  # retained in the signature for compatibility with older callers/tests
-    serial_items = []
+    empty_volume_items = []
     named_volume_items = []
     for item in inventory_items:
         volume_label = str(item[2] or "").strip() if len(item) >= 3 else ""
         if volume_label:
             named_volume_items.append(item)
         else:
-            serial_items.append(item)
-    serial_items.sort(key=_inventory_item_drive_sort_key)
-    return serial_items, named_volume_items
+            empty_volume_items.append(item)
+    empty_volume_items.sort(key=_inventory_item_drive_sort_key)
+    return empty_volume_items, named_volume_items
 
 
 def _group_named_volume_items(inventory_items):
@@ -206,12 +206,50 @@ def _group_named_volume_items(inventory_items):
     return [groups[key] for key in order]
 
 
+def _physical_drive_key_for_item(item):
+    """Return the scheduling-only physical disk key for a search item."""
+    path_name = str((item or [""])[0] or "")
+    try:
+        return (resolve_physical_drive_id(path_name) or "").strip()
+    except Exception:
+        return ""
+
+
+def _group_named_volume_items_by_physical_drive(named_volume_items):
+    """Group named-volume roots for parallel scheduling.
+
+    Visible volumes still own their normal log identity. This function only
+    decides which roots may run concurrently. If two visible volume labels are
+    detected on the same physical hard drive, their roots are placed into the
+    same work group and therefore run serially inside one worker. If the
+    physical disk cannot be detected, the volume keeps the existing one-visible-
+    volume-per-worker behavior.
+    """
+    visible_groups = _group_named_volume_items(named_volume_items)
+    physical_groups = {}
+    order = []
+    for visible_group in visible_groups:
+        physical_key = ""
+        for item in visible_group:
+            physical_key = _physical_drive_key_for_item(item)
+            if physical_key:
+                break
+        if not physical_key:
+            volume_label = str(visible_group[0][2] or "").strip() if visible_group else ""
+            physical_key = f"visible-volume:{volume_label.casefold()}"
+        if physical_key not in physical_groups:
+            physical_groups[physical_key] = []
+            order.append(physical_key)
+        physical_groups[physical_key].extend(visible_group)
+    return [physical_groups[key] for key in order]
+
+
 def _build_volume_work_groups(empty_volume_items, named_volume_items):
-    """Build one serial blank-volume group plus one group per named volume."""
+    """Build named-volume work groups first, then one serial blank-volume group."""
     work_groups = []
+    work_groups.extend(_group_named_volume_items_by_physical_drive(named_volume_items))
     if empty_volume_items:
         work_groups.append(list(empty_volume_items))
-    work_groups.extend(_group_named_volume_items(named_volume_items))
     return work_groups
 
 
@@ -356,44 +394,69 @@ def walk_trees(config):
         console_print(config, f"Queued search path {search_index}: {path_name} | slam={slam_value}{copy_note}{inventory_note}")
 
     empty_volume_items, named_volume_items = _split_serial_and_parallel_items(config, inventory_items)
-    volume_work_groups = _build_volume_work_groups(empty_volume_items, named_volume_items)
-    ordered_work_items = [item for group in volume_work_groups for item in group]
-    if len(empty_volume_items) > 1:
-        console_print(config, f"Empty-volume path group: {len(empty_volume_items)} path(s) will run one at a time within one worker.")
+    named_volume_groups = _group_named_volume_items_by_physical_drive(named_volume_items)
+    empty_volume_groups = [list(empty_volume_items)] if empty_volume_items else []
 
-    worker_count = _path_worker_count(config, len(volume_work_groups)) if volume_work_groups else 0
-    console_print(config, f"Inventory performance mode: {config.performance_mode} | max workers: {worker_count or 1}")
+    if len(empty_volume_items) > 1:
+        console_print(config, f"Empty-volume path group: {len(empty_volume_items)} path(s) will run one at a time after labeled volumes complete.")
+    elif len(empty_volume_items) == 1:
+        console_print(config, "Empty-volume path group: 1 path will run after labeled volumes complete.")
+    if named_volume_groups:
+        physical_group_count = len(named_volume_groups)
+        named_volume_count = len(_group_named_volume_items(named_volume_items))
+        if physical_group_count < named_volume_count:
+            console_print(
+                config,
+                f"Physical-drive scheduling: {named_volume_count} labeled volume(s) grouped into "
+                f"{physical_group_count} physical drive worker group(s).",
+            )
+
+    named_worker_count = _path_worker_count(config, len(named_volume_groups)) if named_volume_groups else 0
+    console_print(config, f"Inventory performance mode: {config.performance_mode} | max workers: {named_worker_count or 1}")
 
     all_metadata_records = []
     total_directories_identified = 0
     total_show_groups_processed = 0
 
-    if volume_work_groups:
-        if worker_count > 1:
+    if named_volume_groups:
+        ordered_named_items = [item for group in named_volume_groups for item in group]
+        if named_worker_count > 1:
             try:
                 work_records, work_dirs, work_groups = _run_parallel_paths(
                     config,
-                    volume_work_groups,
-                    worker_count,
+                    named_volume_groups,
+                    named_worker_count,
                 )
             except BrokenProcessPool as exc:
                 console_print(
                     config,
-                    f"Parallel worker pool failed; retrying search paths serially: {exc}",
+                    f"Parallel worker pool failed; retrying labeled search paths serially: {exc}",
                     error=True,
                 )
                 work_records, work_dirs, work_groups = _run_serial(
                     config,
-                    ordered_work_items,
+                    ordered_named_items,
                 )
         else:
             work_records, work_dirs, work_groups = _run_serial(
                 config,
-                ordered_work_items,
+                ordered_named_items,
             )
         all_metadata_records.extend(work_records)
         total_directories_identified += work_dirs
         total_show_groups_processed += work_groups
+
+    if empty_volume_groups:
+        # Blank-label roots are deliberately held until all labeled-volume
+        # workers finish.  This prevents a labeled and unlabeled partition on
+        # the same physical disk from being scanned at the same time.
+        empty_records, empty_dirs, empty_groups = _run_serial(
+            config,
+            [item for group in empty_volume_groups for item in group],
+        )
+        all_metadata_records.extend(empty_records)
+        total_directories_identified += empty_dirs
+        total_show_groups_processed += empty_groups
 
     # Postprocess should use the records from this run directly.  Reading the
     # reused log token can include unrelated historical records when a child path

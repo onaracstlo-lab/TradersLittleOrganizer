@@ -6,10 +6,10 @@ avoids overwriting user inventory, setlists, logs, or databases.
 """
 from __future__ import annotations
 
-__version__ = "v325"
-# TLO-GI package version: v325
+__version__ = "v327"
+# TLO-GI package version: v327
 __version_summary__ = "Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows."
-# TLO-GI version summary: Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.
+# TLO-GI version summary: Serializes same-physical-drive labeled volume work, fixes Add Shows delete backups, and restores read-only TLOHome GUI labels.
 
 import datetime as _dt
 import hashlib
