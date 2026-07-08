@@ -14,14 +14,14 @@ Run from the directory containing the TLO .py modules:
     python3 -m pytest test_tlo_requirements.py -v
 
 The review-report xfail markers for the compact filename range and >36-token
-errors were removed in v190 because those defects are fixed. v191 adds filename.ext:<hex> checksum-row coverage. v192 adds tagger filename-title fallback coverage. v193 adds Tag During Inventory coverage. v194 narrows the compliant Billboard MP3 year-folder special case. v195 adds volume-aware inventory handling, bracketed log headers, and video subdir pattern matching. v196 moves startup volume decisions to group-log headers. v197 adds explicit bracketed search-path volume prefixes and normalized volume matching. v198 makes overwrite/re-inventory reuse existing log tokens. v199 adds zero-padded tag track numbers, zero-based setlist track recognition, and comma-separated unnumbered setlist fallback. v200 fills missing bracketed search-path volume prefixes from the operating-system volume label for logging and comparison. v201 rejects explicit bracketed volume labels that do not match the mounted drive volume label. v202 removes the obsolete group-log utility from the deployment bundle. v203 regenerates legacy placeholder setlists that say the folder never contained an info file. v204 adds postprocess stage status messages and timing details in summary.log. v205 adds eTreeDB setlist song-title fallback during tagging. v206 uses size-aware setlist collision handling and (altN) alternate suffixes. v207 scopes postprocess to current run log tokens and makes overwrite output replacement path-scoped. v208 removes the user-facing overwrite choice, uses in-memory current-run records for postprocess, and optimizes small re-inventory setlist export. v210 fixes in-memory postprocess when current-run records are ShowMetadata objects. v211 adds parallel postprocess setlist/bootlist piece generation by filename-base groups. v212 adds compliant strict date-first parsing, compliant artist Master/As-Is choice, and immediate Quit cleanup alert. v213 keeps GUI inventory startup responsive by moving root preparation into the worker and marshaling GUI prompts back to Tk. v214 uses compact Phase 1 music-directory markers instead of logging every media file while preserving media type and count. v215 logs only one representative media file path and discovers setlist files/media details later from known folders. v216 centralizes input arguments and GUI checkbox metadata in a shared option registry with one canonical destination name per option. v217 caps postprocess ThreadPoolExecutor workers so large filename-group counts cannot create one thread per filename group. v218 replaces camelCase user-facing flags with kebab-case flags and rejects the removed camelCase spellings. v219 adds optional Search Path folder drag/drop on Windows/WSL when TkDND support is available while leaving pure Linux unchanged. v220 restricts that drag/drop support to native Windows and explicitly reports it unavailable in WSL because Windows File Explorer drops do not reach WSL Tk GUI windows. v221 simplifies drag/drop further: only native Windows attempts drag/drop, Windows release builds assume TkDND/tkinterdnd2 is bundled, and WSL/Linux do not advertise the feature. v222 makes existing log and bootlist path matching ignore Windows drive letters and WSL /mnt/<drive> mount prefixes inside the matching layer. v223 makes inventory-time tagging rescan known music folders so all eligible audio files are tagged after Phase 1 logs only one representative sample path. v224 uses existing audio title tags as the last-resort inventory-time track-title source when setlist titles are missing or count-mismatched, writing Unknown for empty/generic title tags and logging the discrepancy. v225 stops tag-track parsing at collector/note prose and trims obvious trailing prose misparsed as a numbered track before falling back to title tags. v226 writes a debug copy of the responsible setlist file to TLOHome/debug, with the matching meta log entry prepended, whenever debug is enabled and tagging writes Unknown track titles. v227 accepts Windows drive-rooted tag paths such as P:\\tagtest when the tagger runs under WSL/Linux by translating them to /mnt/p/tagtest before validation. v228 adds a Quit button behavior for the GUI tagger window that requests cancellation, closes only the tagger window, and leaves the main GUI open. v229 makes standalone and GUI tagger output write to tagT.log and lets standalone/GUI tagger debug mode write Unknown-title setlist diagnostic copies that include music filenames. v230 broadens tag debug setlist copies to title-related skips and file-write errors so skipped/error folders can be diagnosed when debug is true. v231 makes standalone/GUI tagger progress logging append directly to tagT.log so progress lines cannot be lost after the header is created. v232 treats auCDtect audio-analysis result rows as technical report lines, not song-title rows. v233 rejects ordinal event/header lines such as "9th Annual" as track rows and treats literal setlist titles like "unknown" as supplied titles rather than generated Unknown-title failures. v234 parses unnumbered CD/Set song-list blocks and adds a filename-title tagging fallback confirmed against setlist text. v235 broadens parent/sibling setlist discovery and tightens filename-title fallback. v236 parses set/disc track tokens and stops setlists at patch notes. v237 clears TRACKTOTAL, DISCNUMBER and DISCTOTAL when tagging. v238 adds optional --convert-shn / Convert shn support to convert SHN files to FLAC before tagging. v240 logs the effective Convert shn setting when SHN files are detected and prevents SHN sources from reaching the generic tag writer when conversion is enabled. v241 adds mutually exclusive Tag in Place/Tag Copy During Inventory modes, Tag Copy destination validation/confirmation, and Rename Compliantly folder preparation before inventory-time tagging. v242 makes Tag Copy confirmation cancel silent so Quit or window close aborts inventory startup without a second empty alert. v243 relabels Tag in Place/Tag Copy, carries Tag Copy/Rename Compliantly into the standalone/GUI Tag workflow, and makes Add Shows cancellation silent. v244 removes duplicate Tag in Place/Tag Copy/Rename Compliantly checkboxes from the GUI tagger window and makes the tagger inherit those main-window settings. v245 removes the GUI Silent checkbox while keeping --silent, moves Convert shn to the former Silent slot, shortens the console, and throttles setlist export progress messages. v246 removes the Compliant checkbox from Add Shows, makes Add Shows inherit main-window Compliant/Rename Compliantly while ignoring Tag in Place/Tag Copy, and requires Tag in Place or Tag Copy when Rename Compliantly is checked for Tag or Inventory. v249 broadens tagging title recovery from non-standard setlists and uses usable filename titles before falling back to existing title tags. v250 selects the best eTreeDB same-date performance for venue/location and tag-title fallback and generates real setlists from marker-only missing-info files. v251 improves tag title recovery from damaged rows, skips sample audio files, and confirms bad/corrupt files do not stop the rest of a tag run. v252 treats Extras as a sidecar setlist folder and sorts generic TrackNN files by Disc/CD parent folder before tagging multi-disc wrapper releases. v253 caches setlist.fm setlists from same venue/location responses. v254 handles comma-separated setlist lines without spaces. v255 broadens unnumbered setlist blocks. v256 improves unnumbered blocks, embedded disc-track filename ordering, and sparse unknown-title recovery. v257 treats numbered question-mark placeholders as supplied unknown titles so successful tags do not create false Unknown-title debug failures. v258 suppresses noisy successful debug/tag-write logs and keeps only anomalies. v259 enforces numbered setlist starts/sequences while ignoring false numbered prose before real track lists. v262 strips list-position prefixes such as "4 of 28" and t/track row prefixes before writing song-title tags. v265 leaves unidentified shows untouched by copy/delete, rename, and tag operations. v266 treats Tag Copy and Delete Path as a full inventory-time tagging mode and applies compliant names at the transfer target. v267 removes noisy eTreeDB exact-artist debug lines. v268 normalizes song-title tags to regular printable characters. v269 normalizes TLO-written names and tags to ASCII. v270 addresses release hygiene findings. v271 treats foreign-language unknown artist tags as blank. v272/v273 add standalone foreign-language unknown words. v274 makes setlist.fm a strict eTreeDB fallback. v277 adds volume-style release-part sibling aggregation. v278 keeps same-base volume siblings separate while aggregating differing-base collection volumes. v279 preserves trailing parentheticals in exported setlist filenames. v285 formats invalid-FLAC tagging errors as one concise full-path message. v287 accepts Disc One/Late Show-style unnumbered section headings and skips Encore separators without counting them as song titles. v288 parses disc-track dash setlist rows and blocks revision notes from unnumbered fallback titles. v289 broadens safe setlist title parsing and normalizes remaining tag file error lines. v290 splits tag logs into tagsN/tageN text files and names debug files after generated inventory setlist filenames. v291 parses numbered Set I/Set II duration headings and strips embedded encore prefixes from numbered titles. v292 allows implicit numbered list resets without set/disc headings once the restarted sequence is confirmed. v293 compacts complete-path logs after Phase 1 so reused or legacy comp logs keep one representative media row per music directory. v296 adds structured tag reason codes and stops writing debug files for bad audio-file errors. v297 adds elapsed-time output to the tagger GUI completion display. v303 makes Rename Compliantly independent of tagging and performs rename-only full inventory in place. v304 serializes blank-volume roots while parallelizing named-volume groups, restores the versioned Tagger frame title, and relabels the updater duplicate button. v305 removes the startup release-summary sentence and standardizes every GUI title bar on v1.1 Build 305. v306 updates release metadata and documentation only; functional behavior is unchanged. v307 changes the Tagger and Add Shows in-window headings to Traders Little Helper™ while leaving functional behavior unchanged. v308 makes toBeInventoried.txt ignore blank lines and # comment lines as documented. v313 adds a first-run Add Shows guard when bootlist.csv does not exist. v319 hardens cleanup on forced GUI/CLI exits, SHN conversion timeout handling, and setlist file reads. v321 adds packaged Windows ICO and macOS ICNS icon assets and passes packaged icons directly to native builds. v323 preserves compliant trailing parentheticals in Add Shows, full inventory, and tagging destination names. v324 makes Add Shows honor Tag in Place for regular staged folders and duplicate-resolution folders while continuing to ignore Tag Copy. v325 removes the editable TLOHome fields from the Inventory and Search GUIs while keeping myTLO, --TLOHome, and environment precedence. v326 serializes same-physical-drive labeled volumes, runs blank-label roots after labeled roots, fixes deleteBackupFolders path generation, and shows read-only TLOHome labels in both GUIs. v327 updates source version stamping and accepts the injected GitHub release builder display-version stamp.
+errors were removed in v190 because those defects are fixed. v191 adds filename.ext:<hex> checksum-row coverage. v192 adds tagger filename-title fallback coverage. v193 adds Tag During Inventory coverage. v194 narrows the compliant Billboard MP3 year-folder special case. v195 adds volume-aware inventory handling, bracketed log headers, and video subdir pattern matching. v196 moves startup volume decisions to group-log headers. v197 adds explicit bracketed search-path volume prefixes and normalized volume matching. v198 makes overwrite/re-inventory reuse existing log tokens. v199 adds zero-padded tag track numbers, zero-based setlist track recognition, and comma-separated unnumbered setlist fallback. v200 fills missing bracketed search-path volume prefixes from the operating-system volume label for logging and comparison. v201 rejects explicit bracketed volume labels that do not match the mounted drive volume label. v202 removes the obsolete group-log utility from the deployment bundle. v203 regenerates legacy placeholder setlists that say the folder never contained an info file. v204 adds postprocess stage status messages and timing details in summary.log. v205 adds eTreeDB setlist song-title fallback during tagging. v206 uses size-aware setlist collision handling and (altN) alternate suffixes. v207 scopes postprocess to current run log tokens and makes overwrite output replacement path-scoped. v208 removes the user-facing overwrite choice, uses in-memory current-run records for postprocess, and optimizes small re-inventory setlist export. v210 fixes in-memory postprocess when current-run records are ShowMetadata objects. v211 adds parallel postprocess setlist/bootlist piece generation by filename-base groups. v212 adds compliant strict date-first parsing, compliant artist Master/As-Is choice, and immediate Quit cleanup alert. v213 keeps GUI inventory startup responsive by moving root preparation into the worker and marshaling GUI prompts back to Tk. v214 uses compact Phase 1 music-directory markers instead of logging every media file while preserving media type and count. v215 logs only one representative media file path and discovers setlist files/media details later from known folders. v216 centralizes input arguments and GUI checkbox metadata in a shared option registry with one canonical destination name per option. v217 caps postprocess ThreadPoolExecutor workers so large filename-group counts cannot create one thread per filename group. v218 replaces camelCase user-facing flags with kebab-case flags and rejects the removed camelCase spellings. v219 adds optional Search Path folder drag/drop on Windows/WSL when TkDND support is available while leaving pure Linux unchanged. v220 restricts that drag/drop support to native Windows and explicitly reports it unavailable in WSL because Windows File Explorer drops do not reach WSL Tk GUI windows. v221 simplifies drag/drop further: only native Windows attempts drag/drop, Windows release builds assume TkDND/tkinterdnd2 is bundled, and WSL/Linux do not advertise the feature. v222 makes existing log and bootlist path matching ignore Windows drive letters and WSL /mnt/<drive> mount prefixes inside the matching layer. v223 makes inventory-time tagging rescan known music folders so all eligible audio files are tagged after Phase 1 logs only one representative sample path. v224 uses existing audio title tags as the last-resort inventory-time track-title source when setlist titles are missing or count-mismatched, writing Unknown for empty/generic title tags and logging the discrepancy. v225 stops tag-track parsing at collector/note prose and trims obvious trailing prose misparsed as a numbered track before falling back to title tags. v226 writes a debug copy of the responsible setlist file to TLOHome/debug, with the matching meta log entry prepended, whenever debug is enabled and tagging writes Unknown track titles. v227 accepts Windows drive-rooted tag paths such as P:\\tagtest when the tagger runs under WSL/Linux by translating them to /mnt/p/tagtest before validation. v228 adds a Quit button behavior for the GUI tagger window that requests cancellation, closes only the tagger window, and leaves the main GUI open. v229 makes standalone and GUI tagger output write to tagT.log and lets standalone/GUI tagger debug mode write Unknown-title setlist diagnostic copies that include music filenames. v230 broadens tag debug setlist copies to title-related skips and file-write errors so skipped/error folders can be diagnosed when debug is true. v231 makes standalone/GUI tagger progress logging append directly to tagT.log so progress lines cannot be lost after the header is created. v232 treats auCDtect audio-analysis result rows as technical report lines, not song-title rows. v233 rejects ordinal event/header lines such as "9th Annual" as track rows and treats literal setlist titles like "unknown" as supplied titles rather than generated Unknown-title failures. v234 parses unnumbered CD/Set song-list blocks and adds a filename-title tagging fallback confirmed against setlist text. v235 broadens parent/sibling setlist discovery and tightens filename-title fallback. v236 parses set/disc track tokens and stops setlists at patch notes. v237 clears TRACKTOTAL, DISCNUMBER and DISCTOTAL when tagging. v238 adds optional --convert-shn / Convert shn support to convert SHN files to FLAC before tagging. v240 logs the effective Convert shn setting when SHN files are detected and prevents SHN sources from reaching the generic tag writer when conversion is enabled. v241 adds mutually exclusive Tag in Place/Tag Copy During Inventory modes, Tag Copy destination validation/confirmation, and Rename Compliantly folder preparation before inventory-time tagging. v242 makes Tag Copy confirmation cancel silent so Quit or window close aborts inventory startup without a second empty alert. v243 relabels Tag in Place/Tag Copy, carries Tag Copy/Rename Compliantly into the standalone/GUI Tag workflow, and makes Add Shows cancellation silent. v244 removes duplicate Tag in Place/Tag Copy/Rename Compliantly checkboxes from the GUI tagger window and makes the tagger inherit those main-window settings. v245 removes the GUI Silent checkbox while keeping --silent, moves Convert shn to the former Silent slot, shortens the console, and throttles setlist export progress messages. v246 removes the Compliant checkbox from Add Shows, makes Add Shows inherit main-window Compliant/Rename Compliantly while ignoring Tag in Place/Tag Copy, and requires Tag in Place or Tag Copy when Rename Compliantly is checked for Tag or Inventory. v249 broadens tagging title recovery from non-standard setlists and uses usable filename titles before falling back to existing title tags. v250 selects the best eTreeDB same-date performance for venue/location and tag-title fallback and generates real setlists from marker-only missing-info files. v251 improves tag title recovery from damaged rows, skips sample audio files, and confirms bad/corrupt files do not stop the rest of a tag run. v252 treats Extras as a sidecar setlist folder and sorts generic TrackNN files by Disc/CD parent folder before tagging multi-disc wrapper releases. v253 caches setlist.fm setlists from same venue/location responses. v254 handles comma-separated setlist lines without spaces. v255 broadens unnumbered setlist blocks. v256 improves unnumbered blocks, embedded disc-track filename ordering, and sparse unknown-title recovery. v257 treats numbered question-mark placeholders as supplied unknown titles so successful tags do not create false Unknown-title debug failures. v258 suppresses noisy successful debug/tag-write logs and keeps only anomalies. v259 enforces numbered setlist starts/sequences while ignoring false numbered prose before real track lists. v262 strips list-position prefixes such as "4 of 28" and t/track row prefixes before writing song-title tags. v265 leaves unidentified shows untouched by copy/delete, rename, and tag operations. v266 treats Tag Copy and Delete Path as a full inventory-time tagging mode and applies compliant names at the transfer target. v267 removes noisy eTreeDB exact-artist debug lines. v268 normalizes song-title tags to regular printable characters. v269 normalizes TLO-written names and tags to ASCII. v270 addresses release hygiene findings. v271 treats foreign-language unknown artist tags as blank. v272/v273 add standalone foreign-language unknown words. v274 makes setlist.fm a strict eTreeDB fallback. v277 adds volume-style release-part sibling aggregation. v278 keeps same-base volume siblings separate while aggregating differing-base collection volumes. v279 preserves trailing parentheticals in exported setlist filenames. v285 formats invalid-FLAC tagging errors as one concise full-path message. v287 accepts Disc One/Late Show-style unnumbered section headings and skips Encore separators without counting them as song titles. v288 parses disc-track dash setlist rows and blocks revision notes from unnumbered fallback titles. v289 broadens safe setlist title parsing and normalizes remaining tag file error lines. v290 splits tag logs into tagsN/tageN text files and names debug files after generated inventory setlist filenames. v291 parses numbered Set I/Set II duration headings and strips embedded encore prefixes from numbered titles. v292 allows implicit numbered list resets without set/disc headings once the restarted sequence is confirmed. v293 compacts complete-path logs after Phase 1 so reused or legacy comp logs keep one representative media row per music directory. v296 adds structured tag reason codes and stops writing debug files for bad audio-file errors. v297 adds elapsed-time output to the tagger GUI completion display. v303 makes Rename Compliantly independent of tagging and performs rename-only full inventory in place. v304 serializes blank-volume roots while parallelizing named-volume groups, restores the versioned Tagger frame title, and relabels the updater duplicate button. v305 removes the startup release-summary sentence and standardizes every GUI title bar on v1.1 Build 305. v306 updates release metadata and documentation only; functional behavior is unchanged. v307 changes the Tagger and Add Shows in-window headings to Traders Little Helper™ while leaving functional behavior unchanged. v308 makes toBeInventoried.txt ignore blank lines and # comment lines as documented. v313 adds a first-run Add Shows guard when bootlist.csv does not exist. v319 hardens cleanup on forced GUI/CLI exits, SHN conversion timeout handling, and setlist file reads. v321 adds packaged Windows ICO and macOS ICNS icon assets and passes packaged icons directly to native builds. v323 preserves compliant trailing parentheticals in Add Shows, full inventory, and tagging destination names. v324 makes Add Shows honor Tag in Place for regular staged folders and duplicate-resolution folders while continuing to ignore Tag Copy. v325 removes the editable TLOHome fields from the Inventory and Search GUIs while keeping myTLO, --TLOHome, and environment precedence. v326 serializes same-physical-drive labeled volumes, runs blank-label roots after labeled roots, fixes deleteBackupFolders path generation, and shows read-only TLOHome labels in both GUIs. v328 updates source version stamping and accepts the injected GitHub release builder display-version stamp.
 """
 
 
-__version__ = "v327"
-# TLO-GI package version: v327
-__version_summary__ = 'Serializes same-physical-drive labeled volume work, fixes Add Shows delete backups, and restores read-only TLOHome GUI labels.'
-# TLO-GI version summary: Serializes same-physical-drive labeled volume work, fixes Add Shows delete backups, and restores read-only TLOHome GUI labels.
+__version__ = "v328"
+# TLO-GI package version: v328
+__version_summary__ = 'Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.'
+# TLO-GI version summary: Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.
 
 import importlib.util
 import inspect
@@ -1478,7 +1478,7 @@ def test_v305_tagger_gui_keeps_bold_app_heading_and_uses_current_public_version(
     build_source = inspect.getsource(gui.TaggerWindow._build)
 
     assert TAGGER_TITLE == "Traders Little Helper™ Tagger App"
-    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.1 Build 327"
+    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.1 Build 328"
     assert "self.window.title(TAGGER_DISPLAY_VERSION)" in init_source
     assert build_source.count("text=TAGGER_TITLE") == 1
     assert "text=TAGGER_TITLE, font=title_font" in build_source
@@ -2181,6 +2181,63 @@ def test_v221_gui_uses_dragdrop_root_factory():
     build_source = inspect.getsource(gui.App._build)
     assert "_enable_search_path_drag_drop" in build_source
     assert "search_path_drop_status.reason" not in build_source
+
+
+def test_v328_tagging_path_dragdrop_disabled_on_non_windows(monkeypatch):
+    import tlo_dragdrop as DD
+
+    monkeypatch.setattr(DD, "is_windows_platform", lambda: False)
+
+    class DndCapableWidget(_FakeWidget):
+        def drop_target_register(self, *_args):
+            raise AssertionError("non-Windows should not try to register a tag drop target")
+        def dnd_bind(self, *_args):
+            raise AssertionError("non-Windows should not bind a tag drop target")
+
+    class Var:
+        def set(self, _value):
+            raise AssertionError("non-Windows should not install a tag drop handler")
+
+    status = DD.enable_tagging_path_folder_drop(DndCapableWidget(), Var())
+    assert status.enabled is False
+    assert "native Windows" in status.reason
+
+
+def test_v328_tagging_path_dragdrop_registers_on_native_windows(monkeypatch):
+    import tlo_dragdrop as DD
+
+    monkeypatch.setattr(DD, "is_windows_platform", lambda: True)
+
+    class DndCapableWidget(_FakeWidget):
+        def __init__(self):
+            super().__init__()
+            self.registered = []
+            self.bound = []
+        def drop_target_register(self, *args):
+            self.registered.append(args)
+        def dnd_bind(self, *args):
+            self.bound.append(args)
+
+    class Var:
+        def set(self, _value):
+            pass
+
+    widget = DndCapableWidget()
+    status = DD.enable_tagging_path_folder_drop(widget, Var())
+    assert status.enabled is True
+    assert status.provider == "tkinterdnd2"
+    assert widget.registered
+    assert widget.bound
+
+
+def test_v328_tagger_window_build_registers_tagging_path_dragdrop():
+    gui = _load_tlo_ggi_module()
+    build_source = inspect.getsource(gui.TaggerWindow._build)
+    helper_source = inspect.getsource(gui.TaggerWindow._enable_tagging_path_drag_drop)
+    assert "self.path_entry = ttk.Entry" in build_source
+    assert "self._enable_tagging_path_drag_drop()" in build_source
+    assert "enable_tagging_path_folder_drop" in helper_source
+    assert "Tagging Path:" in build_source
 
 
 # --------------------------------------------------------------------------- #
@@ -6781,7 +6838,7 @@ def test_v304_named_volume_paths_group_by_volume_for_parallel_workers():
     ]
 
 
-def test_v327_blank_group_runs_after_named_volume_groups(monkeypatch):
+def test_v328_blank_group_runs_after_named_volume_groups(monkeypatch):
     import walk_trees_lib as W
 
     monkeypatch.setattr(W, "resolve_physical_drive_id", lambda path: "")
@@ -6815,10 +6872,10 @@ def test_v304_inventory_updater_button_uses_requested_two_line_label():
 def test_v305_public_version_matches_bundle_number():
     import tlo_version as V
 
-    assert V.VERSION == "v327"
-    assert V.BUNDLE_BUILD == 327
-    assert V.DISPLAY_VERSION == "v1.1 Build 327"
-    assert V.versioned_title("TLO Inventory GUI") == "TLO Inventory GUI v1.1 Build 327"
+    assert V.VERSION == "v328"
+    assert V.BUNDLE_BUILD == 328
+    assert V.DISPLAY_VERSION == "v1.1 Build 328"
+    assert V.versioned_title("TLO Inventory GUI") == "TLO Inventory GUI v1.1 Build 328"
 
 
 def test_v305_startup_banner_never_appends_release_change_summary():
@@ -6827,7 +6884,7 @@ def test_v305_startup_banner_never_appends_release_change_summary():
 
     for debug in (False, True):
         banner = M._startup_banner(SimpleNamespace(debug=debug))
-        assert banner == "Starting tlo-gi v1.1 Build 327"
+        assert banner == "Starting tlo-gi v1.1 Build 328"
         assert V.VERSION_SUMMARY not in banner
         assert " - " not in banner
 
@@ -6836,9 +6893,9 @@ def test_v305_all_toplevel_gui_titles_include_public_version():
     gui = _load_tlo_ggi_module()
     from tlo_inventory_update import UPDATER_DISPLAY_VERSION
 
-    assert gui.WINDOW_TITLE == "TLO Inventory GUI v1.1 Build 327"
-    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.1 Build 327"
-    assert UPDATER_DISPLAY_VERSION == "TLO Inventory Updater v1.1 Build 327"
+    assert gui.WINDOW_TITLE == "TLO Inventory GUI v1.1 Build 328"
+    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.1 Build 328"
+    assert UPDATER_DISPLAY_VERSION == "TLO Inventory Updater v1.1 Build 328"
 
     source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
     expected_calls = (
@@ -6967,7 +7024,7 @@ def test_v317_main_inventory_hamburger_help_cascade_sources_about_and_faq():
     assert 'Traders Little Organizer(TM) - TLO' in source
     assert 'f"V1.1Build{BUNDLE_BUILD}\\n"' in source
     assert 'TLO-FAQ.txt' in source
-    assert gui.BUNDLE_BUILD == 327
+    assert gui.BUNDLE_BUILD == 328
 
 
 
@@ -7462,27 +7519,27 @@ def test_v324_update_checker_prefers_platform_complete_fallback(monkeypatch):
     import tlo_github_updates as G
 
     release = {
-        "tag_name": "v1.1-build327",
-        "name": "TLO v1.1 Build 327",
+        "tag_name": "v1.1-build328",
+        "name": "TLO v1.1 Build 328",
         "assets": [
-            {"name": "TLO_V1.1Build327_complete_Windows.zip", "browser_download_url": "https://example.invalid/win", "size": 1},
-            {"name": "TLO_V1.1Build327_complete_Linux.zip", "browser_download_url": "https://example.invalid/linux", "size": 1},
-            {"name": "TLO_V1.1Build327_complete_macOS.zip", "browser_download_url": "https://example.invalid/mac", "size": 1},
+            {"name": "TLO_V1.1Build328_complete_Windows.zip", "browser_download_url": "https://example.invalid/win", "size": 1},
+            {"name": "TLO_V1.1Build328_complete_Linux.zip", "browser_download_url": "https://example.invalid/linux", "size": 1},
+            {"name": "TLO_V1.1Build328_complete_macOS.zip", "browser_download_url": "https://example.invalid/mac", "size": 1},
         ],
     }
     monkeypatch.setattr(G.sys, "platform", "linux")
-    asset, kind, platform = G._choose_asset(release, 327)
+    asset, kind, platform = G._choose_asset(release, 328)
 
-    assert asset["name"] == "TLO_V1.1Build327_complete_Linux.zip"
+    assert asset["name"] == "TLO_V1.1Build328_complete_Linux.zip"
     assert kind == "complete"
     assert platform == "linux"
 
 
 # --------------------------------------------------------------------------- #
-# v325/v327 - GUI TLOHome text boxes removed, read-only labels shown, myTLO precedence preserved.
+# v325/v328 - GUI TLOHome text boxes removed, read-only labels shown, myTLO precedence preserved.
 # --------------------------------------------------------------------------- #
 
-def test_v327_inventory_and_search_guis_do_not_build_tlohome_input_boxes():
+def test_v328_inventory_and_search_guis_do_not_build_tlohome_input_boxes():
     inventory_source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
     search_source = Path(__file__).with_name("tlo-gsi.py").read_text(encoding="utf-8")
 
@@ -7497,7 +7554,7 @@ def test_v327_inventory_and_search_guis_do_not_build_tlohome_input_boxes():
     assert "tlohome_var" not in search_source
 
 
-def test_v327_inventory_gui_uses_non_gui_tlohome_resolver_with_mytlo_precedence():
+def test_v328_inventory_gui_uses_non_gui_tlohome_resolver_with_mytlo_precedence():
     source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
     resolver = source[source.index("    def _resolve_gui_tlo_home"):source.index("    def _show_about_from_menu")]
     build_config = source[source.index("    def _build_config(self, *, for_add_shows=False):"):source.index("    def _pause_inventory(self):")]
@@ -7508,11 +7565,11 @@ def test_v327_inventory_gui_uses_non_gui_tlohome_resolver_with_mytlo_precedence(
     assert "self._resolve_gui_tlo_home(error_type=ValueError)" in build_config
 
 
-def test_v327_search_cli_keeps_mytlo_before_tlohome_before_env(tmp_path, monkeypatch):
+def test_v328_search_cli_keeps_mytlo_before_tlohome_before_env(tmp_path, monkeypatch):
     import importlib.util
 
     module_path = Path(__file__).with_name("tlo-gsi.py")
-    spec = importlib.util.spec_from_file_location("tlo_gsi_v327", module_path)
+    spec = importlib.util.spec_from_file_location("tlo_gsi_v328", module_path)
     search_gui = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     sys.modules[spec.name] = search_gui
@@ -7531,10 +7588,10 @@ def test_v327_search_cli_keeps_mytlo_before_tlohome_before_env(tmp_path, monkeyp
 
 
 # --------------------------------------------------------------------------- #
-# v327 - physical-drive scheduling, delete backup commands, and TLOHome labels.
+# v328 - physical-drive scheduling, delete backup commands, and TLOHome labels.
 # --------------------------------------------------------------------------- #
 
-def test_v327_named_volumes_on_same_physical_drive_are_one_serial_work_group(monkeypatch):
+def test_v328_named_volumes_on_same_physical_drive_are_one_serial_work_group(monkeypatch):
     import walk_trees_lib as W
 
     physical = {
@@ -7557,13 +7614,13 @@ def test_v327_named_volumes_on_same_physical_drive_are_one_serial_work_group(mon
     ]
 
 
-def test_v327_add_shows_volume_path_preserves_drive_from_storage_field():
+def test_v328_add_shows_volume_path_preserves_drive_from_storage_field():
     assert U._format_add_shows_volume_path("[Backup-1]E:", "Artist 2001-02-03 Venue") == "[Backup-1] E:\\Artist 2001-02-03 Venue"
     assert U._format_add_shows_volume_path("[Backup-1]/mnt/e", "Artist 2001-02-03 Venue") == "[Backup-1] /mnt/e/Artist 2001-02-03 Venue"
     assert U._format_add_shows_volume_path("Backup-1", "Artist 2001-02-03 Venue") == "[Backup-1] Artist 2001-02-03 Venue"
 
 
-def test_v327_delete_backup_bat_has_no_echo_off_and_uses_bootlist_rooted_path(tmp_path):
+def test_v328_delete_backup_bat_has_no_echo_off_and_uses_bootlist_rooted_path(tmp_path):
     script = tmp_path / "deleteBackupFolders.bat"
 
     U._append_delete_command(str(script), "E:\\Artist 2001-02-03 Venue")
@@ -7573,7 +7630,7 @@ def test_v327_delete_backup_bat_has_no_echo_off_and_uses_bootlist_rooted_path(tm
     assert 'rmdir /s /q "E:\\Artist 2001-02-03 Venue"' in text
 
 
-def test_v327_delete_backup_path_requires_drive_or_root_from_bootlist_row():
+def test_v328_delete_backup_path_requires_drive_or_root_from_bootlist_row():
     assert U._delete_path_from_bootlist_volume_path("[Backup-1] E:\\Artist 2001-02-03 Venue") == os.path.normpath("E:\\Artist 2001-02-03 Venue")
     assert U._delete_path_from_bootlist_volume_path("[Backup-1] /mnt/e/Artist 2001-02-03 Venue") == os.path.normpath("/mnt/e/Artist 2001-02-03 Venue")
     assert U._delete_path_from_bootlist_volume_path("[Backup-1] /Volumes/Backup-1/Artist 2001-02-03 Venue") == os.path.normpath("/Volumes/Backup-1/Artist 2001-02-03 Venue")

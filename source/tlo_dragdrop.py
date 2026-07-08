@@ -1,7 +1,7 @@
-__version__ = "v327"
-# TLO-GI package version: v327
-__version_summary__ = 'Serializes same-physical-drive labeled volume work, fixes Add Shows delete backups, and restores read-only TLOHome GUI labels.'
-# TLO-GI version summary: Serializes same-physical-drive labeled volume work, fixes Add Shows delete backups, and restores read-only TLOHome GUI labels.
+__version__ = "v328"
+# TLO-GI package version: v328
+__version_summary__ = 'Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.'
+# TLO-GI version summary: Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.
 
 """Native-Windows-only drag-and-drop helpers for the TLO Tk GUI.
 
@@ -99,27 +99,30 @@ def _first_folder_from_drop(widget, data: str) -> Optional[str]:
     return paths[0] if paths else None
 
 
-def enable_search_path_folder_drop(
+def enable_folder_path_drop(
     entry_widget,
     string_var,
     *,
+    field_label: str = "Path",
     on_error: Optional[Callable[[str], None]] = None,
 ) -> DragDropStatus:
-    """Enable native-Windows folder drops on the Search Path entry.
+    """Enable native-Windows folder drops on a path entry.
 
     On WSL, Linux, and other non-Windows platforms, no drag/drop registration is
     attempted.  On native Windows, tkinterdnd2/TkDND is assumed to be bundled in
-    the release app.  Dropping a folder replaces the Search Path value; dropping
-    a file uses its containing folder when available.
+    the release app.  Dropping a folder replaces the path value; dropping a file
+    uses its containing folder when available.
     """
     if not is_drag_drop_platform():
         return DragDropStatus(False, "Folder drag/drop is available only in native Windows.")
+
+    clean_label = str(field_label or "Path").strip() or "Path"
 
     def handle_data(data: str) -> None:
         folder = _first_folder_from_drop(entry_widget, data)
         if not folder:
             if on_error:
-                on_error("Drop a folder onto the Search Path field.")
+                on_error(f"Drop a folder onto the {clean_label} field.")
             return
         string_var.set(folder)
         try:
@@ -131,3 +134,33 @@ def enable_search_path_folder_drop(
     entry_widget.drop_target_register(DND_FILES)
     entry_widget.dnd_bind("<<Drop>>", lambda event: handle_data(getattr(event, "data", "")))
     return DragDropStatus(True, provider="tkinterdnd2")
+
+
+def enable_search_path_folder_drop(
+    entry_widget,
+    string_var,
+    *,
+    on_error: Optional[Callable[[str], None]] = None,
+) -> DragDropStatus:
+    """Enable native-Windows folder drops on the Search Path entry."""
+    return enable_folder_path_drop(
+        entry_widget,
+        string_var,
+        field_label="Search Path",
+        on_error=on_error,
+    )
+
+
+def enable_tagging_path_folder_drop(
+    entry_widget,
+    string_var,
+    *,
+    on_error: Optional[Callable[[str], None]] = None,
+) -> DragDropStatus:
+    """Enable native-Windows folder drops on the Tagger window Tagging Path entry."""
+    return enable_folder_path_drop(
+        entry_widget,
+        string_var,
+        field_label="Tagging Path",
+        on_error=on_error,
+    )

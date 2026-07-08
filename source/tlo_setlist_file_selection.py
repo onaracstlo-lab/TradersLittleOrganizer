@@ -1,7 +1,7 @@
-__version__ = "v327"
-# TLO-GI package version: v327
-__version_summary__ = 'Serializes same-physical-drive labeled volume work, fixes Add Shows delete backups, and restores read-only TLOHome GUI labels.'
-# TLO-GI version summary: Serializes same-physical-drive labeled volume work, fixes Add Shows delete backups, and restores read-only TLOHome GUI labels.
+__version__ = "v328"
+# TLO-GI package version: v328
+__version_summary__ = 'Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.'
+# TLO-GI version summary: Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.
 import os
 import re
 

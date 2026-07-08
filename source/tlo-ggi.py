@@ -1,9 +1,9 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v327"
-# TLO-GI package version: v327
-__version_summary__ = 'Serializes same-physical-drive labeled volume work, fixes Add Shows delete backups, and restores read-only TLOHome GUI labels.'
-# TLO-GI version summary: Serializes same-physical-drive labeled volume work, fixes Add Shows delete backups, and restores read-only TLOHome GUI labels.
+__version__ = "v328"
+# TLO-GI package version: v328
+__version_summary__ = 'Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.'
+# TLO-GI version summary: Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.
 
 import multiprocessing
 
@@ -70,7 +70,7 @@ from tlo_inventory_update import (
     review_paths_for_duplicate,
     updater_delete_script_path,
 )
-from tlo_dragdrop import create_tk_root, enable_search_path_folder_drop
+from tlo_dragdrop import create_tk_root, enable_search_path_folder_drop, enable_tagging_path_folder_drop
 from tlo_runtime_control import (
     clear_cancel_request,
     request_cancel,
@@ -1518,7 +1518,9 @@ class TaggerWindow:
         ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 10))
 
         ttk.Label(frm, text="Tagging Path:").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
-        ttk.Entry(frm, textvariable=self.path_var, width=TAGGER_PATH_ENTRY_WIDTH).grid(row=2, column=1, columnspan=2, sticky="ew", pady=4)
+        self.path_entry = ttk.Entry(frm, textvariable=self.path_var, width=TAGGER_PATH_ENTRY_WIDTH)
+        self.path_entry.grid(row=2, column=1, columnspan=2, sticky="ew", pady=4)
+        self._enable_tagging_path_drag_drop()
 
         buttons = ttk.Frame(frm)
         buttons.grid(row=3, column=0, columnspan=3, sticky="w", pady=(6, 6))
@@ -1530,6 +1532,13 @@ class TaggerWindow:
         self.output = scrolledtext.ScrolledText(frm, width=TAGGER_OUTPUT_TEXT_WIDTH, height=28, font=tkfont.nametofont("TkFixedFont"))
         self.output.grid(row=4, column=0, columnspan=3, sticky="nsew", pady=(4, 0))
         frm.rowconfigure(4, weight=1)
+
+    def _enable_tagging_path_drag_drop(self):
+        return enable_tagging_path_folder_drop(
+            self.path_entry,
+            self.path_var,
+            on_error=lambda msg: messagebox.showwarning("TLO Tagger", msg, parent=self.window),
+        )
 
     def _set_processing_controls(self, enabled):
         tag_state = "normal" if enabled else "disabled"
