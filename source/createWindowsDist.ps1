@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 if ([string]::IsNullOrWhiteSpace($DistRoot)) {
-    $DistRoot = "C:\tloDist-V1.0Build$BundleNumber"
+    $DistRoot = "C:\tloDist-V1.1Build$BundleNumber"
 }
 
 $TargetDir = Join-Path $DistRoot 'apps\Windows'

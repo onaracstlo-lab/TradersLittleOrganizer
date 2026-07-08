@@ -14,12 +14,13 @@ Tkinter GUI that:
 
 from __future__ import annotations
 
-__version__ = "v322"
-# TLO-GI package version: v322
+__version__ = "v324"
+# TLO-GI package version: v324
 
 import csv
 import os
 import sys
+import threading
 import tkinter as tk
 import tkinter.font as tkfont
 import unicodedata
@@ -32,7 +33,19 @@ APP_FILE_NAME = "tlo-gsi.py"
 try:
     from tlo_version import DISPLAY_VERSION
 except ImportError:
-    DISPLAY_VERSION = "v1.0 Build 322"
+    DISPLAY_VERSION = "v1.1 Build 324"
+try:
+    from tlo_github_updates import (
+        check_for_updates,
+        is_auto_update_enabled,
+        set_auto_update_enabled,
+        should_auto_check,
+    )
+except ImportError:
+    check_for_updates = None
+    is_auto_update_enabled = None
+    set_auto_update_enabled = None
+    should_auto_check = None
 
 APP_INTERNAL_VERSION = "v030"
 DISPLAY_COLUMNS = ("Show", "Volume/Path")
@@ -254,13 +267,17 @@ class BootlistSearchApp:
         self.search_entry: ttk.Combobox | None = None
         self.tlohome_entry: ttk.Entry | None = None
         self.font_selector: ttk.Combobox | None = None
+        self.auto_update_var = tk.BooleanVar(value=False)
+        self._update_check_thread = None
         self.csv_result_windows: List[CsvSearchResultsWindow] = []
         self.available_font_families = self._build_font_family_list()
         self.font_family_var.set(self._default_font_family())
         self._apply_font_family(self.font_family_var.get())
 
         self._build_main_window()
+        self._initialize_update_menu_state()
         self.root.after(150, self._startup_first_search)
+        self.root.after(650, self._startup_auto_update_check)
 
     def _default_font_family(self) -> str:
         try:
@@ -353,11 +370,19 @@ class BootlistSearchApp:
             header_font.configure(weight="bold")
         except tk.TclError:
             pass
+        header_frame = ttk.Frame(outer)
+        header_frame.pack(fill="x", pady=(0, 12))
         ttk.Label(
-            outer,
+            header_frame,
             text="Traders Little Organizer™ Collection Search App",
             font=header_font,
-        ).pack(anchor="w", pady=(0, 12))
+        ).pack(side="left", anchor="w")
+        self.hamburger_button = ttk.Menubutton(header_frame, text="☰")
+        self.hamburger_menu = tk.Menu(self.hamburger_button, tearoff=False)
+        self.hamburger_menu.add_command(label="Check for updates", command=lambda: self._run_after_menu_closes(lambda: self._start_update_check(manual=True)))
+        self.hamburger_menu.add_checkbutton(label="Auto update", variable=self.auto_update_var, command=lambda: self._run_after_menu_closes(self._toggle_auto_update))
+        self.hamburger_button.configure(menu=self.hamburger_menu)
+        self.hamburger_button.pack(side="right", anchor="e")
 
         search_frame = ttk.Frame(outer)
         search_frame.pack(fill="x", expand=True)
@@ -402,6 +427,78 @@ class BootlistSearchApp:
 
         ttk.Button(button_frame, text="Execute search", command=self.execute_search).pack(side="left")
         ttk.Button(button_frame, text="Quit", command=self.root.destroy).pack(side="left", padx=(8, 0))
+
+    def _run_after_menu_closes(self, callback: Callable[[], None]) -> None:
+        try:
+            self.root.after_idle(callback)
+        except tk.TclError:
+            callback()
+
+    def _initialize_update_menu_state(self) -> None:
+        if is_auto_update_enabled is None:
+            return
+        try:
+            self.auto_update_var.set(bool(is_auto_update_enabled(self.paths.tlohome)))
+        except Exception:
+            self.auto_update_var.set(False)
+
+    def _toggle_auto_update(self) -> None:
+        if set_auto_update_enabled is None:
+            messagebox.showerror("TLO Auto update", "The update checker is not available in this build.")
+            self.auto_update_var.set(False)
+            return
+        enabled = bool(self.auto_update_var.get())
+        try:
+            set_auto_update_enabled(self.paths.tlohome, enabled)
+        except Exception as exc:
+            self.auto_update_var.set(False)
+            messagebox.showerror("TLO Auto update", str(exc))
+            return
+        if enabled:
+            messagebox.showinfo(
+                "TLO Auto update",
+                "Auto update is enabled. TLO will check GitHub at startup and download newer release ZIPs to your Downloads folder.",
+            )
+            self._start_update_check(manual=False)
+
+    def _startup_auto_update_check(self) -> None:
+        if is_auto_update_enabled is None or should_auto_check is None:
+            return
+        try:
+            if is_auto_update_enabled(self.paths.tlohome):
+                self.auto_update_var.set(True)
+                if should_auto_check(self.paths.tlohome):
+                    self._start_update_check(manual=False)
+        except Exception:
+            self.auto_update_var.set(False)
+
+    def _start_update_check(self, *, manual: bool) -> None:
+        if check_for_updates is None:
+            if manual:
+                messagebox.showerror("TLO update check", "The update checker is not available in this build.")
+            return
+        thread = getattr(self, "_update_check_thread", None)
+        if thread is not None and thread.is_alive():
+            if manual:
+                messagebox.showinfo("TLO update check", "An update check is already running.")
+            return
+
+        def worker() -> None:
+            result = check_for_updates(self.paths.tlohome, manual=manual)
+            try:
+                self.root.after(0, lambda: self._finish_update_check(result, manual))
+            except tk.TclError:
+                pass
+
+        self._update_check_thread = threading.Thread(target=worker, daemon=True)
+        self._update_check_thread.start()
+
+    def _finish_update_check(self, result, manual: bool) -> None:
+        if manual or result.status in {"downloaded", "already_downloaded", "no_asset", "error"}:
+            if result.status == "error":
+                messagebox.showerror(result.title, result.message)
+            else:
+                messagebox.showinfo(result.title, result.message)
 
     def _startup_first_search(self) -> None:
         initial_value = ""

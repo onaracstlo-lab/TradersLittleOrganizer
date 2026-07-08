@@ -24,9 +24,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-__version__ = "v322"
-# TLO-GI package version: v322
-__version_summary__ = 'Preserves trailing parenthetical show-name suffixes across compliant Add Shows, full inventory rename/tag, and standalone tagging.'
+__version__ = "v324"
+# TLO-GI package version: v324
+__version_summary__ = 'Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.'
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 MIN_REQUEST_INTERVAL_SECONDS = 0.600

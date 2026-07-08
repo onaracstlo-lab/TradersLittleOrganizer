@@ -1,9 +1,9 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v322"
-# TLO-GI package version: v322
-__version_summary__ = 'Preserves trailing parenthetical show-name suffixes across compliant Add Shows, full inventory rename/tag, and standalone tagging.'
-# TLO-GI version summary: Preserves trailing parenthetical show-name suffixes across compliant Add Shows, full inventory rename/tag, and standalone tagging.
+__version__ = "v324"
+# TLO-GI package version: v324
+__version_summary__ = 'Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.'
+# TLO-GI version summary: Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.
 
 import multiprocessing
 
@@ -41,6 +41,12 @@ from tlo_bootlist_volume_policy import normalize_volume_action, volume_display_n
 from tlo_main_lib import run_inventory
 from tlo_tag_lib import TAGGER_TITLE, default_tagging_path, resolve_tlo_home, run_tagger
 from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION, versioned_title
+from tlo_github_updates import (
+    check_for_updates,
+    is_auto_update_enabled,
+    set_auto_update_enabled,
+    should_auto_check,
+)
 
 # Keep the standalone Tagger dialog intentionally compact. The prior layout
 # used an 82-character path field and a 110-character output pane; v298 halves
@@ -235,6 +241,8 @@ class App:
         self.hamburger_button = None
         self.hamburger_menu = None
         self.help_menu = None
+        self.auto_update_var = tk.BooleanVar(value=False)
+        self._update_check_thread = None
         self._previous_sigint_handler = None
         self._build()
         self.root.protocol("WM_DELETE_WINDOW", self._on_quit)
@@ -343,6 +351,9 @@ class App:
         self.help_menu = tk.Menu(self.hamburger_menu, tearoff=False)
         self.help_menu.add_command(label="About", command=self._show_about_from_menu)
         self.help_menu.add_command(label="FAQ", command=self._show_faq_from_menu)
+        self.hamburger_menu.add_command(label="Check for updates", command=self._check_for_updates_from_menu)
+        self.hamburger_menu.add_checkbutton(label="Auto update", variable=self.auto_update_var, command=self._toggle_auto_update_from_menu)
+        self.hamburger_menu.add_separator()
         self.hamburger_menu.add_cascade(label="Help", menu=self.help_menu)
         self.hamburger_button.configure(menu=self.hamburger_menu)
         self.hamburger_button.grid(row=row, column=2, sticky="e", padx=6, pady=(0, 4))
@@ -493,6 +504,7 @@ class App:
         self.output = scrolledtext.ScrolledText(frm, width=96, height=21, font=tkfont.nametofont("TkFixedFont"))
         self.output.grid(row=row, column=0, columnspan=3, sticky="nsew")
         frm.rowconfigure(row, weight=1)
+        self._initialize_update_menu_state()
         self._update_main_action_states()
 
     def _enable_search_path_drag_drop(self):
@@ -515,6 +527,94 @@ class App:
     def _show_faq_from_menu(self):
         self._run_after_menu_closes(self._show_faq)
 
+    def _resolve_update_tlo_home(self, *, require_existing=True):
+        value = self.vars.get("TLOHome").get() if hasattr(self, "vars") and "TLOHome" in self.vars else ""
+        if require_existing:
+            return resolve_inventory_tlo_home(value, getattr(self.cli_args, "myTLO", ""), error_type=RuntimeError)
+        resolved = (value or "").strip() or os.environ.get("TLOHome", "")
+        return os.path.normpath(resolved) if resolved else ""
+
+    def _initialize_update_menu_state(self):
+        try:
+            tlo_home = self._resolve_update_tlo_home(require_existing=False)
+            enabled = bool(tlo_home and is_auto_update_enabled(tlo_home))
+            self.auto_update_var.set(enabled)
+            if enabled:
+                self.root.after(800, self._startup_auto_update_check)
+        except Exception:
+            self.auto_update_var.set(False)
+
+    def _check_for_updates_from_menu(self):
+        self._run_after_menu_closes(lambda: self._start_update_check(manual=True))
+
+    def _toggle_auto_update_from_menu(self):
+        self._run_after_menu_closes(self._toggle_auto_update)
+
+    def _toggle_auto_update(self):
+        enabled = bool(self.auto_update_var.get())
+        try:
+            tlo_home = self._resolve_update_tlo_home(require_existing=True)
+            set_auto_update_enabled(tlo_home, enabled)
+        except Exception as exc:
+            self.auto_update_var.set(False)
+            messagebox.showerror("TLO Auto update", str(exc), parent=self.root)
+            return
+        if enabled:
+            messagebox.showinfo(
+                "TLO Auto update",
+                "Auto update is enabled. TLO will check GitHub at startup and download newer release ZIPs to your Downloads folder.",
+                parent=self.root,
+            )
+            self._start_update_check(manual=False)
+
+    def _startup_auto_update_check(self):
+        try:
+            tlo_home = self._resolve_update_tlo_home(require_existing=True)
+            if is_auto_update_enabled(tlo_home):
+                self.auto_update_var.set(True)
+                if should_auto_check(tlo_home):
+                    self._start_update_check(manual=False)
+        except Exception:
+            self.auto_update_var.set(False)
+
+    def _start_update_check(self, *, manual):
+        thread = getattr(self, "_update_check_thread", None)
+        if thread is not None and thread.is_alive():
+            if manual:
+                messagebox.showinfo("TLO update check", "An update check is already running.", parent=self.root)
+            return
+        try:
+            tlo_home = self._resolve_update_tlo_home(require_existing=False)
+        except Exception:
+            tlo_home = ""
+
+        def worker():
+            result = check_for_updates(tlo_home, manual=manual)
+            try:
+                self.root.after(0, lambda: self._finish_update_check(result, manual))
+            except tk.TclError:
+                pass
+
+        if manual:
+            self.queue.put("Checking GitHub for TLO updates...\n")
+        self._update_check_thread = threading.Thread(target=worker, daemon=True)
+        self._update_check_thread.start()
+
+    def _finish_update_check(self, result, manual):
+        if manual or result.status in {"downloaded", "already_downloaded", "no_asset", "error"}:
+            icon = "error" if result.status == "error" else "info"
+            if icon == "error":
+                messagebox.showerror(result.title, result.message, parent=self.root)
+            else:
+                messagebox.showinfo(result.title, result.message, parent=self.root)
+        try:
+            if result.status in {"downloaded", "already_downloaded", "up_to_date"}:
+                self.queue.put(result.title + "\n")
+            elif result.status in {"error", "no_asset"}:
+                self.queue.put(result.title + ": " + result.message.replace("\n", " ") + "\n")
+        except Exception:
+            pass
+
     def _show_about(self):
         dialog = tk.Toplevel(self.root)
         dialog.title(versioned_title("About TLO"))
@@ -523,7 +623,7 @@ class App:
 
         about_text = (
             "Traders Little Organizer(TM) - TLO\n"
-            f"V1.0Build{BUNDLE_BUILD}\n"
+            f"V1.1Build{BUNDLE_BUILD}\n"
             "TLO is developed by Jay Scarano\n"
             "using ChatGPT and Anthropic/Claude\n"
             "Contact me at: onaracs.tlo of g.mail"
@@ -1073,17 +1173,15 @@ class App:
             if not os.path.isabs(normalized_copy_delete) or not os.path.isdir(normalized_copy_delete):
                 raise ValueError("Tag Copy and Delete Path must be an existing fully qualified directory path")
             tag_copy_and_delete_path = os.path.normpath(normalized_copy_delete)
+        tag_in_place = bool(self.bool_vars["tag_during_inventory"].get())
+        tag_copy = bool(self.bool_vars["tag_copy_during_inventory"].get())
         if for_add_shows:
-            # Add Shows can rename the readyForXfer folder in place, but it is
-            # not an inventory-time tagging workflow and intentionally ignores
-            # the main-window Tag in Place / Tag Copy selections.
-            tag_in_place = False
+            # Add Shows honors Tag in Place for readyForXfer/staged and
+            # duplicate-resolution processing.  It still ignores Tag Copy so the
+            # updater cannot create a second copy path outside the staged flow.
             tag_copy = False
-        else:
-            tag_in_place = bool(self.bool_vars["tag_during_inventory"].get())
-            tag_copy = bool(self.bool_vars["tag_copy_during_inventory"].get())
-            if tag_in_place and tag_copy:
-                raise ValueError("Tag in Place and Tag Copy are mutually exclusive")
+        elif tag_in_place and tag_copy:
+            raise ValueError("Tag in Place and Tag Copy are mutually exclusive")
         tag_copy_destination = ""
         if tag_copy:
             tag_copy_destination = self._confirm_tag_copy_destination()

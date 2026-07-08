@@ -1,7 +1,7 @@
-__version__ = "v322"
-# TLO-GI package version: v322
-__version_summary__ = 'Preserves trailing parenthetical show-name suffixes across compliant Add Shows, full inventory rename/tag, and standalone tagging.'
-# TLO-GI version summary: Preserves trailing parenthetical show-name suffixes across compliant Add Shows, full inventory rename/tag, and standalone tagging.
+__version__ = "v324"
+# TLO-GI package version: v324
+__version_summary__ = 'Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.'
+# TLO-GI version summary: Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.
 
 import csv
 import glob
@@ -14,10 +14,11 @@ import shutil
 import subprocess
 import sys
 from dataclasses import asdict
+from types import SimpleNamespace
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from tlo_artist_db import load_artist_matcher, lookup_artist_master_with_status, match_line_to_artists
-from logging_lib import setup_logging
+from logging_lib import allocate_log_tokens, setup_logging
 from tlo_db_validation import validate_required_databases
 from tlo_audio_tags import collect_group_flac_tag_info
 from tlo_media_rules import MEDIA_EXTENSIONS
@@ -725,6 +726,133 @@ def _append_delete_command(script_path: str, path_to_delete: str) -> None:
             pass
 
 
+
+def _json_list_value(value) -> List[str]:
+    if not value:
+        return []
+    if isinstance(value, list):
+        return [os.path.normpath(str(item)) for item in value if str(item or "").strip()]
+    try:
+        parsed = json.loads(str(value))
+    except Exception:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [os.path.normpath(str(item)) for item in parsed if str(item or "").strip()]
+
+
+def _record_namespace_from_dict(record_dict: Dict[str, str]):
+    """Return an attribute-style metadata object for Add Shows tag-in-place."""
+    main_dir_path = os.path.normpath(str(record_dict.get("main_dir_path", "") or ""))
+    setlist_file = os.path.normpath(str(record_dict.get("setlist_file", "") or "")) if record_dict.get("setlist_file") else ""
+    setlist_files = _json_list_value(record_dict.get("setlist_files_json", ""))
+    if setlist_file and setlist_file not in setlist_files:
+        setlist_files.insert(0, setlist_file)
+    music_dirs = _json_list_value(record_dict.get("music_dirs_json", ""))
+    if main_dir_path and not music_dirs:
+        music_dirs = [main_dir_path]
+    return SimpleNamespace(
+        group_number=1,
+        main_dir_name=os.path.basename(main_dir_path) if main_dir_path else "",
+        main_dir_path=main_dir_path,
+        setlist_file=setlist_file,
+        setlist_files=setlist_files,
+        music_dirs=music_dirs,
+        music_file_count=0,
+        artist=str(record_dict.get("artist", "") or ""),
+        date=str(record_dict.get("date", "") or ""),
+        venue=str(record_dict.get("venue", "") or ""),
+        location=str(record_dict.get("location", "") or ""),
+        parentheticals=str(record_dict.get("parentheticals", "") or ""),
+        album_name=str(record_dict.get("album_name", "") or ""),
+        show_name=str(record_dict.get("show_name", "") or ""),
+        show_in_conflict=str(record_dict.get("show_in_conflict", "") or "").casefold() == "yes",
+        setlistfm_setlist_candidates=[],
+    )
+
+
+def _ensure_add_shows_tag_log_scope(config, scope_path: str) -> None:
+    if not getattr(config, "logs", None):
+        setup_logging(config)
+    logs = getattr(config, "logs", None)
+    if not logs:
+        return
+    if getattr(logs, "current_log_token", ""):
+        return
+    try:
+        token = allocate_log_tokens(config.TLOHome, 1)[0]
+    except Exception:
+        token = "U"
+    config.current_log_token = token
+    logs.start_search_path(os.path.normpath(scope_path or config.TLOHome), 1, log_token=token)
+
+
+def _add_shows_tag_emit(config, text: str) -> None:
+    line = str(text or "").rstrip("\r\n")
+    if not line:
+        return
+    logs = getattr(config, "logs", None)
+    if logs:
+        logs.tag("%s", line)
+
+
+def _tag_add_shows_folder_in_place(config, folder_path: str, record_dict: Dict[str, str], generated_setlist_path: str = "") -> Dict[str, int]:
+    """Tag an Add Shows source folder when the main GUI Tag in Place box is checked.
+
+    Add Shows still never performs Tag Copy.  The regular Add Shows path and
+    the duplicate-resolution path call this after any compliant rename and
+    before moving the folder to staged, so the same physical folder that is
+    staged is the one that receives tags.
+    """
+    from tlo_tag_lib import empty_tag_stats, emit_tag_fallback_summary, emit_tag_problem_summary, tag_group_with_record
+
+    if not bool(getattr(config, "tag_during_inventory", False)):
+        return empty_tag_stats()
+    if not folder_path or not os.path.isdir(folder_path):
+        stats = empty_tag_stats()
+        stats["errors"] += 1
+        _ensure_add_shows_tag_log_scope(config, folder_path or config.TLOHome)
+        _add_shows_tag_emit(config, f"ERROR_ADD_SHOWS_TAG: {folder_path} | folder does not exist")
+        return stats
+
+    _ensure_add_shows_tag_log_scope(config, folder_path)
+    if bool(getattr(config, "tag_copy_during_inventory", False)):
+        _add_shows_tag_emit(config, "ADD_SHOWS_TAG_COPY_IGNORED: Add Shows supports Tag in Place only; Tag Copy was ignored")
+
+    group = _build_single_folder_group(config, folder_path)
+    if generated_setlist_path and os.path.isfile(generated_setlist_path) and not group.get("setlist_file"):
+        group["setlist_file"] = os.path.normpath(generated_setlist_path)
+        group["setlist_files"] = [os.path.normpath(generated_setlist_path)]
+        group["txt_files"] = [os.path.normpath(generated_setlist_path)]
+    record = _record_namespace_from_dict(record_dict)
+    record.main_dir_path = os.path.normpath(folder_path)
+    record.main_dir_name = os.path.basename(os.path.normpath(folder_path))
+    if not record.show_name:
+        stats = empty_tag_stats()
+        stats["groups"] = 1
+        stats["skipped"] = 1
+        _add_shows_tag_emit(config, f"TAG_SKIP: {folder_path} | show unidentified; leaving folder untagged")
+        return stats
+
+    _add_shows_tag_emit(config, f"ADD_SHOWS_TAG_IN_PLACE: {folder_path}")
+    subtotal = tag_group_with_record(
+        config,
+        group,
+        record,
+        emit=lambda text: _add_shows_tag_emit(config, text),
+        allow_unknown_metadata=True,
+        fallback_to_filenames_on_track_problem=True,
+        fallback_to_title_tags_on_track_problem=True,
+    )
+    emit_tag_fallback_summary(subtotal, lambda text: _add_shows_tag_emit(config, text))
+    emit_tag_problem_summary(config, lambda text: _add_shows_tag_emit(config, text))
+    _add_shows_tag_emit(
+        config,
+        f"ADD_SHOWS_TAG_SUMMARY: folders={subtotal['groups']} tagged_files={subtotal['tagged']} skipped_folders={subtotal['skipped']} file_errors={subtotal['errors']}",
+    )
+    return subtotal
+
+
 def process_new_shows(config, current_volume: str, check_duplicates: bool = True) -> Dict[str, int]:
     prepare_updater_config(config)
     dirs = ensure_updater_directories(config.TLOHome)
@@ -747,8 +875,9 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
             record_dict = _record_dict_for_new_folder(config, folder, record, artist_matcher)
             folder = _rename_add_shows_folder_compliantly(config, folder, record_dict)
             folder_leaf = os.path.basename(os.path.normpath(folder))
-            create_or_replace_generated_setlist(config.TLOHome, record_dict)
+            generated_setlist = create_or_replace_generated_setlist(config.TLOHome, record_dict)
             _add_bootlist_row_for_record(config.TLOHome, record_dict, current_volume, folder_leaf)
+            _tag_add_shows_folder_in_place(config, folder, record_dict, generated_setlist)
             move_folder_to(folder, dirs["staged"])
             staged_count += 1
         except Exception:
@@ -812,8 +941,9 @@ def process_duplicate_folder(config, item: Dict[str, object], selected_rows: Seq
         _remove_bootlist_rows(config.TLOHome, selected_rows)
     folder = _rename_add_shows_folder_compliantly(config, folder, record)
     folder_leaf = os.path.basename(os.path.normpath(folder))
-    create_or_replace_generated_setlist(config.TLOHome, record)
+    generated_setlist = create_or_replace_generated_setlist(config.TLOHome, record)
     _add_bootlist_row_for_record(config.TLOHome, record, current_volume, folder_leaf)
+    _tag_add_shows_folder_in_place(config, folder, record, generated_setlist)
     move_folder_to(folder, dirs["staged"])
     return {"delete_commands": deleted_old, "staged": 1}
 

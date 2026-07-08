@@ -12,7 +12,7 @@ Arguments:
   SOURCE_ROOT    Directory containing the TLO Python sources. Defaults to the
                  directory containing this script.
   DIST_ROOT      Output release tree. Defaults to:
-                 $HOME/tloDist-V1.0Build<BUNDLE_NUMBER>
+                 $HOME/tloDist-V1.1Build<BUNDLE_NUMBER>
 
 Environment variables:
   PYTHON_BIN                    Python executable to use. Default: python3
@@ -35,7 +35,7 @@ BUNDLE_NUMBER="$1"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 SOURCE_ROOT="${2:-$SCRIPT_DIR}"
-DIST_ROOT="${3:-$HOME/tloDist-V1.0Build${BUNDLE_NUMBER}}"
+DIST_ROOT="${3:-$HOME/tloDist-V1.1Build${BUNDLE_NUMBER}}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 [[ -d "$SOURCE_ROOT" ]] || fail "SOURCE_ROOT does not exist: $SOURCE_ROOT"

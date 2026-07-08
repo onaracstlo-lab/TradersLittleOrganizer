@@ -1,9 +1,9 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v322"
-# TLO-GI package version: v322
-__version_summary__ = 'Preserves trailing parenthetical show-name suffixes across compliant Add Shows, full inventory rename/tag, and standalone tagging.'
-# TLO-GI version summary: Preserves trailing parenthetical show-name suffixes across compliant Add Shows, full inventory rename/tag, and standalone tagging.
+__version__ = "v324"
+# TLO-GI package version: v324
+__version_summary__ = 'Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.'
+# TLO-GI version summary: Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.
 
 import json
 import os
