@@ -1,7 +1,7 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v324"
-# TLO-GI package version: v324
+__version__ = "v325"
+# TLO-GI package version: v325
 __version_summary__ = 'Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.'
 # TLO-GI version summary: Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.
 
@@ -311,11 +311,6 @@ class App:
         frm.columnconfigure(1, weight=1)
         frm.columnconfigure(2, weight=1)
 
-        resolved_tlo_home_default = (
-            (getattr(self.cli_args, "myTLO", "") or "").strip()
-            or (getattr(self.cli_args, "TLOHome", "") or "").strip()
-            or os.environ.get("TLOHome", "")
-        )
         performance_mode_default = (getattr(self.cli_args, "performance_mode", "balanced") or "balanced").strip().lower()
         cli_max_workers = int(getattr(self.cli_args, "max_workers", 0) or 0)
         cli_max_workers_supplied = bool(hasattr(self.cli_args, "max_workers"))
@@ -327,7 +322,6 @@ class App:
         self._max_workers_auto_default = not (cli_max_workers_supplied and cli_max_workers > 0)
         self._setting_max_workers_programmatically = False
         defaults = {
-            "TLOHome": resolved_tlo_home_default,
             "search_path_override": (getattr(self.cli_args, "search_path_override", "") or "").strip(),
             "search_path_slam_override": (getattr(self.cli_args, "search_path_slam_override", "") or "").strip(),
             "tag_copy_and_delete_path": (getattr(self.cli_args, "tag_copy_and_delete_path", "") or "").strip(),
@@ -359,11 +353,6 @@ class App:
         self.hamburger_button.grid(row=row, column=2, sticky="e", padx=6, pady=(0, 4))
         row += 1
 
-        ttk.Label(frm, text="TLOHome", style="Main.TLabel").grid(row=row, column=0, sticky="w", padx=6, pady=(2, 3))
-        ttk.Entry(frm, textvariable=self.vars["TLOHome"], width=92, style="Main.TEntry").grid(
-            row=row, column=1, columnspan=2, sticky="ew", padx=(12, 6), pady=(2, 3)
-        )
-        row += 1
 
         ttk.Label(frm, text="Search Path", style="Main.TLabel").grid(row=row, column=0, sticky="w", padx=6, pady=(4, 1))
         self.search_path_entry = ttk.Entry(frm, textvariable=self.vars["search_path_override"], width=92, style="Main.TEntry")
@@ -521,6 +510,20 @@ class App:
         except tk.TclError:
             callback()
 
+    def _cli_tlo_home_value(self):
+        """Return the non-GUI --TLOHome value; myTLO precedence is applied by the resolver."""
+        return (getattr(self.cli_args, "TLOHome", "") or "").strip()
+
+    def _cli_my_tlo_value(self):
+        return (getattr(self.cli_args, "myTLO", "") or "").strip()
+
+    def _resolve_gui_tlo_home(self, *, error_type=ValueError):
+        return resolve_inventory_tlo_home(
+            tlo_home=self._cli_tlo_home_value(),
+            my_tlo=self._cli_my_tlo_value(),
+            error_type=error_type,
+        )
+
     def _show_about_from_menu(self):
         self._run_after_menu_closes(self._show_about)
 
@@ -528,10 +531,9 @@ class App:
         self._run_after_menu_closes(self._show_faq)
 
     def _resolve_update_tlo_home(self, *, require_existing=True):
-        value = self.vars.get("TLOHome").get() if hasattr(self, "vars") and "TLOHome" in self.vars else ""
         if require_existing:
-            return resolve_inventory_tlo_home(value, getattr(self.cli_args, "myTLO", ""), error_type=RuntimeError)
-        resolved = (value or "").strip() or os.environ.get("TLOHome", "")
+            return self._resolve_gui_tlo_home(error_type=RuntimeError)
+        resolved = self._cli_my_tlo_value() or self._cli_tlo_home_value() or os.environ.get("TLOHome", "")
         return os.path.normpath(resolved) if resolved else ""
 
     def _initialize_update_menu_state(self):
@@ -639,8 +641,7 @@ class App:
             pass
 
     def _resolve_faq_path(self):
-        tlo_home_value = self.vars.get("TLOHome").get() if hasattr(self, "vars") and "TLOHome" in self.vars else ""
-        tlo_home = resolve_inventory_tlo_home(tlo_home_value, getattr(self.cli_args, "myTLO", ""))
+        tlo_home = self._resolve_gui_tlo_home()
         return os.path.join(tlo_home, "TLO-FAQ.txt")
 
     def _show_faq(self):
@@ -784,8 +785,8 @@ class App:
             return
         try:
             resolved_home = resolve_tlo_home(
-                tlo_home=self.vars["TLOHome"].get().strip(),
-                my_tlo=(getattr(self.cli_args, "myTLO", "") or "").strip(),
+                tlo_home=self._cli_tlo_home_value(),
+                my_tlo=self._cli_my_tlo_value(),
             )
             tag_path = default_tagging_path(
                 tlo_home=resolved_home,
@@ -1150,11 +1151,7 @@ class App:
 
 
     def _build_config(self, *, for_add_shows=False):
-        tlo_home = resolve_inventory_tlo_home(
-            tlo_home=self.vars["TLOHome"].get().strip(),
-            my_tlo=(getattr(self.cli_args, "myTLO", "") or "").strip(),
-            error_type=ValueError,
-        )
+        tlo_home = self._resolve_gui_tlo_home(error_type=ValueError)
         silent = bool(getattr(self.cli_args, "silent", False))
         performance_mode = (self.vars["performance_mode"].get() or "balanced").strip().lower()
         if performance_mode not in {"gentle", "balanced", "fast", "extreme"}:

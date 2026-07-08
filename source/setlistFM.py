@@ -18,8 +18,8 @@ The input date is yyyy-mm-dd. The setlist.fm API search date is dd-MM-yyyy.
 
 from __future__ import annotations
 
-__version__ = "v324"
-# TLO-GI package version: v324
+__version__ = "v325"
+# TLO-GI package version: v325
 __version_summary__ = 'Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.'
 # TLO-GI version summary: Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.
 

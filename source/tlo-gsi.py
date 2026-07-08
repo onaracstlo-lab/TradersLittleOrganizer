@@ -14,8 +14,8 @@ Tkinter GUI that:
 
 from __future__ import annotations
 
-__version__ = "v324"
-# TLO-GI package version: v324
+__version__ = "v325"
+# TLO-GI package version: v325
 
 import csv
 import os
@@ -33,7 +33,7 @@ APP_FILE_NAME = "tlo-gsi.py"
 try:
     from tlo_version import DISPLAY_VERSION
 except ImportError:
-    DISPLAY_VERSION = "v1.1 Build 324"
+    DISPLAY_VERSION = "v1.1 Build 325"
 try:
     from tlo_github_updates import (
         check_for_updates,
@@ -260,12 +260,10 @@ class BootlistSearchApp:
 
         self.style = ttk.Style(self.root)
         self.search_var = tk.StringVar()
-        self.tlohome_var = tk.StringVar(value=str(paths.tlohome))
         self.deep_var = tk.BooleanVar(value=False)
         self.font_family_var = tk.StringVar()
         self.search_history: List[str] = []
         self.search_entry: ttk.Combobox | None = None
-        self.tlohome_entry: ttk.Entry | None = None
         self.font_selector: ttk.Combobox | None = None
         self.auto_update_var = tk.BooleanVar(value=False)
         self._update_check_thread = None
@@ -387,12 +385,7 @@ class BootlistSearchApp:
         search_frame = ttk.Frame(outer)
         search_frame.pack(fill="x", expand=True)
 
-        ttk.Label(search_frame, text="TLOHome").grid(row=0, column=0, sticky="w", padx=(0, 8))
-        self.tlohome_entry = ttk.Entry(search_frame, textvariable=self.tlohome_var)
-        self.tlohome_entry.grid(row=0, column=1, sticky="ew")
-        bind_standard_entry_shortcuts(self.tlohome_entry)
-
-        ttk.Label(search_frame, text="Search").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=(8, 0))
+        ttk.Label(search_frame, text="Search").grid(row=0, column=0, sticky="w", padx=(0, 8))
 
         self.search_entry = ttk.Combobox(
             search_frame,
@@ -400,16 +393,16 @@ class BootlistSearchApp:
             values=self.search_history,
             state="normal",
         )
-        self.search_entry.grid(row=1, column=1, sticky="ew", pady=(8, 0))
+        self.search_entry.grid(row=0, column=1, sticky="ew")
         self.search_entry.focus_set()
         bind_standard_entry_shortcuts(self.search_entry)
         self.search_entry.bind("<Return>", lambda event: self.execute_search())
         self.search_entry.bind("<<ComboboxSelected>>", lambda event: self.search_entry.icursor(tk.END))
 
         deep_check = ttk.Checkbutton(search_frame, text="Deep", variable=self.deep_var)
-        deep_check.grid(row=2, column=1, sticky="w", pady=(8, 0))
+        deep_check.grid(row=1, column=1, sticky="w", pady=(8, 0))
 
-        ttk.Label(search_frame, text="Font").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=(8, 0))
+        ttk.Label(search_frame, text="Font").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=(8, 0))
         self.font_selector = ttk.Combobox(
             search_frame,
             textvariable=self.font_family_var,
@@ -417,7 +410,7 @@ class BootlistSearchApp:
             state="readonly",
             width=28,
         )
-        self.font_selector.grid(row=3, column=1, sticky="w", pady=(8, 0))
+        self.font_selector.grid(row=2, column=1, sticky="w", pady=(8, 0))
         self.font_selector.bind("<<ComboboxSelected>>", self._on_font_family_changed)
 
         search_frame.columnconfigure(1, weight=1)
@@ -549,20 +542,7 @@ class BootlistSearchApp:
         if self.search_entry is not None:
             self.search_entry["values"] = self.search_history
 
-    def _sync_paths_from_tlohome_box(self) -> bool:
-        try:
-            tlohome = validate_tlohome(self.tlohome_var.get())
-        except AppConfigError as exc:
-            messagebox.showerror("Error", str(exc), parent=self.root)
-            return False
-        self.paths = build_paths(tlohome)
-        self.tlohome_var.set(str(tlohome))
-        return True
-
     def execute_search(self) -> None:
-        if not self._sync_paths_from_tlohome_box():
-            return
-
         search_text = self.search_var.get().strip()
         self._remember_search(search_text)
 

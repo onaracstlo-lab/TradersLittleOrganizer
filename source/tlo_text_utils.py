@@ -1,7 +1,7 @@
 """Text cleanup utilities for safe titles, ASCII normalization, comparison keys, and full-file reads."""
 
-__version__ = "v324"
-# TLO-GI package version: v324
+__version__ = "v325"
+# TLO-GI package version: v325
 __version_summary__ = 'Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.'
 # TLO-GI version summary: Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows.
 import os
