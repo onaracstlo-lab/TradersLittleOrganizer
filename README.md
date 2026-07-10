@@ -4,7 +4,7 @@ to provide venue, location and setlist info.
 
 There is an artist database that comes from a scrape of artists in etreeDB and a venue list.
 
-An excellent replacement for LiveShowTagger - works in bulk, more discriminating about choosing setlist files, and less finicky about song numbering.
+An excellent replacement for LiveShowTagger - works in bulk, more discriminating about choosing setlist files, and less finicky about format of how songs are numbered.
 
 Relies on python packages mutagen, tkinter, tkinterdnd2 and imageio_ffmpeg.
 
