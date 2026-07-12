@@ -1,7 +1,7 @@
-__version__ = "v328"
-# TLO-GI package version: v328
-__version_summary__ = 'Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.'
-# TLO-GI version summary: Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.
+__version__ = "v334"
+# TLO-GI package version: v334
+__version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
+# TLO-GI version summary: Rearranges the main-window checkboxes into the requested two-row, four-column layout.
 
 import csv
 import glob
@@ -23,7 +23,15 @@ from logging_lib import allocate_log_tokens, setup_logging
 from tlo_db_validation import validate_required_databases
 from tlo_audio_tags import collect_group_flac_tag_info
 from tlo_media_rules import MEDIA_EXTENSIONS
-from tlo_phase23_v2 import _extract_metadata_for_group, _find_date_matches, _match_string_dash_string, _string_date_matches, _compliant_string_date_matches
+from tlo_phase23_v2 import (
+    _extract_metadata_for_group,
+    _find_date_matches,
+    _format_show_metadata_log_lines,
+    _format_switches_log_line,
+    _match_string_dash_string,
+    _string_date_matches,
+    _compliant_string_date_matches,
+)
 from tlo_postprocess import (
     _adjust_show_name_for_output,
     _export_combined_setlist_text,
@@ -837,7 +845,7 @@ def _json_list_value(value) -> List[str]:
 
 
 def _record_namespace_from_dict(record_dict: Dict[str, str]):
-    """Return an attribute-style metadata object for Add Shows tag-in-place."""
+    """Return an attribute-style metadata object for Add Shows tag-in-place/logging."""
     main_dir_path = os.path.normpath(str(record_dict.get("main_dir_path", "") or ""))
     setlist_file = os.path.normpath(str(record_dict.get("setlist_file", "") or "")) if record_dict.get("setlist_file") else ""
     setlist_files = _json_list_value(record_dict.get("setlist_files_json", ""))
@@ -847,22 +855,32 @@ def _record_namespace_from_dict(record_dict: Dict[str, str]):
     if main_dir_path and not music_dirs:
         music_dirs = [main_dir_path]
     return SimpleNamespace(
-        group_number=1,
+        group_number=int(record_dict.get("group_number") or 1),
         main_dir_name=os.path.basename(main_dir_path) if main_dir_path else "",
         main_dir_path=main_dir_path,
         setlist_file=setlist_file,
         setlist_files=setlist_files,
         music_dirs=music_dirs,
-        music_file_count=0,
+        music_file_count=int(record_dict.get("music_file_count") or 0),
+        volume_label=str(record_dict.get("volume_label", "") or ""),
         artist=str(record_dict.get("artist", "") or ""),
         date=str(record_dict.get("date", "") or ""),
         venue=str(record_dict.get("venue", "") or ""),
         location=str(record_dict.get("location", "") or ""),
+        city=str(record_dict.get("city", "") or ""),
+        region=str(record_dict.get("region", "") or ""),
+        country=str(record_dict.get("country", "") or ""),
+        qualifier=str(record_dict.get("qualifier", "") or ""),
         parentheticals=str(record_dict.get("parentheticals", "") or ""),
         album_name=str(record_dict.get("album_name", "") or ""),
+        is_24_bit=str(record_dict.get("is_24_bit", "") or "").casefold() == "yes",
         show_name=str(record_dict.get("show_name", "") or ""),
         show_in_conflict=str(record_dict.get("show_in_conflict", "") or "").casefold() == "yes",
         setlistfm_setlist_candidates=[],
+        flac_tag_samples=[],
+        evidence={},
+        conflicts=[],
+        observations=[str(record_dict.get("add_shows_observation", "") or "").strip()] if str(record_dict.get("add_shows_observation", "") or "").strip() else [],
     )
 
 
@@ -882,6 +900,23 @@ def _ensure_add_shows_tag_log_scope(config, scope_path: str) -> None:
     logs.start_search_path(os.path.normpath(scope_path or config.TLOHome), 1, log_token=token)
 
 
+
+
+def _log_add_shows_metadata(config, record_dict: Dict[str, str], folder_path: str, current_volume: str, action_detail: str) -> None:
+    """Write a meta*.log entry for an Add Shows candidate or staged item."""
+    _ensure_add_shows_tag_log_scope(config, folder_path or config.TLOHome)
+    logs = getattr(config, "logs", None)
+    if not logs:
+        return
+    record_for_log = dict(record_dict)
+    record_for_log.setdefault("main_dir_path", folder_path)
+    record_for_log.setdefault("volume_label", _split_storage_designation(current_volume)[0])
+    record_for_log["add_shows_observation"] = action_detail
+    switches_line = _format_switches_log_line(config, action="Add Shows")
+    for line in _format_show_metadata_log_lines(_record_namespace_from_dict(record_for_log), [], switches_line=switches_line):
+        logs.show_metadata("%s", line)
+    logs.show_metadata("")
+
 def _add_shows_tag_emit(config, text: str) -> None:
     line = str(text or "").rstrip("\r\n")
     if not line:
@@ -892,16 +927,19 @@ def _add_shows_tag_emit(config, text: str) -> None:
 
 
 def _tag_add_shows_folder_in_place(config, folder_path: str, record_dict: Dict[str, str], generated_setlist_path: str = "") -> Dict[str, int]:
-    """Tag an Add Shows source folder when the main GUI Tag in Place box is checked.
+    """Tag or SHN-convert an Add Shows source folder before staging.
 
-    Add Shows still never performs Tag Copy.  The regular Add Shows path and
-    the duplicate-resolution path call this after any compliant rename and
-    before moving the folder to staged, so the same physical folder that is
-    staged is the one that receives tags.
+    Add Shows still never performs Tag Copy.  When Tag in Place is checked, the
+    folder is tagged in place.  When Tag in Place is not checked but Convert shn
+    is checked, SHN/SHNF files are converted to FLAC without writing tags.  Both
+    the regular Add Shows path and the duplicate-resolution path call this after
+    compliant rename and generated setlist preparation, but before staging.
     """
-    from tlo_tag_lib import empty_tag_stats, emit_tag_fallback_summary, emit_tag_problem_summary, tag_group_with_record
+    from tlo_tag_lib import convert_group_shn_files_only, empty_tag_stats, emit_tag_fallback_summary, emit_tag_problem_summary, tag_group_with_record
 
-    if not bool(getattr(config, "tag_during_inventory", False)):
+    tag_enabled = bool(getattr(config, "tag_during_inventory", False))
+    convert_only = bool(getattr(config, "convert_shn", False)) and not tag_enabled
+    if not tag_enabled and not convert_only:
         return empty_tag_stats()
     if not folder_path or not os.path.isdir(folder_path):
         stats = empty_tag_stats()
@@ -922,6 +960,20 @@ def _tag_add_shows_folder_in_place(config, folder_path: str, record_dict: Dict[s
     record = _record_namespace_from_dict(record_dict)
     record.main_dir_path = os.path.normpath(folder_path)
     record.main_dir_name = os.path.basename(os.path.normpath(folder_path))
+    if convert_only:
+        _add_shows_tag_emit(config, f"ADD_SHOWS_CONVERT_SHN_ONLY: {folder_path}")
+        conversion_stats = convert_group_shn_files_only(
+            config,
+            group,
+            emit=lambda text: _add_shows_tag_emit(config, text),
+            context="Add Shows",
+        )
+        _add_shows_tag_emit(
+            config,
+            f"ADD_SHOWS_CONVERT_SHN_SUMMARY: folders={conversion_stats['groups']} converted_files={conversion_stats['converted']} file_errors={conversion_stats['errors']}",
+        )
+        return empty_tag_stats() | {"groups": conversion_stats["groups"], "errors": conversion_stats["errors"]}
+
     if not record.show_name:
         stats = empty_tag_stats()
         stats["groups"] = 1
@@ -964,6 +1016,8 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
             if check_duplicates:
                 matches = find_potential_duplicate_rows_for_folder(config, folder, record, artist_matcher)
             if matches:
+                record_dict = _record_dict_for_new_folder(config, folder, record, artist_matcher)
+                _log_add_shows_metadata(config, record_dict, folder, current_volume, "Add Shows duplicate candidate moved to dups")
                 move_folder_to(folder, dirs["dups"])
                 duplicate_count += 1
                 continue
@@ -972,6 +1026,7 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
             folder_leaf = os.path.basename(os.path.normpath(folder))
             generated_setlist = create_or_replace_generated_setlist(config.TLOHome, record_dict)
             _add_bootlist_row_for_record(config.TLOHome, record_dict, current_volume, folder_leaf)
+            _log_add_shows_metadata(config, record_dict, folder, current_volume, "Add Shows staged new show")
             _tag_add_shows_folder_in_place(config, folder, record_dict, generated_setlist)
             move_folder_to(folder, dirs["staged"])
             staged_count += 1
@@ -1038,6 +1093,7 @@ def process_duplicate_folder(config, item: Dict[str, object], selected_rows: Seq
     folder_leaf = os.path.basename(os.path.normpath(folder))
     generated_setlist = create_or_replace_generated_setlist(config.TLOHome, record)
     _add_bootlist_row_for_record(config.TLOHome, record, current_volume, folder_leaf)
+    _log_add_shows_metadata(config, record, folder, current_volume, "Add Shows duplicate resolved and staged")
     _tag_add_shows_folder_in_place(config, folder, record, generated_setlist)
     move_folder_to(folder, dirs["staged"])
     return {"delete_commands": deleted_old, "staged": 1}

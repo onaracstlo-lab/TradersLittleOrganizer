@@ -1,7 +1,7 @@
-__version__ = "v328"
-# TLO-GI package version: v328
-__version_summary__ = 'Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.'
-# TLO-GI version summary: Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.
+__version__ = "v334"
+# TLO-GI package version: v334
+__version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
+# TLO-GI version summary: Rearranges the main-window checkboxes into the requested two-row, four-column layout.
 import argparse
 import sys
 import os
@@ -56,6 +56,7 @@ class Config:
     tag_copy_and_delete_path: str = ""
     rename_compliantly: bool = False
     convert_shn: bool = False
+    artist_in_album: bool = True
     etree_lookup: bool = False
     setlistfm_lookup: bool = False
     setlistfm_min_interval_seconds: float = 0.600
@@ -191,6 +192,7 @@ def build_inventory_parser() -> argparse.ArgumentParser:
         "tag_copy_and_delete_path",
         "rename_compliantly",
         "convert_shn",
+        "artist_in_album",
         "etree_lookup",
         "setlistfm_lookup",
         "performance_mode",
@@ -259,6 +261,7 @@ def build_config():
         tag_copy_and_delete_path=(values.get("tag_copy_and_delete_path") or ""),
         rename_compliantly=bool(values.get("rename_compliantly", False)),
         convert_shn=bool(values.get("convert_shn", False)),
+        artist_in_album=bool(values.get("artist_in_album", True)),
         etree_lookup=bool(values.get("etree_lookup", False)),
         setlistfm_lookup=bool(values.get("setlistfm_lookup", False)),
         performance_mode=values.get("performance_mode", "balanced") or "balanced",

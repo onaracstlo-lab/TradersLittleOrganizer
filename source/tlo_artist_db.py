@@ -1,12 +1,12 @@
-__version__ = "v328"
-# TLO-GI package version: v328
-__version_summary__ = 'Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.'
-# TLO-GI version summary: Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.
+__version__ = "v334"
+# TLO-GI package version: v334
+__version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
+# TLO-GI version summary: Rearranges the main-window checkboxes into the requested two-row, four-column layout.
 import re
 import sqlite3
 from dataclasses import dataclass, field
 from typing import Deque, Dict, List, Optional, Set, Tuple
-from collections import deque
+from collections import OrderedDict, deque
 
 from tlo_db_validation import validate_artist_sqlite
 from tlo_text_utils import compact_ws
@@ -48,7 +48,8 @@ class ArtistMatcher:
     exact_map: Dict[str, Set[str]] = field(default_factory=dict)
     master_aliases: Dict[str, List[str]] = field(default_factory=dict)
     master_norms: Dict[str, Set[str]] = field(default_factory=dict)
-    query_cache: Dict[str, Tuple[str, Tuple[str, ...]]] = field(default_factory=dict)
+    query_cache: "OrderedDict[str, Tuple[str, Tuple[str, ...]]]" = field(default_factory=OrderedDict)
+    query_cache_max_entries: int = 4096
     recent_masters: Deque[str] = field(default_factory=lambda: deque(maxlen=5))
 
 
@@ -118,6 +119,33 @@ def _update_recent_master(matcher: ArtistMatcher, master: str) -> None:
     matcher.recent_masters.appendleft(master)
 
 
+def _cache_query_result(matcher: ArtistMatcher, cache_key: str, status: str, masters: Tuple[str, ...]) -> None:
+    matcher.query_cache[cache_key] = (status, masters)
+    try:
+        matcher.query_cache.move_to_end(cache_key)
+    except AttributeError:
+        pass
+    max_entries = max(1, int(getattr(matcher, "query_cache_max_entries", 4096) or 4096))
+    while len(matcher.query_cache) > max_entries:
+        try:
+            matcher.query_cache.popitem(last=False)
+        except TypeError:
+            # Plain dict fallback for old pickled/test objects; remove the oldest insertion key.
+            first_key = next(iter(matcher.query_cache), None)
+            if first_key is None:
+                break
+            matcher.query_cache.pop(first_key, None)
+
+
+def _get_query_result(matcher: ArtistMatcher, cache_key: str) -> Tuple[str, Tuple[str, ...]] | None:
+    cached = matcher.query_cache.get(cache_key)
+    if cached is not None:
+        try:
+            matcher.query_cache.move_to_end(cache_key)
+        except AttributeError:
+            pass
+    return cached
+
 def lookup_artist_masters(text: str, matcher: Optional[ArtistMatcher]) -> List[str]:
     if matcher is None:
         return []
@@ -126,7 +154,7 @@ def lookup_artist_masters(text: str, matcher: Optional[ArtistMatcher]) -> List[s
         return []
 
     cache_key = _cache_key(variants)
-    cached = matcher.query_cache.get(cache_key)
+    cached = _get_query_result(matcher, cache_key)
     if cached is not None:
         _status, masters = cached
         if len(masters) == 1:
@@ -135,7 +163,7 @@ def lookup_artist_masters(text: str, matcher: Optional[ArtistMatcher]) -> List[s
 
     cached_recent = _query_matches_cached_aliases(variants, matcher)
     if cached_recent:
-        matcher.query_cache[cache_key] = ("matched", tuple(cached_recent))
+        _cache_query_result(matcher, cache_key, "matched", tuple(cached_recent))
         _update_recent_master(matcher, cached_recent[0])
         return cached_recent
 
@@ -145,7 +173,7 @@ def lookup_artist_masters(text: str, matcher: Optional[ArtistMatcher]) -> List[s
 
     masters = tuple(sorted(found, key=lambda item: item.casefold()))
     status = "matched" if len(masters) == 1 else ("collision" if len(masters) > 1 else "no_match")
-    matcher.query_cache[cache_key] = (status, masters)
+    _cache_query_result(matcher, cache_key, status, masters)
     if len(masters) == 1:
         _update_recent_master(matcher, masters[0])
     return list(masters)
@@ -158,7 +186,7 @@ def lookup_artist_master_with_status(text: str, matcher: Optional[ArtistMatcher]
     if not variants:
         return "no_match", []
     cache_key = _cache_key(variants)
-    cached = matcher.query_cache.get(cache_key)
+    cached = _get_query_result(matcher, cache_key)
     if cached is not None:
         status, masters = cached
         if status == "matched" and masters:

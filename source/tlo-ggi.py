@@ -1,9 +1,9 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v328"
-# TLO-GI package version: v328
-__version_summary__ = 'Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.'
-# TLO-GI version summary: Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.
+__version__ = "v334"
+# TLO-GI package version: v334
+__version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
+# TLO-GI version summary: Rearranges the main-window checkboxes into the requested two-row, four-column layout.
 
 import multiprocessing
 
@@ -199,6 +199,7 @@ def _parse_gui_command_line(argv=None):
         "tag_copy_and_delete_path",
         "rename_compliantly",
         "convert_shn",
+        "artist_in_album",
         "etree_lookup",
         "setlistfm_lookup",
         "performance_mode",
@@ -418,6 +419,7 @@ class App:
         checkbox_frame.columnconfigure(0, weight=0)
         checkbox_frame.columnconfigure(1, weight=0)
         checkbox_frame.columnconfigure(2, weight=0)
+        checkbox_frame.columnconfigure(3, weight=0)
         for option in GUI_CHECKBOX_OPTIONS:
             checkbox_command = None
             if option.config_field in {"tag_during_inventory", "tag_copy_during_inventory"}:
@@ -432,7 +434,7 @@ class App:
                 row=option.gui_row,
                 column=option.gui_col,
                 sticky="w",
-                padx=(4, 34 if option.gui_col in (0, 1) else 4),
+                padx=(4, 24 if option.gui_col in (0, 1, 2) else 4),
                 pady=(3, 3),
             )
         self._lookup_dependency_syncing = False
@@ -632,8 +634,8 @@ class App:
         dialog.resizable(False, False)
 
         about_text = (
-            "Traders Little Organizer(TM) - TLO\n"
-            f"V1.1Build{BUNDLE_BUILD}\n"
+            "Traders Little Organizer™ - TLO\n"
+            f"V1.2Build{BUNDLE_BUILD}\n"
             "TLO is developed by Jay Scarano\n"
             "using ChatGPT and Anthropic/Claude\n"
             "Contact me at: onaracs.tlo of g.mail"
@@ -821,6 +823,7 @@ class App:
             tag_copy_destination=str(getattr(self.cli_args, "tag_copy_destination", "") or ""),
             rename_compliantly=rename_compliantly,
             convert_shn=bool(self.bool_vars["convert_shn"].get()),
+            artist_in_album=bool(self.bool_vars["artist_in_album"].get()),
         )
 
     def _open_add_to_inventory(self):
@@ -1208,6 +1211,7 @@ class App:
             tag_copy_and_delete_path=tag_copy_and_delete_path,
             rename_compliantly=rename_compliantly,
             convert_shn=self.bool_vars["convert_shn"].get(),
+            artist_in_album=self.bool_vars["artist_in_album"].get(),
             etree_lookup=self.bool_vars["etree_lookup"].get(),
             setlistfm_lookup=self.bool_vars["setlistfm_lookup"].get(),
             performance_mode=performance_mode,
@@ -1464,6 +1468,7 @@ class TaggerWindow:
         tag_copy_destination="",
         rename_compliantly=False,
         convert_shn=False,
+        artist_in_album=True,
     ):
         self.parent_app = parent_app
         self.tlo_home = tlo_home
@@ -1477,6 +1482,7 @@ class TaggerWindow:
             self.tag_in_place = True
         self.rename_compliantly = bool(rename_compliantly)
         self.convert_shn = bool(convert_shn)
+        self.artist_in_album = bool(artist_in_album)
         self.queue = queue.Queue()
         self.worker = None
         self._processing = False
@@ -1511,7 +1517,8 @@ class TaggerWindow:
                 f"eTreeDB title fallback: {'on' if self.etree_lookup else 'off'} | "
                 f"Tag mode: {tag_mode_label} | "
                 f"Rename Compliantly: {'on' if self.rename_compliantly else 'off'} | "
-                f"Convert shn: {'on' if self.convert_shn else 'off'}"
+                f"Convert shn: {'on' if self.convert_shn else 'off'} | "
+                f"Artist in Album: {'on' if self.artist_in_album else 'off'}"
             ),
             wraplength=TAGGER_MODE_WRAP_PIXELS,
             justify="left",
@@ -1589,6 +1596,7 @@ class TaggerWindow:
                     tag_copy_destination=tag_copy_destination,
                     rename_compliantly=bool(self.rename_compliantly),
                     convert_shn=self.convert_shn,
+                    artist_in_album=self.artist_in_album,
                     emit=self.queue.put,
                 )
                 error = None
@@ -1702,7 +1710,8 @@ class AddToInventoryWindow:
             frm,
             text=(
                 f"Mode: {'Compliant' if bool(getattr(self.config, 'compliant', False)) else 'Non-compliant'} | "
-                f"Rename Compliantly: {'on' if bool(getattr(self.config, 'rename_compliantly', False)) else 'off'}"
+                f"Rename Compliantly: {'on' if bool(getattr(self.config, 'rename_compliantly', False)) else 'off'} | "
+                f"Artist in Album: {'on' if bool(getattr(self.config, 'artist_in_album', True)) else 'off'}"
             ),
         ).grid(row=4, column=0, columnspan=3, sticky="w", pady=(1, 8))
 

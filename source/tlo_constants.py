@@ -1,7 +1,7 @@
-__version__ = "v328"
-# TLO-GI package version: v328
-__version_summary__ = 'Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.'
-# TLO-GI version summary: Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.
+__version__ = "v334"
+# TLO-GI package version: v334
+__version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
+# TLO-GI version summary: Rearranges the main-window checkboxes into the requested two-row, four-column layout.
 import re
 
 US_STATE_CODE_TO_NAME = {

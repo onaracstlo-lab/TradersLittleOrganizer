@@ -1,7 +1,7 @@
-__version__ = "v328"
-# TLO-GI package version: v328
-__version_summary__ = 'Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.'
-# TLO-GI version summary: Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.
+__version__ = "v334"
+# TLO-GI package version: v334
+__version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
+# TLO-GI version summary: Rearranges the main-window checkboxes into the requested two-row, four-column layout.
 
 import argparse
 from dataclasses import dataclass
@@ -106,13 +106,18 @@ OPTIONS = [
     ),
     Option(
         "rename_compliantly", "--rename-compliantly", "flag",
-        gui="checkbox", gui_label="Rename Compliantly", gui_row=2, gui_col=2,
+        gui="checkbox", gui_label="Rename Compliantly", gui_row=1, gui_col=1,
         help="Rename a folder using the resolved Show Name. In Full Inventory with no tagging/copy mode, rename the original folder in place without writing audio tags.",
     ),
     Option(
         "convert_shn", "--convert-shn", "flag",
-        gui="checkbox", gui_label="Convert shn", gui_row=1, gui_col=1,
-        help="During Tag or inventory-time tagging, convert .shn/.shnf files to .flac before tagging; delete originals only after successful conversion.",
+        gui="checkbox", gui_label="Convert shn", gui_row=1, gui_col=3,
+        help="Convert .shn/.shnf files to .flac during Tag, Full Inventory, or Add Shows; delete originals only after successful conversion.",
+    ),
+    Option(
+        "artist_in_album", "--no-artist-in-album", "store_false",
+        default=True, gui="checkbox", gui_label="Artist in Album Tag", gui_row=0, gui_col=3,
+        help="Include the artist name at the beginning of Album tags by default. Use this flag to preserve the prior Album tag format without the artist prefix.",
     ),
     Option(
         "tag_copy_destination", "--tag-copy-destination", "text",
@@ -178,6 +183,10 @@ def add_option_to_parser(parser: argparse.ArgumentParser, option: Option) -> Non
         kwargs["metavar"] = option.metavar
     if option.kind == "flag":
         parser.add_argument(option.flag, action="store_true", **kwargs)
+        return
+    if option.kind == "store_false":
+        kwargs["default"] = option.default
+        parser.add_argument(option.flag, action="store_false", **kwargs)
         return
     if option.kind == "choice":
         kwargs["choices"] = tuple(option.choices)

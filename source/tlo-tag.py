@@ -1,7 +1,7 @@
-__version__ = "v328"
-# TLO-GI package version: v328
-__version_summary__ = 'Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.'
-# TLO-GI version summary: Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.
+__version__ = "v334"
+# TLO-GI package version: v334
+__version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
+# TLO-GI version summary: Rearranges the main-window checkboxes into the requested two-row, four-column layout.
 
 import argparse
 import multiprocessing
@@ -32,6 +32,7 @@ def _parse_args(argv=None):
         "tag_copy_destination",
         "rename_compliantly",
         "convert_shn",
+        "artist_in_album",
     ))
     parser.add_argument("--debug", dest="debug", nargs="?", const=True, default=False, type=parse_bool, metavar="BOOL", help="Enable debug output and write Unknown-title diagnostic setlist copies under TLOHome/debug; optional BOOL accepts true/false, yes/no, y/n, 1/0.")
     parser.add_argument("--tag-path", dest="tagPathOption", default="", metavar="DIR", help="Optional fully qualified tagging path override.")
@@ -65,6 +66,7 @@ def main(argv=None) -> int:
             tag_copy_destination=str(getattr(args, "tag_copy_destination", "") or ""),
             rename_compliantly=bool(args.rename_compliantly),
             convert_shn=bool(args.convert_shn),
+            artist_in_album=bool(args.artist_in_album),
             emit=lambda text: console_emit(str(text), end="" if str(text).endswith("\n") else "\n"),
         )
         return 0

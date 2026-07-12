@@ -1,9 +1,9 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v328"
-# TLO-GI package version: v328
-__version_summary__ = 'Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.'
-# TLO-GI version summary: Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.
+__version__ = "v334"
+# TLO-GI package version: v334
+__version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
+# TLO-GI version summary: Rearranges the main-window checkboxes into the requested two-row, four-column layout.
 
 import json
 import os
@@ -2442,11 +2442,60 @@ def _log_group(config, item: dict, group_number: int) -> None:
 
 
 
-def _format_show_metadata_log_lines(record: ShowMetadata, date_matches: List[Dict[str, str]]) -> List[str]:
+def _yes_no(value) -> str:
+    return "yes" if bool(value) else "no"
+
+
+def _format_switches_log_line(config, action: str = "Full Inventory") -> str:
+    """Return the per-entry settings line written to meta*.log.
+
+    The generic Tag value means that a tagging-mode mutation is active for this
+    specific item: Tag in Place, Tag Copy, or Tag Copy/Delete Original. Convert
+    shn is reported separately because it may run without tagging. Per-path
+    --$copy and --$copy-delete directives are included in the effective values
+    without persisting any additional state.
+    """
+    action_text = compact_ws(action or "Full Inventory")
+    if action_text.casefold() == "add shows":
+        # Add Shows intentionally honors Tag in Place and Convert shn only; Tag
+        # Copy and Tag Copy/Delete Original are inventory-time transfer modes and
+        # are not active for Add Shows entries.
+        copy_delete_enabled = False
+        tag_copy_enabled = False
+        tag_in_place_enabled = bool(getattr(config, "tag_during_inventory", False))
+    else:
+        path_copy_destination = str(getattr(config, "current_path_copy_destination", "") or "").strip()
+        path_copy_delete_destination = str(getattr(config, "current_path_copy_delete_destination", "") or "").strip()
+        global_copy_delete_path = str(getattr(config, "tag_copy_and_delete_path", "") or "").strip()
+        copy_delete_enabled = bool(global_copy_delete_path or path_copy_delete_destination)
+        tag_copy_enabled = bool((not copy_delete_enabled) and (path_copy_destination or getattr(config, "tag_copy_during_inventory", False)))
+        tag_in_place_enabled = bool(getattr(config, "tag_during_inventory", False))
+    tag_enabled = bool(tag_in_place_enabled or tag_copy_enabled or copy_delete_enabled)
+    parts = [
+        f"Action: {action_text}",
+        f"Compliant: {_yes_no(getattr(config, 'compliant', False))}",
+        f"Tag: {_yes_no(tag_enabled)}",
+        f"Tag in Place: {_yes_no(tag_in_place_enabled)}",
+        f"Tag Copy: {_yes_no(tag_copy_enabled)}",
+        f"Tag Copy/Delete Original: {_yes_no(copy_delete_enabled)}",
+        f"Rename Compliantly: {_yes_no(getattr(config, 'rename_compliantly', False))}",
+        f"Convert shn: {_yes_no(getattr(config, 'convert_shn', False))}",
+        f"Artist in Album: {_yes_no(getattr(config, 'artist_in_album', True))}",
+        f"etreeDB: {_yes_no(getattr(config, 'etree_lookup', False))}",
+        f"setlist.fm: {_yes_no(getattr(config, 'setlistfm_lookup', False))}",
+    ]
+    if bool(getattr(config, "compliant", False)):
+        parts.append(f"Compliant Artist Mode: {compact_ws(getattr(config, 'compliant_artist_mode', '') or 'master')}")
+    return "Switches -- " + "; ".join(parts) + ";"
+
+
+def _format_show_metadata_log_lines(record: ShowMetadata, date_matches: List[Dict[str, str]], switches_line: str = "") -> List[str]:
     """Return the exact meta-log entry lines for one show metadata record."""
     lines: List[str] = []
     lines.append(f"SHOW_NAME: {record.show_name}")
     lines.append(f"SHOW_IN_CONFLICT: {'yes' if record.show_in_conflict else 'no'}")
+    if switches_line:
+        lines.append(compact_ws(switches_line))
     lines.append(f"MAIN_DIR_PATH: {record.main_dir_path}")
     lines.append(f"GROUP_NUMBER: {record.group_number}")
     lines.append(f"MAIN_DIR_NAME: {record.main_dir_name}")
@@ -2499,12 +2548,12 @@ def _format_show_metadata_log_lines(record: ShowMetadata, date_matches: List[Dic
     return lines
 
 
-def _format_show_metadata_log_entry(record: ShowMetadata, date_matches: List[Dict[str, str]]) -> str:
-    return "\n".join(_format_show_metadata_log_lines(record, date_matches)) + "\n"
+def _format_show_metadata_log_entry(record: ShowMetadata, date_matches: List[Dict[str, str]], switches_line: str = "") -> str:
+    return "\n".join(_format_show_metadata_log_lines(record, date_matches, switches_line=switches_line)) + "\n"
 
 
-def _log_show_metadata(config, record: ShowMetadata, date_matches: List[Dict[str, str]]) -> None:
-    for line in _format_show_metadata_log_lines(record, date_matches):
+def _log_show_metadata(config, record: ShowMetadata, date_matches: List[Dict[str, str]], switches_line: str = "") -> None:
+    for line in _format_show_metadata_log_lines(record, date_matches, switches_line=switches_line):
         config.logs.show_metadata("%s", line)
     config.logs.show_metadata("")
 
@@ -3968,10 +4017,14 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
     # A copy/copy-delete directive is an inventory-time tagging mode. Tag Copy
     # keeps inventory ownership with the original tree. Tag Copy/Delete Original
     # reads metadata from the original tree, transfers the show, then inventories
-    # the transferred destination and tags that destination.
+    # the transferred destination and tags that destination. Convert shn can also
+    # be requested by itself; in that case the run converts SHN/SHNF files in the
+    # inventoried folder without writing tags.
     tag_during_inventory = tag_in_place_during_inventory or tag_copy_during_inventory or tag_copy_and_delete_enabled
+    convert_shn_without_tagging = bool(getattr(config, "convert_shn", False)) and not tag_during_inventory
     rename_in_place_only = bool(getattr(config, "rename_compliantly", False)) and not tag_during_inventory
     tag_totals = {"groups": 0, "tagged": 0, "skipped": 0, "errors": 0, "comma_item_folders": [], "comma_line_folders": []}
+    shn_conversion_totals = {"groups": 0, "converted": 0, "errors": 0}
     copy_delete_inventory_groups: List[dict] = []
     renamed_inventory_groups: List[dict] = []
     if tag_during_inventory:
@@ -3986,6 +4039,8 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
         )
     else:
         config.logs.tag("TAG_DURING_INVENTORY: disabled")
+    if convert_shn_without_tagging:
+        config.logs.tag("CONVERT_SHN_DURING_INVENTORY: enabled | tagging=disabled")
     if rename_in_place_only:
         config.logs.tag("RENAME_COMPLIANTLY: enabled | mode=in-place | tagging=disabled")
     if tag_copy_and_delete_enabled:
@@ -4051,9 +4106,31 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
                     config.logs.conflicts("COPY_DELETE_FAILED_NOT_INVENTORIED: %s | %s", record.main_dir_path, exc)
                     continue
 
+        if convert_shn_without_tagging and tag_group_ready:
+            try:
+                from tlo_tag_lib import convert_group_shn_files_only, merge_shn_conversion_stats
+
+                def _convert_log_emit(text: str) -> None:
+                    line = str(text or "").rstrip("\r\n")
+                    if line:
+                        config.logs.tag("%s", line)
+
+                subtotal = convert_group_shn_files_only(
+                    config,
+                    inventory_group,
+                    emit=_convert_log_emit,
+                    context="full inventory",
+                )
+                merge_shn_conversion_stats(shn_conversion_totals, subtotal)
+            except Exception as exc:
+                shn_conversion_totals["groups"] += 1
+                shn_conversion_totals["errors"] += 1
+                config.logs.tag("ERROR_CONVERT_SHN: %s | inventory SHN conversion failed: %s", inventory_record.main_dir_path, exc)
+
         _log_group(config, inventory_group, group_number)
-        meta_log_entry = _format_show_metadata_log_entry(inventory_record, date_matches)
-        _log_show_metadata(config, inventory_record, date_matches)
+        switches_line = _format_switches_log_line(config, action="Full Inventory")
+        meta_log_entry = _format_show_metadata_log_entry(inventory_record, date_matches, switches_line=switches_line)
+        _log_show_metadata(config, inventory_record, date_matches, switches_line=switches_line)
         if tag_copy_and_delete_enabled and tag_group_ready and not unidentified_for_mutation:
             copy_delete_inventory_groups.append(inventory_group)
         if tag_during_inventory and tag_group_ready and not unidentified_for_mutation:
@@ -4109,6 +4186,13 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
             tag_totals["tagged"],
             tag_totals["skipped"],
             tag_totals["errors"],
+        )
+    if convert_shn_without_tagging:
+        config.logs.tag(
+            "CONVERT_SHN_SUMMARY: folders=%s converted_files=%s file_errors=%s",
+            shn_conversion_totals["groups"],
+            shn_conversion_totals["converted"],
+            shn_conversion_totals["errors"],
         )
 
     if unresolved_paths:

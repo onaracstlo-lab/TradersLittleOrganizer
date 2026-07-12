@@ -6,10 +6,10 @@ avoids overwriting user inventory, setlists, logs, or databases.
 """
 from __future__ import annotations
 
-__version__ = "v328"
-# TLO-GI package version: v328
-__version_summary__ = "Makes Add Shows honor Tag in Place for regular and duplicate incremental add workflows."
-# TLO-GI version summary: Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.
+__version__ = "v334"
+# TLO-GI package version: v334
+__version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
+# TLO-GI version summary: Rearranges the main-window checkboxes into the requested two-row, four-column layout.
 
 import datetime as _dt
 import hashlib
@@ -20,6 +20,7 @@ import shutil
 import sys
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +33,12 @@ DEFAULT_REPO_NAME = os.environ.get("TLO_GITHUB_REPO", "TradersLittleOrganizer")
 SETTINGS_FILE_NAME = "update-settings.json"
 AUTO_CHECK_INTERVAL_HOURS = 24
 USER_AGENT = f"TLO-update-checker/{DISPLAY_VERSION.replace(' ', '-') }"
+ALLOWED_DOWNLOAD_HOSTS = {
+    "github.com",
+    "objects.githubusercontent.com",
+    "github-releases.githubusercontent.com",
+}
+ALLOWED_DOWNLOAD_HOST_SUFFIXES = (".githubusercontent.com",)
 
 
 @dataclass(frozen=True)
@@ -172,6 +179,24 @@ def _asset_download_url(asset: dict[str, Any]) -> str:
     return str(asset.get("browser_download_url") or "")
 
 
+def _safe_asset_filename(asset_name: str) -> str:
+    """Return a Downloads-safe basename for a GitHub asset name."""
+    name = Path(str(asset_name or "")).name
+    name = re.sub(r"[^A-Za-z0-9._ -]+", "_", name).strip(" .")
+    return name or "TLO-update.zip"
+
+
+def _download_host_allowed(url: str) -> bool:
+    try:
+        parsed = urllib.parse.urlparse(str(url or ""))
+    except Exception:
+        return False
+    if parsed.scheme.casefold() != "https":
+        return False
+    host = (parsed.hostname or "").casefold().strip(".")
+    return host in ALLOWED_DOWNLOAD_HOSTS or any(host.endswith(suffix) for suffix in ALLOWED_DOWNLOAD_HOST_SUFFIXES)
+
+
 def _matching_assets(release: dict[str, Any]) -> list[dict[str, Any]]:
     assets = release.get("assets")
     return [asset for asset in assets if isinstance(asset, dict)] if isinstance(assets, list) else []
@@ -260,6 +285,8 @@ def _download_asset(asset: dict[str, Any], destination: Path) -> bool:
     url = _asset_download_url(asset)
     if not url:
         raise ValueError("The selected release asset does not include a download URL.")
+    if not _download_host_allowed(url):
+        raise ValueError("The selected release asset download URL is not hosted by GitHub.")
     if destination.exists() and _file_matches_asset(destination, asset):
         return False
 
@@ -336,7 +363,7 @@ def check_for_updates(
             return UpdateCheckResult(
                 status="up_to_date",
                 title="TLO is up to date",
-                message=f"Installed: {DISPLAY_VERSION}\nLatest: v1.1 Build {latest_build}",
+                message=f"Installed: {DISPLAY_VERSION}\nLatest: v1.2 Build {latest_build}",
                 latest_build=latest_build,
             )
 
@@ -348,14 +375,14 @@ def check_for_updates(
                 title="TLO update found, but no ZIP matched this platform",
                 message=(
                     f"Installed: {DISPLAY_VERSION}\n"
-                    f"Latest: v1.1 Build {latest_build}\n\n"
+                    f"Latest: v1.2 Build {latest_build}\n\n"
                     f"No update ZIP for {platform_key} and no complete ZIP were found in the latest GitHub Release."
                 ),
                 latest_build=latest_build,
             )
 
         asset_name = _asset_name(asset)
-        destination = _downloads_dir() / asset_name
+        destination = _downloads_dir() / _safe_asset_filename(asset_name)
         downloaded = _download_asset(asset, destination)
         _update_download_settings(tlo_home, latest_build, asset_name, destination, package_kind)
         if package_kind == "update":
@@ -364,18 +391,19 @@ def check_for_updates(
         else:
             kind_text = "complete distribution"
             extra = "This ZIP may include required support files. Review the release notes before replacing files in TLOHome."
+        verification_note = "" if _expected_digest(asset) else "\n\nGitHub did not provide a SHA-256 digest for this asset; TLO verified the downloaded file size only."
         if downloaded:
             title = "TLO update downloaded"
-            lead = f"TLO v1.1 Build {latest_build} {kind_text} was downloaded to:"
+            lead = f"TLO v1.2 Build {latest_build} {kind_text} was downloaded to:"
             status = "downloaded"
         else:
             title = "TLO update already downloaded"
-            lead = f"TLO v1.1 Build {latest_build} {kind_text} is already available at:"
+            lead = f"TLO v1.2 Build {latest_build} {kind_text} is already available at:"
             status = "already_downloaded"
         return UpdateCheckResult(
             status=status,
             title=title,
-            message=f"{lead}\n\n{destination}\n\n{extra}",
+            message=f"{lead}\n\n{destination}\n\n{extra}{verification_note}",
             latest_build=latest_build,
             path=str(destination),
             asset_name=asset_name,

@@ -1,9 +1,9 @@
 """Tagging engine for standalone Tag runs and inventory-time tag/copy/move workflows."""
 
-__version__ = "v328"
-# TLO-GI package version: v328
-__version_summary__ = 'Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.'
-# TLO-GI version summary: Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.
+__version__ = "v334"
+# TLO-GI package version: v334
+__version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
+# TLO-GI version summary: Rearranges the main-window checkboxes into the requested two-row, four-column layout.
 
 import os
 import re
@@ -369,6 +369,7 @@ def build_tagger_config(
     tag_copy_destination: str = "",
     rename_compliantly: bool = False,
     convert_shn: bool = False,
+    artist_in_album: bool = True,
 ) -> Config:
     resolved_home = resolve_tlo_home(tlo_home=tlo_home, my_tlo=my_tlo)
     tag_copy_enabled = bool(tag_copy)
@@ -395,6 +396,7 @@ def build_tagger_config(
         performance_mode="gentle",
         max_workers=1,
         convert_shn=bool(convert_shn),
+        artist_in_album=bool(artist_in_album),
     )
     config.tlo_dbs_dir = os.path.join(config.TLOHome, TLO_DBS_DIRNAME)
     config.artist_sqlite_db_file = os.path.join(config.tlo_dbs_dir, ARTIST_SQLITE_DB_FILENAME)
@@ -1936,7 +1938,7 @@ def format_tag_track_number(track_number: int, total_tracks: int) -> str:
     width = 3 if total > 99 else 2
     return str(max(0, number)).zfill(width)
 
-def _album_for_record(config: Config, record) -> str:
+def _base_album_for_record(config: Config, record) -> str:
     if getattr(config, "compliant", False):
         album_piece = compact_ws(getattr(record, "album_name", "") or getattr(record, "venue", ""))
         date_piece = compact_ws(getattr(record, "date", ""))
@@ -1950,6 +1952,14 @@ def _album_for_record(config: Config, record) -> str:
         getattr(record, "venue", ""),
         getattr(record, "location", ""),
     ] if compact_ws(part)))
+
+
+def _album_for_record(config: Config, record) -> str:
+    album = _base_album_for_record(config, record)
+    artist = compact_ws(getattr(record, "artist", ""))
+    if bool(getattr(config, "artist_in_album", True)) and artist and album:
+        return compact_ws(f"{artist} {album}")
+    return album
 
 
 def _safe_message_parts(messages: Sequence[str]) -> str:
@@ -2563,6 +2573,73 @@ def _prepare_audio_files_for_tagging(
     # Keep the group's file list current for debug copies and later fallbacks.
     group["music_files"] = list(converted_or_existing)
     return sorted(converted_or_existing, key=_audio_track_order), errors
+
+
+def empty_shn_conversion_stats() -> Dict[str, int]:
+    return {"groups": 0, "converted": 0, "errors": 0}
+
+
+def merge_shn_conversion_stats(total: Dict[str, int], subtotal: Dict[str, int]) -> Dict[str, int]:
+    for key in ("groups", "converted", "errors"):
+        total[key] = int(total.get(key, 0) or 0) + int(subtotal.get(key, 0) or 0)
+    return total
+
+
+def convert_group_shn_files_only(
+    config: Config,
+    group: dict,
+    emit: Optional[Callable[[str], None]] = None,
+    context: str = "",
+) -> Dict[str, int]:
+    """Convert SHN/SHNF files for an already-discovered group without tagging.
+
+    This is used when the user checks Convert shn but does not enable a tagging
+    mode.  It performs the same conservative conversion as tagging preparation:
+    the app-bundled converter is required, an existing FLAC destination is never
+    overwritten, and the original SHN/SHNF file is deleted only after the FLAC is
+    successfully written.
+    """
+    stats = empty_shn_conversion_stats()
+    if not bool(getattr(config, "convert_shn", False)):
+        return stats
+
+    raw_audio_files = _rescan_group_audio_files(group)
+    shn_files = [
+        os.path.normpath(path_name)
+        for path_name in raw_audio_files
+        if _is_shn_audio_file(path_name) and not _is_sample_audio_file(path_name)
+    ]
+    if not shn_files:
+        group["music_files"] = sorted(list(raw_audio_files or []), key=_audio_track_order)
+        return stats
+
+    stats["groups"] = 1
+    folder = _folder_label(group)
+    context_note = compact_ws(str(context or ""))
+    context_suffix = f" | {context_note}" if context_note else ""
+    _emit(emit, f"INFO: {folder} | SHN files detected: {len(shn_files)}; convert shn=yes | tagging=no{context_suffix}")
+
+    replacements: Dict[str, str] = {}
+    for shn_path in sorted(shn_files, key=_audio_track_order):
+        try:
+            replacements[os.path.normcase(os.path.normpath(shn_path))] = convert_shn_to_flac(shn_path, emit=emit)
+            stats["converted"] += 1
+        except Exception as exc:
+            stats["errors"] += 1
+            _emit(emit, _format_tag_file_error_line(shn_path, f"SHN conversion failed: {exc}"))
+
+    updated_files: List[str] = []
+    seen = set()
+    for path_name in sorted(list(raw_audio_files or []), key=_audio_track_order):
+        key = os.path.normcase(os.path.normpath(path_name))
+        replacement = replacements.get(key, os.path.normpath(path_name))
+        replacement_key = os.path.normcase(os.path.normpath(replacement))
+        if replacement_key in seen:
+            continue
+        seen.add(replacement_key)
+        updated_files.append(os.path.normpath(replacement))
+    group["music_files"] = sorted(updated_files, key=_audio_track_order)
+    return stats
 
 
 def _problem(folder: str, reason: str, emit: Optional[Callable[[str], None]], code: str = "") -> None:
@@ -3572,6 +3649,7 @@ def run_tagger(
     tag_copy_destination: str = "",
     rename_compliantly: bool = False,
     convert_shn: bool = False,
+    artist_in_album: bool = True,
     emit: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, int]:
     clear_cancel_request()
@@ -3586,6 +3664,7 @@ def run_tagger(
         tag_copy_destination=tag_copy_destination,
         rename_compliantly=rename_compliantly,
         convert_shn=convert_shn,
+        artist_in_album=artist_in_album,
     )
     ensure_corrupt_flacs_log(config)
     tagging_path = resolve_tagging_path(config.TLOHome, tag_path=tag_path)
@@ -3602,7 +3681,7 @@ def run_tagger(
     artist_matcher = load_artist_matcher(config)
 
     tag_mode = "copy" if bool(getattr(config, "tag_copy_during_inventory", False)) else "in-place"
-    _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | tag mode={tag_mode} | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | debug={'yes' if config.debug else 'no'}")
+    _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | tag mode={tag_mode} | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | artist in album={'yes' if getattr(config, 'artist_in_album', True) else 'no'} | debug={'yes' if config.debug else 'no'}")
     _emit(tag_emit, f"TLOHome: {config.TLOHome}")
     _emit(tag_emit, f"Tagging Path: {tagging_path}")
     if bool(getattr(config, "tag_copy_during_inventory", False)):

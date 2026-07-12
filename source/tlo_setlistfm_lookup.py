@@ -24,9 +24,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-__version__ = "v328"
-# TLO-GI package version: v328
-__version_summary__ = 'Adds native-Windows Explorer drag/drop to the Tagger window Tagging Path field.'
+__version__ = "v334"
+# TLO-GI package version: v334
+__version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 MIN_REQUEST_INTERVAL_SECONDS = 0.600
@@ -177,7 +177,8 @@ def wait_for_rate_limit(
     one request every ``min_interval_seconds`` and no more than ``max_calls``
     requests for the current inventory run. A mkdir-based lock is used because
     os.mkdir is atomic on Windows and POSIX. If a stale lock is encountered, it
-    is removed after a short grace period.
+    is removed after a short grace period. When a wait is required, the lock is
+    released before sleeping so other workers do not spin behind a sleeper.
     """
     state_file = _rate_limit_state_file()
     lock_dir = _rate_limit_lock_dir()
@@ -186,57 +187,65 @@ def wait_for_rate_limit(
     max_calls = int(max_calls or 0)
 
     while True:
-        try:
-            os.mkdir(lock_dir)
-            break
-        except FileExistsError:
+        while True:
             try:
-                age = time.time() - os.path.getmtime(lock_dir)
-                if age > stale_after:
+                os.mkdir(lock_dir)
+                break
+            except FileExistsError:
+                try:
+                    age = time.time() - os.path.getmtime(lock_dir)
+                    if age > stale_after:
+                        os.rmdir(lock_dir)
+                        continue
+                except Exception:
+                    pass
+                time.sleep(0.01)
+
+        try:
+            state = _read_rate_state(state_file)
+            counts = state.setdefault("counts", {})
+            try:
+                current_count = int(counts.get(safe_run_id, 0) or 0)
+            except Exception:
+                current_count = 0
+
+            if max_calls > 0 and current_count >= max_calls:
+                raise SetlistFMError(
+                    f"setlist.fm call limit reached for this inventory run: {current_count}/{max_calls}"
+                )
+
+            last_request = float(state.get("last_request", 0.0) or 0.0)
+            now = time.time()
+            wait_time = float(min_interval_seconds) - (now - last_request)
+            if wait_time > 0:
+                # Release it, wait, and retry so other workers do not busy-spin
+                # behind a lock holder that is only sleeping.
+                try:
                     os.rmdir(lock_dir)
-                    continue
+                except Exception:
+                    pass
+                time.sleep(wait_time)
+                continue
+
+            call_number = current_count + 1
+            counts[safe_run_id] = call_number
+            state["last_request"] = time.time()
+
+            # Keep the file from growing forever if several test/manual runs use
+            # unique run ids. The active run id and most recent known ids are kept.
+            if len(counts) > 32:
+                keep = list(counts.keys())[-31:]
+                if safe_run_id not in keep:
+                    keep.append(safe_run_id)
+                state["counts"] = {key: counts[key] for key in keep if key in counts}
+
+            _write_rate_state(state_file, state)
+            return call_number
+        finally:
+            try:
+                os.rmdir(lock_dir)
             except Exception:
                 pass
-            time.sleep(0.01)
-
-    try:
-        state = _read_rate_state(state_file)
-        counts = state.setdefault("counts", {})
-        try:
-            current_count = int(counts.get(safe_run_id, 0) or 0)
-        except Exception:
-            current_count = 0
-
-        if max_calls > 0 and current_count >= max_calls:
-            raise SetlistFMError(
-                f"setlist.fm call limit reached for this inventory run: {current_count}/{max_calls}"
-            )
-
-        last_request = float(state.get("last_request", 0.0) or 0.0)
-        now = time.time()
-        wait_time = float(min_interval_seconds) - (now - last_request)
-        if wait_time > 0:
-            time.sleep(wait_time)
-
-        call_number = current_count + 1
-        counts[safe_run_id] = call_number
-        state["last_request"] = time.time()
-
-        # Keep the file from growing forever if several test/manual runs use
-        # unique run ids. The active run id and most recent known ids are kept.
-        if len(counts) > 32:
-            keep = list(counts.keys())[-31:]
-            if safe_run_id not in keep:
-                keep.append(safe_run_id)
-            state["counts"] = {key: counts[key] for key in keep if key in counts}
-
-        _write_rate_state(state_file, state)
-        return call_number
-    finally:
-        try:
-            os.rmdir(lock_dir)
-        except Exception:
-            pass
 
 def api_get(
     path: str,
