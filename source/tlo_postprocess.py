@@ -1,9 +1,9 @@
 """Postprocess metadata logs into setlist files, bootlist.csv, duplicate/group outputs, and summary/unidentified-show files."""
 
-__version__ = "v334"
-# TLO-GI package version: v334
-__version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
-# TLO-GI version summary: Rearranges the main-window checkboxes into the requested two-row, four-column layout.
+__version__ = "v335"
+# TLO-GI package version: v335
+__version_summary__ = 'Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.'
+# TLO-GI version summary: Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.
 import csv
 import glob
 import json

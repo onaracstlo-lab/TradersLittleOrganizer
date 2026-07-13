@@ -1,9 +1,9 @@
 """Tagging engine for standalone Tag runs and inventory-time tag/copy/move workflows."""
 
-__version__ = "v334"
-# TLO-GI package version: v334
-__version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
-# TLO-GI version summary: Rearranges the main-window checkboxes into the requested two-row, four-column layout.
+__version__ = "v335"
+# TLO-GI package version: v335
+__version_summary__ = 'Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.'
+# TLO-GI version summary: Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.
 
 import os
 import re
@@ -2475,6 +2475,30 @@ def _bundled_ffmpeg_executable() -> str:
     return ""
 
 
+def _hidden_windows_subprocess_kwargs(platform_name: Optional[str] = None) -> dict:
+    """Return subprocess options that prevent console windows on native Windows.
+
+    PyInstaller one-file GUI builds otherwise allow console executables such as
+    the bundled ffmpeg converter to create short-lived Windows Terminal tabs.
+    Non-Windows platforms receive no extra subprocess options.
+    """
+    if (platform_name or os.name) != "nt":
+        return {}
+    kwargs = {}
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    if creationflags:
+        kwargs["creationflags"] = creationflags
+    startupinfo_type = getattr(subprocess, "STARTUPINFO", None)
+    startf_use_showwindow = getattr(subprocess, "STARTF_USESHOWWINDOW", 0)
+    if startupinfo_type is not None and startf_use_showwindow:
+        startupinfo = startupinfo_type()
+        startupinfo.dwFlags |= startf_use_showwindow
+        if hasattr(startupinfo, "wShowWindow"):
+            startupinfo.wShowWindow = getattr(subprocess, "SW_HIDE", 0)
+        kwargs["startupinfo"] = startupinfo
+    return kwargs
+
+
 def _shn_converter_available() -> bool:
     return bool(_bundled_ffmpeg_executable())
 
@@ -2514,6 +2538,7 @@ def convert_shn_to_flac(path_name: str, emit: Optional[Callable[[str], None]] = 
                 stderr=subprocess.PIPE,
                 text=True,
                 timeout=SHN_CONVERSION_TIMEOUT_SECONDS,
+                **_hidden_windows_subprocess_kwargs(),
             )
         except subprocess.TimeoutExpired as exc:
             raise TaggerError(f"bundled SHN converter timed out after {SHN_CONVERSION_TIMEOUT_SECONDS} seconds") from exc

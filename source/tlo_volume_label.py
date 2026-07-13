@@ -1,7 +1,7 @@
-__version__ = "v334"
-# TLO-GI package version: v334
-__version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
-# TLO-GI version summary: Rearranges the main-window checkboxes into the requested two-row, four-column layout.
+__version__ = "v335"
+# TLO-GI package version: v335
+__version_summary__ = 'Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.'
+# TLO-GI version summary: Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.
 import ctypes
 import os
 import re
@@ -62,9 +62,28 @@ def _mount_point_for_path(path_text: str) -> str:
         probe = parent
 
 
+def _hidden_windows_subprocess_kwargs(platform_name=None):
+    """Return subprocess options that keep Windows helper commands invisible."""
+    if (platform_name or os.name) != "nt":
+        return {}
+    kwargs = {}
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    if creationflags:
+        kwargs["creationflags"] = creationflags
+    startupinfo_type = getattr(subprocess, "STARTUPINFO", None)
+    startf_use_showwindow = getattr(subprocess, "STARTF_USESHOWWINDOW", 0)
+    if startupinfo_type is not None and startf_use_showwindow:
+        startupinfo = startupinfo_type()
+        startupinfo.dwFlags |= startf_use_showwindow
+        if hasattr(startupinfo, "wShowWindow"):
+            startupinfo.wShowWindow = getattr(subprocess, "SW_HIDE", 0)
+        kwargs["startupinfo"] = startupinfo
+    return kwargs
+
+
 def _run_command(command):
     try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=8, check=False)
+        result = subprocess.run(command, capture_output=True, text=True, timeout=8, check=False, **_hidden_windows_subprocess_kwargs())
     except Exception:
         return ''
     output = (result.stdout or '').strip()

@@ -3,7 +3,7 @@ Regression tests pinning the TLO Inventory requirements' explicit worked example
 to the current implementation behavior.
 
 These tests are derived directly from the worked examples in
-TLO_Inventory_Requirements_Working_v334.docx (Sections 1-15 and
+TLO_Inventory_Requirements_Working_v335.docx (Sections 1-15 and
 Appendices A-I, with focused examples from Sections 1, 5, 7, 8, 10-15, and Appendix E). They are intended as a guard so that
 future date/filename/metadata regex churn cannot silently change documented
 behavior.
@@ -18,10 +18,10 @@ errors were removed in v190 because those defects are fixed. v191 adds filename.
 """
 
 
-__version__ = "v334"
-# TLO-GI package version: v334
-__version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
-# TLO-GI version summary: Rearranges the main-window checkboxes into the requested two-row, four-column layout.
+__version__ = "v335"
+# TLO-GI package version: v335
+__version_summary__ = 'Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.'
+# TLO-GI version summary: Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.
 
 import importlib.util
 import inspect
@@ -1478,7 +1478,7 @@ def test_v305_tagger_gui_keeps_bold_app_heading_and_uses_current_public_version(
     build_source = inspect.getsource(gui.TaggerWindow._build)
 
     assert TAGGER_TITLE == "Traders Little Helper™ Tagger App"
-    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 334"
+    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 335"
     assert "self.window.title(TAGGER_DISPLAY_VERSION)" in init_source
     assert build_source.count("text=TAGGER_TITLE") == 1
     assert "text=TAGGER_TITLE, font=title_font" in build_source
@@ -6872,10 +6872,10 @@ def test_v304_inventory_updater_button_uses_requested_two_line_label():
 def test_v305_public_version_matches_bundle_number():
     import tlo_version as V
 
-    assert V.VERSION == "v334"
-    assert V.BUNDLE_BUILD == 334
-    assert V.DISPLAY_VERSION == "v1.2 Build 334"
-    assert V.versioned_title("TLO Inventory GUI") == "TLO Inventory GUI v1.2 Build 334"
+    assert V.VERSION == "v335"
+    assert V.BUNDLE_BUILD == 335
+    assert V.DISPLAY_VERSION == "v1.2 Build 335"
+    assert V.versioned_title("TLO Inventory GUI") == "TLO Inventory GUI v1.2 Build 335"
 
 
 def test_v305_startup_banner_never_appends_release_change_summary():
@@ -6884,7 +6884,7 @@ def test_v305_startup_banner_never_appends_release_change_summary():
 
     for debug in (False, True):
         banner = M._startup_banner(SimpleNamespace(debug=debug))
-        assert banner == "Starting tlo-gi v1.2 Build 334"
+        assert banner == "Starting tlo-gi v1.2 Build 335"
         assert V.VERSION_SUMMARY not in banner
         assert " - " not in banner
 
@@ -6893,9 +6893,9 @@ def test_v305_all_toplevel_gui_titles_include_public_version():
     gui = _load_tlo_ggi_module()
     from tlo_inventory_update import UPDATER_DISPLAY_VERSION
 
-    assert gui.WINDOW_TITLE == "TLO Inventory GUI v1.2 Build 334"
-    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 334"
-    assert UPDATER_DISPLAY_VERSION == "TLO Inventory Updater v1.2 Build 334"
+    assert gui.WINDOW_TITLE == "TLO Inventory GUI v1.2 Build 335"
+    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 335"
+    assert UPDATER_DISPLAY_VERSION == "TLO Inventory Updater v1.2 Build 335"
 
     source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
     expected_calls = (
@@ -7024,7 +7024,7 @@ def test_v317_main_inventory_hamburger_help_cascade_sources_about_and_faq():
     assert 'Traders Little Organizer™ - TLO' in source
     assert 'f"V1.2Build{BUNDLE_BUILD}\\n"' in source
     assert 'TLO-FAQ.txt' in source
-    assert gui.BUNDLE_BUILD == 334
+    assert gui.BUNDLE_BUILD == 335
 
 
 
@@ -7529,7 +7529,7 @@ def test_v324_update_checker_prefers_platform_complete_fallback(monkeypatch):
 
     release = {
         "tag_name": "v1.1-build329",
-        "name": "TLO v1.2 Build 334",
+        "name": "TLO v1.2 Build 335",
         "assets": [
             {"name": "TLO_V1.1Build329_complete_Windows.zip", "browser_download_url": "https://example.invalid/win", "size": 1},
             {"name": "TLO_V1.1Build329_complete_Linux.zip", "browser_download_url": "https://example.invalid/linux", "size": 1},
@@ -7663,12 +7663,12 @@ def test_v330_update_destination_uses_sanitized_basename_and_warns_without_diges
     import tlo_github_updates as G
 
     release = {
-        "tag_name": "v1.2-build335",
-        "name": "TLO v1.2 Build 335",
+        "tag_name": "v1.2-build336",
+        "name": "TLO v1.2 Build 336",
         "assets": [
             {
-                "name": "../TLO_V1.2Build335_update_Linux.zip",
-                "browser_download_url": "https://github.com/onaracstlo-lab/TradersLittleOrganizer/releases/download/v335/TLO.zip",
+                "name": "../TLO_V1.2Build336_update_Linux.zip",
+                "browser_download_url": "https://github.com/onaracstlo-lab/TradersLittleOrganizer/releases/download/v336/TLO.zip",
                 "size": 1,
             }
         ],
@@ -7687,8 +7687,8 @@ def test_v330_update_destination_uses_sanitized_basename_and_warns_without_diges
     result = G.check_for_updates(tmp_path / "TLOHome", manual=True)
 
     assert result.status == "downloaded"
-    assert seen == [tmp_path / "TLO_V1.2Build335_update_Linux.zip"]
-    assert result.path == str(tmp_path / "TLO_V1.2Build335_update_Linux.zip")
+    assert seen == [tmp_path / "TLO_V1.2Build336_update_Linux.zip"]
+    assert result.path == str(tmp_path / "TLO_V1.2Build336_update_Linux.zip")
     assert "verified the downloaded file size only" in result.message
 
 
@@ -7979,3 +7979,63 @@ def test_v334_main_gui_configures_four_checkbox_columns():
     source = Path("tlo-ggi.py").read_text(encoding="utf-8")
     for column in range(4):
         assert f"checkbox_frame.columnconfigure({column}, weight=0)" in source
+
+
+# --------------------------------------------------------------------------- #
+# v335 - Native Windows helper subprocesses remain hidden in GUI one-file builds
+# --------------------------------------------------------------------------- #
+
+def test_v335_hidden_windows_subprocess_kwargs_include_no_window_flags(monkeypatch):
+    import tlo_tag_lib as taglib
+
+    class FakeStartupInfo:
+        def __init__(self):
+            self.dwFlags = 0
+            self.wShowWindow = None
+
+    monkeypatch.setattr(taglib.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+    monkeypatch.setattr(taglib.subprocess, "STARTUPINFO", FakeStartupInfo, raising=False)
+    monkeypatch.setattr(taglib.subprocess, "STARTF_USESHOWWINDOW", 1, raising=False)
+    monkeypatch.setattr(taglib.subprocess, "SW_HIDE", 0, raising=False)
+
+    kwargs = taglib._hidden_windows_subprocess_kwargs("nt")
+
+    assert kwargs["creationflags"] == 0x08000000
+    assert kwargs["startupinfo"].dwFlags & 1
+    assert kwargs["startupinfo"].wShowWindow == 0
+    assert taglib._hidden_windows_subprocess_kwargs("posix") == {}
+
+
+def test_v335_shn_converter_passes_hidden_windows_subprocess_options(monkeypatch, tmp_path):
+    import tlo_tag_lib as taglib
+
+    shn = tmp_path / "01 Song One.shn"
+    shn.write_bytes(b"fake shn")
+    monkeypatch.setattr(taglib, "_bundled_ffmpeg_executable", lambda: "C:/app/ffmpeg.exe")
+    monkeypatch.setattr(taglib, "_hidden_windows_subprocess_kwargs", lambda: {"creationflags": 12345})
+    captured = {}
+
+    def fake_run(command, **kwargs):
+        captured.update(kwargs)
+        Path(command[-1]).write_bytes(b"fake flac")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(taglib.subprocess, "run", fake_run)
+    taglib.convert_shn_to_flac(str(shn), emit=lambda _text: None)
+
+    assert captured["creationflags"] == 12345
+
+
+def test_v335_physical_drive_powershell_passes_hidden_windows_subprocess_options(monkeypatch):
+    import tlo_volume_label as volume
+
+    monkeypatch.setattr(volume, "_hidden_windows_subprocess_kwargs", lambda: {"creationflags": 67890})
+    captured = {}
+
+    def fake_run(command, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(stdout="7\n", stderr="")
+
+    monkeypatch.setattr(volume.subprocess, "run", fake_run)
+    assert volume._run_command(["powershell.exe", "-NoProfile", "-Command", "echo 7"]) == "7"
+    assert captured["creationflags"] == 67890

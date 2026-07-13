@@ -24,8 +24,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-__version__ = "v334"
-# TLO-GI package version: v334
+__version__ = "v335"
+# TLO-GI package version: v335
 __version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"

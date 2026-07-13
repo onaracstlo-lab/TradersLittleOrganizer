@@ -1,7 +1,7 @@
-__version__ = "v334"
-# TLO-GI package version: v334
-__version_summary__ = 'Rearranges the main-window checkboxes into the requested two-row, four-column layout.'
-# TLO-GI version summary: Rearranges the main-window checkboxes into the requested two-row, four-column layout.
+__version__ = "v335"
+# TLO-GI package version: v335
+__version_summary__ = 'Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.'
+# TLO-GI version summary: Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.
 from console_output_lib import console_print
 from initial_dir_walk_lib import initial_dir_walk
 from tlo_complete_path_log import compact_complete_path_log
