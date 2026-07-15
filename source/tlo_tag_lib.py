@@ -1,9 +1,9 @@
-"""Tagging engine for standalone Tag runs and inventory-time tag/copy/move workflows."""
+"""Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v335"
-# TLO-GI package version: v335
-__version_summary__ = 'Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.'
-# TLO-GI version summary: Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.
+__version__ = "v336"
+# TLO-GI package version: v336
+__version_summary__ = 'Restricts standalone Tag to direct tagging and hides undocumented myTLO help.'
+# TLO-GI version summary: Restricts standalone Tag to direct tagging and hides undocumented myTLO help.
 
 import os
 import re
@@ -364,22 +364,11 @@ def build_tagger_config(
     compliant: bool = False,
     etree_lookup: bool = False,
     debug: bool = False,
-    tag_in_place: bool = True,
-    tag_copy: bool = False,
-    tag_copy_destination: str = "",
     rename_compliantly: bool = False,
     convert_shn: bool = False,
     artist_in_album: bool = True,
 ) -> Config:
     resolved_home = resolve_tlo_home(tlo_home=tlo_home, my_tlo=my_tlo)
-    tag_copy_enabled = bool(tag_copy)
-    tag_in_place_enabled = bool(tag_in_place) and not tag_copy_enabled
-    normalized_destination = ""
-    if tag_copy_enabled:
-        normalized_destination = normalize_platform_input_path(strip_optional_quotes(str(tag_copy_destination or "")).strip())
-        if not normalized_destination or not os.path.isabs(normalized_destination) or not os.path.isdir(normalized_destination):
-            raise TaggerError(f"Tag Copy destination is not a valid existing full path: {tag_copy_destination}")
-        normalized_destination = os.path.normpath(normalized_destination)
     config = Config(
         debug=bool(debug),
         silent=False,
@@ -387,9 +376,12 @@ def build_tagger_config(
         search_path_override="",
         search_path_slam_override="",
         compliant=bool(compliant),
-        tag_during_inventory=tag_in_place_enabled,
-        tag_copy_during_inventory=tag_copy_enabled,
-        tag_copy_destination=normalized_destination,
+        # The standalone tagger always writes tags directly to the selected
+        # tagging path. These shared Config fields remain fixed so inventory-only
+        # copy controls cannot leak into standalone Tag processing.
+        tag_during_inventory=True,
+        tag_copy_during_inventory=False,
+        tag_copy_destination="",
         rename_compliantly=bool(rename_compliantly),
         etree_lookup=bool(etree_lookup),
         setlistfm_lookup=False,
@@ -3669,9 +3661,6 @@ def run_tagger(
     tag_path: str = "",
     etree_lookup: bool = False,
     debug: bool = False,
-    tag_in_place: bool = True,
-    tag_copy: bool = False,
-    tag_copy_destination: str = "",
     rename_compliantly: bool = False,
     convert_shn: bool = False,
     artist_in_album: bool = True,
@@ -3684,9 +3673,6 @@ def run_tagger(
         compliant=compliant,
         etree_lookup=etree_lookup,
         debug=debug,
-        tag_in_place=tag_in_place,
-        tag_copy=tag_copy,
-        tag_copy_destination=tag_copy_destination,
         rename_compliantly=rename_compliantly,
         convert_shn=convert_shn,
         artist_in_album=artist_in_album,
@@ -3705,12 +3691,9 @@ def run_tagger(
     tag_emit = _build_tag_log_emit(config, emit)
     artist_matcher = load_artist_matcher(config)
 
-    tag_mode = "copy" if bool(getattr(config, "tag_copy_during_inventory", False)) else "in-place"
-    _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | tag mode={tag_mode} | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | artist in album={'yes' if getattr(config, 'artist_in_album', True) else 'no'} | debug={'yes' if config.debug else 'no'}")
+    _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | artist in album={'yes' if getattr(config, 'artist_in_album', True) else 'no'} | debug={'yes' if config.debug else 'no'}")
     _emit(tag_emit, f"TLOHome: {config.TLOHome}")
     _emit(tag_emit, f"Tagging Path: {tagging_path}")
-    if bool(getattr(config, "tag_copy_during_inventory", False)):
-        _emit(tag_emit, f"Tag Copy Destination: {config.tag_copy_destination}")
 
     groups = _groups_from_inventory_discovery(config, tagging_path)
     if not groups:

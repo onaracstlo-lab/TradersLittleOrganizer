@@ -1,9 +1,9 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v335"
-# TLO-GI package version: v335
-__version_summary__ = 'Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.'
-# TLO-GI version summary: Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.
+__version__ = "v336"
+# TLO-GI package version: v336
+__version_summary__ = 'Restricts standalone Tag to direct tagging and hides undocumented myTLO help.'
+# TLO-GI version summary: Restricts standalone Tag to direct tagging and hides undocumented myTLO help.
 
 import multiprocessing
 
@@ -807,9 +807,6 @@ class App:
         except Exception as exc:
             messagebox.showerror("tlo-ggi", str(exc), parent=self.root)
             return
-        tag_in_place = bool(self.bool_vars["tag_during_inventory"].get())
-        tag_copy = bool(self.bool_vars["tag_copy_during_inventory"].get())
-        tag_copy_and_delete_path = self.vars["tag_copy_and_delete_path"].get().strip()
         rename_compliantly = bool(self.bool_vars["rename_compliantly"].get())
         TaggerWindow(
             self,
@@ -818,9 +815,6 @@ class App:
             compliant=bool(self.bool_vars["compliant"].get()),
             etree_lookup=bool(self.bool_vars["etree_lookup"].get()),
             debug=bool(getattr(self.cli_args, "debug", False)),
-            tag_in_place=tag_in_place,
-            tag_copy=tag_copy,
-            tag_copy_destination=str(getattr(self.cli_args, "tag_copy_destination", "") or ""),
             rename_compliantly=rename_compliantly,
             convert_shn=bool(self.bool_vars["convert_shn"].get()),
             artist_in_album=bool(self.bool_vars["artist_in_album"].get()),
@@ -1463,9 +1457,6 @@ class TaggerWindow:
         compliant=False,
         etree_lookup=False,
         debug=False,
-        tag_in_place=True,
-        tag_copy=False,
-        tag_copy_destination="",
         rename_compliantly=False,
         convert_shn=False,
         artist_in_album=True,
@@ -1475,11 +1466,6 @@ class TaggerWindow:
         self.compliant = bool(compliant)
         self.etree_lookup = bool(etree_lookup)
         self.debug = bool(debug)
-        self.tag_copy_destination = str(tag_copy_destination or "")
-        self.tag_copy = bool(tag_copy)
-        self.tag_in_place = bool(tag_in_place) and not self.tag_copy
-        if not self.tag_in_place and not self.tag_copy:
-            self.tag_in_place = True
         self.rename_compliantly = bool(rename_compliantly)
         self.convert_shn = bool(convert_shn)
         self.artist_in_album = bool(artist_in_album)
@@ -1509,13 +1495,11 @@ class TaggerWindow:
         ttk.Label(frm, text=TAGGER_TITLE, font=title_font).grid(
             row=0, column=0, columnspan=3, sticky="w", pady=(0, 2)
         )
-        tag_mode_label = "Tag Copy" if self.tag_copy else "Tag in Place"
         ttk.Label(
             frm,
             text=(
                 f"Mode: {'Compliant' if self.compliant else 'Non-compliant'} | "
                 f"eTreeDB title fallback: {'on' if self.etree_lookup else 'off'} | "
-                f"Tag mode: {tag_mode_label} | "
                 f"Rename Compliantly: {'on' if self.rename_compliantly else 'off'} | "
                 f"Convert shn: {'on' if self.convert_shn else 'off'} | "
                 f"Artist in Album: {'on' if self.artist_in_album else 'off'}"
@@ -1569,13 +1553,6 @@ class TaggerWindow:
             messagebox.showinfo("TLO Tagger", "Tagging is already running.", parent=self.window)
             return
         tag_path = self.path_var.get().strip()
-        tag_copy = bool(self.tag_copy)
-        tag_copy_destination = ""
-        if tag_copy:
-            tag_copy_destination = self.parent_app._confirm_tag_copy_destination(self.tag_copy_destination)
-            if not tag_copy_destination:
-                return
-            self.tag_copy_destination = tag_copy_destination
         self.output.delete("1.0", tk.END)
         self._tag_cancel_requested = False
         self._tag_start_monotonic = time.monotonic()
@@ -1591,9 +1568,6 @@ class TaggerWindow:
                     tag_path=tag_path,
                     etree_lookup=self.etree_lookup,
                     debug=self.debug,
-                    tag_in_place=bool(self.tag_in_place),
-                    tag_copy=tag_copy,
-                    tag_copy_destination=tag_copy_destination,
                     rename_compliantly=bool(self.rename_compliantly),
                     convert_shn=self.convert_shn,
                     artist_in_album=self.artist_in_album,

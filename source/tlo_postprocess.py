@@ -1,9 +1,9 @@
 """Postprocess metadata logs into setlist files, bootlist.csv, duplicate/group outputs, and summary/unidentified-show files."""
 
-__version__ = "v335"
-# TLO-GI package version: v335
-__version_summary__ = 'Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.'
-# TLO-GI version summary: Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.
+__version__ = "v336"
+# TLO-GI package version: v336
+__version_summary__ = 'Restricts standalone Tag to direct tagging and hides undocumented myTLO help.'
+# TLO-GI version summary: Restricts standalone Tag to direct tagging and hides undocumented myTLO help.
 import csv
 import glob
 import json

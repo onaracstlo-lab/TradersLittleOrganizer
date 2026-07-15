@@ -1,9 +1,9 @@
 """Path and TLOHome input normalization shared by CLI, GUI, and tagging entry points."""
 
-__version__ = "v335"
-# TLO-GI package version: v335
-__version_summary__ = 'Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.'
-# TLO-GI version summary: Suppresses visible Windows child-console windows during SHN conversion and physical-drive PowerShell checks.
+__version__ = "v336"
+# TLO-GI package version: v336
+__version_summary__ = 'Restricts standalone Tag to direct tagging and hides undocumented myTLO help.'
+# TLO-GI version summary: Restricts standalone Tag to direct tagging and hides undocumented myTLO help.
 
 import argparse
 import os
@@ -85,7 +85,7 @@ def resolve_tlo_home(tlo_home: str = "", my_tlo: str = "", *, error_type=ValueEr
     env_tlo_home = _strip_optional_quotes(os.environ.get("TLOHome", ""))
     resolved = _strip_optional_quotes(my_tlo).strip() or _strip_optional_quotes(tlo_home).strip() or env_tlo_home
     if not resolved:
-        raise error_type("TLOHome must be supplied with --TLOHome, --myTLO, or the TLOHome environment variable.")
+        raise error_type("TLOHome must be supplied with --TLOHome or the TLOHome environment variable.")
     try:
         return os.path.normpath(tlo_home_type(resolved))
     except argparse.ArgumentTypeError as exc:
