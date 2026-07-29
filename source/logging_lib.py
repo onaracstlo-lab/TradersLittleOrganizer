@@ -1,7 +1,7 @@
-__version__ = "v336"
-# TLO-GI package version: v336
-__version_summary__ = 'Restricts standalone Tag to direct tagging and hides undocumented myTLO help.'
-# TLO-GI version summary: Restricts standalone Tag to direct tagging and hides undocumented myTLO help.
+__version__ = "v347"
+# TLO-GI package version: v347
+__version_summary__ = 'Uses one main-window Dry run setting inherited live by Tag and Add Shows.'
+# TLO-GI version summary: Uses one main-window Dry run setting inherited live by Tag and Add Shows.
 import logging
 import os
 import re

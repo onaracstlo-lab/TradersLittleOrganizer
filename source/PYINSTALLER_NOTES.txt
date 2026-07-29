@@ -1,0 +1,7 @@
+PyInstaller note for SHN conversion
+
+TLO does not ask the user to install ffmpeg, shorten, shntool, or another SHN converter.
+
+When building a native release, include imageio-ffmpeg with its package data so imageio_ffmpeg.get_ffmpeg_exe() resolves the bundled converter at runtime. If the package data is missing, --convert-shn records a clear conversion error and leaves the SHN/SHNF source file unchanged.
+
+Install imageio-ffmpeg in the build environment and collect the package binary/data files. Exact PyInstaller collect flags may vary by PyInstaller version. The supported GitHub build process already carries the required collection settings.

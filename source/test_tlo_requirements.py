@@ -1,27 +1,15 @@
-"""
-Regression tests pinning the TLO Inventory requirements' explicit worked examples
-to the current implementation behavior.
+"""Regression tests for the current TLO requirements and release contract.
 
-These tests are derived directly from the worked examples in
-TLO_Inventory_Requirements_Working_v336.docx (Sections 1-15 and
-Appendices A-I, with focused examples from Sections 1, 5, 7, 8, 10-15, and Appendix E). They are intended as a guard so that
-future date/filename/metadata regex churn cannot silently change documented
-behavior.
-
-Run from the directory containing the TLO .py modules:
-
-    pip install mutagen pytest
-    python3 -m pytest test_tlo_requirements.py -v
-
-The review-report xfail markers for the compact filename range and >36-token
-errors were removed in v190 because those defects are fixed. v191 adds filename.ext:<hex> checksum-row coverage. v192 adds tagger filename-title fallback coverage. v193 adds Tag During Inventory coverage. v194 narrows the compliant Billboard MP3 year-folder special case. v195 adds volume-aware inventory handling, bracketed log headers, and video subdir pattern matching. v196 moves startup volume decisions to group-log headers. v197 adds explicit bracketed search-path volume prefixes and normalized volume matching. v198 makes overwrite/re-inventory reuse existing log tokens. v199 adds zero-padded tag track numbers, zero-based setlist track recognition, and comma-separated unnumbered setlist fallback. v200 fills missing bracketed search-path volume prefixes from the operating-system volume label for logging and comparison. v201 rejects explicit bracketed volume labels that do not match the mounted drive volume label. v202 removes the obsolete group-log utility from the deployment bundle. v203 regenerates legacy placeholder setlists that say the folder never contained an info file. v204 adds postprocess stage status messages and timing details in summary.log. v205 adds eTreeDB setlist song-title fallback during tagging. v206 uses size-aware setlist collision handling and (altN) alternate suffixes. v207 scopes postprocess to current run log tokens and makes overwrite output replacement path-scoped. v208 removes the user-facing overwrite choice, uses in-memory current-run records for postprocess, and optimizes small re-inventory setlist export. v210 fixes in-memory postprocess when current-run records are ShowMetadata objects. v211 adds parallel postprocess setlist/bootlist piece generation by filename-base groups. v212 adds compliant strict date-first parsing, compliant artist Master/As-Is choice, and immediate Quit cleanup alert. v213 keeps GUI inventory startup responsive by moving root preparation into the worker and marshaling GUI prompts back to Tk. v214 uses compact Phase 1 music-directory markers instead of logging every media file while preserving media type and count. v215 logs only one representative media file path and discovers setlist files/media details later from known folders. v216 centralizes input arguments and GUI checkbox metadata in a shared option registry with one canonical destination name per option. v217 caps postprocess ThreadPoolExecutor workers so large filename-group counts cannot create one thread per filename group. v218 replaces camelCase user-facing flags with kebab-case flags and rejects the removed camelCase spellings. v219 adds optional Search Path folder drag/drop on Windows/WSL when TkDND support is available while leaving pure Linux unchanged. v220 restricts that drag/drop support to native Windows and explicitly reports it unavailable in WSL because Windows File Explorer drops do not reach WSL Tk GUI windows. v221 simplifies drag/drop further: only native Windows attempts drag/drop, Windows release builds assume TkDND/tkinterdnd2 is bundled, and WSL/Linux do not advertise the feature. v222 makes existing log and bootlist path matching ignore Windows drive letters and WSL /mnt/<drive> mount prefixes inside the matching layer. v223 makes inventory-time tagging rescan known music folders so all eligible audio files are tagged after Phase 1 logs only one representative sample path. v224 uses existing audio title tags as the last-resort inventory-time track-title source when setlist titles are missing or count-mismatched, writing Unknown for empty/generic title tags and logging the discrepancy. v225 stops tag-track parsing at collector/note prose and trims obvious trailing prose misparsed as a numbered track before falling back to title tags. v226 writes a debug copy of the responsible setlist file to TLOHome/debug, with the matching meta log entry prepended, whenever debug is enabled and tagging writes Unknown track titles. v227 accepts Windows drive-rooted tag paths such as P:\\tagtest when the tagger runs under WSL/Linux by translating them to /mnt/p/tagtest before validation. v228 adds a Quit button behavior for the GUI tagger window that requests cancellation, closes only the tagger window, and leaves the main GUI open. v229 makes standalone and GUI tagger output write to tagT.log and lets standalone/GUI tagger debug mode write Unknown-title setlist diagnostic copies that include music filenames. v230 broadens tag debug setlist copies to title-related skips and file-write errors so skipped/error folders can be diagnosed when debug is true. v231 makes standalone/GUI tagger progress logging append directly to tagT.log so progress lines cannot be lost after the header is created. v232 treats auCDtect audio-analysis result rows as technical report lines, not song-title rows. v233 rejects ordinal event/header lines such as "9th Annual" as track rows and treats literal setlist titles like "unknown" as supplied titles rather than generated Unknown-title failures. v234 parses unnumbered CD/Set song-list blocks and adds a filename-title tagging fallback confirmed against setlist text. v235 broadens parent/sibling setlist discovery and tightens filename-title fallback. v236 parses set/disc track tokens and stops setlists at patch notes. v237 clears TRACKTOTAL, DISCNUMBER and DISCTOTAL when tagging. v238 adds optional --convert-shn / Convert shn support to convert SHN files to FLAC before tagging. v240 logs the effective Convert shn setting when SHN files are detected and prevents SHN sources from reaching the generic tag writer when conversion is enabled. v241 adds mutually exclusive Tag in Place/Tag Copy During Inventory modes, Tag Copy destination validation/confirmation, and Rename Compliantly folder preparation before inventory-time tagging. v242 makes Tag Copy confirmation cancel silent so Quit or window close aborts inventory startup without a second empty alert. v243 relabels Tag in Place/Tag Copy, carries Tag Copy/Rename Compliantly into the standalone/GUI Tag workflow, and makes Add Shows cancellation silent. v244 removes duplicate Tag in Place/Tag Copy/Rename Compliantly checkboxes from the GUI tagger window and makes the tagger inherit those main-window settings. v245 removes the GUI Silent checkbox while keeping --silent, moves Convert shn to the former Silent slot, shortens the console, and throttles setlist export progress messages. v246 removes the Compliant checkbox from Add Shows, makes Add Shows inherit main-window Compliant/Rename Compliantly while ignoring Tag in Place/Tag Copy, and requires Tag in Place or Tag Copy when Rename Compliantly is checked for Tag or Inventory. v249 broadens tagging title recovery from non-standard setlists and uses usable filename titles before falling back to existing title tags. v250 selects the best eTreeDB same-date performance for venue/location and tag-title fallback and generates real setlists from marker-only missing-info files. v251 improves tag title recovery from damaged rows, skips sample audio files, and confirms bad/corrupt files do not stop the rest of a tag run. v252 treats Extras as a sidecar setlist folder and sorts generic TrackNN files by Disc/CD parent folder before tagging multi-disc wrapper releases. v253 caches setlist.fm setlists from same venue/location responses. v254 handles comma-separated setlist lines without spaces. v255 broadens unnumbered setlist blocks. v256 improves unnumbered blocks, embedded disc-track filename ordering, and sparse unknown-title recovery. v257 treats numbered question-mark placeholders as supplied unknown titles so successful tags do not create false Unknown-title debug failures. v258 suppresses noisy successful debug/tag-write logs and keeps only anomalies. v259 enforces numbered setlist starts/sequences while ignoring false numbered prose before real track lists. v262 strips list-position prefixes such as "4 of 28" and t/track row prefixes before writing song-title tags. v265 leaves unidentified shows untouched by copy/delete, rename, and tag operations. v266 treats Tag Copy and Delete Path as a full inventory-time tagging mode and applies compliant names at the transfer target. v267 removes noisy eTreeDB exact-artist debug lines. v268 normalizes song-title tags to regular printable characters. v269 normalizes TLO-written names and tags to ASCII. v270 addresses release hygiene findings. v271 treats foreign-language unknown artist tags as blank. v272/v273 add standalone foreign-language unknown words. v274 makes setlist.fm a strict eTreeDB fallback. v277 adds volume-style release-part sibling aggregation. v278 keeps same-base volume siblings separate while aggregating differing-base collection volumes. v279 preserves trailing parentheticals in exported setlist filenames. v285 formats invalid-FLAC tagging errors as one concise full-path message. v287 accepts Disc One/Late Show-style unnumbered section headings and skips Encore separators without counting them as song titles. v288 parses disc-track dash setlist rows and blocks revision notes from unnumbered fallback titles. v289 broadens safe setlist title parsing and normalizes remaining tag file error lines. v290 splits tag logs into tagsN/tageN text files and names debug files after generated inventory setlist filenames. v291 parses numbered Set I/Set II duration headings and strips embedded encore prefixes from numbered titles. v292 allows implicit numbered list resets without set/disc headings once the restarted sequence is confirmed. v293 compacts complete-path logs after Phase 1 so reused or legacy comp logs keep one representative media row per music directory. v296 adds structured tag reason codes and stops writing debug files for bad audio-file errors. v297 adds elapsed-time output to the tagger GUI completion display. v303 makes Rename Compliantly independent of tagging and performs rename-only full inventory in place. v304 serializes blank-volume roots while parallelizing named-volume groups, restores the versioned Tagger frame title, and relabels the updater duplicate button. v305 removes the startup release-summary sentence and standardizes every GUI title bar on v1.1 Build 305. v306 updates release metadata and documentation only; functional behavior is unchanged. v307 changes the Tagger and Add Shows in-window headings to Traders Little Helper™ while leaving functional behavior unchanged. v308 makes toBeInventoried.txt ignore blank lines and # comment lines as documented. v313 adds a first-run Add Shows guard when bootlist.csv does not exist. v319 hardens cleanup on forced GUI/CLI exits, SHN conversion timeout handling, and setlist file reads. v321 adds packaged Windows ICO and macOS ICNS icon assets and passes packaged icons directly to native builds. v323 preserves compliant trailing parentheticals in Add Shows, full inventory, and tagging destination names. v324 makes Add Shows honor Tag in Place for regular staged folders and duplicate-resolution folders while continuing to ignore Tag Copy. v325 removes the editable TLOHome fields from the Inventory and Search GUIs while keeping myTLO, --TLOHome, and environment precedence. v326 serializes same-physical-drive labeled volumes, runs blank-label roots after labeled roots, fixes deleteBackupFolders path generation, and shows read-only TLOHome labels in both GUIs. v329 updates source version stamping and accepts the injected GitHub release builder display-version stamp. v330 addresses review findings by hardening updater downloads, bounding the artist-query cache, releasing the setlist.fm rate-limit lock while waiting, and cleaning the requirements/test provenance text. v336 removes inventory-only tag/copy options from standalone Tag and hides --myTLO from help output.
+The suite pins documented behavior from TLO_Inventory_Requirements_Working_v347.docx.
+Historical build-by-build test notes are preserved in old-change-logs.zip rather
+than repeated in this executable test module.
 """
 
 
-__version__ = "v336"
-# TLO-GI package version: v336
-__version_summary__ = 'Restricts standalone Tag to direct tagging and hides undocumented myTLO help.'
-# TLO-GI version summary: Restricts standalone Tag to direct tagging and hides undocumented myTLO help.
+__version__ = "v347"
+# TLO-GI package version: v347
+__version_summary__ = 'Uses one main-window Dry run setting inherited live by Tag and Add Shows.'
+# TLO-GI version summary: Uses one main-window Dry run setting inherited live by Tag and Add Shows.
 
 import argparse
 import importlib.util
@@ -30,6 +18,8 @@ import json
 import os
 import sys
 import tempfile
+import zipfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -43,6 +33,40 @@ import tlo_tag_lib as T
 import logging_lib
 import inventory_parser_lib as IPL
 from tlo_options import apply_lookup_dependency
+
+
+SOURCE_DIR = Path(__file__).resolve().parent
+
+
+def _source_text(filename):
+    """Read a source-bundle text file relative to this test module."""
+    return (SOURCE_DIR / filename).read_text(encoding="utf-8")
+
+
+
+def _docx_text(filename):
+    """Extract searchable visible text from a local DOCX without python-docx."""
+    with zipfile.ZipFile(SOURCE_DIR / filename) as archive:
+        root = ET.fromstring(archive.read("word/document.xml"))
+    return " ".join(text for text in root.itertext() if text).replace("\xa0", " ")
+
+
+def _load_local_module(filename, module_name):
+    """Load a local script module while safely restoring sys.modules."""
+    module_path = SOURCE_DIR / filename
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.modules.get(module_name)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        if previous is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = previous
+    return module
 
 
 # --------------------------------------------------------------------------- #
@@ -1479,7 +1503,7 @@ def test_v305_tagger_gui_keeps_bold_app_heading_and_uses_current_public_version(
     build_source = inspect.getsource(gui.TaggerWindow._build)
 
     assert TAGGER_TITLE == "Traders Little Helper™ Tagger App"
-    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 336"
+    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 347"
     assert "self.window.title(TAGGER_DISPLAY_VERSION)" in init_source
     assert build_source.count("text=TAGGER_TITLE") == 1
     assert "text=TAGGER_TITLE, font=title_font" in build_source
@@ -1844,11 +1868,8 @@ def test_compliant_artist_mode_as_is_skips_master_lookup():
 # --------------------------------------------------------------------------- #
 
 def _load_tlo_ggi_module():
-    module_path = Path(__file__).with_name("tlo-ggi.py")
-    spec = importlib.util.spec_from_file_location("tlo_ggi_for_tests", module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return _load_local_module("tlo-ggi.py", "tlo_ggi_for_tests")
+
 
 
 def test_gui_start_defers_inventory_root_preparation_to_worker():
@@ -2009,10 +2030,7 @@ def test_tlohome_mytlo_env_precedence_is_preserved(monkeypatch, tmp_path):
 
 
 def test_tagger_parser_uses_registry_canonical_dest():
-    module_path = Path(__file__).with_name("tlo-tag.py")
-    spec = importlib.util.spec_from_file_location("tlo_tag_for_tests", module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = _load_local_module("tlo-tag.py", "tlo_tag_for_tests")
 
     args = module._parse_args(["--compliant", "--etree-lookup"])
     assert args.compliant is True
@@ -2085,10 +2103,7 @@ def test_v218_legacy_camel_case_inventory_flags_are_rejected(monkeypatch, tmp_pa
 
 
 def test_v218_tagger_uses_tag_path_and_rejects_legacy_tagPath():
-    module_path = Path(__file__).with_name("tlo-tag.py")
-    spec = importlib.util.spec_from_file_location("tlo_tag_for_v218_tests", module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = _load_local_module("tlo-tag.py", "tlo_tag_for_v218_tests")
 
     args = module._parse_args(["--tag-path", "/tmp/tags"])
     assert args.tagPath == "/tmp/tags"
@@ -2359,8 +2374,8 @@ def test_v228_tagger_window_quit_button_stays_enabled_and_requests_cancel():
     destroy_source = inspect.getsource(gui.TaggerWindow._destroy_tagger_window)
 
     assert 'text="Quit"' in build_source
-    assert 'tag_button.configure(state=tag_state)' in controls_source
-    assert 'exit_button.configure(state="normal")' in controls_source
+    assert 'self.tag_run_button' in controls_source
+    assert 'self.exit_button.configure(state="normal")' in controls_source
     assert 'request_cancel()' in exit_source
     assert 'self._destroy_tagger_window()' in exit_source
     assert 'self.parent_app.active_tagger_window = None' in destroy_source
@@ -2426,11 +2441,8 @@ def test_v229_run_tagger_passes_debug_into_tagger_config(tmp_path, monkeypatch):
 
 
 def _load_tlo_tag_module():
-    module_path = Path(__file__).with_name("tlo-tag.py")
-    spec = importlib.util.spec_from_file_location("tlo_tag_cli_for_tests", module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return _load_local_module("tlo-tag.py", "tlo_tag_cli_for_tests")
+
 
 
 def test_v229_tlo_tag_cli_accepts_debug_bool():
@@ -3078,10 +3090,7 @@ def test_v238_inventory_cli_accepts_convert_shn(monkeypatch, tmp_path):
 
 
 def test_v238_tagger_parser_accepts_convert_shn():
-    module_path = Path(__file__).with_name("tlo-tag.py")
-    spec = importlib.util.spec_from_file_location("tlo_tag_for_v238_tests", module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = _load_local_module("tlo-tag.py", "tlo_tag_for_v238_tests")
 
     args = module._parse_args(["--convert-shn", "--tag-path", "/tmp/tags"])
     assert args.convert_shn is True
@@ -3530,9 +3539,9 @@ def test_v241_rename_compliantly_in_place_renames_group_and_record(tmp_path):
 def test_v242_gui_inventory_start_cancel_is_silent_before_general_error_handler():
     from pathlib import Path
 
-    source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
+    source = _source_text("tlo-ggi.py")
     method_start = source.index("    def _start(self):")
-    marker = "try:\n            config = self._build_config()"
+    marker = "        try:\n"
     start = source.index(marker, method_start)
     snippet = source[start:source.index("        clear_cancel_request()", start)]
     assert "except _InventoryStartCancelled:\n            return" in snippet
@@ -3546,7 +3555,7 @@ def test_v242_gui_inventory_start_cancel_is_silent_before_general_error_handler(
 def test_v243_gui_add_shows_start_cancel_is_silent_before_general_error_handler():
     from pathlib import Path
 
-    source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
+    source = _source_text("tlo-ggi.py")
     method_start = source.index("    def _open_add_to_inventory(self):")
     marker = "try:\n            config = self._build_config(for_add_shows=True)"
     start = source.index(marker, method_start)
@@ -3582,12 +3591,7 @@ def test_v243_process_tagging_group_prepares_copy_or_rename_target():
 
 
 def test_v336_tagger_parser_rejects_inventory_tag_and_copy_options():
-    import importlib.util
-
-    module_path = os.path.join(os.path.dirname(__file__), "tlo-tag.py")
-    spec = importlib.util.spec_from_file_location("tlo_tag_cli_v336", module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = _load_local_module("tlo-tag.py", "tlo_tag_cli_v336")
 
     for argv in (
         ["--tag-during-inventory"],
@@ -3605,34 +3609,30 @@ def test_v336_tagger_parser_rejects_inventory_tag_and_copy_options():
 # v244 - GUI Tag inherits main-window tag mode settings; no tagger checkboxes.
 # --------------------------------------------------------------------------- #
 
-def test_v244_tagger_window_has_no_mode_checkboxes():
+def test_v337_tagger_window_has_only_tagger_scoped_controls():
     import inspect
-    import importlib.util
-
-    module_path = os.path.join(os.path.dirname(__file__), "tlo-ggi.py")
-    spec = importlib.util.spec_from_file_location("tlo_ggi_gui_v244", module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = _load_local_module("tlo-ggi.py", "tlo_ggi_gui_v337")
 
     build_source = inspect.getsource(module.TaggerWindow._build)
     start_source = inspect.getsource(module.TaggerWindow._start_tagging)
 
-    assert "ttk.Checkbutton" not in build_source
-    assert "tag_copy_var" not in build_source
-    assert "tag_in_place_var" not in build_source
-    assert "rename_compliantly_var" not in build_source
-    assert "self.tag_copy" not in start_source
+    assert "ttk.Checkbutton" in build_source
+    assert "Compliant parsing" in build_source
+    assert "eTreeDB fallback" in build_source
+    assert "Rename Compliantly" in build_source
+    assert "Convert SHN" in build_source
+    assert "Artist in Album Tag" in build_source
+    assert "Tag in Place" not in build_source
+    assert "Tag Copy" not in build_source
     assert "tag_copy_destination" not in start_source
     assert "tag_in_place=" not in start_source
-    assert "rename_compliantly=bool(self.rename_compliantly)" in start_source
-    assert "tag_copy_var" not in start_source
-    assert "rename_compliantly_var" not in start_source
+    assert 'rename_compliantly=bool(self.option_vars["rename_compliantly"].get())' in start_source
 
 
 def test_v244_open_tagger_passes_main_window_values_to_tagger_window():
     from pathlib import Path
 
-    source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
+    source = _source_text("tlo-ggi.py")
     method_start = source.index("    def _open_tagger(self):")
     call_start = source.index("        TaggerWindow(", method_start)
     snippet = source[call_start:source.index("\n        )", call_start) + len("\n        )")]
@@ -3667,7 +3667,7 @@ def test_v245_silent_kept_cli_only_and_convert_shn_uses_former_silent_slot():
 def test_v245_gui_build_config_takes_silent_from_cli_not_checkbox():
     from pathlib import Path
 
-    source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
+    source = _source_text("tlo-ggi.py")
     build_config = source[source.index("    def _build_config(self, *, for_add_shows=False):"):source.index("    def _pause_inventory(self):")]
     build_method = source[source.index("    def _build(self):"):source.index("    def _enable_search_path_drag_drop(self):")]
 
@@ -3679,7 +3679,7 @@ def test_v245_gui_build_config_takes_silent_from_cli_not_checkbox():
 def test_v245_postprocess_setlist_progress_is_throttled():
     from pathlib import Path
 
-    source = Path(__file__).with_name("tlo_postprocess.py").read_text(encoding="utf-8")
+    source = _source_text("tlo_postprocess.py")
     assert "progress_interval = max(1000, total_records // 10) if total_records else 0" in source
     assert "processed == len(group)" not in source
     assert "processed <= group_size" not in source
@@ -3692,26 +3692,23 @@ def test_v245_postprocess_setlist_progress_is_throttled():
 
 def test_v246_add_shows_window_has_no_compliant_checkbox_and_does_not_mutate_compliant():
     import inspect
-    import importlib.util
-
-    module_path = os.path.join(os.path.dirname(__file__), "tlo-ggi.py")
-    spec = importlib.util.spec_from_file_location("tlo_ggi_gui_v246_addshows", module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = _load_local_module("tlo-ggi.py", "tlo_ggi_gui_v246_addshows")
 
     build_source = inspect.getsource(module.AddToInventoryWindow._build)
     refresh_source = inspect.getsource(module.AddToInventoryWindow._refresh_config)
 
     assert "compliant_var" not in build_source
     assert 'ttk.Checkbutton(frm, text="Compliant"' not in build_source
-    assert "Mode: {'Compliant'" in build_source
+    mode_source = inspect.getsource(module.AddToInventoryWindow._refresh_mode_display)
+    assert "Mode inherited from the main window" in mode_source
+    assert "Compliant:" in mode_source
     assert "self.config.compliant" not in refresh_source
 
 
 def test_v246_open_add_shows_uses_add_shows_config_mode():
     from pathlib import Path
 
-    source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
+    source = _source_text("tlo-ggi.py")
     method_start = source.index("    def _open_add_to_inventory(self):")
     method_end = source.index("    def _show_backup_alert", method_start)
     snippet = source[method_start:method_end]
@@ -3721,7 +3718,7 @@ def test_v246_open_add_shows_uses_add_shows_config_mode():
 def test_v246_build_config_add_shows_keeps_rename():
     from pathlib import Path
 
-    source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
+    source = _source_text("tlo-ggi.py")
     build_config = source[source.index("    def _build_config(self, *, for_add_shows=False):"):source.index("    def _pause_inventory(self):")]
 
     assert "if for_add_shows:" in build_config
@@ -3773,8 +3770,8 @@ def test_v246_add_shows_rename_compliantly_renames_ready_folder_in_place(tmp_pat
 def test_v247_updater_window_title_bar_and_banner_are_not_duplicated():
     from pathlib import Path
 
-    gui_source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
-    update_source = Path(__file__).with_name("tlo_inventory_update.py").read_text(encoding="utf-8")
+    gui_source = _source_text("tlo-ggi.py")
+    update_source = _source_text("tlo_inventory_update.py")
     build_source = gui_source[gui_source.index("class AddToInventoryWindow:"):gui_source.index("class DuplicateHandlerWindow:")]
 
     assert 'UPDATER_TITLE = "Traders Little Helper™ Inventory Update App"' in update_source
@@ -4689,7 +4686,8 @@ def test_v263_option_registry_adds_tag_copy_and_delete_path(tmp_path):
 
     option = OPTIONS_BY_FIELD["tag_copy_and_delete_path"]
     assert option.flag == "--tag-copy-and-delete"
-    assert option.gui_label == "Tag Copy/Delete Original\n-- Destination Path"
+    assert option.gui is None
+    assert option.gui_label == ""
 
     values = {"tag_copy_and_delete_path": str(tmp_path)}
     IPL._validate_tag_copy_values(values)
@@ -4784,7 +4782,7 @@ def test_v264_rename_compliantly_allows_tag_copy_and_delete_path(tmp_path):
 def test_v264_rename_compliantly_alert_requirement_is_superseded_by_v303():
     from pathlib import Path
 
-    source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
+    source = _source_text("tlo-ggi.py")
     assert "either Tag in Place, Tag Copy, or Tag Copy/Delete Original must be available" not in source
     assert "_show_rename_requires_tag_mode_alert" not in source
 
@@ -5018,7 +5016,7 @@ def test_v266_inventory_copy_delete_tags_transferred_compliant_folder(tmp_path, 
 
 # v267 - remove noisy exact-artist eTreeDB debug lines
 def test_v267_etree_exact_artist_debug_noise_removed():
-    source = Path("tlo_etree_lookup.py").read_text(encoding="utf-8")
+    source = _source_text("tlo_etree_lookup.py")
     assert "artist exact query" not in source
     assert "using exact artist" not in source
 
@@ -5676,7 +5674,7 @@ def test_v282_gui_inventory_worker_catches_startup_errors_and_schedules_finish()
     start_source = inspect.getsource(gui.App._start)
     assert "except Exception as exc:" in start_source
     assert 'self.queue.put(f\"ERROR: {exc}\\n\")' in start_source
-    assert "self.root.after(0, self._finish_inventory_thread)" in start_source
+    assert "self.root.after(0, lambda: self._finish_inventory_thread(exit_code))" in start_source
 
 
 # --------------------------------------------------------------------------- #
@@ -6548,11 +6546,7 @@ def test_v296_tag_reason_summary_counts_reason_codes(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_v297_tagger_elapsed_time_format():
-    module_path = Path(__file__).with_name("tlo-ggi.py")
-    spec = importlib.util.spec_from_file_location("tlo_ggi_for_v297_test", module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec and spec.loader
-    spec.loader.exec_module(module)
+    module = _load_local_module("tlo-ggi.py", "tlo_ggi_for_v297_test")
     assert module._format_elapsed_time(0) == "0:00"
     assert module._format_elapsed_time(59) == "0:59"
     assert module._format_elapsed_time(60) == "1:00"
@@ -6564,11 +6558,7 @@ def test_v297_tagger_elapsed_time_format():
 # --------------------------------------------------------------------------- #
 
 def test_v298_tagger_window_uses_half_width_constants():
-    module_path = Path(__file__).with_name("tlo-ggi.py")
-    spec = importlib.util.spec_from_file_location("tlo_ggi_for_v298_test", module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec and spec.loader
-    spec.loader.exec_module(module)
+    module = _load_local_module("tlo-ggi.py", "tlo_ggi_for_v298_test")
     assert module.TAGGER_PATH_ENTRY_WIDTH == 41
     assert module.TAGGER_OUTPUT_TEXT_WIDTH == 55
     assert module.TAGGER_PATH_ENTRY_WIDTH * 2 == 82
@@ -6718,7 +6708,7 @@ def test_v303_inventory_parser_allows_rename_without_tag_mode():
 
 
 def test_v303_gui_has_no_rename_requires_tag_mode_block():
-    source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
+    source = _source_text("tlo-ggi.py")
     assert "_show_rename_requires_tag_mode_alert" not in source
     assert "Because Rename Compliantly is checked" not in source
 
@@ -6886,10 +6876,10 @@ def test_v304_inventory_updater_button_uses_requested_two_line_label():
 def test_v305_public_version_matches_bundle_number():
     import tlo_version as V
 
-    assert V.VERSION == "v336"
-    assert V.BUNDLE_BUILD == 336
-    assert V.DISPLAY_VERSION == "v1.2 Build 336"
-    assert V.versioned_title("TLO Inventory GUI") == "TLO Inventory GUI v1.2 Build 336"
+    assert V.VERSION == "v347"
+    assert V.BUNDLE_BUILD == 347
+    assert V.DISPLAY_VERSION == "v1.2 Build 347"
+    assert V.versioned_title("TLO Inventory GUI") == "TLO Inventory GUI v1.2 Build 347"
 
 
 def test_v305_startup_banner_never_appends_release_change_summary():
@@ -6898,7 +6888,7 @@ def test_v305_startup_banner_never_appends_release_change_summary():
 
     for debug in (False, True):
         banner = M._startup_banner(SimpleNamespace(debug=debug))
-        assert banner == "Starting tlo-gi v1.2 Build 336"
+        assert banner == "Starting tlo-gi v1.2 Build 347"
         assert V.VERSION_SUMMARY not in banner
         assert " - " not in banner
 
@@ -6907,14 +6897,14 @@ def test_v305_all_toplevel_gui_titles_include_public_version():
     gui = _load_tlo_ggi_module()
     from tlo_inventory_update import UPDATER_DISPLAY_VERSION
 
-    assert gui.WINDOW_TITLE == "TLO Inventory GUI v1.2 Build 336"
-    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 336"
-    assert UPDATER_DISPLAY_VERSION == "TLO Inventory Updater v1.2 Build 336"
+    assert gui.WINDOW_TITLE == "TLO Inventory GUI v1.2 Build 347"
+    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 347"
+    assert UPDATER_DISPLAY_VERSION == "TLO Inventory Updater v1.2 Build 347"
 
-    source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
+    source = _source_text("tlo-ggi.py")
     expected_calls = (
         'alert.title(versioned_title("TLO Backup Alert"))',
-        'dialog.title(versioned_title("Tag Copy"))',
+        'dialog.title(versioned_title(title))',
         'dialog.title(versioned_title("Existing TLO Inventory"))',
         'self.window.title(versioned_title("TLO Handle Duplicates"))',
         'review.title(versioned_title(f"TLO Txt Review - {os.path.basename(path_name)}"))',
@@ -7022,7 +7012,7 @@ def test_v313_add_shows_existing_bootlist_does_not_prompt(tmp_path, monkeypatch)
 
 def test_v317_main_inventory_hamburger_help_cascade_sources_about_and_faq():
     gui = _load_tlo_ggi_module()
-    source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
+    source = _source_text("tlo-ggi.py")
 
     assert 'ttk.Menubutton(' in source
     assert 'text="☰"' in source
@@ -7038,7 +7028,7 @@ def test_v317_main_inventory_hamburger_help_cascade_sources_about_and_faq():
     assert 'Traders Little Organizer™ - TLO' in source
     assert 'f"V1.2Build{BUNDLE_BUILD}\\n"' in source
     assert 'TLO-FAQ.txt' in source
-    assert gui.BUNDLE_BUILD == 336
+    assert gui.BUNDLE_BUILD == 347
 
 
 
@@ -7046,7 +7036,7 @@ def test_v317_main_inventory_hamburger_help_cascade_sources_about_and_faq():
 
 
 def test_v330_about_dialog_uses_superscript_trademark_symbol():
-    source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
+    source = _source_text("tlo-ggi.py")
 
     assert "Traders Little Organizer™ - TLO" in source
     assert "Traders Little Organizer(TM) - TLO" not in source
@@ -7082,18 +7072,22 @@ def test_v317_help_menu_wrappers_schedule_dialog_callbacks():
     assert ("dialog", "faq") in calls
 
 
-def test_v317_faq_file_is_in_source_bundle():
-    faq = Path(__file__).with_name("TLO-FAQ.txt")
+def test_v341_faq_file_is_current_and_in_source_bundle():
+    faq = SOURCE_DIR / "TLO-FAQ.txt"
     assert faq.is_file()
     text = faq.read_text(encoding="utf-8")
-    assert "Q:Is TLO a commercial application:" in text
-    assert "A: No, TLO is freeware." in text
-    assert "LiveShowTagger" in text
-    assert "Do I need to define TLOHome before I do anything?" in text
-    assert "Can TLO ever do anything destructive?" in text
-    assert "What if I forget and accidentally re-inventory a drive?" in text
-    assert "copy and delete" in text
-    assert "duplicate entries" in text
+    for expected in (
+        "Q: Is TLO a commercial application?",
+        "A: No. TLO is freeware.",
+        "Do I need to define TLOHome before I start?",
+        "Can TLO change or remove original material?",
+        "What happens if I inventory the same drive again?",
+        "When does TLO ask for a Tag Copy destination?",
+        "duplicate inventory entries",
+    ):
+        assert expected in text
+    assert "Q: Not very" not in text
+    assert "You never lose your content" not in text
 
 
 # --------------------------------------------------------------------------- #
@@ -7101,15 +7095,7 @@ def test_v317_faq_file_is_in_source_bundle():
 # --------------------------------------------------------------------------- #
 
 def _load_tlo_gsi_module():
-    module_path = Path(__file__).with_name("tlo-gsi.py")
-    spec = importlib.util.spec_from_file_location("tlo_gsi_for_tests", module_path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    try:
-        spec.loader.exec_module(module)
-        return module
-    finally:
-        sys.modules.pop(spec.name, None)
+    return _load_local_module("tlo-gsi.py", "tlo_gsi_for_tests")
 
 
 def test_v319_tlo_gsi_accepts_hidden_mytlo_with_same_precedence(tmp_path, monkeypatch):
@@ -7192,7 +7178,7 @@ def test_v319_runtime_control_exposes_child_cleanup_backstop():
 
 
 def test_v319_gui_forced_exits_sweep_children_before_os_exit():
-    source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
+    source = _source_text("tlo-ggi.py")
     assert "def _force_exit_after_child_cleanup" in source
     assert "terminate_all_children()" in source
     assert "flush_standard_streams()" in source
@@ -7201,7 +7187,7 @@ def test_v319_gui_forced_exits_sweep_children_before_os_exit():
 
 
 def test_v319_cli_keyboard_interrupt_cleans_newly_allocated_tokens():
-    source = Path(__file__).with_name("tlo-gi.py").read_text(encoding="utf-8")
+    source = _source_text("tlo-gi.py")
     assert "except KeyboardInterrupt" in source
     assert "request_cancel_and_terminate_active_executor()" in source
     assert "terminate_all_children()" in source
@@ -7210,7 +7196,7 @@ def test_v319_cli_keyboard_interrupt_cleans_newly_allocated_tokens():
 
 
 def test_v319_run_inventory_keyboard_interrupt_uses_newly_allocated_tokens():
-    source = Path(__file__).with_name("tlo_main_lib.py").read_text(encoding="utf-8")
+    source = _source_text("tlo_main_lib.py")
     assert "except KeyboardInterrupt" in source
     assert "terminate_all_children()" in source
     assert "newly_allocated_log_tokens" in source
@@ -7241,7 +7227,7 @@ def test_v319_shn_conversion_uses_timeout_and_reports_timeout(monkeypatch, tmp_p
 
 
 def test_v319_setlist_date_fallback_uses_context_manager_for_drive_file_reads():
-    source = Path(__file__).with_name("tlo_phase23_v2.py").read_text(encoding="utf-8")
+    source = _source_text("tlo_phase23_v2.py")
     assert 'data = open(path_name, "rb").read()' not in source
     assert 'with open(path_name, "rb") as infile:' in source
     assert "data = infile.read()" in source
@@ -7260,7 +7246,7 @@ def test_v323_packaged_platform_icon_assets_are_present():
 
 def test_v323_windows_dist_uses_packaged_ico_files_directly():
     from pathlib import Path
-    text = (Path(__file__).resolve().parent / "createWindowsDist.ps1").read_text(encoding="utf-8")
+    text = _source_text("createWindowsDist.ps1")
     assert "$IconRoot = Join-Path $SourceRoot 'icons'" in text
     assert "tlo-inventory-icon.ico" in text
     assert "tlo-search-icon.ico" in text
@@ -7292,7 +7278,7 @@ def test_v323_windows_ico_assets_are_dib_based_not_png_compressed():
 
 def test_v323_windows_dist_verifies_exact_packaged_icon_resources():
     from pathlib import Path
-    text = (Path(__file__).resolve().parent / "createWindowsDist.ps1").read_text(encoding="utf-8")
+    text = _source_text("createWindowsDist.ps1")
     assert "Assert-WindowsIcoIsDibBased" in text
     assert "Assert-WindowsExeMatchesSourceIcon" in text
     assert "hashlib.sha256(blob).hexdigest()" in text
@@ -7450,13 +7436,13 @@ def test_v323_update_settings_are_tlohome_local(tmp_path):
 
 
 def test_v323_inventory_and_search_sources_include_update_menu_items():
-    inventory_source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
-    search_source = Path(__file__).with_name("tlo-gsi.py").read_text(encoding="utf-8")
+    inventory_source = _source_text("tlo-ggi.py")
+    search_source = _source_text("tlo-gsi.py")
 
     for source in (inventory_source, search_source):
         assert 'label="Check for updates"' in source
         assert 'label="Auto update"' in source
-        assert 'update-settings.json' in Path(__file__).with_name("tlo_github_updates.py").read_text(encoding="utf-8")
+        assert 'update-settings.json' in _source_text("tlo_github_updates.py")
         assert 'check_for_updates' in source
 
 # --------------------------------------------------------------------------- #
@@ -7464,17 +7450,17 @@ def test_v323_inventory_and_search_sources_include_update_menu_items():
 # --------------------------------------------------------------------------- #
 
 def test_v324_build_config_add_shows_honors_tag_in_place_but_ignores_tag_copy():
-    source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
+    source = _source_text("tlo-ggi.py")
     build_config = source[source.index("    def _build_config(self, *, for_add_shows=False):"):source.index("    def _pause_inventory(self):")]
 
     assert 'tag_in_place = bool(self.bool_vars["tag_during_inventory"].get())' in build_config
-    assert "Add Shows honors Tag in Place" in build_config
+    assert "Add Shows stages accepted folders inside TLOHome" in build_config
     assert "tag_copy = False" in build_config
     assert "tag_in_place = False" not in build_config
 
 
 def test_v324_add_shows_regular_and_duplicate_paths_tag_before_staging():
-    source = Path(__file__).with_name("tlo_inventory_update.py").read_text(encoding="utf-8")
+    source = _source_text("tlo_inventory_update.py")
     regular = source[source.index("def process_new_shows") : source.index("def duplicate_work_items")]
     duplicate = source[source.index("def process_duplicate_folder") : source.index("def delete_new_keep_old")]
 
@@ -7563,8 +7549,8 @@ def test_v324_update_checker_prefers_platform_complete_fallback(monkeypatch):
 # --------------------------------------------------------------------------- #
 
 def test_v330_inventory_and_search_guis_do_not_build_tlohome_input_boxes():
-    inventory_source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
-    search_source = Path(__file__).with_name("tlo-gsi.py").read_text(encoding="utf-8")
+    inventory_source = _source_text("tlo-ggi.py")
+    search_source = _source_text("tlo-gsi.py")
 
     inventory_build = inventory_source[inventory_source.index("    def _build(self):"):inventory_source.index("    def _run_after_menu_closes(self, callback):")]
     search_build = search_source[search_source.index("    def _build_main_window(self) -> None:"):search_source.index("    def _run_after_menu_closes")]
@@ -7578,7 +7564,7 @@ def test_v330_inventory_and_search_guis_do_not_build_tlohome_input_boxes():
 
 
 def test_v330_inventory_gui_uses_non_gui_tlohome_resolver_with_mytlo_precedence():
-    source = Path(__file__).with_name("tlo-ggi.py").read_text(encoding="utf-8")
+    source = _source_text("tlo-ggi.py")
     resolver = source[source.index("    def _resolve_gui_tlo_home"):source.index("    def _show_about_from_menu")]
     build_config = source[source.index("    def _build_config(self, *, for_add_shows=False):"):source.index("    def _pause_inventory(self):")]
 
@@ -7591,12 +7577,7 @@ def test_v330_inventory_gui_uses_non_gui_tlohome_resolver_with_mytlo_precedence(
 def test_v330_search_cli_keeps_mytlo_before_tlohome_before_env(tmp_path, monkeypatch):
     import importlib.util
 
-    module_path = Path(__file__).with_name("tlo-gsi.py")
-    spec = importlib.util.spec_from_file_location("tlo_gsi_v330", module_path)
-    search_gui = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    sys.modules[spec.name] = search_gui
-    spec.loader.exec_module(search_gui)
+    search_gui = _load_local_module("tlo-gsi.py", "tlo_gsi_v330")
 
     env_home = tmp_path / "env"
     tlo_home = tmp_path / "tlo"
@@ -7677,12 +7658,12 @@ def test_v330_update_destination_uses_sanitized_basename_and_warns_without_diges
     import tlo_github_updates as G
 
     release = {
-        "tag_name": "v1.2-build337",
-        "name": "TLO v1.2 Build 337",
+        "tag_name": "v1.2-build348",
+        "name": "TLO v1.2 Build 348",
         "assets": [
             {
-                "name": "../TLO_V1.2Build337_update_Linux.zip",
-                "browser_download_url": "https://github.com/onaracstlo-lab/TradersLittleOrganizer/releases/download/v337/TLO.zip",
+                "name": "../TLO_V1.2Build348_update_Linux.zip",
+                "browser_download_url": "https://github.com/onaracstlo-lab/TradersLittleOrganizer/releases/download/v348/TLO.zip",
                 "size": 1,
             }
         ],
@@ -7701,8 +7682,8 @@ def test_v330_update_destination_uses_sanitized_basename_and_warns_without_diges
     result = G.check_for_updates(tmp_path / "TLOHome", manual=True)
 
     assert result.status == "downloaded"
-    assert seen == [tmp_path / "TLO_V1.2Build337_update_Linux.zip"]
-    assert result.path == str(tmp_path / "TLO_V1.2Build337_update_Linux.zip")
+    assert seen == [tmp_path / "TLO_V1.2Build348_update_Linux.zip"]
+    assert result.path == str(tmp_path / "TLO_V1.2Build348_update_Linux.zip")
     assert "verified the downloaded file size only" in result.message
 
 
@@ -7718,7 +7699,7 @@ def test_v330_artist_query_cache_is_bounded():
 
 
 def test_v330_setlistfm_rate_limit_releases_lock_before_waiting():
-    source = Path(__file__).with_name("tlo_setlistfm_lookup.py").read_text(encoding="utf-8")
+    source = _source_text("tlo_setlistfm_lookup.py")
     wait_block = source[source.index("def wait_for_rate_limit") : source.index("def api_get")]
 
     assert "Release it, wait, and" in wait_block
@@ -7971,7 +7952,7 @@ def test_v333_artist_in_album_option_defaults_checked_and_cli_can_disable():
 
 # v334 - Main GUI checkbox order and Artist in Album Tag label
 
-def test_v334_main_gui_checkbox_layout_is_two_rows_by_four_columns():
+def test_v334_main_gui_checkbox_layout_preserves_original_two_rows_and_adds_v339_third_row():
     from tlo_options import OPTIONS_BY_FIELD, GUI_CHECKBOX_OPTIONS
     expected = {
         "etree_lookup": (0, 0, "etreeDB"),
@@ -7982,15 +7963,17 @@ def test_v334_main_gui_checkbox_layout_is_two_rows_by_four_columns():
         "rename_compliantly": (1, 1, "Rename Compliantly"),
         "tag_copy_during_inventory": (1, 2, "Tag Copy"),
         "convert_shn": (1, 3, "Convert shn"),
+        "as_is_artist_name": (2, 1, "As-Is Artist Name"),
+        "tag_copy_and_delete_enabled": (2, 2, "Tag Copy/Delete Original"),
     }
-    assert len(GUI_CHECKBOX_OPTIONS) == 8
+    assert len(GUI_CHECKBOX_OPTIONS) == 10
     for field, (row, col, label) in expected.items():
         option = OPTIONS_BY_FIELD[field]
         assert (option.gui_row, option.gui_col, option.gui_label) == (row, col, label)
 
 
 def test_v334_main_gui_configures_four_checkbox_columns():
-    source = Path("tlo-ggi.py").read_text(encoding="utf-8")
+    source = _source_text("tlo-ggi.py")
     for column in range(4):
         assert f"checkbox_frame.columnconfigure({column}, weight=0)" in source
 
@@ -8053,3 +8036,1015 @@ def test_v335_physical_drive_powershell_passes_hidden_windows_subprocess_options
     monkeypatch.setattr(volume.subprocess, "run", fake_run)
     assert volume._run_command(["powershell.exe", "-NoProfile", "-Command", "echo 7"]) == "7"
     assert captured["creationflags"] == 67890
+
+
+# --------------------------------------------------------------------------- #
+# v337 - Review, preview, structured progress, issues, validation, and summaries
+# --------------------------------------------------------------------------- #
+
+def test_v337_preview_scans_without_modifying_files(tmp_path):
+    from types import SimpleNamespace
+    from tlo_ux import preview_operation
+
+    show = tmp_path / "Artist 2001-01-01 Venue"
+    show.mkdir()
+    flac = show / "01 Song.flac"
+    shn = show / "02 Song.shn"
+    flac.write_bytes(b"flac")
+    shn.write_bytes(b"shn")
+    before = {path.name: path.read_bytes() for path in show.iterdir()}
+    config = SimpleNamespace(
+        TLOHome=str(tmp_path),
+        search_path_override=str(show),
+        search_path_copy_override="",
+        search_path_copy_delete_override="",
+        tag_during_inventory=True,
+        tag_copy_during_inventory=False,
+        tag_copy_and_delete_path="",
+        rename_compliantly=True,
+        convert_shn=True,
+    )
+
+    result = preview_operation(config, operation="Full Inventory")
+
+    assert result.music_folders == 1
+    assert result.media_files == 2
+    assert result.shn_files == 1
+    assert {path.name: path.read_bytes() for path in show.iterdir()} == before
+    assert any("write audio tags in place" in item.actions for item in result.samples)
+    assert any("convert SHN" in action for item in result.samples for action in item.actions)
+
+
+def test_v337_inline_validation_accepts_inventory_file_and_rejects_bad_destination(tmp_path):
+    from tlo_ux import validate_optional_destination, validate_search_path
+
+    music = tmp_path / "music"
+    music.mkdir()
+    (music / "01.flac").write_bytes(b"x")
+    (tmp_path / "toBeInventoried.txt").write_text(str(music) + "\n", encoding="utf-8")
+
+    assert validate_search_path("", str(tmp_path)).valid is True
+    assert validate_search_path(str(music), str(tmp_path)).valid is True
+    assert validate_optional_destination("relative", "Destination").valid is False
+
+
+def test_v337_operation_review_explains_original_file_changes(tmp_path):
+    from types import SimpleNamespace
+    from tlo_ux import operation_review_lines
+
+    config = SimpleNamespace(
+        TLOHome=str(tmp_path), search_path_override=str(tmp_path),
+        compliant=False, tag_during_inventory=True, tag_copy_during_inventory=False,
+        tag_copy_and_delete_path="", tag_copy_destination="", rename_compliantly=False,
+        convert_shn=False, artist_in_album=True, etree_lookup=False,
+        setlistfm_lookup=False, performance_mode="balanced", max_workers=2,
+    )
+    lines = operation_review_lines(config, operation="Full Inventory")
+    assert "Tag in Place: Yes" in lines
+    assert "Original files may be changed: Yes" in lines
+
+
+def test_v337_run_monitor_builds_structured_counts_and_issues():
+    from tlo_ux import RunMonitor
+
+    monitor = RunMonitor("Full Inventory")
+    monitor.feed("Inventory roots loaded: 2 accessible, 0 inaccessible")
+    monitor.feed("Search path complete: /music/a | directories identified: 3 | show groups processed: 2")
+    monitor.feed("WARN: /music/a/show | no setlist found")
+    monitor.finish(success=True)
+
+    assert monitor.snapshot.roots_total == 2
+    assert monitor.snapshot.roots_completed == 1
+    assert monitor.snapshot.directories == 3
+    assert monitor.snapshot.show_groups == 2
+    assert monitor.snapshot.warnings == 1
+    assert monitor.issues[0].category == "Missing setlist"
+
+
+def test_v337_gui_contains_review_preview_progress_issues_and_completion_surfaces():
+    gui = _load_tlo_ggi_module()
+    source = _source_text("tlo-ggi.py")
+    assert "class PreviewWindow" in source
+    assert "class IssuesWindow" in source
+    assert "Review the operation before it starts." in source
+    assert "Current Operation" in source
+    assert "View Issues" in source
+    assert hasattr(gui.App, "_review_inventory_operation")
+    assert hasattr(gui.App, "_refresh_inline_validation")
+    assert hasattr(gui.TaggerWindow, "_toggle_pause")
+
+
+def test_v337_add_shows_preview_is_non_destructive(tmp_path):
+    from types import SimpleNamespace
+    from tlo_ux import preview_add_shows
+
+    ready = tmp_path / "readyForXfer"
+    show = ready / "Artist 2002-02-02 Venue"
+    show.mkdir(parents=True)
+    flac = show / "01 Song.flac"
+    shn = show / "02 Song.shn"
+    flac.write_bytes(b"flac")
+    shn.write_bytes(b"shn")
+    before = sorted((path.relative_to(tmp_path).as_posix(), path.read_bytes()) for path in show.iterdir())
+    config = SimpleNamespace(
+        TLOHome=str(tmp_path),
+        rename_compliantly=True,
+        convert_shn=True,
+        tag_during_inventory=True,
+        tag_copy_during_inventory=False,
+        tag_copy_and_delete_path="",
+        compliant=True,
+        compliant_artist_mode="as-is",
+        as_is_artist_name=True,
+        artist_in_album=True,
+        etree_lookup=False,
+        setlistfm_lookup=False,
+        artist_sqlite_db_file="",
+        venue_reference_db_file="",
+    )
+
+    result = preview_add_shows(config, mode="new")
+
+    assert result.operation == "Add Shows - New Shows Dry Run"
+    assert result.music_folders == 1
+    assert result.media_files == 2
+    assert result.shn_files == 1
+    assert show.is_dir()
+    assert not (tmp_path / "staged").exists()
+    assert not (tmp_path / "dups").exists()
+    after = sorted((path.relative_to(tmp_path).as_posix(), path.read_bytes()) for path in show.iterdir())
+    assert after == before
+    assert any("move accepted folder" in action for item in result.samples for action in item.actions)
+
+
+def test_v337_add_shows_preserves_folder_error_details(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    import tlo_inventory_update as updater
+
+    ready = tmp_path / "readyForXfer"
+    bad = ready / "Unreadable Show"
+    bad.mkdir(parents=True)
+    monkeypatch.setattr(updater, "prepare_updater_config", lambda config: config)
+    monkeypatch.setattr(
+        updater,
+        "ensure_updater_directories",
+        lambda _home: {"ready": str(ready), "staged": str(tmp_path / "staged"), "dups": str(tmp_path / "dups")},
+    )
+    monkeypatch.setattr(updater, "load_artist_matcher", lambda _config: object())
+    monkeypatch.setattr(updater, "_iter_top_level_dirs", lambda _root: [str(bad)])
+    monkeypatch.setattr(updater, "identify_folder", lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("cannot read folder")))
+
+    result = updater.process_new_shows(SimpleNamespace(TLOHome=str(tmp_path)), "[VOL]E:")
+
+    assert result["processed"] == 1
+    assert result["errors"] == 1
+    assert result["issues"] == [{"path": str(bad), "message": "cannot read folder"}]
+
+
+def test_v337_add_shows_gui_has_review_validation_status_and_summary():
+    gui = _load_tlo_ggi_module()
+    source = _source_text("tlo-ggi.py")
+    assert not hasattr(gui.AddToInventoryWindow, "_preview_new_shows")
+    assert not hasattr(gui.AddToInventoryWindow, "_preview_duplicates")
+    assert hasattr(gui.AddToInventoryWindow, "_new_show_review_lines")
+    assert "Preview New Shows" not in source
+    assert "Preview Potential\nDuplicate/Upgrades" not in source
+    assert "Current storage volume is available" in source
+    assert "Add Shows processing complete" in source
+    assert "preview_add_shows" in source
+
+
+# v338 - Main Inventory GUI validation-label cleanup
+
+def test_v338_main_window_omits_search_and_copy_status_labels_but_keeps_validation():
+    source = _source_text("tlo-ggi.py")
+    assert "search_path_status_var" not in source
+    assert "copy_destination_status_var" not in source
+    assert "validate_search_path(self.vars[\"search_path_override\"].get(), tlo_home)" in source
+    assert "validate_optional_destination(" not in source
+    assert "self._form_valid = bool(search_status.valid and max_workers_valid)" in source
+
+
+# v339 - checkbox-driven Copy/Delete and universal As-Is artist naming
+
+def test_v339_main_window_removes_copy_delete_path_entry_and_adds_checkbox():
+    from tlo_options import OPTIONS_BY_FIELD, GUI_CHECKBOX_OPTIONS
+    source = _source_text("tlo-ggi.py")
+    assert 'text="Tag Copy/Delete Original\\n-- Destination Path"' not in source
+    assert 'self.vars["tag_copy_and_delete_path"]' not in source
+    assert OPTIONS_BY_FIELD["tag_copy_and_delete_path"].gui is None
+    option = OPTIONS_BY_FIELD["tag_copy_and_delete_enabled"]
+    assert option in GUI_CHECKBOX_OPTIONS
+    assert (option.gui_row, option.gui_col, option.gui_label) == (2, 2, "Tag Copy/Delete Original")
+    assert hasattr(_load_tlo_ggi_module().App, "_confirm_tag_copy_delete_destination")
+
+
+def test_v339_copy_delete_destination_checks_path_and_available_storage(tmp_path):
+    gui = _load_tlo_ggi_module()
+    app = object.__new__(gui.App)
+    valid, message, normalized = app._destination_storage_status(str(tmp_path))
+    assert valid is True
+    assert normalized == os.path.normpath(str(tmp_path))
+    assert "available" in message.lower()
+    invalid, _message, normalized = app._destination_storage_status("relative/path")
+    assert invalid is False
+    assert normalized == ""
+
+
+def test_v339_artist_mode_is_checkbox_driven_and_never_prompts():
+    gui_source = _source_text("tlo-ggi.py")
+    parser_source = _source_text("inventory_parser_lib.py")
+    assert "_prompt_compliant_artist_mode" not in gui_source
+    assert 'input("Compliant artist names:' not in parser_source
+    from tlo_options import OPTIONS_BY_FIELD
+    option = OPTIONS_BY_FIELD["as_is_artist_name"]
+    assert option.default is False
+    assert option.gui_label == "As-Is Artist Name"
+
+
+def test_v339_noncompliant_tag_artist_uses_master_by_default_and_raw_when_checked():
+    from tlo_artist_db import ArtistMatcher
+    import tlo_phase23_v2 as phase
+
+    matcher = ArtistMatcher(db_path="")
+    matcher.exact_map = {"bobby d": {"Bob Dylan"}}
+    matcher.master_aliases = {"Bob Dylan": ["Bob Dylan", "Bobby D"]}
+    matcher.master_norms = {"Bob Dylan": {"bobdylan", "bobbyd"}}
+    record = phase.ShowMetadata(group_number=1, main_dir_name="x", main_dir_path="/x", setlist_file="", music_file_count=1)
+    record.flac_tag_samples = [{"artist": "Bobby D", "albumartist": ""}]
+
+    master = phase._resolve_artist_from_tags(record, matcher, {}, [], [], config=SimpleNamespace(as_is_artist_name=False))
+    raw = phase._resolve_artist_from_tags(record, matcher, {}, [], [], config=SimpleNamespace(as_is_artist_name=True))
+
+    assert master == "Bob Dylan"
+    assert raw == "Bobby D"
+
+
+def test_v339_as_is_artist_setting_survives_worker_snapshot():
+    import walk_trees_lib as walk
+    cfg = IPL.Config(
+        debug=False,
+        silent=True,
+        TLOHome="/tmp/tlo",
+        compliant=False,
+        compliant_artist_mode="as-is",
+        as_is_artist_name=True,
+        artist_in_album=False,
+    )
+    snapshot = walk._config_snapshot(cfg)
+    assert snapshot["compliant_artist_mode"] == "as-is"
+    assert snapshot["as_is_artist_name"] is True
+    assert snapshot["artist_in_album"] is False
+
+
+def test_v339_review_reports_as_is_artist_and_copy_delete_destination(tmp_path):
+    from tlo_ux import operation_review_lines
+    cfg = SimpleNamespace(
+        TLOHome=str(tmp_path), search_path_override=str(tmp_path), compliant=False,
+        tag_during_inventory=False, tag_copy_during_inventory=False,
+        tag_copy_and_delete_path=str(tmp_path), tag_copy_destination="",
+        rename_compliantly=False, convert_shn=False, artist_in_album=True,
+        as_is_artist_name=True, etree_lookup=False, setlistfm_lookup=False,
+        performance_mode="balanced", max_workers=2,
+    )
+    lines = operation_review_lines(cfg, operation="Full Inventory")
+    assert "As-Is Artist Name: Yes" in lines
+    assert "Copy/Delete Original: Yes" in lines
+    assert f"Copy destination: {tmp_path}" in lines
+
+
+def test_v339_tag_modes_are_mutually_exclusive():
+    gui = _load_tlo_ggi_module()
+
+    class FakeVar:
+        def __init__(self, value=False):
+            self.value = bool(value)
+        def get(self):
+            return self.value
+        def set(self, value):
+            self.value = bool(value)
+
+    app = object.__new__(gui.App)
+    app.bool_vars = {
+        "tag_during_inventory": FakeVar(True),
+        "tag_copy_during_inventory": FakeVar(True),
+        "tag_copy_and_delete_enabled": FakeVar(True),
+    }
+    app._tag_mode_syncing = False
+    app._schedule_inline_validation = lambda *_args: None
+
+    app._tag_mode_clicked("tag_copy_and_delete_enabled")
+
+    assert app.bool_vars["tag_during_inventory"].get() is False
+    assert app.bool_vars["tag_copy_during_inventory"].get() is False
+    assert app.bool_vars["tag_copy_and_delete_enabled"].get() is True
+
+
+def test_v339_gui_help_documents_checkbox_and_command_line_destination():
+    source = _source_text("tlo-ggi.py")
+    assert "Tag Copy/Delete Original --tag-copy-delete-original" in source
+    assert "--tag-copy-and-delete DIR Supply the Tag Copy/Delete Original destination" in source
+
+
+# v341 - defer both copy destination prompts until an action starts
+
+def test_v341_checking_copy_modes_does_not_open_destination_dialog():
+    gui = _load_tlo_ggi_module()
+
+    class FakeVar:
+        def __init__(self, value=False):
+            self.value = bool(value)
+        def get(self):
+            return self.value
+        def set(self, value):
+            self.value = bool(value)
+
+    for selected in ("tag_copy_during_inventory", "tag_copy_and_delete_enabled"):
+        app = object.__new__(gui.App)
+        app.bool_vars = {
+            "tag_during_inventory": FakeVar(False),
+            "tag_copy_during_inventory": FakeVar(selected == "tag_copy_during_inventory"),
+            "tag_copy_and_delete_enabled": FakeVar(selected == "tag_copy_and_delete_enabled"),
+        }
+        app._tag_mode_syncing = False
+        app._schedule_inline_validation = lambda *_args: None
+        app._confirm_tag_copy_destination = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("dialog opened while checking"))
+        app._confirm_tag_copy_delete_destination = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("dialog opened while checking"))
+
+        app._tag_mode_clicked(selected)
+
+        assert app.bool_vars[selected].get() is True
+
+
+def test_v341_build_config_requests_selected_copy_destination_after_action_start():
+    import inspect
+    gui = _load_tlo_ggi_module()
+    source = inspect.getsource(gui.App._build_config)
+    assert "self._confirm_tag_copy_destination(self._tag_copy_destination)" in source
+    assert "self._confirm_tag_copy_delete_destination(self._tag_copy_delete_destination)" in source
+    assert "self._tag_copy_destination = selected_destination" in source
+    assert "self._tag_copy_delete_destination = selected_destination" in source
+
+
+def test_v341_copy_modes_share_validation_and_only_delete_mode_warns():
+    import inspect
+    gui = _load_tlo_ggi_module()
+    source = inspect.getsource(gui.App._confirm_copy_destination)
+    assert "self._destination_storage_status" in source
+    assert "Valid destination" not in source  # produced by the shared validator, not hard-coded per mode
+    assert "The original material is retained." in source
+    assert "WARNING: Tag Copy/Delete Original" in source
+    assert "removes the original material" in source
+
+
+def test_v341_inline_validation_does_not_require_destination_before_start():
+    source = _source_text("tlo-ggi.py")
+    assert "Tag Copy destination will be requested after Inventory is started." in source
+    assert "Tag Copy/Delete Original destination will be requested after Inventory is started" in source
+    assert "destination_status.valid" not in source
+
+
+def _v341_fake_build_config_app(gui, tmp_path, selected_mode):
+    class FakeVar:
+        def __init__(self, value):
+            self.value = value
+        def get(self):
+            return self.value
+
+    app = object.__new__(gui.App)
+    app.cli_args = SimpleNamespace(
+        debug=False,
+        silent=True,
+        current_storage_volume="",
+        search_path_copy_override="",
+        search_path_copy_delete_override="",
+        tag_copy_destination="",
+        tag_copy_and_delete_path="",
+    )
+    app._resolve_gui_tlo_home = lambda error_type=ValueError: str(tmp_path)
+    app.vars = {
+        "performance_mode": FakeVar("balanced"),
+        "max_workers": FakeVar("2"),
+        "search_path_override": FakeVar(str(tmp_path)),
+        "search_path_slam_override": FakeVar(""),
+    }
+    app.bool_vars = {
+        "as_is_artist_name": FakeVar(False),
+        "rename_compliantly": FakeVar(False),
+        "tag_copy_and_delete_enabled": FakeVar(selected_mode == "delete"),
+        "tag_during_inventory": FakeVar(False),
+        "tag_copy_during_inventory": FakeVar(selected_mode == "copy"),
+        "compliant": FakeVar(False),
+        "convert_shn": FakeVar(False),
+        "artist_in_album": FakeVar(True),
+        "etree_lookup": FakeVar(False),
+        "setlistfm_lookup": FakeVar(False),
+    }
+    app._tag_copy_destination = ""
+    app._tag_copy_delete_destination = ""
+    app._show_copy_capacity_alert_threadsafe = lambda _message: None
+    return app
+
+
+def test_v341_tag_copy_prompt_runs_during_build_config(tmp_path):
+    gui = _load_tlo_ggi_module()
+    app = _v341_fake_build_config_app(gui, tmp_path, "copy")
+    calls = []
+    app._confirm_tag_copy_destination = lambda initial: calls.append(initial) or str(tmp_path)
+    app._confirm_tag_copy_delete_destination = lambda _initial: (_ for _ in ()).throw(AssertionError("wrong dialog"))
+
+    config = app._build_config()
+
+    assert calls == [""]
+    assert config.tag_copy_during_inventory is True
+    assert config.tag_copy_destination == os.path.normpath(str(tmp_path))
+    assert config.tag_copy_and_delete_path == ""
+
+
+def test_v341_copy_delete_prompt_runs_during_build_config(tmp_path):
+    gui = _load_tlo_ggi_module()
+    app = _v341_fake_build_config_app(gui, tmp_path, "delete")
+    calls = []
+    app._confirm_tag_copy_destination = lambda _initial: (_ for _ in ()).throw(AssertionError("wrong dialog"))
+    app._confirm_tag_copy_delete_destination = lambda initial: calls.append(initial) or str(tmp_path)
+
+    config = app._build_config()
+
+    assert calls == [""]
+    assert config.tag_copy_during_inventory is False
+    assert config.tag_copy_destination == ""
+    assert config.tag_copy_and_delete_path == os.path.normpath(str(tmp_path))
+
+# --------------------------------------------------------------------------- #
+# v342 - current documentation and package contract
+# --------------------------------------------------------------------------- #
+
+def test_v342_current_documentation_contract():
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v347.docx")
+    manual_rtf = _source_text("TLO_Inventory_User_Manual_v347.rtf")
+    faq = _source_text("TLO-FAQ.txt")
+    source_and_build_helpers = "\n".join(
+        _source_text(name)
+        for name in ("createWindowsDist.ps1", "createLinuxDist.sh", "createMacOSDist.sh")
+    )
+
+    assert "v1.2 Build 347" in requirements
+    assert "Build 344" not in requirements
+    assert "CHANGES_v344.txt" not in requirements
+    assert "eight ZIP assets" in requirements
+    assert "TLO_DBs/artists.sqlite" in requirements
+    assert "TLO_DBs/venues.txt" in requirements
+    assert "v1.1 Build" not in requirements
+    assert "Build 340 checkbox" not in requirements
+
+    assert "Version v1.2 Build 347" in manual_rtf
+    assert "eight assets" in manual_rtf
+    assert "artists.sqlite" in manual_rtf and "venues.txt" in manual_rtf
+    assert "Checking either box only selects the mode" in manual_rtf
+    assert "Dry run" in requirements and "Dry run" in manual_rtf and "Dry run" in faq
+    assert "Compliant and Rename Compliantly are also mutually exclusive" in requirements
+    assert "checking either one automatically unchecks the other" in manual_rtf
+    assert "using --compliant and --rename-compliantly together produces an argument error" in faq
+    assert "Preview, Inventory (full)" not in requirements
+    assert "TLO_V1.1Build" not in manual_rtf
+    assert "Build341" not in manual_rtf and "Build 341" not in manual_rtf
+    assert "--myTLO" not in manual_rtf
+
+    assert "A: The Windows and macOS/Linux/WSL setup steps" in faq
+    assert "You never lose your content" not in faq
+    assert "readyforXfer" not in source_and_build_helpers
+    assert "tloDist-V1.1Build" not in source_and_build_helpers
+
+
+
+# --------------------------------------------------------------------------- #
+# v342 - Main-window Dry run checkbox replaces Inventory and Tag Preview buttons
+# --------------------------------------------------------------------------- #
+
+def test_v342_main_window_uses_dry_run_checkbox_instead_of_preview_buttons():
+    source = _source_text("tlo-ggi.py")
+    assert 'self.dry_run_checkbox = ttk.Checkbutton' in source
+    assert 'text="Dry run"' in source
+    assert '("dry_run", "Dry run", 3, 0)' not in source
+    assert 'text="Preview\\n "' not in source
+    assert 'self.preview_button = ttk.Button' not in source
+    assert 'command=self._preview_inventory' not in source
+    assert 'command=self._preview_tagging' not in source
+
+
+def test_v342_inventory_click_routes_dry_run_to_non_destructive_preview():
+    import inspect
+    gui = _load_tlo_ggi_module()
+    source = inspect.getsource(gui.App._start)
+    assert 'dry_run = bool(self.dry_run_var.get())' in source
+    assert 'self._review_inventory_operation(config, dry_run=dry_run)' in source
+    assert 'PreviewWindow(self.root, config, operation="Full Inventory Dry Run")' in source
+    assert source.index('if dry_run:') < source.index('clear_cancel_request()')
+
+
+def test_v342_tag_click_routes_dry_run_to_non_destructive_preview():
+    import inspect
+    gui = _load_tlo_ggi_module()
+    source = inspect.getsource(gui.TaggerWindow._start_tagging)
+    assert 'dry_run = self._current_dry_run()' in source
+    assert 'PreviewWindow(self.window, config, operation="Tag Dry Run"' in source
+    assert source.index('if dry_run:') < source.index('clear_cancel_request()')
+
+
+def test_v342_inventory_button_is_not_silently_disabled_by_inline_validation():
+    import inspect
+    gui = _load_tlo_ggi_module()
+    source = inspect.getsource(gui.App._update_main_action_states)
+    assert 'form_invalid' not in source
+    assert 'self.inventory_button.configure' in source
+    start_source = inspect.getsource(gui.App._start)
+    assert 'validate_search_path(self.vars["search_path_override"].get(), tlo_home)' in start_source
+    assert 'raise ValueError(search_status.message)' in start_source
+
+
+# --------------------------------------------------------------------------- #
+# v343 - Compliant and Rename Compliantly are mutually exclusive
+# --------------------------------------------------------------------------- #
+
+def test_v343_shared_validator_rejects_compliant_with_rename():
+    from tlo_options import COMPLIANT_RENAME_CONFLICT_ERROR, validate_compliant_rename_exclusivity
+
+    validate_compliant_rename_exclusivity({"compliant": True, "rename_compliantly": False})
+    validate_compliant_rename_exclusivity({"compliant": False, "rename_compliantly": True})
+    with pytest.raises(ValueError, match="mutually exclusive") as exc_info:
+        validate_compliant_rename_exclusivity({"compliant": True, "rename_compliantly": True})
+    assert str(exc_info.value) == COMPLIANT_RENAME_CONFLICT_ERROR
+
+
+def test_v343_inventory_cli_rejects_compliant_with_rename(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["tlo-gi.py", "--compliant", "--rename-compliantly"],
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        IPL.parse_command_line()
+    assert exc_info.value.code == 2
+    assert "--compliant and --rename-compliantly are mutually exclusive" in capsys.readouterr().err
+
+
+def test_v343_gui_and_tagger_cli_reject_compliant_with_rename(capsys):
+    gui = _load_tlo_ggi_module()
+    with pytest.raises(SystemExit) as gui_exit:
+        gui._parse_gui_command_line(["--compliant", "--rename-compliantly"])
+    assert gui_exit.value.code == 2
+    assert "mutually exclusive" in capsys.readouterr().err
+
+    tag_script = _load_local_module("tlo-tag.py", "tlo_tag_v343_cli")
+    with pytest.raises(SystemExit) as tag_exit:
+        tag_script._parse_args(["--compliant", "--rename-compliantly"])
+    assert tag_exit.value.code == 2
+    assert "mutually exclusive" in capsys.readouterr().err
+
+
+def test_v343_main_gui_toggles_compliant_and_rename_compliantly():
+    gui = _load_tlo_ggi_module()
+
+    class FakeVar:
+        def __init__(self, value=False):
+            self.value = bool(value)
+        def get(self):
+            return self.value
+        def set(self, value):
+            self.value = bool(value)
+
+    app = object.__new__(gui.App)
+    app.bool_vars = {"compliant": FakeVar(True), "rename_compliantly": FakeVar(False)}
+    app._compliant_rename_syncing = False
+    app._schedule_inline_validation = lambda *_args: None
+
+    app.bool_vars["rename_compliantly"].set(True)
+    app._compliant_rename_clicked("rename_compliantly")
+    assert app.bool_vars["rename_compliantly"].get() is True
+    assert app.bool_vars["compliant"].get() is False
+
+    app.bool_vars["compliant"].set(True)
+    app._compliant_rename_clicked("compliant")
+    assert app.bool_vars["compliant"].get() is True
+    assert app.bool_vars["rename_compliantly"].get() is False
+
+
+def test_v343_tagger_gui_toggles_compliant_and_rename_compliantly():
+    gui = _load_tlo_ggi_module()
+
+    class FakeVar:
+        def __init__(self, value=False):
+            self.value = bool(value)
+        def get(self):
+            return self.value
+        def set(self, value):
+            self.value = bool(value)
+
+    window = object.__new__(gui.TaggerWindow)
+    window.option_vars = {"compliant": FakeVar(True), "rename_compliantly": FakeVar(False)}
+    window._compliant_rename_syncing = False
+
+    window.option_vars["rename_compliantly"].set(True)
+    window._compliant_rename_clicked("rename_compliantly")
+    assert window.option_vars["rename_compliantly"].get() is True
+    assert window.option_vars["compliant"].get() is False
+
+    window.option_vars["compliant"].set(True)
+    window._compliant_rename_clicked("compliant")
+    assert window.option_vars["compliant"].get() is True
+    assert window.option_vars["rename_compliantly"].get() is False
+
+
+def test_v343_programmatic_tagger_config_rejects_compliant_with_rename(tmp_path):
+    import tlo_tag_lib as taglib
+
+    with pytest.raises(taglib.TaggerError, match="mutually exclusive"):
+        taglib.build_tagger_config(
+            tlo_home=str(tmp_path),
+            compliant=True,
+            rename_compliantly=True,
+        )
+
+# v345 - Dry run resolves show names and exact planned file tags
+
+
+def _v345_preview_config(tlo_home, search_path, **overrides):
+    from types import SimpleNamespace
+
+    values = dict(
+        TLOHome=str(tlo_home),
+        search_path_override=str(search_path),
+        search_path_copy_override="",
+        search_path_copy_delete_override="",
+        tag_during_inventory=True,
+        tag_copy_during_inventory=False,
+        tag_copy_and_delete_path="",
+        rename_compliantly=False,
+        convert_shn=False,
+        compliant=True,
+        compliant_artist_mode="as-is",
+        as_is_artist_name=True,
+        artist_in_album=True,
+        etree_lookup=False,
+        setlistfm_lookup=False,
+        performance_mode="balanced",
+    )
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def test_v345_inventory_dry_run_reports_resulting_show_and_planned_tags(tmp_path):
+    from tlo_ux import format_preview, preview_operation
+
+    show = tmp_path / "Preview Artist 2001-02-03 Preview Venue Boston MA"
+    show.mkdir()
+    first = show / "01 First Song.flac"
+    second = show / "02 Second Song.flac"
+    first.write_bytes(b"first-audio")
+    second.write_bytes(b"second-audio")
+    (show / "info.txt").write_text(
+        "Preview Artist\n2001-02-03\nPreview Venue\nBoston, MA\n\n"
+        "01 First Song\n02 Second Song\n",
+        encoding="utf-8",
+    )
+    before = {path.name: path.read_bytes() for path in show.iterdir() if path.is_file()}
+
+    result = preview_operation(_v345_preview_config(tmp_path, show), operation="Full Inventory Dry Run")
+    output = format_preview(result)
+
+    assert result.samples
+    item = result.samples[0]
+    assert item.show_name == "Preview Artist 2001-02-03 Preview Venue Boston MA"
+    assert [(tag.track, tag.title) for tag in item.tags] == [("01", "First Song"), ("02", "Second Song")]
+    assert all(tag.artist == "Preview Artist" for tag in item.tags)
+    assert all(tag.album == "Preview Artist 2001-02-03 Preview Venue Boston MA" for tag in item.tags)
+    assert "Resulting show name: Preview Artist 2001-02-03 Preview Venue Boston MA" in output
+    assert "Artist: Preview Artist" in output
+    assert "Album: Preview Artist 2001-02-03 Preview Venue Boston MA" in output
+    assert "Track: 01" in output
+    assert "Title: First Song" in output
+    after = {path.name: path.read_bytes() for path in show.iterdir() if path.is_file()}
+    assert after == before
+
+
+def test_v345_tag_dry_run_simulates_shn_conversion_and_tags_without_writes(tmp_path):
+    from tlo_ux import preview_operation
+
+    show = tmp_path / "Preview Artist 2001-02-03 Preview Venue Boston MA"
+    show.mkdir()
+    flac = show / "01 First Song.flac"
+    shn = show / "02 Second Song.shn"
+    flac.write_bytes(b"first-audio")
+    shn.write_bytes(b"second-audio")
+    (show / "info.txt").write_text("01 First Song\n02 Second Song\n", encoding="utf-8")
+    planned_flac = show / "02 Second Song.flac"
+
+    config = _v345_preview_config(
+        tmp_path,
+        show,
+        tag_during_inventory=False,
+        convert_shn=True,
+    )
+    result = preview_operation(config, operation="Tag Dry Run", tag_path=str(show))
+
+    item = result.samples[0]
+    shn_plan = next(tag for tag in item.tags if tag.source_path == str(shn))
+    assert shn_plan.target_path == str(planned_flac)
+    assert shn_plan.action == "would convert to FLAC, then tag"
+    assert shn_plan.track == "02"
+    assert shn_plan.title == "Second Song"
+    assert shn.exists()
+    assert not planned_flac.exists()
+
+
+def test_v345_inventory_only_dry_run_reports_show_name_without_file_tags(tmp_path):
+    from tlo_ux import preview_operation
+
+    show = tmp_path / "Preview Artist 2001-02-03 Preview Venue Boston MA"
+    show.mkdir()
+    (show / "01 First Song.flac").write_bytes(b"audio")
+    config = _v345_preview_config(tmp_path, show, tag_during_inventory=False)
+
+    result = preview_operation(config, operation="Full Inventory Dry Run")
+
+    assert result.samples[0].show_name == "Preview Artist 2001-02-03 Preview Venue Boston MA"
+    assert result.samples[0].tags == []
+
+
+# v345 - Add Shows Dry run and universal trailing parentheticals
+
+
+def _v345_add_shows_config(tlo_home, **overrides):
+    from types import SimpleNamespace
+
+    values = dict(
+        TLOHome=str(tlo_home),
+        current_volume_label="Backup",
+        tag_during_inventory=True,
+        tag_copy_during_inventory=False,
+        tag_copy_and_delete_path="",
+        rename_compliantly=False,
+        convert_shn=False,
+        compliant=True,
+        compliant_artist_mode="as-is",
+        as_is_artist_name=True,
+        artist_in_album=True,
+        etree_lookup=False,
+        setlistfm_lookup=False,
+        performance_mode="balanced",
+        artist_sqlite_db_file="",
+        venue_reference_db_file="",
+    )
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def test_v345_add_shows_has_no_preview_buttons_and_lists_all_main_flags():
+    import inspect
+    gui = _load_tlo_ggi_module()
+    build = inspect.getsource(gui.AddToInventoryWindow._build)
+    mode = inspect.getsource(gui.AddToInventoryWindow._refresh_mode_display)
+    process_new = inspect.getsource(gui.AddToInventoryWindow._process_new_shows)
+    process_dups = inspect.getsource(gui.AddToInventoryWindow._process_duplicates)
+
+    assert 'text="Dry run"' not in build
+    assert "self.dry_run_var" not in build
+    assert "preview_new_button" not in build
+    assert "preview_dups_button" not in build
+    for label in (
+        "Compliant:", "etreeDB:", "setlist.fm:", "Tag in Place:", "Tag Copy:",
+        "Tag Copy/Delete Original:", "Rename Compliantly:", "Convert shn:",
+        "Artist in Album Tag:", "As-Is Artist Name:", "Dry run:",
+    ):
+        assert label in mode
+    assert "if dry_run:" in process_new and "preview_add_shows" in process_new
+    assert "if dry_run:" in process_dups and "preview_add_shows" in process_dups
+
+
+def test_v345_add_shows_dry_run_reports_show_name_and_planned_tags_without_writes(tmp_path):
+    from tlo_ux import format_preview, preview_add_shows
+
+    show = tmp_path / "readyForXfer" / "Preview Artist 2001-02-03 Preview Venue Boston MA (SBD)"
+    show.mkdir(parents=True)
+    first = show / "01 First Song.flac"
+    second = show / "02 Second Song.flac"
+    first.write_bytes(b"first")
+    second.write_bytes(b"second")
+    (show / "info.txt").write_text("01 First Song\n02 Second Song\n", encoding="utf-8")
+    before = {path.name: path.read_bytes() for path in show.iterdir() if path.is_file()}
+
+    result = preview_add_shows(_v345_add_shows_config(tmp_path), mode="new", check_duplicates=False)
+    output = format_preview(result)
+
+    assert result.samples
+    item = result.samples[0]
+    assert item.show_name == "Preview Artist 2001-02-03 Preview Venue Boston MA (SBD)"
+    assert [(tag.track, tag.title) for tag in item.tags] == [("01", "First Song"), ("02", "Second Song")]
+    assert all(tag.artist == "Preview Artist" for tag in item.tags)
+    assert all(tag.album == "Preview Artist 2001-02-03 Preview Venue Boston MA (SBD)" for tag in item.tags)
+    assert "Resulting show name: Preview Artist 2001-02-03 Preview Venue Boston MA (SBD)" in output
+    assert "Artist: Preview Artist" in output
+    assert "Track: 01" in output
+    assert "Title: First Song" in output
+    after = {path.name: path.read_bytes() for path in show.iterdir() if path.is_file()}
+    assert after == before
+    assert not (tmp_path / "staged" / show.name).exists()
+
+
+def test_v345_compliant_string_date_show_name_retains_parentheticals():
+    from tlo_models import ShowMetadata
+
+    record = ShowMetadata(
+        group_number=1,
+        main_dir_name="Artist 2001-02-03 (Early Show) (SBD)",
+        main_dir_path="/tmp/Artist 2001-02-03 (Early Show) (SBD)",
+        setlist_file="",
+        music_file_count=1,
+        artist="Artist",
+        date="2001-02-03",
+        parentheticals="(Early Show) (SBD)",
+    )
+    assert P._build_compliant_string_date_show_name(record) == "Artist 2001-02-03 (Early Show) (SBD)"
+
+
+def test_v345_final_show_name_safety_appends_parentheticals_in_both_metadata_modes():
+    phase_source = _source_text("tlo_phase23_v2.py")
+    assert phase_source.count("record.show_name = _append_parentheticals_to_show_name(record.show_name, record.parentheticals)") == 2
+
+
+
+def test_v345_album_tags_retain_trailing_parentheticals():
+    from types import SimpleNamespace
+    import tlo_tag_lib as taglib
+
+    config = SimpleNamespace(compliant=True, artist_in_album=True)
+    record = SimpleNamespace(
+        artist="Artist",
+        date="2001-02-03",
+        album_name="Venue Boston MA",
+        venue="Venue Boston MA",
+        location="",
+        parentheticals="(SBD)",
+    )
+    assert taglib._album_for_record(config, record) == "Artist 2001-02-03 Venue Boston MA (SBD)"
+
+
+
+def test_v345_add_shows_dry_run_keeps_process_new_available_without_first_bootlist_volume():
+    import inspect
+    gui = _load_tlo_ggi_module()
+    source = inspect.getsource(gui.AddToInventoryWindow._set_processing_controls)
+    assert 'level != "error" or self._current_dry_run()' in source
+    assert not hasattr(gui.AddToInventoryWindow, "_dry_run_toggled")
+
+# v346 - trailing folder parentheticals survive metadata-path cleanup
+
+def _v346_danny_gatton_group():
+    path = "/mnt/c/tmpDL/Danny Gatton 1994-03-13 Bottom Line NYC (set 2)"
+    return {
+        "group_number": 1,
+        "main_dir_name": os.path.basename(path),
+        "main_dir_path": path,
+        "setlist_file": "",
+        "music_file_count": 1,
+        "setlist_files": [],
+        "music_dirs": [path],
+        "music_files": [],
+        "flac_tag_samples": [],
+        "flac_tag_artist_values": [],
+        "flac_tag_album_values": [],
+        "flac_tag_albumartist_values": [],
+        "flac_tag_date_values": [],
+    }
+
+
+def _v346_danny_gatton_matcher():
+    from tlo_artist_db import ArtistMatcher
+
+    matcher = ArtistMatcher(db_path="")
+    matcher.exact_map = {"danny gatton": {"Danny Gatton"}}
+    matcher.master_aliases = {"Danny Gatton": ["Danny Gatton"]}
+    matcher.master_norms = {"Danny Gatton": {"dannygatton"}}
+    return matcher
+
+
+def test_v346_noncompliant_folder_parenthetical_survives_location_normalization():
+    config = SimpleNamespace(
+        compliant=False,
+        current_volume_label="",
+        current_slam="",
+        as_is_artist_name=False,
+        compliant_artist_mode="master",
+        etree_lookup=False,
+        setlistfm_lookup=False,
+    )
+    record, _date_matches, unresolved = P._extract_metadata_for_group(
+        config,
+        _v346_danny_gatton_group(),
+        _v346_danny_gatton_matcher(),
+    )
+
+    assert unresolved == []
+    assert record.venue == "Bottom Line"
+    assert record.location == "New York, NY"
+    assert record.parentheticals == "(set 2)"
+    assert record.show_name == "Danny Gatton 1994-03-13 Bottom Line New York, NY (set 2)"
+
+
+def test_v346_folder_parenthetical_merge_preserves_order_without_duplicates():
+    assert P._merge_parenthetical_items("(set 2)", "(SBD) (set 2)", "(24-bit)") == "(set 2) (SBD) (24-bit)"
+
+
+def test_v346_dry_run_plan_reports_the_restored_folder_parenthetical():
+    config = SimpleNamespace(
+        compliant=False,
+        current_volume_label="",
+        current_slam="",
+        as_is_artist_name=False,
+        compliant_artist_mode="master",
+        etree_lookup=False,
+        setlistfm_lookup=False,
+        convert_shn=False,
+        artist_in_album=True,
+        TLOHome="/tmp",
+        rename_compliantly=False,
+    )
+    plan = T.build_dry_run_group_plan(
+        config,
+        _v346_danny_gatton_group(),
+        _v346_danny_gatton_matcher(),
+        include_tags=False,
+        standalone_tagger=False,
+    )
+    assert plan["show_name"] == "Danny Gatton 1994-03-13 Bottom Line New York, NY (set 2)"
+
+
+# --------------------------------------------------------------------------- #
+# v347 - child windows inherit main-window Dry run without duplicate controls
+# --------------------------------------------------------------------------- #
+
+def test_v347_tag_and_add_shows_remove_child_dry_run_checkboxes():
+    import inspect
+    gui = _load_tlo_ggi_module()
+    tag_build = inspect.getsource(gui.TaggerWindow._build)
+    add_build = inspect.getsource(gui.AddToInventoryWindow._build)
+
+    assert 'text="Dry run"' not in tag_build
+    assert '("dry_run", "Dry run", 3, 0)' not in tag_build
+    assert 'text="Dry run"' not in add_build
+    assert "self.dry_run_var" not in tag_build
+    assert "self.dry_run_var" not in add_build
+    assert "inherited from main window" in inspect.getsource(gui.TaggerWindow._refresh_inherited_dry_run)
+
+
+def test_v347_tag_and_add_shows_read_current_main_dry_run_value():
+    gui = _load_tlo_ggi_module()
+
+    class FakeVar:
+        def __init__(self, value=False):
+            self.value = bool(value)
+        def get(self):
+            return self.value
+        def set(self, value):
+            self.value = bool(value)
+
+    parent = SimpleNamespace(dry_run_var=FakeVar(False))
+    tagger = object.__new__(gui.TaggerWindow)
+    tagger.parent_app = parent
+    updater = object.__new__(gui.AddToInventoryWindow)
+    updater.parent_app = parent
+    updater.config = SimpleNamespace(main_window_dry_run=False)
+
+    assert tagger._current_dry_run() is False
+    assert updater._current_dry_run() is False
+    parent.dry_run_var.set(True)
+    assert tagger._current_dry_run() is True
+    assert updater._current_dry_run() is True
+
+
+def test_v347_main_dry_run_change_refreshes_open_child_windows():
+    gui = _load_tlo_ggi_module()
+    calls = []
+
+    class Child:
+        def __init__(self, name):
+            self.name = name
+        def _refresh_inherited_dry_run(self):
+            calls.append(self.name)
+
+    app = object.__new__(gui.App)
+    app.active_tagger_window = Child("tag")
+    app.active_updater_window = Child("add")
+    app._main_dry_run_changed()
+    assert calls == ["tag", "add"]
+
+def test_v347_action_paths_use_inherited_main_dry_run():
+    import inspect
+    gui = _load_tlo_ggi_module()
+    tag_start = inspect.getsource(gui.TaggerWindow._start_tagging)
+    add_new = inspect.getsource(gui.AddToInventoryWindow._process_new_shows)
+    add_dups = inspect.getsource(gui.AddToInventoryWindow._process_duplicates)
+
+    assert "dry_run = self._current_dry_run()" in tag_start
+    assert "dry_run = self._current_dry_run()" in add_new
+    assert "dry_run = self._current_dry_run()" in add_dups

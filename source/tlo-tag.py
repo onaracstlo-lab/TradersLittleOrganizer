@@ -1,7 +1,7 @@
-__version__ = "v336"
-# TLO-GI package version: v336
-__version_summary__ = 'Restricts standalone Tag to direct tagging and hides undocumented myTLO help.'
-# TLO-GI version summary: Restricts standalone Tag to direct tagging and hides undocumented myTLO help.
+__version__ = "v347"
+# TLO-GI package version: v347
+__version_summary__ = 'Uses one main-window Dry run setting inherited live by Tag and Add Shows.'
+# TLO-GI version summary: Uses one main-window Dry run setting inherited live by Tag and Add Shows.
 
 import argparse
 import multiprocessing
@@ -11,7 +11,7 @@ from console_output_lib import console_emit
 if __name__ == "__main__":
     multiprocessing.freeze_support()
 
-from tlo_options import add_options_to_parser, parse_bool
+from tlo_options import add_options_to_parser, parse_bool, validate_compliant_rename_exclusivity
 from tlo_path_inputs import strip_optional_quotes
 from tlo_tag_lib import run_tagger
 
@@ -29,11 +29,12 @@ def _parse_args(argv=None):
         "rename_compliantly",
         "convert_shn",
         "artist_in_album",
+        "as_is_artist_name",
     ))
     tagger_help = {
-        "compliant": "Use the simplified compliant folder-name parsing rules.",
+        "compliant": "Use the simplified compliant folder-name parsing rules. Mutually exclusive with --rename-compliantly.",
         "etree_lookup": "Use eTreeDB as a metadata and song-title fallback during tagging.",
-        "rename_compliantly": "Rename an identified folder using the resolved Show Name before tagging it in place.",
+        "rename_compliantly": "Rename an identified folder using the resolved Show Name before tagging it in place. Mutually exclusive with --compliant.",
         "convert_shn": "Convert .shn/.shnf files in the selected tagging path to .flac; delete a source only after successful verified conversion.",
     }
     for action in parser._actions:
@@ -48,6 +49,10 @@ def _parse_args(argv=None):
     if option_value and positional_value and option_value != positional_value:
         parser.error("Use either --tag-path or positional tagPath, not both with different values.")
     args.tagPath = option_value or positional_value
+    try:
+        validate_compliant_rename_exclusivity(vars(args))
+    except ValueError as exc:
+        parser.error(str(exc))
     return args
 
 
@@ -64,6 +69,7 @@ def main(argv=None) -> int:
             rename_compliantly=bool(args.rename_compliantly),
             convert_shn=bool(args.convert_shn),
             artist_in_album=bool(args.artist_in_album),
+            as_is_artist_name=bool(args.as_is_artist_name),
             emit=lambda text: console_emit(str(text), end="" if str(text).endswith("\n") else "\n"),
         )
         return 0

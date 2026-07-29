@@ -24,9 +24,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-__version__ = "v336"
-# TLO-GI package version: v336
-__version_summary__ = 'Restricts standalone Tag to direct tagging and hides undocumented myTLO help.'
+__version__ = "v347"
+# TLO-GI package version: v347
+__version_summary__ = 'Uses one main-window Dry run setting inherited live by Tag and Add Shows.'
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 MIN_REQUEST_INTERVAL_SECONDS = 0.600

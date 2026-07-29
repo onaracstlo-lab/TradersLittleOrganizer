@@ -1,7 +1,7 @@
-__version__ = "v336"
-# TLO-GI package version: v336
-__version_summary__ = 'Restricts standalone Tag to direct tagging and hides undocumented myTLO help.'
-# TLO-GI version summary: Restricts standalone Tag to direct tagging and hides undocumented myTLO help.
+__version__ = "v347"
+# TLO-GI package version: v347
+__version_summary__ = 'Uses one main-window Dry run setting inherited live by Tag and Add Shows.'
+# TLO-GI version summary: Uses one main-window Dry run setting inherited live by Tag and Add Shows.
 
 import csv
 import glob
@@ -1000,7 +1000,7 @@ def _tag_add_shows_folder_in_place(config, folder_path: str, record_dict: Dict[s
     return subtotal
 
 
-def process_new_shows(config, current_volume: str, check_duplicates: bool = True) -> Dict[str, int]:
+def process_new_shows(config, current_volume: str, check_duplicates: bool = True) -> Dict[str, object]:
     prepare_updater_config(config)
     dirs = ensure_updater_directories(config.TLOHome)
     artist_matcher = load_artist_matcher(config)
@@ -1008,6 +1008,7 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
     staged_count = 0
     processed_count = 0
     error_count = 0
+    issue_records: List[Dict[str, str]] = []
     for folder in _iter_top_level_dirs(dirs["ready"]):
         processed_count += 1
         try:
@@ -1030,13 +1031,18 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
             _tag_add_shows_folder_in_place(config, folder, record_dict, generated_setlist)
             move_folder_to(folder, dirs["staged"])
             staged_count += 1
-        except Exception:
+        except Exception as exc:
             error_count += 1
+            issue_records.append({
+                "path": os.path.normpath(folder),
+                "message": str(exc).strip() or exc.__class__.__name__,
+            })
     return {
         "processed": processed_count,
         "staged": staged_count,
         "duplicates": duplicate_count,
         "errors": error_count,
+        "issues": issue_records,
     }
 
 

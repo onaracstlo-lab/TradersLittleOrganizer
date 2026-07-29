@@ -1,9 +1,9 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v336"
-# TLO-GI package version: v336
-__version_summary__ = 'Restricts standalone Tag to direct tagging and hides undocumented myTLO help.'
-# TLO-GI version summary: Restricts standalone Tag to direct tagging and hides undocumented myTLO help.
+__version__ = "v347"
+# TLO-GI package version: v347
+__version_summary__ = 'Uses one main-window Dry run setting inherited live by Tag and Add Shows.'
+# TLO-GI version summary: Uses one main-window Dry run setting inherited live by Tag and Add Shows.
 
 import os
 import re
@@ -32,6 +32,7 @@ except Exception:  # pragma: no cover - optional fallback imports vary by mutage
 
 from inventory_parser_lib import Config
 from tlo_path_inputs import strip_optional_quotes, normalize_platform_input_path, resolve_tlo_home as resolve_tlo_home_common
+from tlo_options import validate_compliant_rename_exclusivity
 from logging_lib import ARTIST_SQLITE_DB_FILENAME, TLO_DBS_DIRNAME, VENUE_REFERENCE_DB_FILENAME, setup_logging
 from tlo_artist_db import load_artist_matcher
 from tlo_audio_tags import collect_group_flac_tag_info
@@ -44,12 +45,12 @@ from tlo_phase23_v2 import (
     _volume_part_parent_info,
     _wrapper_release_aggregation_info,
 )
-from tlo_runtime_control import clear_cancel_request, is_cancel_requested, throttle_point
+from tlo_runtime_control import clear_cancel_request, is_cancel_requested, throttle_point, wait_if_paused
 from tlo_etree_lookup import ETreeDBError, lookup_setlists_by_performance, lookup_setlists_for_performance
 from initial_dir_walk_lib import initial_dir_walk
 from tlo_setlist_file_selection import find_setlist_files_for_music_dir
 from tlo_text_utils import compact_ws, setlist_text_requests_generated_from_music_files, standard_ascii_text
-from tlo_postprocess import _candidate_setlist_name, _setlist_base_from_record
+from tlo_postprocess import _adjust_show_name_for_output, _candidate_setlist_name, _setlist_base_from_record
 from tlo_wrapper_rules import is_wrapper_part_folder_name
 
 
@@ -367,7 +368,15 @@ def build_tagger_config(
     rename_compliantly: bool = False,
     convert_shn: bool = False,
     artist_in_album: bool = True,
+    as_is_artist_name: bool = False,
 ) -> Config:
+    try:
+        validate_compliant_rename_exclusivity({
+            "compliant": bool(compliant),
+            "rename_compliantly": bool(rename_compliantly),
+        })
+    except ValueError as exc:
+        raise TaggerError(str(exc)) from exc
     resolved_home = resolve_tlo_home(tlo_home=tlo_home, my_tlo=my_tlo)
     config = Config(
         debug=bool(debug),
@@ -376,6 +385,8 @@ def build_tagger_config(
         search_path_override="",
         search_path_slam_override="",
         compliant=bool(compliant),
+        compliant_artist_mode=("as-is" if bool(as_is_artist_name) else "master"),
+        as_is_artist_name=bool(as_is_artist_name),
         # The standalone tagger always writes tags directly to the selected
         # tagging path. These shared Config fields remain fixed so inventory-only
         # copy controls cannot leak into standalone Tag processing.
@@ -1931,19 +1942,25 @@ def format_tag_track_number(track_number: int, total_tracks: int) -> str:
     return str(max(0, number)).zfill(width)
 
 def _base_album_for_record(config: Config, record) -> str:
+    parentheticals = compact_ws(getattr(record, "parentheticals", ""))
     if getattr(config, "compliant", False):
         album_piece = compact_ws(getattr(record, "album_name", "") or getattr(record, "venue", ""))
         date_piece = compact_ws(getattr(record, "date", ""))
         if date_piece and album_piece:
-            return compact_ws(f"{date_piece} {album_piece}")
-        if date_piece:
-            return date_piece
-        return album_piece
-    return compact_ws(" ".join(part for part in [
-        getattr(record, "date", ""),
-        getattr(record, "venue", ""),
-        getattr(record, "location", ""),
-    ] if compact_ws(part)))
+            base = compact_ws(f"{date_piece} {album_piece}")
+        elif date_piece:
+            base = date_piece
+        else:
+            base = album_piece
+    else:
+        base = compact_ws(" ".join(part for part in [
+            getattr(record, "date", ""),
+            getattr(record, "venue", ""),
+            getattr(record, "location", ""),
+        ] if compact_ws(part)))
+    if base and parentheticals and not base.endswith(parentheticals):
+        return compact_ws(f"{base} {parentheticals}")
+    return base
 
 
 def _album_for_record(config: Config, record) -> str:
@@ -3553,6 +3570,182 @@ def process_tagging_group(
 
 
 
+def build_dry_run_group_plan(
+    config: Config,
+    group: dict,
+    artist_matcher,
+    *,
+    include_tags: bool,
+    standalone_tagger: bool = False,
+) -> Dict[str, object]:
+    """Resolve one group exactly as a real run would, without changing content.
+
+    Metadata extraction and title selection reuse the production inventory/tagger
+    code.  SHN conversion is simulated: the planned FLAC target is reported, but
+    neither the FLAC nor any tags are written.
+    """
+    folder = _folder_label(group)
+    plan: Dict[str, object] = {
+        "folder": folder,
+        "show_name": "",
+        "artist": "",
+        "album": "",
+        "unresolved": [],
+        "notes": [],
+        "issues": [],
+        "track_source": "",
+        "tags": [],
+        "audio_files": [],
+        "shn_files": 0,
+    }
+
+    try:
+        record, _date_matches, unresolved_reasons = _extract_metadata_for_group(config, group, artist_matcher)
+    except Exception as exc:
+        plan["issues"].append(f"metadata extraction failed: {exc}")
+        return plan
+
+    plan["_record"] = record
+
+    output_record = {
+        "artist": getattr(record, "artist", "") or "",
+        "date": getattr(record, "date", "") or "",
+        "venue": getattr(record, "venue", "") or "",
+        "location": getattr(record, "location", "") or "",
+        "parentheticals": getattr(record, "parentheticals", "") or "",
+        "album_name": getattr(record, "album_name", "") or "",
+        "show_name": getattr(record, "show_name", "") or "",
+    }
+    show_name = _adjust_show_name_for_output(output_record)
+    artist = compact_ws(getattr(record, "artist", ""))
+    album = _album_for_record(config, record)
+    unresolved = [compact_ws(str(reason)) for reason in (unresolved_reasons or []) if compact_ws(str(reason))]
+
+    plan["show_name"] = show_name
+    plan["artist"] = artist
+    plan["album"] = album
+    plan["unresolved"] = unresolved
+
+    raw_audio_files = sorted(_rescan_group_audio_files(group), key=_audio_track_order)
+    plan["audio_files"] = list(raw_audio_files)
+    plan["shn_files"] = sum(1 for path_name in raw_audio_files if _is_shn_audio_file(path_name))
+
+    if not include_tags:
+        return plan
+
+    if standalone_tagger:
+        metadata_problems = []
+        if not artist:
+            metadata_problems.append("artist not found")
+        if not album:
+            metadata_problems.append("album metadata not found")
+        metadata_problems.extend(unresolved)
+        if metadata_problems:
+            plan["issues"].append(_safe_message_parts(metadata_problems))
+            return plan
+    else:
+        # Inventory-time tagging deliberately permits Unknown values.
+        if not show_name:
+            artist = "Unknown"
+            album = "Unknown"
+            plan["notes"].append("Show name was not determined; Artist and Album would be tagged as Unknown.")
+        else:
+            if not artist:
+                artist = "Unknown"
+                plan["notes"].append("Artist was not determined; Artist would be tagged as Unknown.")
+            if not album:
+                album = "Unknown"
+                plan["notes"].append("Album was not determined; Album would be tagged as Unknown.")
+        plan["artist"] = artist
+        plan["album"] = album
+
+    selection_audio_files: List[str] = []
+    target_paths: Dict[str, str] = {}
+    skipped_reasons: Dict[str, str] = {}
+    convert_enabled = bool(getattr(config, "convert_shn", False))
+
+    for path_name in raw_audio_files:
+        normalized = os.path.normpath(path_name)
+        if _is_sample_audio_file(normalized):
+            skipped_reasons[normalized] = "sample audio is skipped"
+            plan["notes"].append(f"Sample audio would be skipped: {os.path.basename(normalized)}")
+            continue
+        if _is_shn_audio_file(normalized):
+            if convert_enabled:
+                target = _converted_flac_path_for_shn(normalized)
+                if os.path.exists(target):
+                    skipped_reasons[normalized] = f"FLAC destination already exists: {target}"
+                    plan["issues"].append(f"{normalized}: FLAC destination already exists: {target}")
+                    continue
+                target_paths[normalized] = target
+                selection_audio_files.append(normalized)
+            else:
+                target_paths[normalized] = normalized
+                selection_audio_files.append(normalized)
+            continue
+        target_paths[normalized] = normalized
+        selection_audio_files.append(normalized)
+
+    emitted: List[str] = []
+    tracks, track_source, track_error = _select_tracks_for_tagging(
+        config,
+        dict(group),
+        selection_audio_files,
+        emit=emitted.append,
+        fallback_to_filenames_on_track_problem=not standalone_tagger,
+        fallback_to_title_tags_on_track_problem=standalone_tagger,
+        record=record,
+    )
+    plan["track_source"] = track_source
+    for line in emitted:
+        clean = compact_ws(line)
+        if clean:
+            plan["notes"].append(clean)
+    if track_error:
+        plan["issues"].append(track_error)
+        return plan
+
+    for audio_path, track in zip(selection_audio_files, tracks):
+        normalized_number = int(track.get("normalized_number", 0) or 0)
+        tag_track_number = format_tag_track_number(normalized_number, len(tracks))
+        title = _clean_track_title(str(track.get("title") or "unknown")) or "unknown"
+        target_path = target_paths.get(audio_path, audio_path)
+        action = "would tag"
+        reason = ""
+        if _is_shn_audio_file(audio_path):
+            if convert_enabled:
+                action = "would convert to FLAC, then tag"
+            else:
+                action = "would not tag"
+                reason = "SHN is not directly taggable; enable Convert shn"
+        elif os.path.splitext(audio_path)[1].lower() not in TAGGABLE_AUDIO_EXTENSIONS:
+            action = "tag write would fail"
+            reason = f"unsupported or non-taggable audio extension: {os.path.splitext(audio_path)[1].lower() or '(none)'}"
+        plan["tags"].append({
+            "source_path": audio_path,
+            "target_path": target_path,
+            "artist": artist,
+            "album": album,
+            "track": tag_track_number,
+            "title": title,
+            "action": action,
+            "reason": reason,
+        })
+
+    for skipped_path, reason in skipped_reasons.items():
+        plan["tags"].append({
+            "source_path": skipped_path,
+            "target_path": skipped_path,
+            "artist": artist,
+            "album": album,
+            "track": "",
+            "title": "",
+            "action": "would skip",
+            "reason": reason,
+        })
+    return plan
+
+
 TAG_STATS_NUMERIC_KEYS = ("groups", "tagged", "skipped", "errors")
 TAG_STATS_LIST_KEYS = ("comma_item_folders", "comma_line_folders", "etreedb_folders", "setlistfm_folders", "title_tag_folders")
 
@@ -3664,6 +3857,7 @@ def run_tagger(
     rename_compliantly: bool = False,
     convert_shn: bool = False,
     artist_in_album: bool = True,
+    as_is_artist_name: bool = False,
     emit: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, int]:
     clear_cancel_request()
@@ -3676,6 +3870,7 @@ def run_tagger(
         rename_compliantly=rename_compliantly,
         convert_shn=convert_shn,
         artist_in_album=artist_in_album,
+        as_is_artist_name=as_is_artist_name,
     )
     ensure_corrupt_flacs_log(config)
     tagging_path = resolve_tagging_path(config.TLOHome, tag_path=tag_path)
@@ -3691,7 +3886,7 @@ def run_tagger(
     tag_emit = _build_tag_log_emit(config, emit)
     artist_matcher = load_artist_matcher(config)
 
-    _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | artist in album={'yes' if getattr(config, 'artist_in_album', True) else 'no'} | debug={'yes' if config.debug else 'no'}")
+    _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | artist in album={'yes' if getattr(config, 'artist_in_album', True) else 'no'} | as-is artist name={'yes' if getattr(config, 'as_is_artist_name', False) else 'no'} | debug={'yes' if config.debug else 'no'}")
     _emit(tag_emit, f"TLOHome: {config.TLOHome}")
     _emit(tag_emit, f"Tagging Path: {tagging_path}")
 
@@ -3702,6 +3897,7 @@ def run_tagger(
 
     totals = empty_tag_stats()
     for idx, group in enumerate(groups, start=1):
+        wait_if_paused(config)
         if is_cancel_requested():
             _emit(tag_emit, "Tagger cancelled.")
             break

@@ -1,7 +1,7 @@
-__version__ = "v336"
-# TLO-GI package version: v336
-__version_summary__ = 'Restricts standalone Tag to direct tagging and hides undocumented myTLO help.'
-# TLO-GI version summary: Restricts standalone Tag to direct tagging and hides undocumented myTLO help.
+__version__ = "v347"
+# TLO-GI package version: v347
+__version_summary__ = 'Uses one main-window Dry run setting inherited live by Tag and Add Shows.'
+# TLO-GI version summary: Uses one main-window Dry run setting inherited live by Tag and Add Shows.
 import multiprocessing
 import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -46,12 +46,15 @@ def _config_snapshot(config, force_silent=False):
         "search_path_copy_override": "",
         "search_path_copy_delete_override": "",
         "compliant": config.compliant,
+        "compliant_artist_mode": getattr(config, "compliant_artist_mode", "master"),
+        "as_is_artist_name": getattr(config, "as_is_artist_name", False),
         "tag_during_inventory": getattr(config, "tag_during_inventory", False),
         "tag_copy_during_inventory": getattr(config, "tag_copy_during_inventory", False),
         "tag_copy_destination": getattr(config, "tag_copy_destination", ""),
         "tag_copy_and_delete_path": getattr(config, "tag_copy_and_delete_path", ""),
         "rename_compliantly": getattr(config, "rename_compliantly", False),
         "convert_shn": getattr(config, "convert_shn", False),
+        "artist_in_album": getattr(config, "artist_in_album", True),
         "etree_lookup": config.etree_lookup,
         "setlistfm_lookup": getattr(config, "setlistfm_lookup", False),
         "setlistfm_min_interval_seconds": getattr(config, "setlistfm_min_interval_seconds", 0.600),

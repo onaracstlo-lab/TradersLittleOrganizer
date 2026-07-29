@@ -1,9 +1,9 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v336"
-# TLO-GI package version: v336
-__version_summary__ = 'Restricts standalone Tag to direct tagging and hides undocumented myTLO help.'
-# TLO-GI version summary: Restricts standalone Tag to direct tagging and hides undocumented myTLO help.
+__version__ = "v347"
+# TLO-GI package version: v347
+__version_summary__ = 'Uses one main-window Dry run setting inherited live by Tag and Add Shows.'
+# TLO-GI version summary: Uses one main-window Dry run setting inherited live by Tag and Add Shows.
 
 import json
 import os
@@ -148,6 +148,44 @@ def _strip_trailing_parenthetical_items_with_cache(text: str) -> Tuple[str, str]
         cached.insert(0, match.group(1).strip())
         value = compact_ws(value[: match.start()])
     return compact_ws(value), " ".join(cached)
+
+
+def _merge_parenthetical_items(*values: str) -> str:
+    """Merge parenthetical groups in source order without duplicates.
+
+    Folder parsing intentionally removes trailing parentheticals before artist,
+    date, venue, and location analysis. Keep those source qualifiers separately
+    so final show-name creation restores them after normalization.
+    """
+    items: List[str] = []
+    seen = set()
+    for value in values:
+        cleaned = compact_ws(value)
+        if not cleaned:
+            continue
+        matches = [compact_ws(item) for item in re.findall(r"\([^()]*\)", cleaned)]
+        if not matches:
+            matches = [cleaned]
+        for item in matches:
+            key = item.casefold()
+            if item and key not in seen:
+                seen.add(key)
+                items.append(item)
+    return " ".join(items)
+
+
+def _group_trailing_parentheticals(group: dict) -> str:
+    """Return trailing parenthetical items from the logical show folder name."""
+    candidates = [
+        str(group.get("main_dir_name") or ""),
+        os.path.basename(os.path.normpath(str(group.get("main_dir_path") or ""))),
+        str(group.get("aggregate_release_base") or ""),
+    ]
+    merged = ""
+    for candidate in candidates:
+        _base, parentheticals = _strip_trailing_parenthetical_items_with_cache(candidate)
+        merged = _merge_parenthetical_items(merged, parentheticals)
+    return merged
 
 
 
@@ -1427,7 +1465,7 @@ def _string_dash_string_tail_date(row: Optional[Dict[str, str]]) -> str:
     match = _date_match_consumes_entire_text(row.get("string2", ""))
     return match.get("normalized", "") if match else ""
 
-def _resolve_artist_from_date_string3(group: dict, matcher: Optional[ArtistMatcher], evidence: Dict[str, List[Candidate]], conflicts: List[str]) -> Tuple[str, str]:
+def _resolve_artist_from_date_string3(group: dict, matcher: Optional[ArtistMatcher], evidence: Dict[str, List[Candidate]], conflicts: List[str], config=None) -> Tuple[str, str]:
     for part, part_path in _candidate_path_parts(group["main_dir_path"]):
         row = _match_date_string3(part)
         if not row:
@@ -1439,9 +1477,10 @@ def _resolve_artist_from_date_string3(group: dict, matcher: Optional[ArtistMatch
             return "", ""
         if detail["status"] == "matched" and detail["masters"]:
             master = detail["masters"][0]
-            evidence.setdefault("artist", []).append(Candidate(master, f"date_string3:{part_path}", 58))
+            artist_name = _artist_output_name(config, row["string3"], master)
+            evidence.setdefault("artist", []).append(Candidate(artist_name, f"date_string3:{part_path}", 58))
             evidence.setdefault("date", []).append(Candidate(row["date_norm"], f"date_string3:{part_path}", 58))
-            return master, row["date_norm"]
+            return artist_name, row["date_norm"]
     return "", ""
 
 
@@ -1463,6 +1502,7 @@ def _resolve_from_string_dash_string(
     conflicts: List[str],
     compliant: bool = False,
     assume_unmatched_artist: bool = False,
+    config=None,
 ) -> Tuple[str, Optional[Dict[str, str]]]:
     for part, part_path in _candidate_path_parts(group["main_dir_path"]):
         row = _match_string_dash_string(part)
@@ -1475,10 +1515,11 @@ def _resolve_from_string_dash_string(
             return "", None
         if detail["status"] == "matched" and detail["masters"]:
             master = detail["masters"][0]
-            evidence.setdefault("artist", []).append(Candidate(master, f"string_dash_string:{part_path}", 56 if not compliant else 66))
+            artist_name = _artist_output_name(config, row["string1"], master)
+            evidence.setdefault("artist", []).append(Candidate(artist_name, f"string_dash_string:{part_path}", 56 if not compliant else 66))
             row["part"] = part
             row["part_path"] = part_path
-            return master, row
+            return artist_name, row
         if compliant or assume_unmatched_artist:
             artist_name = row["string1_stripped"] or row["string1"]
             source_prefix = "compliant:string_dash_string" if compliant else "string_dash_string_unmatched"
@@ -1499,6 +1540,7 @@ def _resolve_noncompliant_from_string_dash_string(
     evidence: Dict[str, List[Candidate]],
     conflicts: List[str],
     observations: List[str],
+    config=None,
 ) -> Tuple[str, Optional[Dict[str, str]]]:
     """Resolve the non-compliant String1 - String2 fallback.
 
@@ -1520,8 +1562,9 @@ def _resolve_noncompliant_from_string_dash_string(
             return "", None
         if detail["status"] == "matched" and detail["masters"]:
             master = detail["masters"][0]
-            evidence.setdefault("artist", []).append(Candidate(master, f"string_dash_string:{part_path}", 56))
-            return master, row
+            artist_name = _artist_output_name(config, row["string1"], master)
+            evidence.setdefault("artist", []).append(Candidate(artist_name, f"string_dash_string:{part_path}", 56))
+            return artist_name, row
 
         path_artist = _resolve_artist_from_subdirs(
             group,
@@ -1531,6 +1574,7 @@ def _resolve_noncompliant_from_string_dash_string(
             pattern_artist="",
             exclude_part_paths={part_path},
             source_label="string_dash_string_path_artist",
+            config=config,
         )
         if path_artist:
             observations.append(f"String1 - String2 artist not found in DB; using artist found elsewhere in path: {path_artist}")
@@ -1557,11 +1601,21 @@ def _lookup_artist_detail(term: str, matcher: Optional[ArtistMatcher]) -> Dict[s
     }
 
 
-def _compliant_artist_mode(config) -> str:
+def _as_is_artist_name(config) -> bool:
+    if bool(getattr(config, "as_is_artist_name", False)):
+        return True
     value = str(getattr(config, "compliant_artist_mode", "master") or "master").strip().lower().replace("_", "-")
-    if value in {"as-is", "asis", "as is", "raw"}:
-        return "as-is"
-    return "master"
+    return value in {"as-is", "asis", "as is", "raw"}
+
+
+def _compliant_artist_mode(config) -> str:
+    return "as-is" if _as_is_artist_name(config) else "master"
+
+
+def _artist_output_name(config, raw_name: str, master_name: str) -> str:
+    raw = compact_ws(raw_name)
+    master = compact_ws(master_name)
+    return raw if _as_is_artist_name(config) and raw else (master or raw)
 
 
 def _set_compliant_artist_from_string1(
@@ -1873,7 +1927,7 @@ def _set_compliant_string2_raw(record: ShowMetadata, string2: str, parenthetical
     record.region = ""
     record.country = ""
     record.location = ""
-    record.parentheticals = parentheticals
+    record.parentheticals = _merge_parenthetical_items(record.parentheticals, parentheticals)
     record.album_name = value
     if value:
         evidence.setdefault("venue", []).append(Candidate(value, source, 70))
@@ -1918,14 +1972,14 @@ def _apply_string_dash_album_to_record(record: ShowMetadata, dash_match: Optiona
     record.country = ""
     record.location = ""
     if parentheticals:
-        record.parentheticals = compact_ws(f"{record.parentheticals} {parentheticals}").strip()
+        record.parentheticals = _merge_parenthetical_items(record.parentheticals, parentheticals)
     evidence.setdefault("album", []).append(Candidate(album_name, source, 70))
 
 
 def _build_compliant_string_date_show_name(record: ShowMetadata) -> str:
     if not record.artist or not record.date:
         return ""
-    return compact_ws(f"{record.artist} {record.date}")
+    return _append_parentheticals_to_show_name(compact_ws(f"{record.artist} {record.date}"), record.parentheticals)
 
 
 def _etree_lookup_is_usable(record: ShowMetadata) -> bool:
@@ -2481,11 +2535,12 @@ def _format_switches_log_line(config, action: str = "Full Inventory") -> str:
         f"Rename Compliantly: {_yes_no(getattr(config, 'rename_compliantly', False))}",
         f"Convert shn: {_yes_no(getattr(config, 'convert_shn', False))}",
         f"Artist in Album: {_yes_no(getattr(config, 'artist_in_album', True))}",
+        f"As-Is Artist Name: {_yes_no(_as_is_artist_name(config))}",
         f"etreeDB: {_yes_no(getattr(config, 'etree_lookup', False))}",
         f"setlist.fm: {_yes_no(getattr(config, 'setlistfm_lookup', False))}",
     ]
     if bool(getattr(config, "compliant", False)):
-        parts.append(f"Compliant Artist Mode: {compact_ws(getattr(config, 'compliant_artist_mode', '') or 'master')}")
+        parts.append(f"Compliant Artist Mode: {'as-is' if _as_is_artist_name(config) else 'master'}")
     return "Switches -- " + "; ".join(parts) + ";"
 
 
@@ -2660,7 +2715,7 @@ def _blank_unusable_artist_tags_for_noncompliant(record: ShowMetadata, observati
         ])
 
 
-def _resolve_artist_from_tags(record: ShowMetadata, matcher: Optional[ArtistMatcher], evidence: Dict[str, List[Candidate]], conflicts: List[str], observations: Optional[List[str]] = None) -> str:
+def _resolve_artist_from_tags(record: ShowMetadata, matcher: Optional[ArtistMatcher], evidence: Dict[str, List[Candidate]], conflicts: List[str], observations: Optional[List[str]] = None, config=None) -> str:
     """Resolve the show artist from music tags.
 
     Requirements rule: once a usable tag artist is found, tag-derived artist
@@ -2694,8 +2749,9 @@ def _resolve_artist_from_tags(record: ShowMetadata, matcher: Optional[ArtistMatc
     detail = _lookup_artist_detail(term, matcher)
     if detail["status"] == "matched":
         master = detail["masters"][0]
-        evidence.setdefault("artist", []).append(Candidate(master, f"{tag_source}:{term}", 95))
-        return master
+        artist_name = _artist_output_name(config, term, master)
+        evidence.setdefault("artist", []).append(Candidate(artist_name, f"{tag_source}:{term}", 95))
+        return artist_name
 
     if detail["status"] == "collision" and observations is not None:
         observations.append(_collision_note(f"tag artist query collision; using raw tag artist: {term}", detail["masters"]))
@@ -2774,6 +2830,7 @@ def _resolve_artist_from_path_before_abbreviation(
     matcher: Optional[ArtistMatcher],
     evidence: Dict[str, List[Candidate]],
     conflicts: List[str],
+    config=None,
 ) -> str:
     """For artist-no-space-date cases, prefer a DB-backed artist elsewhere in path.
 
@@ -2796,9 +2853,10 @@ def _resolve_artist_from_path_before_abbreviation(
         pattern_artist="",
         exclude_part_paths=exclude_paths,
         source_label="path_artist_before_abbreviation",
+        config=config,
     )
 
-def _resolve_artist_from_pattern_matches(pattern_matches: List[Dict[str, str]], matcher: Optional[ArtistMatcher], evidence: Dict[str, List[Candidate]], conflicts: List[str]) -> Tuple[str, List[Dict[str, object]]]:
+def _resolve_artist_from_pattern_matches(pattern_matches: List[Dict[str, str]], matcher: Optional[ArtistMatcher], evidence: Dict[str, List[Candidate]], conflicts: List[str], config=None) -> Tuple[str, List[Dict[str, object]]]:
     lookups: List[Dict[str, object]] = []
     if not pattern_matches:
         return "", lookups
@@ -2818,8 +2876,10 @@ def _resolve_artist_from_pattern_matches(pattern_matches: List[Dict[str, str]], 
         row = lookups[0]
         if row["status"] == "matched" and row["masters"]:
             master = row["masters"][0]
-            evidence.setdefault("artist", []).append(Candidate(master, f"path pattern:{row['term']}", 70))
-            return master, lookups
+            raw_artist = row["match"].get("string1", "") or row["term"]
+            artist_name = _artist_output_name(config, raw_artist, master)
+            evidence.setdefault("artist", []).append(Candidate(artist_name, f"path pattern:{row['term']}", 70))
+            return artist_name, lookups
         if row["status"] == "collision":
             conflicts.append(_collision_note(f"artist query collision for String1: {row['term']}", row["masters"]))
         return "", lookups
@@ -2836,8 +2896,10 @@ def _resolve_artist_from_pattern_matches(pattern_matches: List[Dict[str, str]], 
     unique_masters = _unique_preserve(matched_masters)
     if len(unique_masters) == 1:
         master = unique_masters[0]
-        evidence.setdefault("artist", []).append(Candidate(master, "path_pattern_consensus", 72))
-        return master, lookups
+        raw_artist = next((row["match"].get("string1", "") for row in lookups if row["status"] == "matched" and row["masters"] and row["masters"][0] == master), master)
+        artist_name = _artist_output_name(config, raw_artist, master)
+        evidence.setdefault("artist", []).append(Candidate(artist_name, "path_pattern_consensus", 72))
+        return artist_name, lookups
     if len(unique_masters) > 1:
         conflicts.append(_collision_note("artist conflict across path pattern matches", unique_masters))
     return "", lookups
@@ -2852,6 +2914,7 @@ def _resolve_artist_from_subdirs(
     pattern_artist: str = "",
     exclude_part_paths: Optional[set] = None,
     source_label: str = "subdirectory",
+    config=None,
 ) -> str:
     hits: List[Tuple[str, str]] = []
     exclude_norm = {os.path.normcase(os.path.normpath(path)) for path in (exclude_part_paths or set()) if path}
@@ -2902,8 +2965,10 @@ def _resolve_artist_from_subdirs(
         return ""
 
     if chosen_master:
-        evidence.setdefault("artist", []).append(Candidate(chosen_master, f"{source_label}:{chosen_source}", 60 if not pattern_artist else 62))
-    return chosen_master or pattern_artist
+        artist_name = _artist_output_name(config, chosen_source, chosen_master)
+        evidence.setdefault("artist", []).append(Candidate(artist_name, f"{source_label}:{chosen_source}", 60 if not pattern_artist else 62))
+        return artist_name
+    return pattern_artist
 
 
 
@@ -3348,7 +3413,7 @@ def _apply_string2_to_record(record: ShowMetadata, match: Optional[Dict[str, str
     record.country = country
     record.location = _join_location(city, region, country)
     if extra_parenthetical:
-        record.parentheticals = compact_ws(f"{record.parentheticals} ({extra_parenthetical})").strip()
+        record.parentheticals = _merge_parenthetical_items(record.parentheticals, f"({extra_parenthetical})")
     if record.venue:
         evidence.setdefault("venue", []).append(Candidate(record.venue, f"path_part:{match['part']}", 40))
     if record.city:
@@ -3359,7 +3424,7 @@ def _apply_string2_to_record(record: ShowMetadata, match: Optional[Dict[str, str
         evidence.setdefault("country", []).append(Candidate(record.country, f"path_part:{match['part']}", 35))
 
 
-def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata, evidence: Dict[str, List[Candidate]], observations: List[str]) -> bool:
+def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata, evidence: Dict[str, List[Candidate]], observations: List[str], artist_matcher: Optional[ArtistMatcher] = None) -> bool:
     """Use the selected setlist text after path and eTreeDB metadata.
 
     Non-compliant precedence is path, then eTreeDB, then selected setlist
@@ -3388,7 +3453,9 @@ def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata,
 
     if getattr(result, "artist", ""):
         if not record.artist:
-            record.artist = result.artist
+            detail = _lookup_artist_detail(result.artist, artist_matcher)
+            master = detail["masters"][0] if detail["status"] == "matched" and detail["masters"] else ""
+            record.artist = _artist_output_name(config, result.artist, master)
             evidence.setdefault("artist", []).append(Candidate(record.artist, "setlist_metadata:EXPLICIT_ARTIST_KEY", max(confidence, 80)))
             applied = True
         else:
@@ -3460,6 +3527,7 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
         flac_tag_album_values=[],
         flac_tag_albumartist_values=[],
         flac_tag_date_values=[],
+        parentheticals=_group_trailing_parentheticals(group),
     )
     evidence: Dict[str, List[Candidate]] = {}
     conflicts: List[str] = []
@@ -3496,7 +3564,7 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
             if _compliant_artist_mode(config) == "as-is":
                 dash_artist, dash_match = _resolve_compliant_dash_from_group_as_is(group, evidence, observations)
             else:
-                dash_artist, dash_match = _resolve_from_string_dash_string(group, artist_matcher, evidence, conflicts, compliant=True)
+                dash_artist, dash_match = _resolve_from_string_dash_string(group, artist_matcher, evidence, conflicts, compliant=True, config=config)
         if dash_artist:
             record.artist = dash_artist
         if dash_match:
@@ -3601,6 +3669,7 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
             record.show_name = _build_show_name(record)
         else:
             record.show_name = _build_compliant_string2_show_name(record)
+    record.show_name = _append_parentheticals_to_show_name(record.show_name, record.parentheticals)
     if not record.show_name:
         unresolved_reasons.append("unable to create show name")
 
@@ -3633,6 +3702,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
         flac_tag_album_values=group.get("flac_tag_album_values", []),
         flac_tag_albumartist_values=group.get("flac_tag_albumartist_values", []),
         flac_tag_date_values=group.get("flac_tag_date_values", []),
+        parentheticals=_group_trailing_parentheticals(group),
     )
 
     evidence: Dict[str, List[Candidate]] = {}
@@ -3663,7 +3733,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             dash_album_match = _find_string_dash_string_match(group)
     else:
         _blank_unusable_artist_tags_for_noncompliant(record, observations)
-        tag_artist = _resolve_artist_from_tags(record, artist_matcher, evidence, conflicts, observations)
+        tag_artist = _resolve_artist_from_tags(record, artist_matcher, evidence, conflicts, observations, config=config)
         if tag_artist:
             record.artist = tag_artist
 
@@ -3677,6 +3747,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                     evidence,
                     conflicts,
                     observations,
+                    config=config,
                 )
                 if dash_artist:
                     record.artist = dash_artist
@@ -3690,6 +3761,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                     artist_matcher,
                     evidence,
                     conflicts,
+                    config=config,
                 )
                 if path_artist_before_abbreviation:
                     record.artist = path_artist_before_abbreviation
@@ -3700,16 +3772,16 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                 elif len(conflicts) == conflict_count_before_path_artist:
                     observations.append("artist-no-space-date pattern found; no DB-backed artist found elsewhere in path before abbreviation lookup")
             if not record.artist and len(conflicts) == 0:
-                pattern_artist, _lookups = _resolve_artist_from_pattern_matches(pattern_matches, artist_matcher, evidence, conflicts)
+                pattern_artist, _lookups = _resolve_artist_from_pattern_matches(pattern_matches, artist_matcher, evidence, conflicts, config=config)
                 record.artist = pattern_artist
         if not record.artist and not dash_album_match and len(conflicts) == 0:
             if not string_date_string_found and string_date_found:
                 observations.append("String1 Date retry match found in path")
-            record.artist = _resolve_artist_from_subdirs(group, artist_matcher, evidence, conflicts, pattern_artist=pattern_artist)
+            record.artist = _resolve_artist_from_subdirs(group, artist_matcher, evidence, conflicts, pattern_artist=pattern_artist, config=config)
 
     if aggregate_album_name and not dash_album_match and not string_date_string_found:
         if not record.artist and len(conflicts) == 0:
-            record.artist = _resolve_artist_from_subdirs(group, artist_matcher, evidence, conflicts, pattern_artist=pattern_artist)
+            record.artist = _resolve_artist_from_subdirs(group, artist_matcher, evidence, conflicts, pattern_artist=pattern_artist, config=config)
         if record.artist:
             dash_album_mode = True
             record.album_name = aggregate_album_name
@@ -3804,7 +3876,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             etree_lookup_key = _online_lookup_key(record)
             etree_success = _apply_etree_lookup_to_record(config, record, evidence, observations)
 
-        _apply_setlist_metadata_to_noncompliant_record(config, record, evidence, observations)
+        _apply_setlist_metadata_to_noncompliant_record(config, record, evidence, observations, artist_matcher)
 
         if not dash_album_mode:
             etree_success, etree_lookup_key = _apply_setlistfm_only_after_etree_fallback(
@@ -3812,7 +3884,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             )
 
         if not record.artist:
-            date_string3_artist, date_string3_date = _resolve_artist_from_date_string3(group, artist_matcher, evidence, conflicts)
+            date_string3_artist, date_string3_date = _resolve_artist_from_date_string3(group, artist_matcher, evidence, conflicts, config=config)
             if date_string3_artist:
                 record.artist = date_string3_artist
                 if not record.date:
@@ -3829,7 +3901,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
         if record.artist and record.date:
             etree_lookup_key = _online_lookup_key(record)
             etree_success = _apply_etree_lookup_to_record(config, record, evidence, observations)
-        _apply_setlist_metadata_to_noncompliant_record(config, record, evidence, observations)
+        _apply_setlist_metadata_to_noncompliant_record(config, record, evidence, observations, artist_matcher)
         if not record.date:
             setlist_date_matches = _collect_setlist_date_matches(group)
             if setlist_date_matches:
@@ -3865,6 +3937,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             record.date = "xxxx-xx-xx"
         if record.artist and record.date:
             record.show_name = _build_show_name(record)
+    record.show_name = _append_parentheticals_to_show_name(record.show_name, record.parentheticals)
     if not record.show_name:
         unresolved_reasons.append("unable to create show name")
 

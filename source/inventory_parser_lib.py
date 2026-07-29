@@ -1,7 +1,7 @@
-__version__ = "v336"
-# TLO-GI package version: v336
-__version_summary__ = 'Restricts standalone Tag to direct tagging and hides undocumented myTLO help.'
-# TLO-GI version summary: Restricts standalone Tag to direct tagging and hides undocumented myTLO help.
+__version__ = "v347"
+# TLO-GI package version: v347
+__version_summary__ = 'Uses one main-window Dry run setting inherited live by Tag and Add Shows.'
+# TLO-GI version summary: Uses one main-window Dry run setting inherited live by Tag and Add Shows.
 import argparse
 import sys
 import os
@@ -17,6 +17,7 @@ from tlo_options import (
     parse_compliant_artist_mode,
     parse_max_workers,
     parse_performance_mode,
+    validate_compliant_rename_exclusivity,
 )
 from tlo_path_inputs import (
     strip_optional_quotes,
@@ -50,6 +51,7 @@ class Config:
     search_path_copy_delete_override: str = ""
     compliant: bool = False
     compliant_artist_mode: str = "master"
+    as_is_artist_name: bool = False
     tag_during_inventory: bool = False
     tag_copy_during_inventory: bool = False
     tag_copy_destination: str = ""
@@ -96,34 +98,19 @@ def _looks_like_windows_multiprocessing_spawn_args(args):
 
 
 def prompt_for_compliant_artist_mode(config_or_namespace) -> str:
-    """Return the compliant artist mode, prompting in interactive CLI runs.
+    """Resolve the legacy artist-name mode without opening an interactive prompt.
 
-    Master checks String1 against the artist DB and uses the master name when
-    matched. As-Is uses String1 directly without an artist DB lookup. GUI code
-    supplies the value explicitly; non-interactive command-line runs default to
-    master to avoid blocking scheduled/scripted jobs.
+    ``--compliant-artist-mode`` remains accepted for compatibility. The new
+    ``--as-is-artist-name`` switch applies to both compliant and non-compliant
+    metadata collection. Master naming is the default.
     """
-    mode = parse_compliant_artist_mode(getattr(config_or_namespace, "compliant_artist_mode", "master") or "master")
-    if not bool(getattr(config_or_namespace, "compliant", False)):
-        setattr(config_or_namespace, "compliant_artist_mode", mode)
-        return mode
     raw_mode = str(getattr(config_or_namespace, "compliant_artist_mode", "") or "").strip()
+    as_is = bool(getattr(config_or_namespace, "as_is_artist_name", False))
     if raw_mode:
-        setattr(config_or_namespace, "compliant_artist_mode", mode)
-        return mode
-    if bool(getattr(config_or_namespace, "silent", False)) or not sys.stdin.isatty():
-        setattr(config_or_namespace, "compliant_artist_mode", "master")
-        return "master"
-    while True:
-        answer = input("Compliant artist names: Master artist from DB or As-Is String1? [M/a]: ").strip()
-        if not answer:
-            mode = "master"
-            break
-        try:
-            mode = parse_compliant_artist_mode(answer)
-            break
-        except argparse.ArgumentTypeError:
-            console_emit("Enter M for Master or A for As-Is.", error=True)
+        mode = parse_compliant_artist_mode(raw_mode)
+        as_is = mode == "as-is"
+    mode = "as-is" if as_is else "master"
+    setattr(config_or_namespace, "as_is_artist_name", as_is)
     setattr(config_or_namespace, "compliant_artist_mode", mode)
     return mode
 
@@ -186,6 +173,7 @@ def build_inventory_parser() -> argparse.ArgumentParser:
         "search_path_override",
         "compliant",
         "compliant_artist_mode",
+        "as_is_artist_name",
         "tag_during_inventory",
         "tag_copy_during_inventory",
         "tag_copy_destination",
@@ -215,6 +203,11 @@ def parse_command_line():
             parser.error(f"unrecognized arguments: {' '.join(filtered_unknown)}")
     else:
         parsed = parser.parse_args(raw_args)
+    try:
+        validate_compliant_rename_exclusivity(vars(parsed))
+    except ValueError as exc:
+        parser.error(str(exc))
+
     if getattr(parsed, "search_path_slam_override", None) and not getattr(parsed, "search_path_override", ""):
         parser.error("--$slam is only valid when --search-path is also provided.")
     if getattr(parsed, "search_path_copy_override", None) and not getattr(parsed, "search_path_override", ""):
@@ -244,6 +237,7 @@ def build_config():
     cli_config = parse_command_line()
     values = namespace_values(argparse.Namespace(**cli_config))
     _apply_lookup_dependency_or_parser_error(values, mode="strict")
+    validate_compliant_rename_exclusivity(values)
     _validate_tag_copy_values(values)
     config = Config(
         debug=bool(cli_config.get("debug", False)),
@@ -255,6 +249,7 @@ def build_config():
         search_path_copy_delete_override=(cli_config.get("search_path_copy_delete_override") or ""),
         compliant=bool(values.get("compliant", False)),
         compliant_artist_mode=values.get("compliant_artist_mode", "master") or "master",
+        as_is_artist_name=bool(values.get("as_is_artist_name", False)),
         tag_during_inventory=bool(values.get("tag_during_inventory", False)),
         tag_copy_during_inventory=bool(values.get("tag_copy_during_inventory", False)),
         tag_copy_destination=(values.get("tag_copy_destination") or ""),
@@ -269,5 +264,6 @@ def build_config():
         current_volume_label=resolve_current_storage_volume(values.get("current_storage_volume")),
     )
     apply_lookup_dependency(vars(config), mode="strict")
+    validate_compliant_rename_exclusivity(vars(config))
     _validate_tag_copy_values(vars(config))
     return config

@@ -1,7 +1,7 @@
-__version__ = "v336"
-# TLO-GI package version: v336
-__version_summary__ = 'Restricts standalone Tag to direct tagging and hides undocumented myTLO help.'
-# TLO-GI version summary: Restricts standalone Tag to direct tagging and hides undocumented myTLO help.
+__version__ = "v347"
+# TLO-GI package version: v347
+__version_summary__ = 'Uses one main-window Dry run setting inherited live by Tag and Add Shows.'
+# TLO-GI version summary: Uses one main-window Dry run setting inherited live by Tag and Add Shows.
 
 import argparse
 from dataclasses import dataclass
@@ -9,6 +9,7 @@ from typing import Any, Callable, Optional, Sequence
 
 
 LOOKUP_DEPENDENCY_ERROR = "--setlistfm-lookup requires --etree-lookup on the command line."
+COMPLIANT_RENAME_CONFLICT_ERROR = "--compliant and --rename-compliantly are mutually exclusive."
 
 
 def parse_bool(value):
@@ -86,28 +87,33 @@ OPTIONS = [
     Option(
         "compliant", "--compliant", "flag",
         gui="checkbox", gui_label="Compliant", gui_row=0, gui_col=1,
-        help="Use the simplified compliant Phase 2/3 parsing rules.",
+        help="Use the simplified compliant Phase 2/3 parsing rules. Mutually exclusive with --rename-compliantly.",
     ),
     Option(
         "compliant_artist_mode", "--compliant-artist-mode", "choice",
         default="", choices=("master", "as-is"), metavar="MODE",
         type_func=parse_compliant_artist_mode, suppress_absent=True,
-        help="Compliant artist handling: master checks String1 against the artist DB; as-is uses String1 directly with no lookup.",
+        help=argparse.SUPPRESS,
+    ),
+    Option(
+        "as_is_artist_name", "--as-is-artist-name", "flag",
+        gui="checkbox", gui_label="As-Is Artist Name", gui_row=2, gui_col=1,
+        help="Preserve the artist name as found in show metadata instead of replacing a matched alias with the Artist DB master name.",
     ),
     Option(
         "tag_during_inventory", "--tag-during-inventory", "flag",
         gui="checkbox", gui_label="Tag in Place", gui_row=0, gui_col=2,
-        help="Tag audio files in place during Inventory or Tag processing, writing success results to tagsN.txt and errors to tageN.txt under TLOHome/logs.",
+        help="Tag audio files in place during Full Inventory and supported Add Shows processing, writing success results to tagsN.txt and errors to tageN.txt under TLOHome/logs.",
     ),
     Option(
         "tag_copy_during_inventory", "--tag-copy-during-inventory", "flag",
         gui="checkbox", gui_label="Tag Copy", gui_row=1, gui_col=2,
-        help="Copy each music folder to --tag-copy-destination and tag the copy instead of the original during Inventory or Tag processing.",
+        help="During Full Inventory, copy each identified music folder to --tag-copy-destination and tag the copy instead of the original.",
     ),
     Option(
         "rename_compliantly", "--rename-compliantly", "flag",
         gui="checkbox", gui_label="Rename Compliantly", gui_row=1, gui_col=1,
-        help="Rename a folder using the resolved Show Name. In Full Inventory with no tagging/copy mode, rename the original folder in place without writing audio tags.",
+        help="Rename a folder using the resolved Show Name. Mutually exclusive with --compliant. In Full Inventory with no tagging/copy mode, rename the original folder in place without writing audio tags.",
     ),
     Option(
         "convert_shn", "--convert-shn", "flag",
@@ -122,12 +128,16 @@ OPTIONS = [
     Option(
         "tag_copy_destination", "--tag-copy-destination", "text",
         default="", metavar="DIR",
-        help="Destination parent directory for Tag Copy. The GUI asks for this when Tag Copy is selected.",
+        help="Destination parent directory for Tag Copy. The GUI asks for this after Inventory is started.",
+    ),
+    Option(
+        "tag_copy_and_delete_enabled", "--tag-copy-delete-original", "flag",
+        gui="checkbox", gui_label="Tag Copy/Delete Original", gui_row=2, gui_col=2,
+        help="In the GUI, ask for the destination after Inventory is started, tag the transferred folder, verify it, and remove the original material.",
     ),
     Option(
         "tag_copy_and_delete_path", "--tag-copy-and-delete", "text",
         default="", metavar="DIR",
-        gui="entry", gui_label="Tag Copy/Delete Original\n-- Destination Path",
         help="Inventory-time destination parent directory. After show metadata is captured from the original music folder, copy or move the folder there, verify cross-partition copies by file size, delete the original, and inventory the destination copy.",
     ),
     Option(
@@ -218,6 +228,17 @@ def namespace_values(namespace: argparse.Namespace, fields: Optional[Sequence[st
         option.config_field: getattr(namespace, option.config_field, option.default)
         for option in iter_options(fields)
     }
+
+
+def validate_compliant_rename_exclusivity(values: dict) -> None:
+    """Reject simultaneous compliant parsing and compliant renaming.
+
+    Compliant mode treats the existing folder name as authoritative input, while
+    Rename Compliantly is a non-compliant workflow that constructs a new folder
+    name from resolved metadata. They cannot be enabled for the same operation.
+    """
+    if bool(values.get("compliant", False)) and bool(values.get("rename_compliantly", False)):
+        raise ValueError(COMPLIANT_RENAME_CONFLICT_ERROR)
 
 
 def apply_lookup_dependency(values: dict, *, mode: str) -> bool:

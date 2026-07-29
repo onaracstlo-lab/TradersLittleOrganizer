@@ -1,20 +1,35 @@
-Q:Is TLO a commercial application:
-A: No, TLO is freeware.
+Q: Is TLO a commercial application?
+A: No. TLO is freeware.
 
-Q: Does TLO do a good job of inventory and tagging?
-A: TLO does a better job of identifying show metadata than LiveShowTagger.
+Q: What does TLO do well?
+A: TLO inventories live-music collections, identifies show metadata, creates searchable inventory output, and can tag supported audio files. Results depend on folder names, setlists, tags, database coverage, and optional online lookup sources.
 
-Q: Do I need to define TLOHome before I do anything?
-A: Yes, TLOHome is where all the internal files live. It can be set as an environment variable or on the command line. The Inventory and Search GUIs use the TLOHome value resolved at startup, show it as a read-only TLOHome: <path> label, and no longer include an editable TLOHome box. It can be added to the command line of a shortcut in Windows.
+Q: Do I need to define TLOHome before I start?
+A: Yes. TLOHome is the root for the applications, databases, logs, setlists, and inventory output. Set it with the TLOHome environment variable or the documented --TLOHome command-line option. The Inventory and Search GUIs resolve it at startup and display it as a read-only label.
 
-Q: Is there anything else I need to do, other than define TLOHome, before I start?
-A: No, there are no hard requirements.  However, you might want to set an environment variable for the drive where you're currently storing new downloads, and get a setlist.fm user key and set the environment variable for that, too.
+Q: What else is required before the first run?
+A: A complete installation must contain TLOHome/TLO_DBs/artists.sqlite and TLOHome/TLO_DBs/venues.txt. You also need valid search paths or a valid toBeInventoried.txt file. Optional settings include TLOCurrentStorage for Add Shows and SETLISTFM_API_KEY for setlist.fm lookup.
 
 Q: How difficult is it to set the TLO-related environment variables?
-Q: Not very. It's all described in sections 3 and 4 of the User Manual.
+A: The Windows and macOS/Linux/WSL setup steps are described in Sections 4 through 6 of the User Manual.
 
-Q: Can TLO ever do anything destructive?
-A: Yes!!! If you compliantly rename the original folders, do a tag in place, or a copy and delete, then the originals will not be the same (or be deleted, as the action implies) and this is not reversible. However, these actions are all user controlled and off by default. You never lose your content, but if you want to keep a pristine copy for reseeding, these actions (except the compliant rename) will prevent reseeding.
+Q: Can TLO change or remove original material?
+A: Yes. Rename Compliantly, Tag in Place, SHN-to-FLAC conversion, and Tag Copy/Delete Original can change or remove original files or folders. TLO verifies copy/delete transfers and verifies SHN conversion before removing the source, but these operations are intentionally destructive and are not an undo system. Keep an independent backup when preserving pristine source material matters.
 
-Q: What if I forget and accidentally re-inventory a drive?
-A: It will replace the current inventory of that drive, assuming the volume has a name. If there's no volume name, it will create duplicate entries for the content on that drive.
+Q: What happens if I inventory the same drive again?
+A: For a named volume, TLO deterministically replaces, prunes, or appends the affected scope according to whether the new path is the same as, a parent of, a child of, or separate from the stored paths. It does not ask a Skip/Re-inventory question. Blank-volume runs append to the shared blank-volume logs and can create duplicate inventory entries if the same content is scanned again.
+
+Q: Can I see what TLO plans to do before it changes anything?
+A: Yes. Full Inventory, Add Shows, and Tag show a Review Operation screen before starting. Dry run is controlled only by the checkbox on the main Inventory window; the Tag and Add Shows windows inherit that current value and do not have their own Dry run checkboxes. With Dry run selected, click Inventory, Tag, Process New Shows, or Process Potential Duplicate/Upgrades. Dry run resolves and displays resulting show names and planned actions. When tagging applies, it lists each applicable audio file with the Artist, Album, Track, and Title values that would be written, plus the title source, planned SHN-to-FLAC target, potential duplicate matches, or reason a file would be skipped. Dry run does not write tags, convert, rename, copy, move, delete, create inventory output, or change TLO logs.
+
+Q: Are trailing folder parentheticals preserved in the resulting show name?
+A: Yes. TLO captures trailing parenthetical items before it cleans the folder name for metadata parsing, then restores them after artist, date, venue, and location normalization. For example, Danny Gatton 1994-03-13 Bottom Line NYC (set 2) resolves to Danny Gatton 1994-03-13 Bottom Line New York, NY (set 2). Multiple trailing parentheticals remain in source order without duplicate entries.
+
+Q: Can Compliant and Rename Compliantly be selected together?
+A: No. They are mutually exclusive. In the Inventory and Tagger GUIs, checking either one automatically unchecks the other. On the inventory, GUI-launcher, and standalone-tagger command lines, using --compliant and --rename-compliantly together produces an argument error.
+
+Q: When does TLO ask for a Tag Copy destination?
+A: Checking Tag Copy or Tag Copy/Delete Original only selects the mode. TLO asks for the destination after Inventory is started, including when Dry run is selected. Both dialogs validate the full path and available storage. The copy/delete dialog additionally warns that verified originals will be removed.
+
+Q: Where do I find problems after a run?
+A: The completion summary includes View Issues and Open Logs. View Issues groups recognizable problems by reason, such as unidentified shows, missing setlists, track-title mismatches, unreadable audio, copy or verification problems, online lookup problems, and other tagging or file errors. Select an issue and use Open Path when TLO has a usable path for it.
