@@ -1,9 +1,9 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v347"
-# TLO-GI package version: v347
-__version_summary__ = 'Uses one main-window Dry run setting inherited live by Tag and Add Shows.'
-# TLO-GI version summary: Uses one main-window Dry run setting inherited live by Tag and Add Shows.
+__version__ = "v351"
+# TLO-GI package version: v351
+__version_summary__ = 'Uses normal dark text for donation details and corrects the About contact wording.'
+# TLO-GI version summary: Uses normal dark text for donation details and corrects the About contact wording.
 
 import multiprocessing
 
@@ -90,6 +90,7 @@ from tlo_ux import (
     format_elapsed,
     format_preview,
     issue_group_counts,
+    main_window_checkbox_values,
     merge_issues,
     open_path,
     operation_review_lines,
@@ -156,14 +157,15 @@ HELP_TEXT = (
     "  Inventory (full)  Validate the form and show Review Operation. When Dry run is checked, scan and report planned work without changing files; otherwise run the full inventory job.\n"
     "  Pause             Pause traversal between directory operations; displayed in the right-side inventory group.\n"
     "  Resume            Resume a paused traversal; displayed in the right-side inventory group.\n"
+    "  ☰ > Donate        Shows Venmo and Check donation details.\n"
     "  ☰ > Help          Opens the upper-right hamburger menu, then Help > About or Help > FAQ.\n\n"
     "Run experience:\n"
     "  Inventory remains available so validation problems can be reported when it is clicked. Tag becomes available when its Tagging Path is valid.\n"
-    "  Review Operation summarizes the selected action, paths, lookup choices, and whether original files may be changed.\n"
+    "  Review Operation shows every main-window checkbox value in the same order for Inventory, Tag, and Add Shows, followed by action-specific details and whether original files may be changed.\n"
     "  Dry run is controlled by the main-window checkbox and inherited by Inventory, Add Shows, and Tag. It is non-destructive. Inventory resolves the resulting show name for each show. When tagging applies, Inventory or Tag also lists each file and the Artist, Album, Track, and Title values that would be written.\n"
     "  Current Operation shows the live stage, current item, counts, warnings, errors, and elapsed time while a run is active.\n"
     "  Completion summaries provide View Issues, Open Output, and Open Logs actions. Issues are grouped by reason and may open the affected path.\n"
-    "  The Tagger has its own tagger-scoped controls and never copies or moves folders. Verified SHN-to-FLAC conversion is the only case where it removes a source file.\n"
+    "  Tag has no duplicated option checkboxes and reads current settings from the main window when Tag is clicked. Add Shows does the same and retains only its action-specific Check for Duplicates checkbox. Standalone Tag never copies or moves folders; verified SHN-to-FLAC conversion is the only case where it removes a source file.\n"
 )
 
 
@@ -518,6 +520,9 @@ class App:
         self.progress_bar = None
         self.hamburger_button = None
         self.hamburger_menu = None
+        self.donate_menu = None
+        self.venmo_menu = None
+        self.check_menu = None
         self.help_menu = None
         self.auto_update_var = tk.BooleanVar(value=False)
         self._update_check_thread = None
@@ -634,11 +639,21 @@ class App:
             style="Main.TButton",
         )
         self.hamburger_menu = tk.Menu(self.hamburger_button, tearoff=False)
+        self.donate_menu = tk.Menu(self.hamburger_menu, tearoff=False)
+        self.venmo_menu = tk.Menu(self.donate_menu, tearoff=False)
+        self.check_menu = tk.Menu(self.donate_menu, tearoff=False)
+        self.venmo_menu.add_command(label="@James-Scarano-3")
+        self.check_menu.add_command(label="James Scarano")
+        self.check_menu.add_command(label="49 Majestic Ave.")
+        self.check_menu.add_command(label="Nashua, NH 03063")
+        self.donate_menu.add_cascade(label="Venmo", menu=self.venmo_menu)
+        self.donate_menu.add_cascade(label="Check", menu=self.check_menu)
         self.help_menu = tk.Menu(self.hamburger_menu, tearoff=False)
         self.help_menu.add_command(label="About", command=self._show_about_from_menu)
         self.help_menu.add_command(label="FAQ", command=self._show_faq_from_menu)
         self.hamburger_menu.add_command(label="Check for updates", command=self._check_for_updates_from_menu)
         self.hamburger_menu.add_checkbutton(label="Auto update", variable=self.auto_update_var, command=self._toggle_auto_update_from_menu)
+        self.hamburger_menu.add_cascade(label="Donate", menu=self.donate_menu)
         self.hamburger_menu.add_separator()
         self.hamburger_menu.add_cascade(label="Help", menu=self.help_menu)
         self.hamburger_button.configure(menu=self.hamburger_menu)
@@ -729,7 +744,6 @@ class App:
             style="Main.Large.TCheckbutton",
         )
         self.dry_run_checkbox.grid(row=2, column=3, sticky="w", padx=(4, 4), pady=(3, 3))
-        self.dry_run_var.trace_add("write", self._main_dry_run_changed)
         self._lookup_dependency_syncing = False
         self.bool_vars["setlistfm_lookup"].trace_add("write", self._reapply_lookup_dependency)
         self.bool_vars["etree_lookup"].trace_add("write", self._reapply_lookup_dependency)
@@ -903,8 +917,12 @@ class App:
         )
 
     def _review_inventory_operation(self, config, *, dry_run=False):
-        lines = operation_review_lines(config, operation="Full Inventory")
-        lines.append(f"Dry run: {'Yes' if dry_run else 'No'}")
+        lines = operation_review_lines(
+            config,
+            operation="Full Inventory",
+            dry_run=dry_run,
+            main_checkbox_source=self._current_main_checkbox_values(),
+        )
         return _show_operation_review(
             self.root,
             title="Review Full Inventory Dry Run" if dry_run else "Review Full Inventory",
@@ -1036,7 +1054,7 @@ class App:
             f"V1.2Build{BUNDLE_BUILD}\n"
             "TLO is developed by Jay Scarano\n"
             "using ChatGPT and Anthropic/Claude\n"
-            "Contact me at: onaracs.tlo of g.mail"
+            "Contact me at: onaracs.tlo of gmail"
         )
         frame = ttk.Frame(dialog, padding=14)
         frame.grid(sticky="nsew")
@@ -1172,16 +1190,10 @@ class App:
         except tk.TclError:
             pass
 
-    def _main_dry_run_changed(self, *_args):
-        """Refresh child-window displays after the main Dry run value changes."""
-        for child_name in ("active_tagger_window", "active_updater_window"):
-            child = getattr(self, child_name, None)
-            refresh = getattr(child, "_refresh_inherited_dry_run", None)
-            if callable(refresh):
-                try:
-                    refresh()
-                except tk.TclError:
-                    pass
+    def _current_main_checkbox_values(self):
+        values = {field: bool(var.get()) for field, var in self.bool_vars.items()}
+        values["dry_run"] = bool(self.dry_run_var.get())
+        return main_window_checkbox_values(values, dry_run=values["dry_run"])
 
     def _open_tagger(self):
         if self._inventory_is_running():
@@ -1216,18 +1228,11 @@ class App:
         except Exception as exc:
             messagebox.showerror("tlo-ggi", str(exc), parent=self.root)
             return
-        rename_compliantly = bool(self.bool_vars["rename_compliantly"].get())
         TaggerWindow(
             self,
             tlo_home=resolved_home,
             tag_path=tag_path,
-            compliant=bool(self.bool_vars["compliant"].get()),
-            etree_lookup=bool(self.bool_vars["etree_lookup"].get()),
             debug=bool(getattr(self.cli_args, "debug", False)),
-            rename_compliantly=rename_compliantly,
-            convert_shn=bool(self.bool_vars["convert_shn"].get()),
-            artist_in_album=bool(self.bool_vars["artist_in_album"].get()),
-            as_is_artist_name=bool(self.bool_vars["as_is_artist_name"].get()),
         )
 
     def _open_add_to_inventory(self):
@@ -1658,7 +1663,7 @@ class App:
         if for_add_shows:
             # Add Shows stages accepted folders inside TLOHome and therefore does
             # not execute either inventory copy mode. Preserve the main-window
-            # selections separately so the updater's Mode display still reports
+            # selections separately so the unified review dialog still reports
             # every main-window flag accurately.
             tag_copy = False
             copy_delete_enabled = False
@@ -1999,13 +2004,7 @@ class TaggerWindow:
         parent_app,
         tlo_home,
         tag_path,
-        compliant=False,
-        etree_lookup=False,
         debug=False,
-        rename_compliantly=False,
-        convert_shn=False,
-        artist_in_album=True,
-        as_is_artist_name=False,
     ):
         self.parent_app = parent_app
         self.tlo_home = tlo_home
@@ -2028,18 +2027,6 @@ class TaggerWindow:
         self.item_var = tk.StringVar(value="")
         self.counts_var = tk.StringVar(value="")
         self.elapsed_var = tk.StringVar(value="Elapsed: 0:00")
-        self.option_vars = {
-            "compliant": tk.BooleanVar(value=bool(compliant)),
-            "etree_lookup": tk.BooleanVar(value=bool(etree_lookup)),
-            "rename_compliantly": tk.BooleanVar(value=bool(rename_compliantly)),
-            "convert_shn": tk.BooleanVar(value=bool(convert_shn)),
-            "artist_in_album": tk.BooleanVar(value=bool(artist_in_album)),
-            "as_is_artist_name": tk.BooleanVar(value=bool(as_is_artist_name)),
-        }
-        self.dry_run_status_var = tk.StringVar(value="")
-        self._compliant_rename_syncing = False
-        if bool(self.option_vars["compliant"].get()) and bool(self.option_vars["rename_compliantly"].get()):
-            self.option_vars["rename_compliantly"].set(False)
         self._build()
         self.path_var.trace_add("write", self._validate_controls)
         self._validate_controls()
@@ -2075,31 +2062,8 @@ class TaggerWindow:
             row=3, column=1, columnspan=2, sticky="w", pady=(0, 6)
         )
 
-        options = ttk.LabelFrame(frm, text="Tagging Options", padding=6)
-        options.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(2, 6))
-        option_specs = (
-            ("compliant", "Compliant parsing", 0, 0),
-            ("etree_lookup", "eTreeDB fallback", 0, 1),
-            ("rename_compliantly", "Rename Compliantly", 1, 0),
-            ("convert_shn", "Convert SHN", 1, 1),
-            ("artist_in_album", "Artist in Album Tag", 2, 0),
-            ("as_is_artist_name", "As-Is Artist Name", 2, 1),
-        )
-        self.option_widgets = []
-        for key, label, row, column in option_specs:
-            command = None
-            if key in {"compliant", "rename_compliantly"}:
-                command = (lambda field=key: self._compliant_rename_clicked(field))
-            widget = ttk.Checkbutton(options, text=label, variable=self.option_vars[key], command=command)
-            widget.grid(row=row, column=column, sticky="w", padx=(2, 18), pady=2)
-            self.option_widgets.append(widget)
-        ttk.Label(options, textvariable=self.dry_run_status_var).grid(
-            row=3, column=0, columnspan=2, sticky="w", padx=(2, 18), pady=(4, 2)
-        )
-        self._refresh_inherited_dry_run()
-
         buttons = ttk.Frame(frm)
-        buttons.grid(row=5, column=0, columnspan=3, sticky="w", pady=(6, 6))
+        buttons.grid(row=4, column=0, columnspan=3, sticky="w", pady=(6, 6))
         self.tag_run_button = ttk.Button(buttons, text="Tag", command=self._start_tagging)
         self.tag_run_button.grid(row=0, column=0, padx=(0, 6))
         self.pause_button = ttk.Button(buttons, text="Pause", command=self._toggle_pause, state="disabled")
@@ -2108,7 +2072,7 @@ class TaggerWindow:
         self.exit_button.grid(row=0, column=2, padx=6)
 
         progress = ttk.LabelFrame(frm, text="Current Operation", padding=6)
-        progress.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(0, 6))
+        progress.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(0, 6))
         progress.columnconfigure(1, weight=1)
         ttk.Label(progress, textvariable=self.stage_var).grid(row=0, column=0, sticky="w", padx=(0, 10))
         ttk.Label(progress, textvariable=self.item_var, wraplength=430).grid(row=0, column=1, sticky="w")
@@ -2118,8 +2082,8 @@ class TaggerWindow:
         self.progress_bar.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(5, 0))
 
         self.output = scrolledtext.ScrolledText(frm, width=TAGGER_OUTPUT_TEXT_WIDTH, height=22, font=tkfont.nametofont("TkFixedFont"))
-        self.output.grid(row=7, column=0, columnspan=3, sticky="nsew", pady=(4, 0))
-        frm.rowconfigure(7, weight=1)
+        self.output.grid(row=6, column=0, columnspan=3, sticky="nsew", pady=(4, 0))
+        frm.rowconfigure(6, weight=1)
 
     def _enable_tagging_path_drag_drop(self):
         return enable_tagging_path_folder_drop(
@@ -2128,42 +2092,48 @@ class TaggerWindow:
             on_error=lambda msg: messagebox.showwarning("TLO Tagger", msg, parent=self.window),
         )
 
-    def _compliant_rename_clicked(self, field: str):
-        if self._compliant_rename_syncing:
-            return
-        self._compliant_rename_syncing = True
-        try:
-            if bool(self.option_vars[field].get()):
-                other = "rename_compliantly" if field == "compliant" else "compliant"
-                self.option_vars[other].set(False)
-        finally:
-            self._compliant_rename_syncing = False
+    def _main_checkbox_values(self):
+        getter = getattr(self.parent_app, "_current_main_checkbox_values", None)
+        if callable(getter):
+            return getter()
+        bool_vars = getattr(self.parent_app, "bool_vars", {}) or {}
+        values = {field: bool(var.get()) for field, var in bool_vars.items()}
+        dry_var = getattr(self.parent_app, "dry_run_var", None)
+        values["dry_run"] = bool(dry_var.get()) if dry_var is not None else False
+        return main_window_checkbox_values(values, dry_run=values["dry_run"])
 
     def _current_dry_run(self):
-        value = getattr(self.parent_app, "dry_run_var", None)
-        return bool(value.get()) if value is not None else False
-
-    def _refresh_inherited_dry_run(self):
-        dry_run = self._current_dry_run()
-        self.dry_run_status_var.set(f"Dry run: {'on' if dry_run else 'off'} (inherited from main window)")
+        return bool(self._main_checkbox_values()["dry_run"])
 
     def _tag_config(self):
-        validate_compliant_rename_exclusivity({
-            "compliant": bool(self.option_vars["compliant"].get()),
-            "rename_compliantly": bool(self.option_vars["rename_compliantly"].get()),
-        })
-        return Config(
+        values = self._main_checkbox_values()
+        validate_compliant_rename_exclusivity(values)
+        config = Config(
             debug=self.debug,
             silent=False,
             TLOHome=self.tlo_home,
-            compliant=bool(self.option_vars["compliant"].get()),
-            compliant_artist_mode=("as-is" if bool(self.option_vars["as_is_artist_name"].get()) else "master"),
-            as_is_artist_name=bool(self.option_vars["as_is_artist_name"].get()),
-            etree_lookup=bool(self.option_vars["etree_lookup"].get()),
-            rename_compliantly=bool(self.option_vars["rename_compliantly"].get()),
-            convert_shn=bool(self.option_vars["convert_shn"].get()),
-            artist_in_album=bool(self.option_vars["artist_in_album"].get()),
+            compliant=values["compliant"],
+            compliant_artist_mode=("as-is" if values["as_is_artist_name"] else "master"),
+            as_is_artist_name=values["as_is_artist_name"],
+            # Standalone Tag always tags the selected path directly. The three
+            # inventory tag-mode checkboxes are reported in the review dialog
+            # but do not change standalone Tag's no-copy behavior.
+            tag_during_inventory=True,
+            tag_copy_during_inventory=False,
+            tag_copy_destination="",
+            tag_copy_and_delete_path="",
+            etree_lookup=values["etree_lookup"],
+            setlistfm_lookup=values["setlistfm_lookup"],
+            rename_compliantly=values["rename_compliantly"],
+            convert_shn=values["convert_shn"],
+            artist_in_album=values["artist_in_album"],
         )
+        config.main_window_tag_in_place_selected = values["tag_during_inventory"]
+        config.main_window_tag_copy_selected = values["tag_copy_during_inventory"]
+        config.main_window_tag_copy_delete_selected = values["tag_copy_and_delete_enabled"]
+        config.main_window_dry_run = values["dry_run"]
+        config.main_window_checkbox_values = dict(values)
+        return config
 
     def _validate_controls(self, *_args):
         status = validate_tag_path(self.path_var.get())
@@ -2179,7 +2149,7 @@ class TaggerWindow:
 
     def _set_processing_controls(self, enabled):
         state = "normal" if enabled else "disabled"
-        for widget in (self.tag_run_button, self.path_entry, *self.option_widgets):
+        for widget in (self.tag_run_button, self.path_entry):
             try:
                 widget.configure(state=state)
             except tk.TclError:
@@ -2200,8 +2170,13 @@ class TaggerWindow:
         config = self._tag_config()
         dry_run = self._current_dry_run()
         config.main_window_dry_run = dry_run
-        review_lines = operation_review_lines(config, operation="Tag", path_text=status.normalized)
-        review_lines.append(f"Dry run: {'Yes' if dry_run else 'No'}")
+        review_lines = operation_review_lines(
+            config,
+            operation="Tag",
+            path_text=status.normalized,
+            dry_run=dry_run,
+            main_checkbox_source=config.main_window_checkbox_values,
+        )
         if not _show_operation_review(
             self.window,
             title="Review Tag Dry Run" if dry_run else "Review Tagging",
@@ -2229,14 +2204,15 @@ class TaggerWindow:
             try:
                 totals = run_tagger(
                     tlo_home=self.tlo_home,
-                    compliant=bool(self.option_vars["compliant"].get()),
+                    compliant=bool(config.compliant),
                     tag_path=status.normalized,
-                    etree_lookup=bool(self.option_vars["etree_lookup"].get()),
+                    etree_lookup=bool(config.etree_lookup),
+                    setlistfm_lookup=bool(config.setlistfm_lookup),
                     debug=self.debug,
-                    rename_compliantly=bool(self.option_vars["rename_compliantly"].get()),
-                    convert_shn=bool(self.option_vars["convert_shn"].get()),
-                    artist_in_album=bool(self.option_vars["artist_in_album"].get()),
-                    as_is_artist_name=bool(self.option_vars["as_is_artist_name"].get()),
+                    rename_compliantly=bool(config.rename_compliantly),
+                    convert_shn=bool(config.convert_shn),
+                    artist_in_album=bool(config.artist_in_album),
+                    as_is_artist_name=bool(config.as_is_artist_name),
                     emit=self.queue.put,
                 )
             except Exception as exc:
@@ -2390,7 +2366,6 @@ class AddToInventoryWindow:
         self.window.title(UPDATER_DISPLAY_VERSION)
         self.window.protocol("WM_DELETE_WINDOW", self._request_exit)
         self._build()
-        self._refresh_inherited_dry_run()
         self._refresh_volume_validation()
         self._refresh_elapsed_display()
 
@@ -2407,7 +2382,6 @@ class AddToInventoryWindow:
         self.volume_var = tk.StringVar(value=getattr(self.config, "current_volume_label", "") or "")
         self.check_dups_var = tk.BooleanVar(value=True)
         self.volume_status_var = tk.StringVar(value="")
-        self.mode_var = tk.StringVar(value="")
         self.status_var = tk.StringVar(value="Ready")
         self.elapsed_var = tk.StringVar(value="Elapsed: 0:00")
 
@@ -2416,13 +2390,8 @@ class AddToInventoryWindow:
         self.volume_status_label = ttk.Label(frm, textvariable=self.volume_status_var, justify="left", wraplength=850)
         self.volume_status_label.grid(row=3, column=0, columnspan=3, sticky="w", pady=(0, 4))
         ttk.Checkbutton(frm, text="Check for Duplicates", variable=self.check_dups_var).grid(row=4, column=0, sticky="w", pady=(4, 1))
-        ttk.Label(frm, textvariable=self.mode_var, justify="left", wraplength=1000).grid(
-            row=5, column=0, columnspan=3, sticky="w", pady=(3, 8)
-        )
-        self._refresh_mode_display()
-
         buttons = ttk.Frame(frm)
-        buttons.grid(row=6, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        buttons.grid(row=5, column=0, columnspan=3, sticky="w", pady=(6, 0))
         self.process_new_button = ttk.Button(buttons, text="Process New Shows", command=self._process_new_shows)
         self.process_new_button.grid(row=0, column=0, padx=(0, 6))
         self.process_dups_button = ttk.Button(buttons, text="Process Potential\nDuplicate/Upgrades", command=self._process_duplicates)
@@ -2431,7 +2400,7 @@ class AddToInventoryWindow:
         self.exit_button.grid(row=0, column=2, padx=6)
 
         status_box = ttk.LabelFrame(frm, text="Current Operation", padding=8)
-        status_box.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(12, 0))
+        status_box.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(12, 0))
         status_box.columnconfigure(0, weight=1)
         ttk.Label(status_box, textvariable=self.status_var, justify="left", wraplength=900).grid(row=0, column=0, sticky="w")
         ttk.Label(status_box, textvariable=self.elapsed_var).grid(row=0, column=1, sticky="e", padx=(12, 0))
@@ -2440,52 +2409,43 @@ class AddToInventoryWindow:
 
         self.volume_var.trace_add("write", lambda *_args: self._refresh_volume_validation())
 
-    @staticmethod
-    def _on_off(value):
-        return "on" if bool(value) else "off"
-
-    def _refresh_mode_display(self):
-        copy_selected = bool(getattr(self.config, "main_window_tag_copy_selected", False))
-        copy_delete_selected = bool(getattr(self.config, "main_window_tag_copy_delete_selected", False))
-        lines = [
-            "Mode inherited from the main window:",
-            (
-                f"Compliant: {self._on_off(getattr(self.config, 'compliant', False))} | "
-                f"etreeDB: {self._on_off(getattr(self.config, 'etree_lookup', False))} | "
-                f"setlist.fm: {self._on_off(getattr(self.config, 'setlistfm_lookup', False))} | "
-                f"Tag in Place: {self._on_off(getattr(self.config, 'tag_during_inventory', False))}"
-            ),
-            (
-                f"Tag Copy: {self._on_off(copy_selected)} (not used by Add Shows) | "
-                f"Tag Copy/Delete Original: {self._on_off(copy_delete_selected)} (not used by Add Shows) | "
-                f"Rename Compliantly: {self._on_off(getattr(self.config, 'rename_compliantly', False))}"
-            ),
-            (
-                f"Convert shn: {self._on_off(getattr(self.config, 'convert_shn', False))} | "
-                f"Artist in Album Tag: {self._on_off(getattr(self.config, 'artist_in_album', True))} | "
-                f"As-Is Artist Name: {self._on_off(getattr(self.config, 'as_is_artist_name', False))} | "
-                f"Dry run: {self._on_off(self._current_dry_run())} (inherited from main window)"
-            ),
-        ]
-        self.mode_var.set("\n".join(lines))
+    def _current_main_checkbox_values(self):
+        getter = getattr(self.parent_app, "_current_main_checkbox_values", None)
+        if callable(getter):
+            return getter()
+        bool_vars = getattr(self.parent_app, "bool_vars", {}) or {}
+        values = {field: bool(var.get()) for field, var in bool_vars.items()}
+        dry_var = getattr(self.parent_app, "dry_run_var", None)
+        values["dry_run"] = bool(dry_var.get()) if dry_var is not None else bool(getattr(self.config, "main_window_dry_run", False))
+        return main_window_checkbox_values(values or self.config, dry_run=values["dry_run"])
 
     def _current_dry_run(self):
-        value = getattr(self.parent_app, "dry_run_var", None)
-        if value is not None:
-            return bool(value.get())
-        return bool(getattr(self.config, "main_window_dry_run", False))
-
-    def _refresh_inherited_dry_run(self):
-        self.config.main_window_dry_run = self._current_dry_run()
-        self.config.add_shows_dry_run = self.config.main_window_dry_run
-        self._refresh_mode_display()
-        self._set_processing_controls(not self._processing)
+        return bool(self._current_main_checkbox_values()["dry_run"])
 
     def _refresh_config(self):
+        values = self._current_main_checkbox_values()
+        validate_compliant_rename_exclusivity(values)
+        self.config.compliant = values["compliant"]
+        self.config.compliant_artist_mode = "as-is" if values["as_is_artist_name"] else "master"
+        self.config.as_is_artist_name = values["as_is_artist_name"]
+        self.config.tag_during_inventory = values["tag_during_inventory"]
+        # Add Shows stages material inside TLOHome and does not run either
+        # Full Inventory copy mode. Preserve those main selections only for
+        # the consistent review dialog.
+        self.config.tag_copy_during_inventory = False
+        self.config.tag_copy_destination = ""
+        self.config.tag_copy_and_delete_path = ""
+        self.config.main_window_tag_copy_selected = values["tag_copy_during_inventory"]
+        self.config.main_window_tag_copy_delete_selected = values["tag_copy_and_delete_enabled"]
+        self.config.rename_compliantly = values["rename_compliantly"]
+        self.config.convert_shn = values["convert_shn"]
+        self.config.artist_in_album = values["artist_in_album"]
+        self.config.etree_lookup = values["etree_lookup"]
+        self.config.setlistfm_lookup = values["setlistfm_lookup"]
         self.config.current_volume_label = self.volume_var.get().strip()
-        self.config.main_window_dry_run = self._current_dry_run()
-        self.config.add_shows_dry_run = self.config.main_window_dry_run
-        self._refresh_mode_display()
+        self.config.main_window_dry_run = values["dry_run"]
+        self.config.add_shows_dry_run = values["dry_run"]
+        self.config.main_window_checkbox_values = dict(values)
         return self.config
 
     def _volume_validation(self):
@@ -2617,38 +2577,25 @@ class AddToInventoryWindow:
             parent=self.window,
         )
 
-    def _main_window_flag_review_lines(self, *, dry_run):
-        return [
-            f"Compliant: {'Yes' if bool(getattr(self.config, 'compliant', False)) else 'No'}",
-            f"etreeDB: {'Yes' if bool(getattr(self.config, 'etree_lookup', False)) else 'No'}",
-            f"setlist.fm: {'Yes' if bool(getattr(self.config, 'setlistfm_lookup', False)) else 'No'}",
-            f"Tag in Place: {'Yes' if bool(getattr(self.config, 'tag_during_inventory', False)) else 'No'}",
-            f"Tag Copy: {'Yes' if bool(getattr(self.config, 'main_window_tag_copy_selected', False)) else 'No'} (not used by Add Shows)",
-            f"Tag Copy/Delete Original: {'Yes' if bool(getattr(self.config, 'main_window_tag_copy_delete_selected', False)) else 'No'} (not used by Add Shows)",
-            f"Rename Compliantly: {'Yes' if bool(getattr(self.config, 'rename_compliantly', False)) else 'No'}",
-            f"Convert shn: {'Yes' if bool(getattr(self.config, 'convert_shn', False)) else 'No'}",
-            f"Artist in Album Tag: {'Yes' if bool(getattr(self.config, 'artist_in_album', True)) else 'No'}",
-            f"As-Is Artist Name: {'Yes' if bool(getattr(self.config, 'as_is_artist_name', False)) else 'No'}",
-            f"Dry run: {'Yes' if dry_run else 'No'}",
-        ]
-
     def _new_show_review_lines(self, current_volume, check_duplicates, *, dry_run):
         ready = os.path.join(self.config.TLOHome, "readyForXfer")
         staged = os.path.join(self.config.TLOHome, "staged")
         dups = os.path.join(self.config.TLOHome, "dups")
-        lines = [
-            "Operation: Add Shows - Process New Shows",
-            f"Source: {ready}",
+        lines = operation_review_lines(
+            self.config,
+            operation="Add Shows - Process New Shows",
+            path_text=ready,
+            dry_run=dry_run,
+            main_checkbox_source=self.config.main_window_checkbox_values,
+            original_files_may_change=True,
+        )
+        lines[2:2] = [
             f"Accepted destination: {staged}",
             f"Potential duplicate destination: {dups}",
             f"Current storage volume: {current_volume or '(blank)'}",
             f"Check for Duplicates: {'Yes' if check_duplicates else 'No'}",
-        ]
-        lines.extend(self._main_window_flag_review_lines(dry_run=dry_run))
-        lines.extend([
             f"Folders will be moved from readyForXfer: {'No' if dry_run else 'Yes'}",
-            f"Original files may be changed: {'No' if dry_run else 'Yes'}",
-        ])
+        ]
         return lines
 
     def _process_new_shows(self):
@@ -2725,16 +2672,18 @@ class AddToInventoryWindow:
     def _process_duplicates(self):
         self._refresh_config()
         dry_run = self._current_dry_run()
-        lines = [
-            "Operation: Add Shows - Process Potential Duplicate/Upgrades",
-            f"Source: {os.path.join(self.config.TLOHome, 'dups')}",
+        lines = operation_review_lines(
+            self.config,
+            operation="Add Shows - Process Potential Duplicate/Upgrades",
+            path_text=os.path.join(self.config.TLOHome, "dups"),
+            dry_run=dry_run,
+            main_checkbox_source=self.config.main_window_checkbox_values,
+            original_files_may_change=False,
+        )
+        lines[2:2] = [
             "Action: identify folders and open a review window for each potential match",
-        ]
-        lines.extend(self._main_window_flag_review_lines(dry_run=dry_run))
-        lines.extend([
             "Folders are not changed during this scan: Yes",
-            "Original files may be changed: No",
-        ])
+        ]
         if not _show_operation_review(
             self.window,
             title="Review Potential Duplicate/Upgrades Dry Run" if dry_run else "Review Potential Duplicate/Upgrades",

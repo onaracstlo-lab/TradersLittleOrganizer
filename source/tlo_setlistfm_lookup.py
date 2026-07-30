@@ -24,9 +24,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-__version__ = "v347"
-# TLO-GI package version: v347
-__version_summary__ = 'Uses one main-window Dry run setting inherited live by Tag and Add Shows.'
+__version__ = "v351"
+# TLO-GI package version: v351
+__version_summary__ = 'Uses normal dark text for donation details and corrects the About contact wording.'
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 MIN_REQUEST_INTERVAL_SECONDS = 0.600

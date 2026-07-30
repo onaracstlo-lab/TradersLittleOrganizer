@@ -18,10 +18,10 @@ The input date is yyyy-mm-dd. The setlist.fm API search date is dd-MM-yyyy.
 
 from __future__ import annotations
 
-__version__ = "v347"
-# TLO-GI package version: v347
-__version_summary__ = 'Uses one main-window Dry run setting inherited live by Tag and Add Shows.'
-# TLO-GI version summary: Uses one main-window Dry run setting inherited live by Tag and Add Shows.
+__version__ = "v351"
+# TLO-GI package version: v351
+__version_summary__ = 'Uses normal dark text for donation details and corrects the About contact wording.'
+# TLO-GI version summary: Uses normal dark text for donation details and corrects the About contact wording.
 
 
 import argparse

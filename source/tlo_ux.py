@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-__version__ = "v347"
-# TLO-GI package version: v347
-__version_summary__ = 'Uses one main-window Dry run setting inherited live by Tag and Add Shows.'
-# TLO-GI version summary: Uses one main-window Dry run setting inherited live by Tag and Add Shows.
+__version__ = "v351"
+# TLO-GI package version: v351
+__version_summary__ = 'Uses normal dark text for donation details and corrects the About contact wording.'
+# TLO-GI version summary: Uses normal dark text for donation details and corrects the About contact wording.
 
 
 import copy
@@ -201,7 +201,67 @@ def _yes_no(value: object) -> str:
     return "Yes" if bool(value) else "No"
 
 
-def operation_review_lines(config, *, operation: str, path_text: str = "") -> list[str]:
+MAIN_WINDOW_CHECKBOX_SPECS = (
+    ("etree_lookup", "etreeDB"),
+    ("compliant", "Compliant"),
+    ("tag_during_inventory", "Tag in Place"),
+    ("artist_in_album", "Artist in Album Tag"),
+    ("setlistfm_lookup", "setlist.fm"),
+    ("rename_compliantly", "Rename Compliantly"),
+    ("tag_copy_during_inventory", "Tag Copy"),
+    ("convert_shn", "Convert shn"),
+    ("as_is_artist_name", "As-Is Artist Name"),
+    ("tag_copy_and_delete_enabled", "Tag Copy/Delete Original"),
+    ("dry_run", "Dry run"),
+)
+
+
+def main_window_checkbox_values(source, *, dry_run=None) -> dict[str, bool]:
+    """Return the current main-window checkbox values from a dict or config object."""
+    def read(name, default=False):
+        if isinstance(source, dict):
+            return source.get(name, default)
+        return getattr(source, name, default)
+
+    tag_copy = read("main_window_tag_copy_selected", read("tag_copy_during_inventory", False))
+    copy_delete = read(
+        "main_window_tag_copy_delete_selected",
+        read("tag_copy_and_delete_enabled", bool(read("tag_copy_and_delete_path", ""))),
+    )
+    values = {
+        "etree_lookup": bool(read("etree_lookup", False)),
+        "compliant": bool(read("compliant", False)),
+        "tag_during_inventory": bool(read("tag_during_inventory", False)),
+        "artist_in_album": bool(read("artist_in_album", True)),
+        "setlistfm_lookup": bool(read("setlistfm_lookup", False)),
+        "rename_compliantly": bool(read("rename_compliantly", False)),
+        "tag_copy_during_inventory": bool(tag_copy),
+        "convert_shn": bool(read("convert_shn", False)),
+        "as_is_artist_name": bool(read("as_is_artist_name", False)),
+        "tag_copy_and_delete_enabled": bool(copy_delete),
+        "dry_run": bool(read("main_window_dry_run", False) if dry_run is None else dry_run),
+    }
+    return values
+
+
+def main_window_checkbox_review_lines(source, *, dry_run=None) -> list[str]:
+    """Format every main-window checkbox consistently for all review dialogs."""
+    values = main_window_checkbox_values(source, dry_run=dry_run)
+    lines = ["Main-window checkbox values:"]
+    lines.extend(f"  {label}: {_yes_no(values[field])}" for field, label in MAIN_WINDOW_CHECKBOX_SPECS)
+    return lines
+
+
+def operation_review_lines(
+    config,
+    *,
+    operation: str,
+    path_text: str = "",
+    dry_run=None,
+    main_checkbox_source=None,
+    original_files_may_change=None,
+) -> list[str]:
+    """Build a consistent review summary for Inventory, Tag, and Add Shows."""
     operation_name = str(operation or "Operation")
     lines = [f"Operation: {operation_name}"]
     if path_text:
@@ -211,44 +271,35 @@ def operation_review_lines(config, *, operation: str, path_text: str = "") -> li
     else:
         lines.append(f"Search Paths: {os.path.join(getattr(config, 'TLOHome', ''), 'toBeInventoried.txt')}")
 
-    if operation_name.casefold().startswith("tag"):
-        lines.extend([
-            f"Compliant parsing: {_yes_no(getattr(config, 'compliant', False))}",
-            f"Rename Compliantly: {_yes_no(getattr(config, 'rename_compliantly', False))}",
-            f"Convert SHN to FLAC: {_yes_no(getattr(config, 'convert_shn', False))}",
-            f"Artist in Album Tag: {_yes_no(getattr(config, 'artist_in_album', True))}",
-            f"As-Is Artist Name: {_yes_no(getattr(config, 'as_is_artist_name', False))}",
-            f"eTreeDB fallback: {_yes_no(getattr(config, 'etree_lookup', False))}",
-            "Copy or move folders: No",
-        ])
+    lines.extend(main_window_checkbox_review_lines(main_checkbox_source or config, dry_run=dry_run))
+
+    operation_folded = operation_name.casefold()
+    if operation_folded.startswith("tag"):
+        lines.append("Standalone Tag behavior: tags the selected path directly; inventory copy modes are not used.")
+    elif operation_folded.startswith("add shows"):
+        lines.append("Add Shows behavior: inventory copy modes are reported but are not used by Add Shows.")
     else:
+        lines.append(
+            f"Performance: {getattr(config, 'performance_mode', 'balanced')} / "
+            f"max workers {getattr(config, 'max_workers', 0)}"
+        )
         copy_delete = str(getattr(config, "tag_copy_and_delete_path", "") or "").strip()
-        tag_copy = bool(getattr(config, "tag_copy_during_inventory", False))
-        tag_in_place = bool(getattr(config, "tag_during_inventory", False))
-        lines.extend([
-            f"Compliant parsing: {_yes_no(getattr(config, 'compliant', False))}",
-            f"Tag in Place: {_yes_no(tag_in_place)}",
-            f"Tag Copy: {_yes_no(tag_copy)}",
-            f"Copy/Delete Original: {_yes_no(bool(copy_delete))}",
-            f"Rename Compliantly: {_yes_no(getattr(config, 'rename_compliantly', False))}",
-            f"Convert SHN to FLAC: {_yes_no(getattr(config, 'convert_shn', False))}",
-            f"Artist in Album Tag: {_yes_no(getattr(config, 'artist_in_album', True))}",
-            f"As-Is Artist Name: {_yes_no(getattr(config, 'as_is_artist_name', False))}",
-            f"eTreeDB lookup: {_yes_no(getattr(config, 'etree_lookup', False))}",
-            f"setlist.fm fallback: {_yes_no(getattr(config, 'setlistfm_lookup', False))}",
-            f"Performance: {getattr(config, 'performance_mode', 'balanced')} / max workers {getattr(config, 'max_workers', 0)}",
-        ])
         destination = str(getattr(config, "tag_copy_destination", "") or copy_delete).strip()
         if destination:
             lines.append(f"Copy destination: {destination}")
 
-    changes_originals = bool(
-        getattr(config, "rename_compliantly", False)
-        or getattr(config, "convert_shn", False)
-        or getattr(config, "tag_during_inventory", False)
-        or getattr(config, "tag_copy_and_delete_path", "")
-        or operation_name.casefold().startswith("tag")
-    )
+    is_dry_run = main_window_checkbox_values(main_checkbox_source or config, dry_run=dry_run)["dry_run"]
+    if original_files_may_change is None:
+        changes_originals = (not is_dry_run) and bool(
+            getattr(config, "rename_compliantly", False)
+            or getattr(config, "convert_shn", False)
+            or getattr(config, "tag_during_inventory", False)
+            or getattr(config, "tag_copy_and_delete_path", "")
+            or operation_folded.startswith("tag")
+            or operation_folded.startswith("add shows - process new")
+        )
+    else:
+        changes_originals = (not is_dry_run) and bool(original_files_may_change)
     lines.append(f"Original files may be changed: {_yes_no(changes_originals)}")
     return lines
 

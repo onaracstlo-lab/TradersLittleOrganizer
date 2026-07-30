@@ -1,15 +1,15 @@
 """Regression tests for the current TLO requirements and release contract.
 
-The suite pins documented behavior from TLO_Inventory_Requirements_Working_v347.docx.
+The suite pins documented behavior from TLO_Inventory_Requirements_Working_v351.docx.
 Historical build-by-build test notes are preserved in old-change-logs.zip rather
 than repeated in this executable test module.
 """
 
 
-__version__ = "v347"
-# TLO-GI package version: v347
-__version_summary__ = 'Uses one main-window Dry run setting inherited live by Tag and Add Shows.'
-# TLO-GI version summary: Uses one main-window Dry run setting inherited live by Tag and Add Shows.
+__version__ = "v351"
+# TLO-GI package version: v351
+__version_summary__ = 'Uses normal dark text for donation details and corrects the About contact wording.'
+# TLO-GI version summary: Uses normal dark text for donation details and corrects the About contact wording.
 
 import argparse
 import importlib.util
@@ -1503,7 +1503,7 @@ def test_v305_tagger_gui_keeps_bold_app_heading_and_uses_current_public_version(
     build_source = inspect.getsource(gui.TaggerWindow._build)
 
     assert TAGGER_TITLE == "Traders Little Helper™ Tagger App"
-    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 347"
+    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 351"
     assert "self.window.title(TAGGER_DISPLAY_VERSION)" in init_source
     assert build_source.count("text=TAGGER_TITLE") == 1
     assert "text=TAGGER_TITLE, font=title_font" in build_source
@@ -3615,35 +3615,29 @@ def test_v337_tagger_window_has_only_tagger_scoped_controls():
 
     build_source = inspect.getsource(module.TaggerWindow._build)
     start_source = inspect.getsource(module.TaggerWindow._start_tagging)
+    config_source = inspect.getsource(module.TaggerWindow._tag_config)
 
-    assert "ttk.Checkbutton" in build_source
-    assert "Compliant parsing" in build_source
-    assert "eTreeDB fallback" in build_source
-    assert "Rename Compliantly" in build_source
-    assert "Convert SHN" in build_source
-    assert "Artist in Album Tag" in build_source
-    assert "Tag in Place" not in build_source
-    assert "Tag Copy" not in build_source
+    assert "ttk.Checkbutton" not in build_source
+    assert "Tagging Options" not in build_source
+    assert "Uses checkbox values inherited from the main window" not in build_source
     assert "tag_copy_destination" not in start_source
     assert "tag_in_place=" not in start_source
-    assert 'rename_compliantly=bool(self.option_vars["rename_compliantly"].get())' in start_source
+    assert 'values = self._main_checkbox_values()' in config_source
+    assert 'rename_compliantly=values["rename_compliantly"]' in config_source
 
 
-def test_v244_open_tagger_passes_main_window_values_to_tagger_window():
-    from pathlib import Path
-
+def test_v244_open_tagger_defers_main_window_values_until_action_time():
     source = _source_text("tlo-ggi.py")
     method_start = source.index("    def _open_tagger(self):")
     call_start = source.index("        TaggerWindow(", method_start)
     snippet = source[call_start:source.index("\n        )", call_start) + len("\n        )")]
 
-    assert 'tag_in_place = bool(self.bool_vars["tag_during_inventory"].get())' not in source[method_start:call_start]
-    assert 'tag_copy = bool(self.bool_vars["tag_copy_during_inventory"].get())' not in source[method_start:call_start]
     assert 'tag_in_place=' not in snippet
     assert 'tag_copy=' not in snippet
-    assert 'tag_copy_destination=' not in snippet
-    assert 'rename_compliantly=rename_compliantly' in snippet
-    assert 'convert_shn=bool(self.bool_vars["convert_shn"].get())' in snippet
+    assert 'rename_compliantly=' not in snippet
+    assert 'convert_shn=' not in snippet
+    assert 'debug=bool(getattr(self.cli_args, "debug", False))' in snippet
+    assert 'values = self._main_checkbox_values()' in source[source.index("    def _tag_config", call_start):]
 
 
 # --------------------------------------------------------------------------- #
@@ -3690,7 +3684,7 @@ def test_v245_postprocess_setlist_progress_is_throttled():
 #        Tag and Full Inventory.
 # --------------------------------------------------------------------------- #
 
-def test_v246_add_shows_window_has_no_compliant_checkbox_and_does_not_mutate_compliant():
+def test_v246_add_shows_window_has_only_action_specific_checkbox_and_refreshes_main_values():
     import inspect
     module = _load_local_module("tlo-ggi.py", "tlo_ggi_gui_v246_addshows")
 
@@ -3699,10 +3693,10 @@ def test_v246_add_shows_window_has_no_compliant_checkbox_and_does_not_mutate_com
 
     assert "compliant_var" not in build_source
     assert 'ttk.Checkbutton(frm, text="Compliant"' not in build_source
-    mode_source = inspect.getsource(module.AddToInventoryWindow._refresh_mode_display)
-    assert "Mode inherited from the main window" in mode_source
-    assert "Compliant:" in mode_source
-    assert "self.config.compliant" not in refresh_source
+    assert build_source.count("ttk.Checkbutton") == 1
+    assert 'text="Check for Duplicates"' in build_source
+    assert 'values = self._current_main_checkbox_values()' in refresh_source
+    assert 'self.config.compliant = values["compliant"]' in refresh_source
 
 
 def test_v246_open_add_shows_uses_add_shows_config_mode():
@@ -6876,10 +6870,10 @@ def test_v304_inventory_updater_button_uses_requested_two_line_label():
 def test_v305_public_version_matches_bundle_number():
     import tlo_version as V
 
-    assert V.VERSION == "v347"
-    assert V.BUNDLE_BUILD == 347
-    assert V.DISPLAY_VERSION == "v1.2 Build 347"
-    assert V.versioned_title("TLO Inventory GUI") == "TLO Inventory GUI v1.2 Build 347"
+    assert V.VERSION == "v351"
+    assert V.BUNDLE_BUILD == 351
+    assert V.DISPLAY_VERSION == "v1.2 Build 351"
+    assert V.versioned_title("TLO Inventory GUI") == "TLO Inventory GUI v1.2 Build 351"
 
 
 def test_v305_startup_banner_never_appends_release_change_summary():
@@ -6888,7 +6882,7 @@ def test_v305_startup_banner_never_appends_release_change_summary():
 
     for debug in (False, True):
         banner = M._startup_banner(SimpleNamespace(debug=debug))
-        assert banner == "Starting tlo-gi v1.2 Build 347"
+        assert banner == "Starting tlo-gi v1.2 Build 351"
         assert V.VERSION_SUMMARY not in banner
         assert " - " not in banner
 
@@ -6897,9 +6891,9 @@ def test_v305_all_toplevel_gui_titles_include_public_version():
     gui = _load_tlo_ggi_module()
     from tlo_inventory_update import UPDATER_DISPLAY_VERSION
 
-    assert gui.WINDOW_TITLE == "TLO Inventory GUI v1.2 Build 347"
-    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 347"
-    assert UPDATER_DISPLAY_VERSION == "TLO Inventory Updater v1.2 Build 347"
+    assert gui.WINDOW_TITLE == "TLO Inventory GUI v1.2 Build 351"
+    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 351"
+    assert UPDATER_DISPLAY_VERSION == "TLO Inventory Updater v1.2 Build 351"
 
     source = _source_text("tlo-ggi.py")
     expected_calls = (
@@ -7028,7 +7022,7 @@ def test_v317_main_inventory_hamburger_help_cascade_sources_about_and_faq():
     assert 'Traders Little Organizer™ - TLO' in source
     assert 'f"V1.2Build{BUNDLE_BUILD}\\n"' in source
     assert 'TLO-FAQ.txt' in source
-    assert gui.BUNDLE_BUILD == 347
+    assert gui.BUNDLE_BUILD == 351
 
 
 
@@ -7656,14 +7650,17 @@ def test_v330_update_download_host_is_github_pinned():
 
 def test_v330_update_destination_uses_sanitized_basename_and_warns_without_digest(monkeypatch, tmp_path):
     import tlo_github_updates as G
+    from tlo_version import BUNDLE_BUILD
 
+    available_build = BUNDLE_BUILD + 1
+    asset_name = f"TLO_V1.2Build{available_build}_update_Linux.zip"
     release = {
-        "tag_name": "v1.2-build348",
-        "name": "TLO v1.2 Build 348",
+        "tag_name": f"v1.2-build{available_build}",
+        "name": f"TLO v1.2 Build {available_build}",
         "assets": [
             {
-                "name": "../TLO_V1.2Build348_update_Linux.zip",
-                "browser_download_url": "https://github.com/onaracstlo-lab/TradersLittleOrganizer/releases/download/v348/TLO.zip",
+                "name": f"../{asset_name}",
+                "browser_download_url": f"https://github.com/onaracstlo-lab/TradersLittleOrganizer/releases/download/v{available_build}/TLO.zip",
                 "size": 1,
             }
         ],
@@ -7682,8 +7679,8 @@ def test_v330_update_destination_uses_sanitized_basename_and_warns_without_diges
     result = G.check_for_updates(tmp_path / "TLOHome", manual=True)
 
     assert result.status == "downloaded"
-    assert seen == [tmp_path / "TLO_V1.2Build348_update_Linux.zip"]
-    assert result.path == str(tmp_path / "TLO_V1.2Build348_update_Linux.zip")
+    assert seen == [tmp_path / asset_name]
+    assert result.path == str(tmp_path / asset_name)
     assert "verified the downloaded file size only" in result.message
 
 
@@ -8100,7 +8097,7 @@ def test_v337_operation_review_explains_original_file_changes(tmp_path):
         setlistfm_lookup=False, performance_mode="balanced", max_workers=2,
     )
     lines = operation_review_lines(config, operation="Full Inventory")
-    assert "Tag in Place: Yes" in lines
+    assert any(line.strip() == "Tag in Place: Yes" for line in lines)
     assert "Original files may be changed: Yes" in lines
 
 
@@ -8308,8 +8305,8 @@ def test_v339_review_reports_as_is_artist_and_copy_delete_destination(tmp_path):
         performance_mode="balanced", max_workers=2,
     )
     lines = operation_review_lines(cfg, operation="Full Inventory")
-    assert "As-Is Artist Name: Yes" in lines
-    assert "Copy/Delete Original: Yes" in lines
+    assert any(line.strip() == "As-Is Artist Name: Yes" for line in lines)
+    assert any(line.strip() == "Tag Copy/Delete Original: Yes" for line in lines)
     assert f"Copy destination: {tmp_path}" in lines
 
 
@@ -8480,15 +8477,15 @@ def test_v341_copy_delete_prompt_runs_during_build_config(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_v342_current_documentation_contract():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v347.docx")
-    manual_rtf = _source_text("TLO_Inventory_User_Manual_v347.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v351.docx")
+    manual_rtf = _source_text("TLO_Inventory_User_Manual_v351.rtf")
     faq = _source_text("TLO-FAQ.txt")
     source_and_build_helpers = "\n".join(
         _source_text(name)
         for name in ("createWindowsDist.ps1", "createLinuxDist.sh", "createMacOSDist.sh")
     )
 
-    assert "v1.2 Build 347" in requirements
+    assert "v1.2 Build 351" in requirements
     assert "Build 344" not in requirements
     assert "CHANGES_v344.txt" not in requirements
     assert "eight ZIP assets" in requirements
@@ -8497,7 +8494,7 @@ def test_v342_current_documentation_contract():
     assert "v1.1 Build" not in requirements
     assert "Build 340 checkbox" not in requirements
 
-    assert "Version v1.2 Build 347" in manual_rtf
+    assert "Version v1.2 Build 351" in manual_rtf
     assert "eight assets" in manual_rtf
     assert "artists.sqlite" in manual_rtf and "venues.txt" in manual_rtf
     assert "Checking either box only selects the mode" in manual_rtf
@@ -8508,7 +8505,21 @@ def test_v342_current_documentation_contract():
     assert "Preview, Inventory (full)" not in requirements
     assert "TLO_V1.1Build" not in manual_rtf
     assert "Build341" not in manual_rtf and "Build 341" not in manual_rtf
+    assert "Build347" not in manual_rtf and "Build 347" not in manual_rtf
+    assert "TLO_V1.2Build350" not in manual_rtf
     assert "--myTLO" not in manual_rtf
+    assert "Tagging Options group" not in requirements
+    assert "tagger-scoped controls" not in requirements
+    assert "no duplicated main-window option checkboxes" in requirements
+    assert "same complete ordered main-window checkbox-value section" in requirements
+    assert "no duplicated main-option checkboxes" in manual_rtf
+    assert "Standalone Tag always tags the selected Tagging Path directly" in manual_rtf
+    assert "Inventory, Add Shows, or Tag processing when selected" not in manual_rtf
+    assert "same labels and order" in manual_rtf
+    assert "Full Inventory and Tag" in manual_rtf
+    assert "Every Review Operation dialog reports all main-window checkbox values in the same order" in faq
+    assert "Tag has no duplicated option checkboxes" in faq
+    assert "In the Inventory and Tagger GUIs" not in faq
 
     assert "A: The Windows and macOS/Linux/WSL setup steps" in faq
     assert "You never lose your content" not in faq
@@ -8629,30 +8640,20 @@ def test_v343_main_gui_toggles_compliant_and_rename_compliantly():
     assert app.bool_vars["rename_compliantly"].get() is False
 
 
-def test_v343_tagger_gui_toggles_compliant_and_rename_compliantly():
+def test_v343_tagger_uses_main_window_compliant_rename_exclusivity():
     gui = _load_tlo_ggi_module()
-
-    class FakeVar:
-        def __init__(self, value=False):
-            self.value = bool(value)
-        def get(self):
-            return self.value
-        def set(self, value):
-            self.value = bool(value)
-
     window = object.__new__(gui.TaggerWindow)
-    window.option_vars = {"compliant": FakeVar(True), "rename_compliantly": FakeVar(False)}
-    window._compliant_rename_syncing = False
-
-    window.option_vars["rename_compliantly"].set(True)
-    window._compliant_rename_clicked("rename_compliantly")
-    assert window.option_vars["rename_compliantly"].get() is True
-    assert window.option_vars["compliant"].get() is False
-
-    window.option_vars["compliant"].set(True)
-    window._compliant_rename_clicked("compliant")
-    assert window.option_vars["compliant"].get() is True
-    assert window.option_vars["rename_compliantly"].get() is False
+    window.debug = False
+    window.tlo_home = "/tmp"
+    window._main_checkbox_values = lambda: {
+        "compliant": True, "rename_compliantly": True, "as_is_artist_name": False,
+        "etree_lookup": False, "setlistfm_lookup": False, "convert_shn": False,
+        "artist_in_album": True, "tag_during_inventory": False,
+        "tag_copy_during_inventory": False, "tag_copy_and_delete_enabled": False,
+        "dry_run": False,
+    }
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        window._tag_config()
 
 
 def test_v343_programmatic_tagger_config_rejects_compliant_with_rename(tmp_path):
@@ -8799,11 +8800,11 @@ def _v345_add_shows_config(tlo_home, **overrides):
     return SimpleNamespace(**values)
 
 
-def test_v345_add_shows_has_no_preview_buttons_and_lists_all_main_flags():
+def test_v345_add_shows_has_no_preview_buttons_and_reviews_all_main_flags():
     import inspect
     gui = _load_tlo_ggi_module()
     build = inspect.getsource(gui.AddToInventoryWindow._build)
-    mode = inspect.getsource(gui.AddToInventoryWindow._refresh_mode_display)
+    new_review = inspect.getsource(gui.AddToInventoryWindow._new_show_review_lines)
     process_new = inspect.getsource(gui.AddToInventoryWindow._process_new_shows)
     process_dups = inspect.getsource(gui.AddToInventoryWindow._process_duplicates)
 
@@ -8811,12 +8812,8 @@ def test_v345_add_shows_has_no_preview_buttons_and_lists_all_main_flags():
     assert "self.dry_run_var" not in build
     assert "preview_new_button" not in build
     assert "preview_dups_button" not in build
-    for label in (
-        "Compliant:", "etreeDB:", "setlist.fm:", "Tag in Place:", "Tag Copy:",
-        "Tag Copy/Delete Original:", "Rename Compliantly:", "Convert shn:",
-        "Artist in Album Tag:", "As-Is Artist Name:", "Dry run:",
-    ):
-        assert label in mode
+    assert 'operation_review_lines(' in new_review
+    assert 'main_checkbox_source=self.config.main_window_checkbox_values' in new_review
     assert "if dry_run:" in process_new and "preview_add_shows" in process_new
     assert "if dry_run:" in process_dups and "preview_add_shows" in process_dups
 
@@ -8994,7 +8991,6 @@ def test_v347_tag_and_add_shows_remove_child_dry_run_checkboxes():
     assert 'text="Dry run"' not in add_build
     assert "self.dry_run_var" not in tag_build
     assert "self.dry_run_var" not in add_build
-    assert "inherited from main window" in inspect.getsource(gui.TaggerWindow._refresh_inherited_dry_run)
 
 
 def test_v347_tag_and_add_shows_read_current_main_dry_run_value():
@@ -9022,21 +9018,10 @@ def test_v347_tag_and_add_shows_read_current_main_dry_run_value():
     assert updater._current_dry_run() is True
 
 
-def test_v347_main_dry_run_change_refreshes_open_child_windows():
-    gui = _load_tlo_ggi_module()
-    calls = []
-
-    class Child:
-        def __init__(self, name):
-            self.name = name
-        def _refresh_inherited_dry_run(self):
-            calls.append(self.name)
-
-    app = object.__new__(gui.App)
-    app.active_tagger_window = Child("tag")
-    app.active_updater_window = Child("add")
-    app._main_dry_run_changed()
-    assert calls == ["tag", "add"]
+def test_v347_child_actions_do_not_require_live_notice_refreshes():
+    source = _source_text("tlo-ggi.py")
+    assert "def _main_options_changed" not in source
+    assert "def _main_dry_run_changed" not in source
 
 def test_v347_action_paths_use_inherited_main_dry_run():
     import inspect
@@ -9048,3 +9033,251 @@ def test_v347_action_paths_use_inherited_main_dry_run():
     assert "dry_run = self._current_dry_run()" in tag_start
     assert "dry_run = self._current_dry_run()" in add_new
     assert "dry_run = self._current_dry_run()" in add_dups
+
+# --------------------------------------------------------------------------- #
+# v348 - Tag and Add Shows inherit all main-window checkbox values and use one
+#        consistent pre-execution review-dialog format.
+# --------------------------------------------------------------------------- #
+
+def _v348_checkbox_values(**overrides):
+    values = {
+        "etree_lookup": True,
+        "compliant": False,
+        "tag_during_inventory": True,
+        "artist_in_album": True,
+        "setlistfm_lookup": True,
+        "rename_compliantly": False,
+        "tag_copy_during_inventory": False,
+        "convert_shn": True,
+        "as_is_artist_name": True,
+        "tag_copy_and_delete_enabled": False,
+        "dry_run": True,
+    }
+    values.update(overrides)
+    return values
+
+
+def test_v348_child_windows_remove_duplicated_main_option_checkboxes():
+    import inspect
+    gui = _load_tlo_ggi_module()
+    tag_build = inspect.getsource(gui.TaggerWindow._build)
+    add_build = inspect.getsource(gui.AddToInventoryWindow._build)
+
+    assert "ttk.Checkbutton" not in tag_build
+    assert "Tagging Options" not in tag_build
+    assert add_build.count("ttk.Checkbutton") == 1
+    assert 'text="Check for Duplicates"' in add_build
+    for duplicated_label in (
+        "Compliant", "etreeDB", "setlist.fm", "Tag in Place", "Tag Copy",
+        "Tag Copy/Delete Original", "Rename Compliantly", "Convert shn",
+        "Artist in Album Tag", "As-Is Artist Name", "Dry run",
+    ):
+        assert f'text="{duplicated_label}"' not in add_build
+
+
+def test_v348_review_checkbox_section_is_identical_for_all_workflows(tmp_path):
+    from types import SimpleNamespace
+    from tlo_ux import MAIN_WINDOW_CHECKBOX_SPECS, operation_review_lines
+
+    values = _v348_checkbox_values()
+    config = SimpleNamespace(
+        TLOHome=str(tmp_path), search_path_override=str(tmp_path),
+        performance_mode="balanced", max_workers=4,
+        tag_copy_destination="", tag_copy_and_delete_path="",
+        **{key: value for key, value in values.items() if key != "dry_run"},
+    )
+
+    sections = []
+    for operation in ("Full Inventory", "Tag", "Add Shows - Process New Shows"):
+        lines = operation_review_lines(
+            config,
+            operation=operation,
+            path_text=str(tmp_path),
+            dry_run=values["dry_run"],
+            main_checkbox_source=values,
+        )
+        start = lines.index("Main-window checkbox values:")
+        sections.append(lines[start:start + 1 + len(MAIN_WINDOW_CHECKBOX_SPECS)])
+    assert sections[0] == sections[1] == sections[2]
+    assert sections[0][-1] == "  Dry run: Yes"
+
+
+def test_v348_tagger_reads_live_main_values_at_action_time(tmp_path):
+    gui = _load_tlo_ggi_module()
+    parent_values = _v348_checkbox_values(compliant=True, rename_compliantly=False)
+
+    class Parent:
+        def _current_main_checkbox_values(self):
+            return dict(parent_values)
+
+    tagger = object.__new__(gui.TaggerWindow)
+    tagger.parent_app = Parent()
+    tagger.debug = False
+    tagger.tlo_home = str(tmp_path)
+
+    config = tagger._tag_config()
+    assert config.compliant is True
+    assert config.etree_lookup is True
+    assert config.setlistfm_lookup is True
+    assert config.convert_shn is True
+    assert config.as_is_artist_name is True
+    assert config.main_window_tag_in_place_selected is True
+    assert config.main_window_dry_run is True
+
+    parent_values["compliant"] = False
+    parent_values["rename_compliantly"] = True
+    parent_values["convert_shn"] = False
+    refreshed = tagger._tag_config()
+    assert refreshed.compliant is False
+    assert refreshed.rename_compliantly is True
+    assert refreshed.convert_shn is False
+
+
+def test_v348_add_shows_refreshes_all_main_values_before_action(tmp_path):
+    gui = _load_tlo_ggi_module()
+    values = _v348_checkbox_values(tag_during_inventory=False, tag_copy_during_inventory=True)
+
+    class Parent:
+        def _current_main_checkbox_values(self):
+            return dict(values)
+
+    class FakeVar:
+        def get(self):
+            return "BackupVolume"
+
+    updater = object.__new__(gui.AddToInventoryWindow)
+    updater.parent_app = Parent()
+    updater.volume_var = FakeVar()
+    updater.config = SimpleNamespace(TLOHome=str(tmp_path))
+
+    config = updater._refresh_config()
+    assert config.etree_lookup is True
+    assert config.setlistfm_lookup is True
+    assert config.convert_shn is True
+    assert config.as_is_artist_name is True
+    assert config.main_window_tag_copy_selected is True
+    assert config.tag_copy_during_inventory is False
+    assert config.tag_copy_destination == ""
+    assert config.current_volume_label == "BackupVolume"
+    assert config.main_window_dry_run is True
+
+
+def test_v348_each_primary_action_calls_review_before_execution():
+    import inspect
+    gui = _load_tlo_ggi_module()
+
+    inventory = inspect.getsource(gui.App._start)
+    tag = inspect.getsource(gui.TaggerWindow._start_tagging)
+    add_new = inspect.getsource(gui.AddToInventoryWindow._process_new_shows)
+    add_dups = inspect.getsource(gui.AddToInventoryWindow._process_duplicates)
+
+    assert inventory.index("_review_inventory_operation") < inventory.index("PreviewWindow")
+    assert tag.index("_show_operation_review") < tag.index("PreviewWindow")
+    assert add_new.index("_show_operation_review") < add_new.index("PreviewWindow")
+    assert add_dups.index("_show_operation_review") < add_dups.index("PreviewWindow")
+
+
+# --------------------------------------------------------------------------- #
+# v349 - remove inherited-settings notice labels from child windows
+# --------------------------------------------------------------------------- #
+
+def test_v349_child_windows_remove_main_window_value_notice_labels():
+    import inspect
+    gui = _load_tlo_ggi_module()
+    tag_build = inspect.getsource(gui.TaggerWindow._build)
+    add_build = inspect.getsource(gui.AddToInventoryWindow._build)
+    full_source = _source_text("tlo-ggi.py")
+
+    assert "inherited_settings_var" not in tag_build
+    assert "inherited_settings_var" not in add_build
+    assert 'text="Settings"' not in tag_build
+    assert "Uses checkbox values inherited from the main window" not in full_source
+    assert "_refresh_inherited_settings" not in full_source
+    assert "_refresh_inherited_dry_run" not in full_source
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v351.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v351.rtf")
+    assert "does not display a separate notice about inheriting values" in requirements
+    assert "no inherited-settings notice label" in manual
+
+
+def test_v349_child_windows_still_read_main_values_at_action_time(tmp_path):
+    gui = _load_tlo_ggi_module()
+    values = _v348_checkbox_values(dry_run=False, convert_shn=False)
+
+    class Parent:
+        def _current_main_checkbox_values(self):
+            return dict(values)
+
+    class FakeVar:
+        def get(self):
+            return "BackupVolume"
+
+    tagger = object.__new__(gui.TaggerWindow)
+    tagger.parent_app = Parent()
+    tagger.debug = False
+    tagger.tlo_home = str(tmp_path)
+    updater = object.__new__(gui.AddToInventoryWindow)
+    updater.parent_app = Parent()
+    updater.volume_var = FakeVar()
+    updater.config = SimpleNamespace(TLOHome=str(tmp_path))
+
+    assert tagger._tag_config().convert_shn is False
+    assert updater._refresh_config().main_window_dry_run is False
+    values["convert_shn"] = True
+    values["dry_run"] = True
+    assert tagger._tag_config().convert_shn is True
+    assert updater._refresh_config().main_window_dry_run is True
+
+
+# --------------------------------------------------------------------------- #
+# v351 - Donate cascade in the main Inventory hamburger menu
+# --------------------------------------------------------------------------- #
+
+def test_v351_inventory_hamburger_donate_cascades_and_details():
+    import inspect
+    gui = _load_tlo_ggi_module()
+    build_source = inspect.getsource(gui.App._build)
+
+    assert 'self.hamburger_menu.add_cascade(label="Donate", menu=self.donate_menu)' in build_source
+    assert 'self.donate_menu.add_cascade(label="Venmo", menu=self.venmo_menu)' in build_source
+    assert 'self.donate_menu.add_cascade(label="Check", menu=self.check_menu)' in build_source
+    assert 'self.venmo_menu.add_command(label="@James-Scarano-3")' in build_source
+    assert 'self.check_menu.add_command(label="James Scarano")' in build_source
+    assert 'self.check_menu.add_command(label="49 Majestic Ave.")' in build_source
+    assert 'self.check_menu.add_command(label="Nashua, NH 03063")' in build_source
+
+
+def test_v351_donate_details_are_documented():
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v351.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v351.rtf")
+
+    for text in (requirements, manual):
+        assert "Donate" in text
+        assert "Venmo" in text
+        assert "@James-Scarano-3" in text
+        assert "Check" in text
+        assert "James Scarano" in text
+        assert "49 Majestic Ave." in text
+        assert "Nashua, NH 03063" in text
+
+
+# --------------------------------------------------------------------------- #
+# v351 - donation detail text appearance and About contact wording
+# --------------------------------------------------------------------------- #
+
+def test_v351_donation_details_use_normal_menu_text():
+    source = _source_text("tlo-ggi.py")
+    for label in ("@James-Scarano-3", "James Scarano", "49 Majestic Ave.", "Nashua, NH 03063"):
+        line = next(line for line in source.splitlines() if f'add_command(label="{label}"' in line)
+        assert 'state="disabled"' not in line
+    assert "normal dark menu text" in _source_text("TLO-FAQ.txt")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v351.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v351.rtf")
+    assert "dark text rather than disabled gray text" in requirements
+    assert "normal dark menu text instead of disabled gray text" in manual
+
+
+def test_v351_about_contact_uses_gmail_wording():
+    source = _source_text("tlo-ggi.py")
+    assert "Contact me at: onaracs.tlo of gmail" in source
+    assert "onaracs.tlo of g.mail" not in source

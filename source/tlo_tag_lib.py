@@ -1,9 +1,9 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v347"
-# TLO-GI package version: v347
-__version_summary__ = 'Uses one main-window Dry run setting inherited live by Tag and Add Shows.'
-# TLO-GI version summary: Uses one main-window Dry run setting inherited live by Tag and Add Shows.
+__version__ = "v351"
+# TLO-GI package version: v351
+__version_summary__ = 'Uses normal dark text for donation details and corrects the About contact wording.'
+# TLO-GI version summary: Uses normal dark text for donation details and corrects the About contact wording.
 
 import os
 import re
@@ -364,6 +364,7 @@ def build_tagger_config(
     my_tlo: str = "",
     compliant: bool = False,
     etree_lookup: bool = False,
+    setlistfm_lookup: bool = False,
     debug: bool = False,
     rename_compliantly: bool = False,
     convert_shn: bool = False,
@@ -377,6 +378,8 @@ def build_tagger_config(
         })
     except ValueError as exc:
         raise TaggerError(str(exc)) from exc
+    if bool(setlistfm_lookup) and not bool(etree_lookup):
+        raise TaggerError("setlist.fm lookup requires eTreeDB lookup.")
     resolved_home = resolve_tlo_home(tlo_home=tlo_home, my_tlo=my_tlo)
     config = Config(
         debug=bool(debug),
@@ -395,7 +398,7 @@ def build_tagger_config(
         tag_copy_destination="",
         rename_compliantly=bool(rename_compliantly),
         etree_lookup=bool(etree_lookup),
-        setlistfm_lookup=False,
+        setlistfm_lookup=bool(setlistfm_lookup),
         performance_mode="gentle",
         max_workers=1,
         convert_shn=bool(convert_shn),
@@ -3853,6 +3856,7 @@ def run_tagger(
     compliant: bool = False,
     tag_path: str = "",
     etree_lookup: bool = False,
+    setlistfm_lookup: bool = False,
     debug: bool = False,
     rename_compliantly: bool = False,
     convert_shn: bool = False,
@@ -3866,6 +3870,7 @@ def run_tagger(
         my_tlo=my_tlo,
         compliant=compliant,
         etree_lookup=etree_lookup,
+        setlistfm_lookup=setlistfm_lookup,
         debug=debug,
         rename_compliantly=rename_compliantly,
         convert_shn=convert_shn,
@@ -3886,7 +3891,7 @@ def run_tagger(
     tag_emit = _build_tag_log_emit(config, emit)
     artist_matcher = load_artist_matcher(config)
 
-    _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | artist in album={'yes' if getattr(config, 'artist_in_album', True) else 'no'} | as-is artist name={'yes' if getattr(config, 'as_is_artist_name', False) else 'no'} | debug={'yes' if config.debug else 'no'}")
+    _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | setlist.fm fallback={'yes' if config.setlistfm_lookup else 'no'} | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | artist in album={'yes' if getattr(config, 'artist_in_album', True) else 'no'} | as-is artist name={'yes' if getattr(config, 'as_is_artist_name', False) else 'no'} | debug={'yes' if config.debug else 'no'}")
     _emit(tag_emit, f"TLOHome: {config.TLOHome}")
     _emit(tag_emit, f"Tagging Path: {tagging_path}")
 
