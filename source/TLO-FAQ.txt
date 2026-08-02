@@ -36,3 +36,6 @@ A: The completion summary includes View Issues and Open Logs. View Issues groups
 
 Q: How can I donate to TLO?
 A: Open the upper-right hamburger menu in the Inventory window and choose Donate. Donate > Venmo shows @James-Scarano-3. Donate > Check shows James Scarano, 49 Majestic Ave., Nashua, NH 03063. The donation details use normal dark menu text rather than disabled gray text.
+
+Q: Why does the Current Operation activity indicator move slowly?
+A: Build 352 intentionally moves the indeterminate activity indicator at one-tenth of its former speed in Inventory, Tag, and Add Shows. This is only a visual animation change; it does not slow inventory, tagging, Add Shows, elapsed-time updates, or worker processing.

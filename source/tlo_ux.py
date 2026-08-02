@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-__version__ = "v351"
-# TLO-GI package version: v351
-__version_summary__ = 'Uses normal dark text for donation details and corrects the About contact wording.'
-# TLO-GI version summary: Uses normal dark text for donation details and corrects the About contact wording.
+__version__ = "v352"
+# TLO-GI package version: v352
+__version_summary__ = 'Slows the GUI activity indicator animation to one-tenth of its previous speed.'
+# TLO-GI version summary: Slows the GUI activity indicator animation to one-tenth of its previous speed.
 
 
 import copy
@@ -27,6 +27,12 @@ from inventory_list_lib import (
     _strip_optional_quotes,
 )
 from tlo_media_rules import MEDIA_EXTENSIONS
+
+
+# ttk.Progressbar.start() receives the animation interval in milliseconds.
+# Build 352 intentionally uses ten times the former 12 ms interval so the
+# indeterminate activity indicator moves at one-tenth its previous speed.
+ACTIVITY_INDICATOR_INTERVAL_MS = 120
 
 
 @dataclass(frozen=True)

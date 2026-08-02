@@ -1,15 +1,15 @@
 """Regression tests for the current TLO requirements and release contract.
 
-The suite pins documented behavior from TLO_Inventory_Requirements_Working_v351.docx.
+The suite pins documented behavior from TLO_Inventory_Requirements_Working_v352.docx.
 Historical build-by-build test notes are preserved in old-change-logs.zip rather
 than repeated in this executable test module.
 """
 
 
-__version__ = "v351"
-# TLO-GI package version: v351
-__version_summary__ = 'Uses normal dark text for donation details and corrects the About contact wording.'
-# TLO-GI version summary: Uses normal dark text for donation details and corrects the About contact wording.
+__version__ = "v352"
+# TLO-GI package version: v352
+__version_summary__ = 'Slows the GUI activity indicator animation to one-tenth of its previous speed.'
+# TLO-GI version summary: Slows the GUI activity indicator animation to one-tenth of its previous speed.
 
 import argparse
 import importlib.util
@@ -1503,7 +1503,7 @@ def test_v305_tagger_gui_keeps_bold_app_heading_and_uses_current_public_version(
     build_source = inspect.getsource(gui.TaggerWindow._build)
 
     assert TAGGER_TITLE == "Traders Little Helper™ Tagger App"
-    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 351"
+    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 352"
     assert "self.window.title(TAGGER_DISPLAY_VERSION)" in init_source
     assert build_source.count("text=TAGGER_TITLE") == 1
     assert "text=TAGGER_TITLE, font=title_font" in build_source
@@ -6870,10 +6870,10 @@ def test_v304_inventory_updater_button_uses_requested_two_line_label():
 def test_v305_public_version_matches_bundle_number():
     import tlo_version as V
 
-    assert V.VERSION == "v351"
-    assert V.BUNDLE_BUILD == 351
-    assert V.DISPLAY_VERSION == "v1.2 Build 351"
-    assert V.versioned_title("TLO Inventory GUI") == "TLO Inventory GUI v1.2 Build 351"
+    assert V.VERSION == "v352"
+    assert V.BUNDLE_BUILD == 352
+    assert V.DISPLAY_VERSION == "v1.2 Build 352"
+    assert V.versioned_title("TLO Inventory GUI") == "TLO Inventory GUI v1.2 Build 352"
 
 
 def test_v305_startup_banner_never_appends_release_change_summary():
@@ -6882,7 +6882,7 @@ def test_v305_startup_banner_never_appends_release_change_summary():
 
     for debug in (False, True):
         banner = M._startup_banner(SimpleNamespace(debug=debug))
-        assert banner == "Starting tlo-gi v1.2 Build 351"
+        assert banner == "Starting tlo-gi v1.2 Build 352"
         assert V.VERSION_SUMMARY not in banner
         assert " - " not in banner
 
@@ -6891,9 +6891,9 @@ def test_v305_all_toplevel_gui_titles_include_public_version():
     gui = _load_tlo_ggi_module()
     from tlo_inventory_update import UPDATER_DISPLAY_VERSION
 
-    assert gui.WINDOW_TITLE == "TLO Inventory GUI v1.2 Build 351"
-    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 351"
-    assert UPDATER_DISPLAY_VERSION == "TLO Inventory Updater v1.2 Build 351"
+    assert gui.WINDOW_TITLE == "TLO Inventory GUI v1.2 Build 352"
+    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 352"
+    assert UPDATER_DISPLAY_VERSION == "TLO Inventory Updater v1.2 Build 352"
 
     source = _source_text("tlo-ggi.py")
     expected_calls = (
@@ -7022,7 +7022,7 @@ def test_v317_main_inventory_hamburger_help_cascade_sources_about_and_faq():
     assert 'Traders Little Organizer™ - TLO' in source
     assert 'f"V1.2Build{BUNDLE_BUILD}\\n"' in source
     assert 'TLO-FAQ.txt' in source
-    assert gui.BUNDLE_BUILD == 351
+    assert gui.BUNDLE_BUILD == 352
 
 
 
@@ -8477,15 +8477,15 @@ def test_v341_copy_delete_prompt_runs_during_build_config(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_v342_current_documentation_contract():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v351.docx")
-    manual_rtf = _source_text("TLO_Inventory_User_Manual_v351.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v352.docx")
+    manual_rtf = _source_text("TLO_Inventory_User_Manual_v352.rtf")
     faq = _source_text("TLO-FAQ.txt")
     source_and_build_helpers = "\n".join(
         _source_text(name)
         for name in ("createWindowsDist.ps1", "createLinuxDist.sh", "createMacOSDist.sh")
     )
 
-    assert "v1.2 Build 351" in requirements
+    assert "v1.2 Build 352" in requirements
     assert "Build 344" not in requirements
     assert "CHANGES_v344.txt" not in requirements
     assert "eight ZIP assets" in requirements
@@ -8494,7 +8494,9 @@ def test_v342_current_documentation_contract():
     assert "v1.1 Build" not in requirements
     assert "Build 340 checkbox" not in requirements
 
-    assert "Version v1.2 Build 351" in manual_rtf
+    assert "Version v1.2 Build 352" in manual_rtf
+    assert "V1.2Build351" not in manual_rtf
+    assert "V1.2Build352" in manual_rtf
     assert "eight assets" in manual_rtf
     assert "artists.sqlite" in manual_rtf and "venues.txt" in manual_rtf
     assert "Checking either box only selects the mode" in manual_rtf
@@ -9194,8 +9196,8 @@ def test_v349_child_windows_remove_main_window_value_notice_labels():
     assert "Uses checkbox values inherited from the main window" not in full_source
     assert "_refresh_inherited_settings" not in full_source
     assert "_refresh_inherited_dry_run" not in full_source
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v351.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v351.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v352.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v352.rtf")
     assert "does not display a separate notice about inheriting values" in requirements
     assert "no inherited-settings notice label" in manual
 
@@ -9248,8 +9250,8 @@ def test_v351_inventory_hamburger_donate_cascades_and_details():
 
 
 def test_v351_donate_details_are_documented():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v351.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v351.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v352.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v352.rtf")
 
     for text in (requirements, manual):
         assert "Donate" in text
@@ -9271,8 +9273,8 @@ def test_v351_donation_details_use_normal_menu_text():
         line = next(line for line in source.splitlines() if f'add_command(label="{label}"' in line)
         assert 'state="disabled"' not in line
     assert "normal dark menu text" in _source_text("TLO-FAQ.txt")
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v351.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v351.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v352.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v352.rtf")
     assert "dark text rather than disabled gray text" in requirements
     assert "normal dark menu text instead of disabled gray text" in manual
 
@@ -9281,3 +9283,14 @@ def test_v351_about_contact_uses_gmail_wording():
     source = _source_text("tlo-ggi.py")
     assert "Contact me at: onaracs.tlo of gmail" in source
     assert "onaracs.tlo of g.mail" not in source
+
+
+# v352 - slower activity indicator animation
+
+def test_v352_activity_indicator_moves_at_one_tenth_previous_speed():
+    ux = _load_local_module("tlo_ux.py", "tlo_ux_v352")
+    gui_source = _source_text("tlo-ggi.py")
+    assert ux.ACTIVITY_INDICATOR_INTERVAL_MS == 120
+    assert gui_source.count("progress_bar.start(ACTIVITY_INDICATOR_INTERVAL_MS)") == 3
+    assert "progress_bar.start(12)" not in gui_source
+

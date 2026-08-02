@@ -1,7 +1,7 @@
-__version__ = "v351"
-# TLO-GI package version: v351
-__version_summary__ = 'Uses normal dark text for donation details and corrects the About contact wording.'
-# TLO-GI version summary: Uses normal dark text for donation details and corrects the About contact wording.
+__version__ = "v352"
+# TLO-GI package version: v352
+__version_summary__ = 'Slows the GUI activity indicator animation to one-tenth of its previous speed.'
+# TLO-GI version summary: Slows the GUI activity indicator animation to one-tenth of its previous speed.
 from dataclasses import dataclass, field
 from typing import Dict, List
 

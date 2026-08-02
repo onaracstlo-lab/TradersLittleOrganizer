@@ -14,8 +14,8 @@ Tkinter GUI that:
 
 from __future__ import annotations
 
-__version__ = "v351"
-# TLO-GI package version: v351
+__version__ = "v352"
+# TLO-GI package version: v352
 
 import csv
 import os
@@ -33,7 +33,7 @@ APP_FILE_NAME = "tlo-gsi.py"
 try:
     from tlo_version import DISPLAY_VERSION
 except ImportError:
-    DISPLAY_VERSION = "v1.2 Build 351"
+    DISPLAY_VERSION = "v1.2 Build 352"
 try:
     from tlo_github_updates import (
         check_for_updates,

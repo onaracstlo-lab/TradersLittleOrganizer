@@ -1,9 +1,9 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v351"
-# TLO-GI package version: v351
-__version_summary__ = 'Uses normal dark text for donation details and corrects the About contact wording.'
-# TLO-GI version summary: Uses normal dark text for donation details and corrects the About contact wording.
+__version__ = "v352"
+# TLO-GI package version: v352
+__version_summary__ = 'Slows the GUI activity indicator animation to one-tenth of its previous speed.'
+# TLO-GI version summary: Slows the GUI activity indicator animation to one-tenth of its previous speed.
 
 import multiprocessing
 
@@ -83,6 +83,7 @@ from tlo_runtime_control import (
     is_pause_requested,
 )
 from tlo_ux import (
+    ACTIVITY_INDICATOR_INTERVAL_MS,
     RunMonitor,
     RunIssue,
     PreviewResult,
@@ -1964,7 +1965,7 @@ class App:
         self._update_progress_display()
         try:
             if self.progress_bar is not None:
-                self.progress_bar.start(12)
+                self.progress_bar.start(ACTIVITY_INDICATOR_INTERVAL_MS)
         except tk.TclError:
             pass
         self.queue.put("Inventory request accepted; preparing inventory roots.\n")
@@ -2196,7 +2197,7 @@ class TaggerWindow:
         self._set_processing_controls(False)
         self.parent_app._update_main_action_states()
         self._update_progress_display()
-        self.progress_bar.start(12)
+        self.progress_bar.start(ACTIVITY_INDICATOR_INTERVAL_MS)
 
         def worker():
             totals = None
@@ -2499,7 +2500,7 @@ class AddToInventoryWindow:
         self.status_var.set(f"{task_name}: running")
         self.elapsed_var.set("Elapsed: 0:00")
         try:
-            self.progress_bar.start(12)
+            self.progress_bar.start(ACTIVITY_INDICATOR_INTERVAL_MS)
         except tk.TclError:
             pass
         self._set_processing_controls(False)
