@@ -1,7 +1,7 @@
-__version__ = "v352"
-# TLO-GI package version: v352
-__version_summary__ = 'Slows the GUI activity indicator animation to one-tenth of its previous speed.'
-# TLO-GI version summary: Slows the GUI activity indicator animation to one-tenth of its previous speed.
+__version__ = "v354"
+# TLO-GI package version: v354
+__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
+# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
 
 import argparse
 import multiprocessing
@@ -13,7 +13,9 @@ if __name__ == "__main__":
 
 from tlo_options import add_options_to_parser, parse_bool, validate_compliant_rename_exclusivity
 from tlo_path_inputs import strip_optional_quotes
-from tlo_tag_lib import run_tagger
+from tlo_tag_lib import build_tagger_config, resolve_tagging_path, run_tagger
+from tlo_run_settings import append_run_settings
+from tlo_ux import operation_review_lines
 
 
 def _parse_args(argv=None):
@@ -59,6 +61,30 @@ def _parse_args(argv=None):
 def main(argv=None) -> int:
     args = _parse_args(argv)
     try:
+        review_config = build_tagger_config(
+            tlo_home=args.TLOHome,
+            my_tlo=args.myTLO,
+            compliant=bool(args.compliant),
+            etree_lookup=bool(args.etree_lookup),
+            setlistfm_lookup=False,
+            debug=bool(args.debug),
+            rename_compliantly=bool(args.rename_compliantly),
+            convert_shn=bool(args.convert_shn),
+            artist_in_album=bool(args.artist_in_album),
+            as_is_artist_name=bool(args.as_is_artist_name),
+        )
+        review_config.tag_during_inventory = True
+        review_config.tag_copy_during_inventory = False
+        review_config.tag_copy_and_delete_path = ""
+        review_config.dry_run = False
+        resolved_tag_path = resolve_tagging_path(review_config.TLOHome, args.tagPath)
+        review_lines = operation_review_lines(
+            review_config,
+            operation="Tag",
+            path_text=resolved_tag_path,
+            dry_run=False,
+        )
+        append_run_settings(review_config.TLOHome, "Tag", review_lines)
         run_tagger(
             tlo_home=args.TLOHome,
             my_tlo=args.myTLO,

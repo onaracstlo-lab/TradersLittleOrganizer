@@ -24,9 +24,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-__version__ = "v352"
-# TLO-GI package version: v352
-__version_summary__ = 'Slows the GUI activity indicator animation to one-tenth of its previous speed.'
+__version__ = "v354"
+# TLO-GI package version: v354
+__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 MIN_REQUEST_INTERVAL_SECONDS = 0.600

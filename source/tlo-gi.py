@@ -1,7 +1,7 @@
-__version__ = "v352"
-# TLO-GI package version: v352
-__version_summary__ = 'Slows the GUI activity indicator animation to one-tenth of its previous speed.'
-# TLO-GI version summary: Slows the GUI activity indicator animation to one-tenth of its previous speed.
+__version__ = "v354"
+# TLO-GI package version: v354
+__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
+# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
 import multiprocessing
 
 if __name__ == "__main__":
@@ -10,6 +10,8 @@ if __name__ == "__main__":
 from inventory_parser_lib import build_config
 from logging_lib import delete_logs_for_tokens
 from tlo_main_lib import run_inventory
+from tlo_run_settings import append_run_settings
+from tlo_ux import operation_review_lines
 from tlo_runtime_control import request_cancel_and_terminate_active_executor, terminate_all_children, flush_standard_streams
 
 
@@ -17,6 +19,12 @@ def main() -> int:
     config = None
     try:
         config = build_config()
+        review_lines = operation_review_lines(
+            config,
+            operation="Full Inventory",
+            dry_run=False,
+        )
+        append_run_settings(config.TLOHome, "Full Inventory", review_lines)
         return run_inventory(config)
     except KeyboardInterrupt:
         if config is not None:

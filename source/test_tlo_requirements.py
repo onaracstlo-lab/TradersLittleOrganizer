@@ -1,15 +1,15 @@
 """Regression tests for the current TLO requirements and release contract.
 
-The suite pins documented behavior from TLO_Inventory_Requirements_Working_v352.docx.
+The suite pins documented behavior from TLO_Inventory_Requirements_Working_v354.docx.
 Historical build-by-build test notes are preserved in old-change-logs.zip rather
 than repeated in this executable test module.
 """
 
 
-__version__ = "v352"
-# TLO-GI package version: v352
-__version_summary__ = 'Slows the GUI activity indicator animation to one-tenth of its previous speed.'
-# TLO-GI version summary: Slows the GUI activity indicator animation to one-tenth of its previous speed.
+__version__ = "v354"
+# TLO-GI package version: v354
+__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
+# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
 
 import argparse
 import importlib.util
@@ -1503,7 +1503,7 @@ def test_v305_tagger_gui_keeps_bold_app_heading_and_uses_current_public_version(
     build_source = inspect.getsource(gui.TaggerWindow._build)
 
     assert TAGGER_TITLE == "Traders Little Helper™ Tagger App"
-    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 352"
+    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 354"
     assert "self.window.title(TAGGER_DISPLAY_VERSION)" in init_source
     assert build_source.count("text=TAGGER_TITLE") == 1
     assert "text=TAGGER_TITLE, font=title_font" in build_source
@@ -6870,10 +6870,10 @@ def test_v304_inventory_updater_button_uses_requested_two_line_label():
 def test_v305_public_version_matches_bundle_number():
     import tlo_version as V
 
-    assert V.VERSION == "v352"
-    assert V.BUNDLE_BUILD == 352
-    assert V.DISPLAY_VERSION == "v1.2 Build 352"
-    assert V.versioned_title("TLO Inventory GUI") == "TLO Inventory GUI v1.2 Build 352"
+    assert V.VERSION == "v354"
+    assert V.BUNDLE_BUILD == 354
+    assert V.DISPLAY_VERSION == "v1.2 Build 354"
+    assert V.versioned_title("TLO Inventory GUI") == "TLO Inventory GUI v1.2 Build 354"
 
 
 def test_v305_startup_banner_never_appends_release_change_summary():
@@ -6882,7 +6882,7 @@ def test_v305_startup_banner_never_appends_release_change_summary():
 
     for debug in (False, True):
         banner = M._startup_banner(SimpleNamespace(debug=debug))
-        assert banner == "Starting tlo-gi v1.2 Build 352"
+        assert banner == "Starting tlo-gi v1.2 Build 354"
         assert V.VERSION_SUMMARY not in banner
         assert " - " not in banner
 
@@ -6891,9 +6891,9 @@ def test_v305_all_toplevel_gui_titles_include_public_version():
     gui = _load_tlo_ggi_module()
     from tlo_inventory_update import UPDATER_DISPLAY_VERSION
 
-    assert gui.WINDOW_TITLE == "TLO Inventory GUI v1.2 Build 352"
-    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 352"
-    assert UPDATER_DISPLAY_VERSION == "TLO Inventory Updater v1.2 Build 352"
+    assert gui.WINDOW_TITLE == "TLO Inventory GUI v1.2 Build 354"
+    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.2 Build 354"
+    assert UPDATER_DISPLAY_VERSION == "TLO Inventory Updater v1.2 Build 354"
 
     source = _source_text("tlo-ggi.py")
     expected_calls = (
@@ -7022,7 +7022,7 @@ def test_v317_main_inventory_hamburger_help_cascade_sources_about_and_faq():
     assert 'Traders Little Organizer™ - TLO' in source
     assert 'f"V1.2Build{BUNDLE_BUILD}\\n"' in source
     assert 'TLO-FAQ.txt' in source
-    assert gui.BUNDLE_BUILD == 352
+    assert gui.BUNDLE_BUILD == 354
 
 
 
@@ -8477,15 +8477,15 @@ def test_v341_copy_delete_prompt_runs_during_build_config(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_v342_current_documentation_contract():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v352.docx")
-    manual_rtf = _source_text("TLO_Inventory_User_Manual_v352.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v354.docx")
+    manual_rtf = _source_text("TLO_Inventory_User_Manual_v354.rtf")
     faq = _source_text("TLO-FAQ.txt")
     source_and_build_helpers = "\n".join(
         _source_text(name)
         for name in ("createWindowsDist.ps1", "createLinuxDist.sh", "createMacOSDist.sh")
     )
 
-    assert "v1.2 Build 352" in requirements
+    assert "v1.2 Build 354" in requirements
     assert "Build 344" not in requirements
     assert "CHANGES_v344.txt" not in requirements
     assert "eight ZIP assets" in requirements
@@ -8494,9 +8494,9 @@ def test_v342_current_documentation_contract():
     assert "v1.1 Build" not in requirements
     assert "Build 340 checkbox" not in requirements
 
-    assert "Version v1.2 Build 352" in manual_rtf
+    assert "Version v1.2 Build 354" in manual_rtf
     assert "V1.2Build351" not in manual_rtf
-    assert "V1.2Build352" in manual_rtf
+    assert "V1.2Build354" in manual_rtf
     assert "eight assets" in manual_rtf
     assert "artists.sqlite" in manual_rtf and "venues.txt" in manual_rtf
     assert "Checking either box only selects the mode" in manual_rtf
@@ -9196,8 +9196,8 @@ def test_v349_child_windows_remove_main_window_value_notice_labels():
     assert "Uses checkbox values inherited from the main window" not in full_source
     assert "_refresh_inherited_settings" not in full_source
     assert "_refresh_inherited_dry_run" not in full_source
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v352.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v352.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v354.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v354.rtf")
     assert "does not display a separate notice about inheriting values" in requirements
     assert "no inherited-settings notice label" in manual
 
@@ -9250,8 +9250,8 @@ def test_v351_inventory_hamburger_donate_cascades_and_details():
 
 
 def test_v351_donate_details_are_documented():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v352.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v352.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v354.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v354.rtf")
 
     for text in (requirements, manual):
         assert "Donate" in text
@@ -9273,8 +9273,8 @@ def test_v351_donation_details_use_normal_menu_text():
         line = next(line for line in source.splitlines() if f'add_command(label="{label}"' in line)
         assert 'state="disabled"' not in line
     assert "normal dark menu text" in _source_text("TLO-FAQ.txt")
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v352.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v352.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v354.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v354.rtf")
     assert "dark text rather than disabled gray text" in requirements
     assert "normal dark menu text instead of disabled gray text" in manual
 
@@ -9294,3 +9294,232 @@ def test_v352_activity_indicator_moves_at_one_tenth_previous_speed():
     assert gui_source.count("progress_bar.start(ACTIVITY_INDICATOR_INTERVAL_MS)") == 3
     assert "progress_bar.start(12)" not in gui_source
 
+
+# --------------------------------------------------------------------------- #
+# v353 - one append-only settings log for every started action
+# --------------------------------------------------------------------------- #
+
+def test_v353_run_settings_log_appends_confirmation_lines(tmp_path):
+    from datetime import datetime, timezone
+    from tlo_run_settings import append_run_settings, run_settings_log_path
+
+    review_lines = [
+        "Operation: Full Inventory",
+        f"Path: {tmp_path}",
+        "Main-window checkbox values:",
+        "  Tag in Place: Yes",
+        "  Artist in Album Tag: Yes",
+        "Original files may be changed: Yes",
+    ]
+    started = datetime(2026, 8, 2, 22, 4, 5, tzinfo=timezone.utc)
+    path_name = append_run_settings(
+        str(tmp_path),
+        "Full Inventory",
+        review_lines,
+        started_at=started,
+    )
+    append_run_settings(
+        str(tmp_path),
+        "Tag Dry Run",
+        ["Operation: Tag", "  Dry run: Yes"],
+        started_at=started,
+    )
+
+    assert path_name == run_settings_log_path(str(tmp_path))
+    assert path_name.endswith(os.path.join("logs", "runSettings.log"))
+    text = Path(path_name).read_text(encoding="utf-8")
+    assert text.startswith("Action: Full Inventory | Date: 2026-08-02 | Time: 10:04:05 PM UTC\n")
+    assert "\n".join(review_lines) in text
+    assert text.count("Action:") == 2
+    assert "Action: Tag Dry Run | Date: 2026-08-02 | Time: 10:04:05 PM UTC" in text
+    assert "Operation: Tag\n  Dry run: Yes" in text
+
+
+def test_v353_review_wrapper_logs_only_after_start(monkeypatch, tmp_path):
+    gui = _load_tlo_ggi_module()
+    calls = []
+    config = SimpleNamespace(TLOHome=str(tmp_path))
+    lines = ["Operation: Tag", "  Dry run: No"]
+
+    monkeypatch.setattr(gui, "_show_operation_review", lambda *args, **kwargs: False)
+    monkeypatch.setattr(gui, "append_run_settings", lambda *args, **kwargs: calls.append((args, kwargs)))
+    assert gui._show_operation_review_and_log(
+        object(), config=config, action="Tag", title="Review Tagging", lines=lines
+    ) is False
+    assert calls == []
+
+    monkeypatch.setattr(gui, "_show_operation_review", lambda *args, **kwargs: True)
+    assert gui._show_operation_review_and_log(
+        object(), config=config, action="Tag", title="Review Tagging", lines=lines
+    ) is True
+    assert calls == [((str(tmp_path), "Tag", lines), {})]
+
+
+def test_v353_all_gui_primary_actions_use_the_shared_settings_log():
+    import inspect
+    gui = _load_tlo_ggi_module()
+
+    inventory = inspect.getsource(gui.App._review_inventory_operation)
+    tag = inspect.getsource(gui.TaggerWindow._start_tagging)
+    add_new = inspect.getsource(gui.AddToInventoryWindow._process_new_shows)
+    add_dups = inspect.getsource(gui.AddToInventoryWindow._process_duplicates)
+
+    for source in (inventory, tag, add_new, add_dups):
+        assert "_show_operation_review_and_log" in source
+    assert 'action="Full Inventory Dry Run" if dry_run else "Full Inventory"' in inventory
+    assert 'action="Tag Dry Run" if dry_run else "Tag"' in tag
+    assert "Add Shows - Process New Shows Dry Run" in add_new
+    assert "Add Shows - Process Potential Duplicate/Upgrades Dry Run" in add_dups
+
+
+def test_v353_command_line_inventory_and_tag_use_the_same_log():
+    inventory_cli = _source_text("tlo-gi.py")
+    tag_cli = _source_text("tlo-tag.py")
+    for source in (inventory_cli, tag_cli):
+        assert "append_run_settings" in source
+        assert "operation_review_lines" in source
+    assert 'append_run_settings(config.TLOHome, "Full Inventory", review_lines)' in inventory_cli
+    assert 'append_run_settings(review_config.TLOHome, "Tag", review_lines)' in tag_cli
+
+
+def test_v353_run_settings_log_is_documented_in_current_artifacts():
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v354.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v354.rtf")
+    faq = _source_text("TLO-FAQ.txt")
+    help_source = _source_text("tlo-ggi.py")
+
+    for text in (requirements, manual, faq, help_source):
+        assert "runSettings.log" in text
+    assert "first line of each entry" in requirements
+    assert "same review-line list" in requirements
+    assert "Clicking Go Back or closing Review Operation does not create a log entry" in manual
+    assert "Command-line Inventory and Tag use the same log" in faq
+
+# --------------------------------------------------------------------------- #
+# v354 - safe sibling aggregation and inventory-time Artist in Album
+# --------------------------------------------------------------------------- #
+
+def test_v354_descriptive_parenthetical_v_number_is_not_a_volume_suffix():
+    from tlo_wrapper_rules import split_volume_part_suffix
+
+    assert split_volume_part_suffix("Dixie Dregs 1979-06-19 My Father's Place (WLIR-FM, rm v.2)") == ("", "")
+    assert split_volume_part_suffix("Latter Days (v.2)") == ("Latter Days", "v.2")
+    assert split_volume_part_suffix("Latter Days v2") == ("Latter Days", "v2")
+
+
+def test_v354_broad_collection_root_is_never_promoted_by_unrelated_volume_like_children(tmp_path):
+    root = tmp_path / "boots"
+    folders = [
+        root / "Bob Dylan - Odds and Ends Vol Four",
+        root / "Bob Dylan - ODDS ENDS VOL THREE",
+        root / "Dixie Dregs 1979-06-19 My Father's Place Roslyn, NY (WLIR-FM, rm v.2)",
+        root / "Al Di Meola 1977-06-12 Orpheum Theatre Boston, MA",
+    ]
+    for index, folder in enumerate(folders, start=1):
+        folder.mkdir(parents=True)
+        (folder / f"{index:02d} Track.flac").write_bytes(b"audio")
+        (folder / "info.txt").write_text("01 Track\n", encoding="utf-8")
+
+    groups = _build_test_groups_from_tree(tmp_path, root)
+
+    assert len(groups) == len(folders)
+    assert all(os.path.normcase(group["main_dir_path"]) != os.path.normcase(str(root)) for group in groups)
+    assert sorted(os.path.normcase(group["main_dir_path"]) for group in groups) == sorted(os.path.normcase(str(folder)) for folder in folders)
+
+
+def test_v354_wrapper_parts_do_not_promote_parent_when_unrelated_music_sibling_exists(tmp_path):
+    root = tmp_path / "boots"
+    cd1 = root / "Big Release CD1"
+    cd2 = root / "Big Release CD2"
+    unrelated = root / "Other Artist 2001-01-01 Venue City ST"
+    for folder in (cd1, cd2, unrelated):
+        folder.mkdir(parents=True)
+        (folder / "01 Track.flac").write_bytes(b"audio")
+
+    groups = _build_test_groups_from_tree(tmp_path, root)
+
+    assert len(groups) == 3
+    assert all(os.path.normcase(group["main_dir_path"]) != os.path.normcase(str(root)) for group in groups)
+
+
+def test_v354_full_inventory_tag_in_place_passes_artist_in_album_to_album_builder(tmp_path, monkeypatch):
+    from tlo_models import ShowMetadata
+
+    show_dir = tmp_path / "raw show"
+    show_dir.mkdir()
+    audio = show_dir / "01 Song.flac"
+    audio.write_bytes(b"audio")
+    group = {
+        "main_dir_path": str(show_dir),
+        "main_dir_name": show_dir.name,
+        "music_dirs": [str(show_dir)],
+        "music_files": [str(audio)],
+        "music_sample_files": [str(audio)],
+        "setlist_files": [],
+        "txt_files": [],
+    }
+    record = ShowMetadata(
+        group_number=1,
+        main_dir_name=show_dir.name,
+        main_dir_path=str(show_dir),
+        setlist_file="",
+        music_file_count=1,
+        artist="Miles Davis",
+        date="1970-04-09",
+        venue="Fillmore West",
+        city="San Francisco",
+        region="CA",
+        location="San Francisco, CA",
+        show_name="Miles Davis 1970-04-09 Fillmore West San Francisco, CA",
+        music_dirs=[str(show_dir)],
+        setlist_files=[],
+    )
+
+    class CaptureLogs:
+        def tag(self, *_args, **_kwargs): pass
+        def conflicts(self, *_args, **_kwargs): pass
+        def groups(self, *_args, **_kwargs): pass
+        def meta(self, *_args, **_kwargs): pass
+
+    config = IPL.Config(
+        debug=False,
+        silent=True,
+        TLOHome=str(tmp_path),
+        current_search_path=str(tmp_path),
+        tag_during_inventory=True,
+        rename_compliantly=False,
+        artist_in_album=True,
+    )
+    config.logs = CaptureLogs()
+    captured = {}
+
+    monkeypatch.setattr(P, "_build_groups_from_search_path", lambda *_args, **_kwargs: [group])
+    monkeypatch.setattr(P, "_extract_metadata_for_group", lambda *_args, **_kwargs: (record, [], []))
+    monkeypatch.setattr(P, "_log_group", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(P, "_log_show_metadata", lambda *_args, **_kwargs: None)
+
+    def fake_tag(config_arg, _group_arg, record_arg, **_kwargs):
+        captured["album"] = T._album_for_record(config_arg, record_arg)
+        return {"groups": 1, "tagged": 1, "skipped": 0, "errors": 0}
+
+    monkeypatch.setattr(T, "tag_group_with_record", fake_tag)
+
+    P.process_groups_for_search_path_v2(config, artist_matcher=None)
+
+    assert captured["album"] == "Miles Davis 1970-04-09 Fillmore West San Francisco, CA"
+
+
+def test_v354_safe_grouping_and_artist_in_album_are_documented_in_current_artifacts():
+    import zipfile
+
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v354.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v354.rtf")
+    faq = _source_text("TLO-FAQ.txt")
+
+    for text in (requirements, manual, faq):
+        assert "broad collection" in text or "broad collection/search" in text
+        assert "Artist in Album" in text
+    assert "(WLIR-FM, rm v.2)" in requirements
+    assert "(WLIR-FM, rm v.2)" in manual
+    with zipfile.ZipFile(SOURCE_DIR / "old-change-logs.zip") as archive:
+        assert "CHANGES_v353.txt" in archive.namelist()

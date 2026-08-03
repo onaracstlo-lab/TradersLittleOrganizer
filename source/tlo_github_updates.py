@@ -6,10 +6,10 @@ avoids overwriting user inventory, setlists, logs, or databases.
 """
 from __future__ import annotations
 
-__version__ = "v352"
-# TLO-GI package version: v352
-__version_summary__ = 'Slows the GUI activity indicator animation to one-tenth of its previous speed.'
-# TLO-GI version summary: Slows the GUI activity indicator animation to one-tenth of its previous speed.
+__version__ = "v354"
+# TLO-GI package version: v354
+__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
+# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
 
 import datetime as _dt
 import hashlib

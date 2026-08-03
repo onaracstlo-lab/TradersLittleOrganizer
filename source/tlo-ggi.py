@@ -1,9 +1,9 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v352"
-# TLO-GI package version: v352
-__version_summary__ = 'Slows the GUI activity indicator animation to one-tenth of its previous speed.'
-# TLO-GI version summary: Slows the GUI activity indicator animation to one-tenth of its previous speed.
+__version__ = "v354"
+# TLO-GI package version: v354
+__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
+# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
 
 import multiprocessing
 
@@ -72,6 +72,7 @@ from tlo_inventory_update import (
     updater_delete_script_path,
 )
 from tlo_dragdrop import create_tk_root, enable_search_path_folder_drop, enable_tagging_path_folder_drop
+from tlo_run_settings import append_run_settings
 from tlo_runtime_control import (
     clear_cancel_request,
     request_cancel,
@@ -162,7 +163,7 @@ HELP_TEXT = (
     "  ☰ > Help          Opens the upper-right hamburger menu, then Help > About or Help > FAQ.\n\n"
     "Run experience:\n"
     "  Inventory remains available so validation problems can be reported when it is clicked. Tag becomes available when its Tagging Path is valid.\n"
-    "  Review Operation shows every main-window checkbox value in the same order for Inventory, Tag, and Add Shows, followed by action-specific details and whether original files may be changed.\n"
+    "  Review Operation shows every main-window checkbox value in the same order for Inventory, Tag, and Add Shows, followed by action-specific details and whether original files may be changed. After Start is selected, the same lines are appended to TLOHome/logs/runSettings.log with the action, date, and time.\n"
     "  Dry run is controlled by the main-window checkbox and inherited by Inventory, Add Shows, and Tag. It is non-destructive. Inventory resolves the resulting show name for each show. When tagging applies, Inventory or Tag also lists each file and the Artist, Album, Track, and Title values that would be written.\n"
     "  Current Operation shows the live stage, current item, counts, warnings, errors, and elapsed time while a run is active.\n"
     "  Completion summaries provide View Issues, Open Output, and Open Logs actions. Issues are grouped by reason and may open the affected path.\n"
@@ -378,6 +379,35 @@ def _show_operation_review(parent, *, title, lines, preview_callback=None):
     dialog.focus_force()
     dialog.wait_window()
     return result["start"]
+
+
+def _show_operation_review_and_log(
+    parent,
+    *,
+    config,
+    action,
+    title,
+    lines,
+    preview_callback=None,
+):
+    """Show Review Operation and append the accepted settings before execution."""
+    if not _show_operation_review(
+        parent,
+        title=title,
+        lines=lines,
+        preview_callback=preview_callback,
+    ):
+        return False
+    try:
+        append_run_settings(config.TLOHome, action, lines)
+    except Exception as exc:
+        messagebox.showerror(
+            "TLO Run Settings Log",
+            f"The operation was not started because its settings could not be written:\n{exc}",
+            parent=parent,
+        )
+        return False
+    return True
 
 
 def _show_completion_dialog(parent, *, title, monitor, issues, tlo_home, primary_output=""):
@@ -924,8 +954,10 @@ class App:
             dry_run=dry_run,
             main_checkbox_source=self._current_main_checkbox_values(),
         )
-        return _show_operation_review(
+        return _show_operation_review_and_log(
             self.root,
+            config=config,
+            action="Full Inventory Dry Run" if dry_run else "Full Inventory",
             title="Review Full Inventory Dry Run" if dry_run else "Review Full Inventory",
             lines=lines,
         )
@@ -2178,8 +2210,10 @@ class TaggerWindow:
             dry_run=dry_run,
             main_checkbox_source=config.main_window_checkbox_values,
         )
-        if not _show_operation_review(
+        if not _show_operation_review_and_log(
             self.window,
+            config=config,
+            action="Tag Dry Run" if dry_run else "Tag",
             title="Review Tag Dry Run" if dry_run else "Review Tagging",
             lines=review_lines,
         ):
@@ -2606,10 +2640,13 @@ class AddToInventoryWindow:
         dry_run = self._current_dry_run()
         if not dry_run and not self._confirm_first_add_shows_run(current_volume):
             return
-        if not _show_operation_review(
+        review_lines = self._new_show_review_lines(current_volume, check_duplicates, dry_run=dry_run)
+        if not _show_operation_review_and_log(
             self.window,
+            config=self.config,
+            action="Add Shows - Process New Shows Dry Run" if dry_run else "Add Shows - Process New Shows",
             title="Review Add Shows Dry Run" if dry_run else "Review Add Shows",
-            lines=self._new_show_review_lines(current_volume, check_duplicates, dry_run=dry_run),
+            lines=review_lines,
         ):
             return
         if dry_run:
@@ -2685,8 +2722,14 @@ class AddToInventoryWindow:
             "Action: identify folders and open a review window for each potential match",
             "Folders are not changed during this scan: Yes",
         ]
-        if not _show_operation_review(
+        if not _show_operation_review_and_log(
             self.window,
+            config=self.config,
+            action=(
+                "Add Shows - Process Potential Duplicate/Upgrades Dry Run"
+                if dry_run
+                else "Add Shows - Process Potential Duplicate/Upgrades"
+            ),
             title="Review Potential Duplicate/Upgrades Dry Run" if dry_run else "Review Potential Duplicate/Upgrades",
             lines=lines,
         ):

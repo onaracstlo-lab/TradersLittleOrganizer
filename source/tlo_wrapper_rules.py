@@ -1,7 +1,7 @@
-__version__ = "v352"
-# TLO-GI package version: v352
-__version_summary__ = 'Slows the GUI activity indicator animation to one-tenth of its previous speed.'
-# TLO-GI version summary: Slows the GUI activity indicator animation to one-tenth of its previous speed.
+__version__ = "v354"
+# TLO-GI package version: v354
+__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
+# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
 import re
 
 NON_MAIN_DIR_PATTERNS = [
@@ -132,12 +132,27 @@ def split_wrapper_part_suffix(dir_name: str) -> tuple[str, str]:
 def split_volume_part_suffix(dir_name: str) -> tuple[str, str]:
     """Return (base, suffix) when dir_name ends with a volume-style suffix.
 
-    Examples:
-      Big Release (Volume 1) -> ("Big Release", "Volume 1")
-      Big Release Vol. 2 -> ("Big Release", "Vol. 2")
-      Early Days (v.1) -> ("Early Days", "v.1")
+    A short ``v.2`` marker is accepted when it is the entire final
+    parenthetical/bracketed item or a normal bare suffix. It is not accepted
+    when it appears inside a larger descriptive parenthetical such as
+    ``(WLIR-FM, rm v.2)``.
     """
-    return _split_suffix_with_regex(dir_name, VOLUME_PART_SUFFIX_RE)
+    name = str(dir_name or "").strip()
+    if not name:
+        return "", ""
+    match = VOLUME_PART_SUFFIX_RE.search(name)
+    if not match:
+        return "", ""
+    matched_text = name[match.start():].strip(" ._-	")
+    marker_match = re.search(r"(?i)(volume|vol\.?|v\.?)", matched_text)
+    marker = marker_match.group(1).casefold().rstrip(".") if marker_match else ""
+    if marker == "v":
+        prefix = name[:match.start()]
+        unmatched_round = prefix.rfind("(") > prefix.rfind(")")
+        unmatched_square = prefix.rfind("[") > prefix.rfind("]")
+        if unmatched_round or unmatched_square:
+            return "", ""
+    return _split_suffix_with_regex(name, VOLUME_PART_SUFFIX_RE)
 
 
 def is_wrapper_part_folder_name(dir_name: str) -> bool:

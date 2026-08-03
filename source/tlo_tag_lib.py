@@ -1,9 +1,9 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v352"
-# TLO-GI package version: v352
-__version_summary__ = 'Slows the GUI activity indicator animation to one-tenth of its previous speed.'
-# TLO-GI version summary: Slows the GUI activity indicator animation to one-tenth of its previous speed.
+__version__ = "v354"
+# TLO-GI package version: v354
+__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
+# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
 
 import os
 import re
@@ -43,6 +43,7 @@ from tlo_phase23_v2 import (
     _extract_metadata_for_group,
     _unique_paths_preserve_order,
     _volume_part_parent_info,
+    _wrapper_part_parent_info,
     _wrapper_release_aggregation_info,
 )
 from tlo_runtime_control import clear_cancel_request, is_cancel_requested, throttle_point, wait_if_paused
@@ -480,7 +481,9 @@ def _group_music_dirs(config: Config, all_logged_paths: List[str], media_by_dir:
     inputs are the same as inventory.
     """
     buckets: Dict[str, dict] = {}
-    volume_parent_info = _volume_part_parent_info([{"music_dir": music_dir} for music_dir in media_by_dir.keys()])
+    grouping_entries = [{"music_dir": music_dir} for music_dir in media_by_dir.keys()]
+    volume_parent_info = _volume_part_parent_info(grouping_entries)
+    wrapper_parent_info = _wrapper_part_parent_info(grouping_entries)
     if getattr(config, "compliant", False):
         for music_dir, music_files in sorted(media_by_dir.items(), key=lambda item: item[0].lower()):
             key = f"single::{os.path.normcase(os.path.normpath(music_dir))}"
@@ -497,7 +500,7 @@ def _group_music_dirs(config: Config, all_logged_paths: List[str], media_by_dir:
         for music_dir, music_files in sorted(media_by_dir.items(), key=lambda item: item[0].lower()):
             throttle_point(config)
             music_dir = os.path.normpath(music_dir)
-            info = _wrapper_release_aggregation_info(music_dir, volume_parent_info)
+            info = _wrapper_release_aggregation_info(music_dir, volume_parent_info, wrapper_parent_info)
             if info:
                 key = info["aggregation_key"]
                 bucket = buckets.setdefault(key, {

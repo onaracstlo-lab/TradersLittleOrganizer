@@ -1,9 +1,9 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v352"
-# TLO-GI package version: v352
-__version_summary__ = 'Slows the GUI activity indicator animation to one-tenth of its previous speed.'
-# TLO-GI version summary: Slows the GUI activity indicator animation to one-tenth of its previous speed.
+__version__ = "v354"
+# TLO-GI package version: v354
+__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
+# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
 
 import json
 import os
@@ -500,30 +500,32 @@ def _volume_part_parent_info(music_dir_entries: Sequence[dict]) -> Dict[str, dic
     """Return parent-level aggregation info for collection-style volume folders.
 
     Volume suffixes such as ``(Vol 1)`` and ``(Volume 2)`` are only aggregated
-    when sibling music directories under the same parent have different stripped
-    base names.  That represents a collection parent such as
-    ``Bob Dylan - Collection/Early Days (Vol 1)`` plus
-    ``Bob Dylan - Collection/Latter Days (Vol 2)``.  Same-base siblings such as
-    ``Show Name (Volume 1)`` plus ``Show Name (Volume 2)`` remain separate
-    inventory entries so each row points to its own folder.
+    when every direct music-bearing child under the parent is a volume part and
+    the stripped base names differ. This prevents a broad collection/search
+    root from being promoted into one logical show merely because two unrelated
+    descendants happen to end in volume-like text.
     """
-    rows_by_parent: Dict[str, List[Tuple[str, str, str]]] = {}
+    all_rows_by_parent: Dict[str, List[Tuple[str, str]]] = {}
+    volume_rows_by_parent: Dict[str, List[Tuple[str, str, str]]] = {}
     for entry in music_dir_entries or []:
         music_dir = _entry_music_dir(entry) if isinstance(entry, dict) else os.path.normpath(str(entry or ""))
         if not music_dir:
             continue
-        folder_name = os.path.basename(os.path.normpath(music_dir))
-        parent_dir = os.path.dirname(os.path.normpath(music_dir))
+        normalized = os.path.normpath(music_dir)
+        folder_name = os.path.basename(normalized)
+        parent_dir = os.path.dirname(normalized)
         if not parent_dir:
             continue
+        parent_key = os.path.normcase(parent_dir)
+        all_rows_by_parent.setdefault(parent_key, []).append((parent_dir, folder_name))
         base_name, suffix = split_volume_part_suffix(folder_name)
-        if not suffix:
-            continue
-        rows_by_parent.setdefault(os.path.normcase(parent_dir), []).append((parent_dir, base_name, suffix))
+        if suffix:
+            volume_rows_by_parent.setdefault(parent_key, []).append((parent_dir, base_name, suffix))
 
     info: Dict[str, dict] = {}
-    for parent_key, rows in rows_by_parent.items():
-        if len(rows) < 2:
+    for parent_key, rows in volume_rows_by_parent.items():
+        all_rows = all_rows_by_parent.get(parent_key, [])
+        if len(rows) < 2 or len(rows) != len(all_rows):
             continue
         parent_dir = rows[0][0]
         bases = [compact_ws(base) for _parent, base, _suffix in rows if compact_ws(base)]
@@ -531,8 +533,6 @@ def _volume_part_parent_info(music_dir_entries: Sequence[dict]) -> Dict[str, dic
         # Same-base siblings are separate shows/releases: for example
         #   Bill Dickens 1987-03-14 Great Venue NY NY (Volume 1)
         #   Bill Dickens 1987-03-14 Great Venue NY NY (Volume 2)
-        # They should produce two inventory rows with the same stripped show base
-        # and size-aware setlist alternates, not one aggregate parent row.
         if len(distinct_bases) <= 1:
             continue
         aggregate_name = os.path.basename(parent_dir)
@@ -545,7 +545,59 @@ def _volume_part_parent_info(music_dir_entries: Sequence[dict]) -> Dict[str, dic
     return info
 
 
-def _wrapper_release_aggregation_info(music_dir: str, volume_parent_info: Optional[Dict[str, dict]] = None) -> Optional[Dict[str, str]]:
+def _wrapper_part_parent_info(music_dir_entries: Sequence[dict]) -> Dict[Tuple[str, str], dict]:
+    """Return safe parent aggregation info for CD/disc/part sibling folders.
+
+    A parent may be used as a logical show root only when all of its direct
+    music-bearing children belong to one wrapper relationship. Named suffix
+    releases (``Release CD1``/``Release CD2``) require at least two parts.
+    Exact wrapper folders (``CD1`` or ``Disc 1``) may be the only music-bearing
+    child. This prevents overlapping groups and protects broad collection roots.
+    """
+    all_rows_by_parent: Dict[str, List[Tuple[str, str]]] = {}
+    wrapper_rows: Dict[str, Dict[str, List[Tuple[str, str, str]]]] = {}
+    for entry in music_dir_entries or []:
+        music_dir = _entry_music_dir(entry) if isinstance(entry, dict) else os.path.normpath(str(entry or ""))
+        if not music_dir:
+            continue
+        normalized = os.path.normpath(music_dir)
+        folder_name = os.path.basename(normalized)
+        parent_dir = os.path.dirname(normalized)
+        if not parent_dir:
+            continue
+        parent_key = os.path.normcase(parent_dir)
+        all_rows_by_parent.setdefault(parent_key, []).append((parent_dir, folder_name))
+        base_name, suffix = split_wrapper_part_suffix(folder_name)
+        if not suffix:
+            continue
+        relation_key = compact_ws(base_name).casefold() if compact_ws(base_name) else "__exact_wrapper_part__"
+        wrapper_rows.setdefault(parent_key, {}).setdefault(relation_key, []).append((parent_dir, base_name, suffix))
+
+    info: Dict[Tuple[str, str], dict] = {}
+    for parent_key, relations in wrapper_rows.items():
+        all_rows = all_rows_by_parent.get(parent_key, [])
+        if len(relations) != 1:
+            continue
+        relation_key, rows = next(iter(relations.items()))
+        if len(rows) != len(all_rows):
+            continue
+        if relation_key != "__exact_wrapper_part__" and len(rows) < 2:
+            continue
+        parent_dir = rows[0][0]
+        base_name = compact_ws(rows[0][1])
+        info[(parent_key, relation_key)] = {
+            "parent_dir": parent_dir,
+            "aggregate_album_name": base_name,
+            "aggregate_release_base": base_name,
+        }
+    return info
+
+
+def _wrapper_release_aggregation_info(
+    music_dir: str,
+    volume_parent_info: Optional[Dict[str, dict]] = None,
+    wrapper_parent_info: Optional[Dict[Tuple[str, str], dict]] = None,
+) -> Optional[Dict[str, str]]:
     """Return aggregation metadata for non-compliant wrapper/part folders.
 
     Exact wrapper names such as CD1, Disc 1, or flac aggregate to their parent
@@ -578,8 +630,12 @@ def _wrapper_release_aggregation_info(music_dir: str, volume_parent_info: Option
 
     base_name, suffix = split_wrapper_part_suffix(folder_name)
     if suffix:
+        relation_key = compact_ws(base_name).casefold() if compact_ws(base_name) else "__exact_wrapper_part__"
+        parent_info = (wrapper_parent_info or {}).get((parent_key, relation_key))
+        if not parent_info:
+            return None
         if base_name:
-            key = f"suffix::{os.path.normcase(parent_dir)}::{base_name.casefold()}"
+            key = f"suffix::{parent_key}::{relation_key}"
             return {
                 "aggregation_key": key,
                 "main_dir_path": parent_dir,
@@ -588,7 +644,7 @@ def _wrapper_release_aggregation_info(music_dir: str, volume_parent_info: Option
                 "aggregate_release_base": base_name,
                 "aggregation_reason": f"wrapper_suffix:{suffix}",
             }
-        key = f"exact::{os.path.normcase(parent_dir)}"
+        key = f"exact::{parent_key}"
         return {
             "aggregation_key": key,
             "main_dir_path": parent_dir,
@@ -666,6 +722,7 @@ def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
     # Compliant mode remains one group per music directory.
     buckets: Dict[str, dict] = {}
     volume_parent_info = _volume_part_parent_info(music_dir_entries)
+    wrapper_parent_info = _wrapper_part_parent_info(music_dir_entries)
     if getattr(config, "compliant", False):
         for entry in music_dir_entries:
             music_dir = _entry_music_dir(entry)
@@ -677,7 +734,7 @@ def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
         for entry in sorted(music_dir_entries, key=lambda item: _entry_music_dir(item).lower()):
             throttle_point(config)
             music_dir = _entry_music_dir(entry)
-            info = _wrapper_release_aggregation_info(music_dir, volume_parent_info)
+            info = _wrapper_release_aggregation_info(music_dir, volume_parent_info, wrapper_parent_info)
             if info:
                 key = info["aggregation_key"]
                 bucket = buckets.setdefault(key, _new_group_bucket(

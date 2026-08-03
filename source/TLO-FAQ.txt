@@ -19,6 +19,12 @@ A: Yes. Rename Compliantly, Tag in Place, SHN-to-FLAC conversion, and Tag Copy/D
 Q: What happens if I inventory the same drive again?
 A: For a named volume, TLO deterministically replaces, prunes, or appends the affected scope according to whether the new path is the same as, a parent of, a child of, or separate from the stored paths. It does not ask a Skip/Re-inventory question. Blank-volume runs append to the shared blank-volume logs and can create duplicate inventory entries if the same content is scanned again.
 
+Q: Can Rename Compliantly rename my entire collection or search root?
+A: No. TLO may aggregate true CD, disc, part, or volume siblings only when every direct music-bearing child under the parent belongs to that one release relationship. If any direct music-bearing sibling is unrelated, the folders remain separate and the broad collection/search parent is never renamed as one show. Text such as v.2 inside a larger descriptive parenthetical does not count as a volume suffix.
+
+Q: Does Artist in Album Tag apply during Full Inventory?
+A: Yes. When checked, Full Inventory with Tag in Place, Tag Copy, or Tag Copy/Delete Original writes Album as Artist followed by the resolved date, venue, location, and preserved parentheticals. Add Shows tagging and standalone Tag use the same rule.
+
 Q: Can I see what TLO plans to do before it changes anything?
 A: Yes. Full Inventory, Add Shows, and Tag show a Review Operation screen before starting. Every Review Operation dialog reports all main-window checkbox values in the same order. Tag has no duplicated option checkboxes, and Add Shows retains only its action-specific Check for Duplicates checkbox. Both child windows read the current main-window values when an action starts. Dry run is controlled only by the checkbox on the main Inventory window; the Tag and Add Shows windows inherit that current value and do not have their own Dry run checkboxes. With Dry run selected, click Inventory, Tag, Process New Shows, or Process Potential Duplicate/Upgrades. Dry run resolves and displays resulting show names and planned actions. When tagging applies, it lists each applicable audio file with the Artist, Album, Track, and Title values that would be written, plus the title source, planned SHN-to-FLAC target, potential duplicate matches, or reason a file would be skipped. Dry run does not write tags, convert, rename, copy, move, delete, create inventory output, or change TLO logs.
 
@@ -31,6 +37,9 @@ A: No. They are mutually exclusive. In the main Inventory window, checking eithe
 Q: When does TLO ask for a Tag Copy destination?
 A: Checking Tag Copy or Tag Copy/Delete Original only selects the mode. TLO asks for the destination after Inventory is started, including when Dry run is selected. Both dialogs validate the full path and available storage. The copy/delete dialog additionally warns that verified originals will be removed.
 
+Q: Where are the settings for each run recorded?
+A: After you choose Start in Review Operation, TLO appends the action, local date/time, and the same reviewed settings lines to TLOHome/logs/runSettings.log. The file is shared by Full Inventory, Tag, Process New Shows, and Process Potential Duplicate/Upgrades, including Dry runs. Command-line Inventory and Tag use the same log. Choosing Go Back or closing Review Operation does not create an entry.
+
 Q: Where do I find problems after a run?
 A: The completion summary includes View Issues and Open Logs. View Issues groups recognizable problems by reason, such as unidentified shows, missing setlists, track-title mismatches, unreadable audio, copy or verification problems, online lookup problems, and other tagging or file errors. Select an issue and use Open Path when TLO has a usable path for it.
 
@@ -38,4 +47,4 @@ Q: How can I donate to TLO?
 A: Open the upper-right hamburger menu in the Inventory window and choose Donate. Donate > Venmo shows @James-Scarano-3. Donate > Check shows James Scarano, 49 Majestic Ave., Nashua, NH 03063. The donation details use normal dark menu text rather than disabled gray text.
 
 Q: Why does the Current Operation activity indicator move slowly?
-A: Build 352 intentionally moves the indeterminate activity indicator at one-tenth of its former speed in Inventory, Tag, and Add Shows. This is only a visual animation change; it does not slow inventory, tagging, Add Shows, elapsed-time updates, or worker processing.
+A: The indeterminate activity indicator moves at one-tenth of its former speed in Inventory, Tag, and Add Shows. This is only a visual animation change; it does not slow inventory, tagging, Add Shows, elapsed-time updates, or worker processing.
