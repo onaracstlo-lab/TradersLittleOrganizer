@@ -6,10 +6,10 @@ avoids overwriting user inventory, setlists, logs, or databases.
 """
 from __future__ import annotations
 
-__version__ = "v354"
-# TLO-GI package version: v354
-__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
-# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
+__version__ = "v359"
+# TLO-GI package version: v359
+__version_summary__ = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
+# TLO-GI version summary: Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.
 
 import datetime as _dt
 import hashlib
@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION
+from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION, PUBLIC_VERSION
 
 DEFAULT_REPO_OWNER = os.environ.get("TLO_GITHUB_OWNER", "onaracstlo-lab")
 DEFAULT_REPO_NAME = os.environ.get("TLO_GITHUB_REPO", "TradersLittleOrganizer")
@@ -363,7 +363,7 @@ def check_for_updates(
             return UpdateCheckResult(
                 status="up_to_date",
                 title="TLO is up to date",
-                message=f"Installed: {DISPLAY_VERSION}\nLatest: v1.2 Build {latest_build}",
+                message=f"Installed: {DISPLAY_VERSION}\nLatest: v{PUBLIC_VERSION} Build {latest_build}",
                 latest_build=latest_build,
             )
 
@@ -375,7 +375,7 @@ def check_for_updates(
                 title="TLO update found, but no ZIP matched this platform",
                 message=(
                     f"Installed: {DISPLAY_VERSION}\n"
-                    f"Latest: v1.2 Build {latest_build}\n\n"
+                    f"Latest: v{PUBLIC_VERSION} Build {latest_build}\n\n"
                     f"No update ZIP for {platform_key} and no complete ZIP were found in the latest GitHub Release."
                 ),
                 latest_build=latest_build,
@@ -394,11 +394,11 @@ def check_for_updates(
         verification_note = "" if _expected_digest(asset) else "\n\nGitHub did not provide a SHA-256 digest for this asset; TLO verified the downloaded file size only."
         if downloaded:
             title = "TLO update downloaded"
-            lead = f"TLO v1.2 Build {latest_build} {kind_text} was downloaded to:"
+            lead = f"TLO v{PUBLIC_VERSION} Build {latest_build} {kind_text} was downloaded to:"
             status = "downloaded"
         else:
             title = "TLO update already downloaded"
-            lead = f"TLO v1.2 Build {latest_build} {kind_text} is already available at:"
+            lead = f"TLO v{PUBLIC_VERSION} Build {latest_build} {kind_text} is already available at:"
             status = "already_downloaded"
         return UpdateCheckResult(
             status=status,

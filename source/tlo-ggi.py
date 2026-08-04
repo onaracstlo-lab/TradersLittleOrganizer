@@ -1,9 +1,9 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v354"
-# TLO-GI package version: v354
-__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
-# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
+__version__ = "v359"
+# TLO-GI package version: v359
+__version_summary__ = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
+# TLO-GI version summary: Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.
 
 import multiprocessing
 
@@ -41,7 +41,7 @@ from logging_lib import delete_logs_for_tokens
 from tlo_bootlist_volume_policy import normalize_volume_action, volume_display_name
 from tlo_main_lib import run_inventory
 from tlo_tag_lib import TAGGER_TITLE, default_tagging_path, resolve_tlo_home, run_tagger
-from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION, versioned_title
+from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION, PUBLIC_VERSION, versioned_title
 from tlo_github_updates import (
     check_for_updates,
     is_auto_update_enabled,
@@ -57,6 +57,14 @@ TAGGER_PATH_ENTRY_WIDTH = 41
 TAGGER_OUTPUT_TEXT_WIDTH = 55
 TAGGER_MODE_WRAP_PIXELS = 520
 TAGGER_DISPLAY_VERSION = versioned_title("TLO Tagger GUI")
+
+
+def _start_activity_indicator(progress_bar) -> bool:
+    """Start one indeterminate progress bar at the shared animation interval."""
+    if progress_bar is None:
+        return False
+    progress_bar.start(ACTIVITY_INDICATOR_INTERVAL_MS)
+    return True
 
 from tlo_inventory_update import (
     UPDATER_DISPLAY_VERSION,
@@ -1084,7 +1092,7 @@ class App:
 
         about_text = (
             "Traders Little Organizer™ - TLO\n"
-            f"V1.2Build{BUNDLE_BUILD}\n"
+            f"V{PUBLIC_VERSION}Build{BUNDLE_BUILD}\n"
             "TLO is developed by Jay Scarano\n"
             "using ChatGPT and Anthropic/Claude\n"
             "Contact me at: onaracs.tlo of gmail"
@@ -1595,17 +1603,18 @@ class App:
 
         if delete_original:
             message = (
-                "WARNING: Tag Copy/Delete Original transfers each identified show to the selected destination, "
-                "verifies the transfer, and removes the original material.\n\n"
-                "Choose an existing destination parent folder. An exact source-size capacity check will run "
-                "before Inventory makes any changes."
+                "WARNING: Tag Copy/Delete Original transfers each identified show to the selected destination "
+                "and removes the original material.\n\n"
+                "On the same partition, TLO renames/moves the folder without totaling or comparing file sizes. "
+                "On a different partition, TLO checks required capacity, copies the folder, and verifies every "
+                "file by size before deleting the original."
             )
         else:
             message = (
                 "Tag Copy copies each identified show to the selected destination and tags the copy. "
                 "The original material is retained.\n\n"
-                "Choose an existing destination parent folder. An exact source-size capacity check will run "
-                "before Inventory makes any changes."
+                "TLO checks required capacity before changes begin and verifies every copied file by size, "
+                "including when the source and destination are on the same partition."
             )
 
         ttk.Label(
@@ -1996,8 +2005,7 @@ class App:
         self._update_main_action_states()
         self._update_progress_display()
         try:
-            if self.progress_bar is not None:
-                self.progress_bar.start(ACTIVITY_INDICATOR_INTERVAL_MS)
+            _start_activity_indicator(self.progress_bar)
         except tk.TclError:
             pass
         self.queue.put("Inventory request accepted; preparing inventory roots.\n")
@@ -2231,7 +2239,7 @@ class TaggerWindow:
         self._set_processing_controls(False)
         self.parent_app._update_main_action_states()
         self._update_progress_display()
-        self.progress_bar.start(ACTIVITY_INDICATOR_INTERVAL_MS)
+        _start_activity_indicator(self.progress_bar)
 
         def worker():
             totals = None
@@ -2534,7 +2542,7 @@ class AddToInventoryWindow:
         self.status_var.set(f"{task_name}: running")
         self.elapsed_var.set("Elapsed: 0:00")
         try:
-            self.progress_bar.start(ACTIVITY_INDICATOR_INTERVAL_MS)
+            _start_activity_indicator(self.progress_bar)
         except tk.TclError:
             pass
         self._set_processing_controls(False)

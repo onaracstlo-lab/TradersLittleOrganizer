@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-__version__ = "v354"
-# TLO-GI package version: v354
-__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
-# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
+__version__ = "v359"
+# TLO-GI package version: v359
+__version_summary__ = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
+# TLO-GI version summary: Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.
 
 
 import copy
@@ -345,11 +345,11 @@ def _preview_actions(config, *, copy_mode: str = "", tagger: bool = False, shn_c
     elif bool(getattr(config, "tag_copy_during_inventory", False)):
         actions.append("copy folder and tag copy")
     elif str(getattr(config, "tag_copy_and_delete_path", "") or "").strip():
-        actions.append("copy/move folder, verify, then remove original")
+        actions.append("move folder on the same partition; otherwise copy, verify file sizes, then remove original")
     elif copy_mode == "copy":
         actions.append("copy folder")
     elif copy_mode == "copy-delete":
-        actions.append("copy/move folder, verify, then remove original")
+        actions.append("move folder on the same partition; otherwise copy, verify file sizes, then remove original")
     else:
         actions.append("inventory only")
 
@@ -980,7 +980,7 @@ def collect_current_log_issues(tlo_home: str, tokens: Iterable[str], *, tagger: 
         return []
     paths: list[str] = []
     if tagger:
-        paths.extend([os.path.join(logs_dir, "tageT.txt"), os.path.join(logs_dir, "tagT.log")])
+        paths.extend([os.path.join(logs_dir, "tagsT.txt"), os.path.join(logs_dir, "tageT.txt")])
     for token in tokens or []:
         paths.append(os.path.join(logs_dir, f"tage{token}.txt"))
     issues: list[RunIssue] = []

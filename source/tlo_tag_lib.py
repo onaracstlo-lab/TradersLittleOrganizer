@@ -1,9 +1,9 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v354"
-# TLO-GI package version: v354
-__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
-# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
+__version__ = "v359"
+# TLO-GI package version: v359
+__version_summary__ = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
+# TLO-GI version summary: Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.
 
 import os
 import re
@@ -2363,7 +2363,7 @@ def _verify_copy_by_file_size(source_root: str, destination_root: str) -> None:
             details.append(f"extra={extra}")
         if mismatched:
             details.append(f"size_mismatch={mismatched}")
-        raise TaggerError("Tag Copy and Delete verification failed" + (": " + "; ".join(details) if details else ""))
+        raise TaggerError("Copy verification failed" + (": " + "; ".join(details) if details else ""))
 
 
 def prepare_inventory_copy_delete_target(
@@ -2399,7 +2399,9 @@ def prepare_inventory_copy_delete_target(
 
     if _paths_on_same_filesystem(source_root, destination_parent):
         try:
-            shutil.move(source_root, destination_root)
+            # The source and destination are on the same filesystem, so this is
+            # a directory rename/move. Do not total or compare file sizes.
+            os.rename(source_root, destination_root)
             _emit(emit, f"TAG_COPY_DELETE_MOVE: {source_root} -> {destination_root}")
         except Exception as exc:
             raise TaggerError(f"Tag Copy and Delete move failed: {exc}") from exc
@@ -2443,8 +2445,14 @@ def prepare_inventory_tagging_target(
         destination_root = _unique_destination_path(destination_parent, target_name)
         try:
             shutil.copytree(source_root, destination_root, symlinks=False)
+            # Tag Copy always retains the source, even on the same partition, so
+            # it always creates a real copy and must verify every copied file by
+            # relative path and size before tagging continues.
+            _verify_copy_by_file_size(source_root, destination_root)
             _emit(emit, f"TAG_COPY: {source_root} -> {destination_root}")
         except Exception as exc:
+            if isinstance(exc, TaggerError):
+                raise
             raise TaggerError(f"Tag Copy failed: {exc}") from exc
         return (
             _rewrite_group_paths(group, source_root, destination_root, mutate=False),

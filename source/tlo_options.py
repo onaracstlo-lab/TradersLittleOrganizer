@@ -1,7 +1,7 @@
-__version__ = "v354"
-# TLO-GI package version: v354
-__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
-# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
+__version__ = "v359"
+# TLO-GI package version: v359
+__version_summary__ = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
+# TLO-GI version summary: Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.
 
 import argparse
 from dataclasses import dataclass
@@ -108,7 +108,7 @@ OPTIONS = [
     Option(
         "tag_copy_during_inventory", "--tag-copy-during-inventory", "flag",
         gui="checkbox", gui_label="Tag Copy", gui_row=1, gui_col=2,
-        help="During Full Inventory, copy each identified music folder to --tag-copy-destination and tag the copy instead of the original.",
+        help="During Full Inventory, copy each identified music folder to --tag-copy-destination, verify the copy by file size, and tag the copy instead of the original.",
     ),
     Option(
         "rename_compliantly", "--rename-compliantly", "flag",
@@ -123,7 +123,7 @@ OPTIONS = [
     Option(
         "artist_in_album", "--no-artist-in-album", "store_false",
         default=True, gui="checkbox", gui_label="Artist in Album Tag", gui_row=0, gui_col=3,
-        help="Include the artist name at the beginning of Album tags by default. Use this flag to preserve the prior Album tag format without the artist prefix.",
+        help="Omit the artist-name prefix from Album tags. By default, Album tags begin with the artist name.",
     ),
     Option(
         "tag_copy_destination", "--tag-copy-destination", "text",
@@ -133,12 +133,12 @@ OPTIONS = [
     Option(
         "tag_copy_and_delete_enabled", "--tag-copy-delete-original", "flag",
         gui="checkbox", gui_label="Tag Copy/Delete Original", gui_row=2, gui_col=2,
-        help="In the GUI, ask for the destination after Inventory is started, tag the transferred folder, verify it, and remove the original material.",
+        help="In the GUI, ask for the destination after Inventory is started. Same-partition transfers are directory moves with no size comparison; cross-partition transfers are copied and verified by file size before the original is removed.",
     ),
     Option(
         "tag_copy_and_delete_path", "--tag-copy-and-delete", "text",
         default="", metavar="DIR",
-        help="Inventory-time destination parent directory. After show metadata is captured from the original music folder, copy or move the folder there, verify cross-partition copies by file size, delete the original, and inventory the destination copy.",
+        help="Inventory-time destination parent directory. Same-partition transfers use a directory move without size checks. Cross-partition transfers copy and verify every file by size before deleting the original and inventorying the destination.",
     ),
     Option(
         "etree_lookup", "--etree-lookup", "flag",

@@ -1,10 +1,11 @@
 """Central release-version constants for the TLO Inventory bundle."""
 
-VERSION = "v354"
+VERSION = "v359"
 __version__ = VERSION
-BUNDLE_BUILD = 354
-DISPLAY_VERSION = f"v1.2 Build {BUNDLE_BUILD}"
-VERSION_SUMMARY = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
+PUBLIC_VERSION = "1.3"
+BUNDLE_BUILD = 359
+DISPLAY_VERSION = f"v{PUBLIC_VERSION} Build {BUNDLE_BUILD}"
+VERSION_SUMMARY = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
 def versioned_title(base_title: str) -> str:
     """Return a GUI title containing the public version/build string."""
     base = str(base_title or "").strip()

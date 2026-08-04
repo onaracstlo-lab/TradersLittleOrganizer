@@ -1,7 +1,7 @@
-__version__ = "v354"
-# TLO-GI package version: v354
-__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
-# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
+__version__ = "v359"
+# TLO-GI package version: v359
+__version_summary__ = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
+# TLO-GI version summary: Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.
 import argparse
 import sys
 import os
@@ -63,6 +63,7 @@ class Config:
     setlistfm_lookup: bool = False
     setlistfm_min_interval_seconds: float = 0.600
     setlistfm_max_calls: int = 1400
+    setlistfm_lock_timeout_seconds: float = 20.0
     setlistfm_run_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     active_search_paths: list[str] = field(default_factory=list)
     inventory_complete: bool = False
@@ -162,7 +163,7 @@ def _validate_tag_copy_values(values: dict, parser=None) -> None:
 
 def build_inventory_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Drive/partition reporting tool",
+        description="Inventory, identify, organize, and optionally tag live-music show folders.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--debug", nargs="?", const=True, type=parse_bool, default=False, metavar="BOOL", help="Enable debug output. With no value, enables debug output; also accepts true/false, yes/no, y/n, 1/0. This is the only toggle that accepts an optional BOOL for backwards compatibility.")

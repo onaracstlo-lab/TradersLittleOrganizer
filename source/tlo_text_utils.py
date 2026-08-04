@@ -1,9 +1,9 @@
 """Text cleanup utilities for safe titles, ASCII normalization, comparison keys, and full-file reads."""
 
-__version__ = "v354"
-# TLO-GI package version: v354
-__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
-# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
+__version__ = "v359"
+# TLO-GI package version: v359
+__version_summary__ = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
+# TLO-GI version summary: Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.
 import os
 import re
 import unicodedata
@@ -12,6 +12,11 @@ from html import unescape
 
 from tlo_constants import US_STATE_CODES
 
+
+
+MAX_TEXT_SAMPLE_BYTES = 1 * 1024 * 1024
+MAX_TEXT_FULL_BYTES = 16 * 1024 * 1024
+MAX_DOCX_XML_BYTES = 16 * 1024 * 1024
 
 SINGLE_QUOTE_TRANSLATION = str.maketrans({
     "‘": "'",
@@ -144,25 +149,48 @@ def _normalize_text_preserve_lines(text: str) -> str:
     return "\n".join(kept)
 
 
-def _read_text_content(path_name: str) -> str:
+def _read_text_content(
+    path_name: str,
+    *,
+    max_bytes: int = MAX_TEXT_FULL_BYTES,
+    allow_truncate: bool = False,
+) -> str:
     if not path_name or not os.path.isfile(path_name):
         return ""
 
     _, ext = os.path.splitext(path_name)
     ext = ext.lower()
+    byte_limit = max(1, int(max_bytes or 1))
 
     try:
         if ext == ".docx":
             with zipfile.ZipFile(path_name, "r") as zf:
-                xml = zf.read("word/document.xml").decode("utf-8", errors="ignore")
+                info = zf.getinfo("word/document.xml")
+                if int(info.file_size or 0) > MAX_DOCX_XML_BYTES:
+                    return ""
+                xml_bytes = zf.read(info)
+                if len(xml_bytes) > MAX_DOCX_XML_BYTES:
+                    return ""
+                xml = xml_bytes.decode("utf-8", errors="ignore")
             xml = re.sub(r"<w:tab[^>]*/>", "\t", xml)
             xml = re.sub(r"<w:br[^>]*/>", "\n", xml)
             xml = re.sub(r"</w:p>", "\n", xml)
             xml = re.sub(r"<[^>]+>", "", xml)
             return _normalize_text_preserve_lines(unescape(xml).replace("\t", " "))
 
+        try:
+            file_size = os.path.getsize(path_name)
+        except OSError:
+            file_size = 0
+        if file_size > byte_limit and not allow_truncate:
+            return ""
+
         with open(path_name, "rb") as infile:
-            raw = infile.read()
+            raw = infile.read(byte_limit + 1)
+        if len(raw) > byte_limit:
+            if not allow_truncate:
+                return ""
+            raw = raw[:byte_limit]
 
         for encoding in ("utf-8", "utf-8-sig", "cp1252", "latin-1"):
             try:
@@ -174,20 +202,28 @@ def _read_text_content(path_name: str) -> str:
                     text = re.sub(r"[{}]", "", text)
                     return _normalize_text_preserve_lines(text)
                 return text
-            except Exception:
+            except (LookupError, UnicodeError):
                 continue
     except OSError:
         return ""
-    except (KeyError, zipfile.BadZipFile):
+    except (KeyError, zipfile.BadZipFile, RuntimeError):
         return ""
 
     return ""
 
 
 def read_text_file_sample(path_name: str, max_chars: int = 20000) -> str:
-    text = _read_text_content(path_name)
+    text = _read_text_content(
+        path_name,
+        max_bytes=MAX_TEXT_SAMPLE_BYTES,
+        allow_truncate=True,
+    )
     return text[:max_chars] if text else ""
 
 
 def read_text_file_full(path_name: str) -> str:
-    return _read_text_content(path_name)
+    return _read_text_content(
+        path_name,
+        max_bytes=MAX_TEXT_FULL_BYTES,
+        allow_truncate=False,
+    )

@@ -1,9 +1,9 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v354"
-# TLO-GI package version: v354
-__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
-# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
+__version__ = "v359"
+# TLO-GI package version: v359
+__version_summary__ = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
+# TLO-GI version summary: Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.
 
 import json
 import os
@@ -2351,6 +2351,8 @@ def _apply_setlistfm_lookup_to_record(config, record: ShowMetadata, evidence: Di
             min_interval_seconds=float(getattr(config, "setlistfm_min_interval_seconds", 0.600) or 0.600),
             max_calls=int(getattr(config, "setlistfm_max_calls", 1400) or 1400),
             run_id=str(getattr(config, "setlistfm_run_id", "") or ""),
+            tlo_home=str(getattr(config, "TLOHome", "") or ""),
+            lock_timeout_seconds=float(getattr(config, "setlistfm_lock_timeout_seconds", 20.0) or 20.0),
         )
     except Exception as exc:
         observations.append(f"setlist.fm lookup failed: {exc}")

@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 import tempfile
 import time
 import urllib.error
@@ -24,13 +25,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-__version__ = "v354"
-# TLO-GI package version: v354
-__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
+__version__ = "v359"
+# TLO-GI package version: v359
+__version_summary__ = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 MIN_REQUEST_INTERVAL_SECONDS = 0.600
 MAX_REQUESTS_PER_RUN = 1400
+RATE_LIMIT_LOCK_TIMEOUT_SECONDS = 20.0
+RATE_LIMIT_STALE_AFTER_SECONDS = 10.0
+RATE_LIMIT_STATE_SUBDIR = os.path.join("logs", "setlistfm-state")
 USER_AGENT = "tlo-setlistfm-venue-lookup/1.1"
 
 
@@ -111,14 +115,47 @@ def get_api_key() -> str:
     return api_key
 
 
-def _rate_limit_state_file() -> str:
-    root = os.path.join(tempfile.gettempdir(), "tlo_inventory_setlistfm_rate_limit")
-    os.makedirs(root, exist_ok=True)
-    return os.path.join(root, "state.json")
+def _resolved_tlo_home(tlo_home: str = "") -> str:
+    raw = str(tlo_home or os.environ.get("TLOHome", "") or "").strip()
+    if not raw:
+        raise SetlistFMError("TLOHome is required for setlist.fm rate-limit state.")
+    resolved = os.path.abspath(raw)
+    if not os.path.isdir(resolved):
+        raise SetlistFMError(f"TLOHome does not exist for setlist.fm rate-limit state: {resolved}")
+    return resolved
 
 
-def _rate_limit_lock_dir() -> str:
-    return _rate_limit_state_file() + ".lock"
+def _ensure_private_state_dir(tlo_home: str = "") -> str:
+    home = _resolved_tlo_home(tlo_home)
+    logs_dir = os.path.join(home, "logs")
+    if os.path.lexists(logs_dir) and os.path.islink(logs_dir):
+        raise SetlistFMError(f"Refusing symlinked TLO logs directory: {logs_dir}")
+    os.makedirs(logs_dir, exist_ok=True)
+    root = os.path.join(home, RATE_LIMIT_STATE_SUBDIR)
+    if os.path.lexists(root) and os.path.islink(root):
+        raise SetlistFMError(f"Refusing symlinked setlist.fm state directory: {root}")
+    os.makedirs(root, mode=0o700, exist_ok=True)
+    try:
+        mode = os.lstat(root).st_mode
+    except OSError as exc:
+        raise SetlistFMError(f"Cannot inspect setlist.fm state directory: {root}: {exc}") from exc
+    if not stat.S_ISDIR(mode):
+        raise SetlistFMError(f"setlist.fm state path is not a directory: {root}")
+    try:
+        os.chmod(root, 0o700)
+    except OSError:
+        # Windows does not implement POSIX directory modes; ownership still
+        # follows the user-owned TLOHome directory.
+        pass
+    return root
+
+
+def _rate_limit_state_file(tlo_home: str = "") -> str:
+    return os.path.join(_ensure_private_state_dir(tlo_home), "state.json")
+
+
+def _rate_limit_lock_dir(tlo_home: str = "") -> str:
+    return os.path.join(_ensure_private_state_dir(tlo_home), "reservation.lock")
 
 
 def _safe_run_id(run_id: str = "") -> str:
@@ -127,11 +164,19 @@ def _safe_run_id(run_id: str = "") -> str:
 
 
 def _read_rate_state(state_file: str) -> Dict[str, Any]:
-    try:
-        with open(state_file, "r", encoding="utf-8") as fh:
-            raw = fh.read().strip()
-    except Exception:
+    if not os.path.exists(state_file):
         return {"last_request": 0.0, "counts": {}}
+    if os.path.islink(state_file):
+        raise SetlistFMError(f"Refusing symlinked setlist.fm state file: {state_file}")
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(state_file, flags)
+        with os.fdopen(fd, "r", encoding="utf-8") as fh:
+            raw = fh.read().strip()
+    except FileNotFoundError:
+        return {"last_request": 0.0, "counts": {}}
+    except OSError as exc:
+        raise SetlistFMError(f"Cannot read setlist.fm rate-limit state: {state_file}: {exc}") from exc
 
     if not raw:
         return {"last_request": 0.0, "counts": {}}
@@ -161,8 +206,55 @@ def _read_rate_state(state_file: str) -> Dict[str, Any]:
 
 
 def _write_rate_state(state_file: str, state: Dict[str, Any]) -> None:
-    with open(state_file, "w", encoding="utf-8") as fh:
-        json.dump(state, fh, sort_keys=True)
+    if os.path.lexists(state_file) and os.path.islink(state_file):
+        raise SetlistFMError(f"Refusing symlinked setlist.fm state file: {state_file}")
+    state_dir = os.path.dirname(state_file)
+    temp_name = ""
+    try:
+        fd, temp_name = tempfile.mkstemp(prefix="state-", suffix=".tmp", dir=state_dir, text=True)
+        try:
+            os.chmod(temp_name, 0o600)
+        except OSError:
+            pass
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(state, fh, sort_keys=True)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(temp_name, state_file)
+        temp_name = ""
+    except OSError as exc:
+        raise SetlistFMError(f"Cannot write setlist.fm rate-limit state: {state_file}: {exc}") from exc
+    finally:
+        if temp_name:
+            try:
+                os.remove(temp_name)
+            except OSError:
+                pass
+
+
+def _acquire_rate_limit_lock(lock_dir: str, *, stale_after: float, timeout_seconds: float) -> None:
+    deadline = time.monotonic() + max(0.0, float(timeout_seconds))
+    while True:
+        if os.path.lexists(lock_dir) and os.path.islink(lock_dir):
+            raise SetlistFMError(f"Refusing symlinked setlist.fm lock path: {lock_dir}")
+        try:
+            os.mkdir(lock_dir, 0o700)
+            return
+        except FileExistsError:
+            try:
+                age = time.time() - os.path.getmtime(lock_dir)
+                if age > stale_after:
+                    os.rmdir(lock_dir)
+                    continue
+            except FileNotFoundError:
+                continue
+            except OSError:
+                pass
+            if time.monotonic() >= deadline:
+                raise SetlistFMError(
+                    f"Timed out after {float(timeout_seconds):.1f} seconds waiting for the setlist.fm rate-limit lock."
+                )
+            time.sleep(0.05)
 
 
 def wait_for_rate_limit(
@@ -170,6 +262,8 @@ def wait_for_rate_limit(
     *,
     max_calls: int = MAX_REQUESTS_PER_RUN,
     run_id: str = "",
+    tlo_home: str = "",
+    lock_timeout_seconds: float = RATE_LIMIT_LOCK_TIMEOUT_SECONDS,
 ) -> int:
     """Reserve one setlist.fm API request slot.
 
@@ -180,27 +274,18 @@ def wait_for_rate_limit(
     is removed after a short grace period. When a wait is required, the lock is
     released before sleeping so other workers do not spin behind a sleeper.
     """
-    state_file = _rate_limit_state_file()
-    lock_dir = _rate_limit_lock_dir()
-    stale_after = 10.0
+    state_file = _rate_limit_state_file(tlo_home)
+    lock_dir = _rate_limit_lock_dir(tlo_home)
+    stale_after = RATE_LIMIT_STALE_AFTER_SECONDS
     safe_run_id = _safe_run_id(run_id)
     max_calls = int(max_calls or 0)
 
     while True:
-        while True:
-            try:
-                os.mkdir(lock_dir)
-                break
-            except FileExistsError:
-                try:
-                    age = time.time() - os.path.getmtime(lock_dir)
-                    if age > stale_after:
-                        os.rmdir(lock_dir)
-                        continue
-                except Exception:
-                    pass
-                time.sleep(0.01)
-
+        _acquire_rate_limit_lock(
+            lock_dir,
+            stale_after=stale_after,
+            timeout_seconds=lock_timeout_seconds,
+        )
         try:
             state = _read_rate_state(state_file)
             counts = state.setdefault("counts", {})
@@ -256,11 +341,15 @@ def api_get(
     min_interval_seconds: float = MIN_REQUEST_INTERVAL_SECONDS,
     max_calls: int = MAX_REQUESTS_PER_RUN,
     run_id: str = "",
+    tlo_home: str = "",
+    lock_timeout_seconds: float = RATE_LIMIT_LOCK_TIMEOUT_SECONDS,
 ) -> Dict[str, Any]:
     wait_for_rate_limit(
         min_interval_seconds,
         max_calls=max_calls,
         run_id=run_id,
+        tlo_home=tlo_home,
+        lock_timeout_seconds=lock_timeout_seconds,
     )
     query = urllib.parse.urlencode(params)
     url = f"{API_BASE}{path}?{query}"
@@ -385,6 +474,8 @@ def search_setlists(
     min_interval_seconds: float = MIN_REQUEST_INTERVAL_SECONDS,
     max_calls: int = MAX_REQUESTS_PER_RUN,
     run_id: str = "",
+    tlo_home: str = "",
+    lock_timeout_seconds: float = RATE_LIMIT_LOCK_TIMEOUT_SECONDS,
 ) -> List[SetlistFMResult]:
     api_key = api_key or get_api_key()
     api_date = convert_date_for_api(date_yyyy_mm_dd)
@@ -399,6 +490,8 @@ def search_setlists(
         min_interval_seconds=min_interval_seconds,
         max_calls=max_calls,
         run_id=run_id,
+        tlo_home=tlo_home,
+        lock_timeout_seconds=lock_timeout_seconds,
     )
 
     raw_setlists = ensure_list(payload.get("setlist"))
@@ -417,6 +510,8 @@ def lookup_venue_and_location(
     min_interval_seconds: float = MIN_REQUEST_INTERVAL_SECONDS,
     max_calls: int = MAX_REQUESTS_PER_RUN,
     run_id: str = "",
+    tlo_home: str = "",
+    lock_timeout_seconds: float = RATE_LIMIT_LOCK_TIMEOUT_SECONDS,
 ) -> List[SetlistFMResult]:
     if not artist or not date_yyyy_mm_dd:
         return []
@@ -426,6 +521,8 @@ def lookup_venue_and_location(
         min_interval_seconds=min_interval_seconds,
         max_calls=max_calls,
         run_id=run_id,
+        tlo_home=tlo_home,
+        lock_timeout_seconds=lock_timeout_seconds,
     )
 
 

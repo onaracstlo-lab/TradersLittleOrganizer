@@ -14,7 +14,7 @@ Q: How difficult is it to set the TLO-related environment variables?
 A: The Windows and macOS/Linux/WSL setup steps are described in Sections 4 through 6 of the User Manual.
 
 Q: Can TLO change or remove original material?
-A: Yes. Rename Compliantly, Tag in Place, SHN-to-FLAC conversion, and Tag Copy/Delete Original can change or remove original files or folders. TLO verifies copy/delete transfers and verifies SHN conversion before removing the source, but these operations are intentionally destructive and are not an undo system. Keep an independent backup when preserving pristine source material matters.
+A: Yes. Rename Compliantly, Tag in Place, SHN-to-FLAC conversion, and Tag Copy/Delete Original can change or remove original files or folders. Same-partition Copy/Delete Original transfers are directory moves and do not use file-size comparison. Cross-partition Copy/Delete Original transfers are copied and verified by relative path and file size before the source is removed. Tag Copy always verifies the copied files by size because it always creates and retains a separate copy. SHN conversion is also verified before removing the source. These operations are intentionally destructive and are not an undo system. Keep an independent backup when preserving pristine source material matters.
 
 Q: What happens if I inventory the same drive again?
 A: For a named volume, TLO deterministically replaces, prunes, or appends the affected scope according to whether the new path is the same as, a parent of, a child of, or separate from the stored paths. It does not ask a Skip/Re-inventory question. Blank-volume runs append to the shared blank-volume logs and can create duplicate inventory entries if the same content is scanned again.
@@ -35,7 +35,7 @@ Q: Can Compliant and Rename Compliantly be selected together?
 A: No. They are mutually exclusive. In the main Inventory window, checking either one automatically unchecks the other. Tag and Add Shows inherit the resulting main-window values. On the inventory, GUI-launcher, and standalone-tagger command lines, using --compliant and --rename-compliantly together produces an argument error.
 
 Q: When does TLO ask for a Tag Copy destination?
-A: Checking Tag Copy or Tag Copy/Delete Original only selects the mode. TLO asks for the destination after Inventory is started, including when Dry run is selected. Both dialogs validate the full path and available storage. The copy/delete dialog additionally warns that verified originals will be removed.
+A: Checking Tag Copy or Tag Copy/Delete Original only selects the mode. TLO asks for the destination after Inventory is started, including when Dry run is selected. Both dialogs validate the full path and show available storage. Tag Copy always totals the source and verifies every copied file by size. The copy/delete dialog additionally warns that originals will be removed; same-partition transfers are moves with no size totaling or comparison, while cross-partition transfers are copied and verified before deletion.
 
 Q: Where are the settings for each run recorded?
 A: After you choose Start in Review Operation, TLO appends the action, local date/time, and the same reviewed settings lines to TLOHome/logs/runSettings.log. The file is shared by Full Inventory, Tag, Process New Shows, and Process Potential Duplicate/Upgrades, including Dry runs. Command-line Inventory and Tag use the same log. Choosing Go Back or closing Review Operation does not create an entry.
@@ -48,3 +48,6 @@ A: Open the upper-right hamburger menu in the Inventory window and choose Donate
 
 Q: Why does the Current Operation activity indicator move slowly?
 A: The indeterminate activity indicator moves at one-tenth of its former speed in Inventory, Tag, and Add Shows. This is only a visual animation change; it does not slow inventory, tagging, Add Shows, elapsed-time updates, or worker processing.
+
+Q: Where does TLO store setlist.fm rate-limit information?
+A: Build 356 and later store it under TLOHome/logs/setlistfm-state. TLO no longer uses a shared system temporary-directory state file. A worker abandons a blocked reservation after 20 seconds and continues without that lookup.

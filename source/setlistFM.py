@@ -18,10 +18,10 @@ The input date is yyyy-mm-dd. The setlist.fm API search date is dd-MM-yyyy.
 
 from __future__ import annotations
 
-__version__ = "v354"
-# TLO-GI package version: v354
-__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
-# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
+__version__ = "v359"
+# TLO-GI package version: v359
+__version_summary__ = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
+# TLO-GI version summary: Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.
 
 
 import argparse
@@ -38,7 +38,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from console_output_lib import console_emit
 
-VERSION = "1.0"
+VERSION = "1.3"
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 

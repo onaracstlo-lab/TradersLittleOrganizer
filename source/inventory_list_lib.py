@@ -1,7 +1,7 @@
-__version__ = "v354"
-# TLO-GI package version: v354
-__version_summary__ = 'Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.'
-# TLO-GI version summary: Prevents broad collection roots from being aggregated or renamed and preserves Artist in Album during full-inventory tagging.
+__version__ = "v359"
+# TLO-GI package version: v359
+__version_summary__ = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
+# TLO-GI version summary: Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.
 import os
 import re
 import shutil
@@ -309,19 +309,22 @@ def _collect_copy_capacity_requirements(config, accessible_items):
             continue
         if os.path.normcase(os.path.normpath(path_name)) == os.path.normcase(os.path.normpath(destination)) or _path_is_same_or_under(destination, path_name):
             raise ValueError(f"Copy destination must not be the source folder or a child of it: source={path_name} destination={destination}")
+        # Copy/Delete on the same filesystem is a directory rename/move. It does
+        # not create a second tree, so do not walk the source to total file sizes
+        # and do not include it in destination-capacity requirements. Ordinary
+        # Tag Copy always creates a second tree, and cross-filesystem Copy/Delete
+        # copies before deleting, so both still require a full source-size check.
+        if effective_mode == "copy-delete" and _paths_on_same_filesystem(path_name, destination):
+            continue
         if path_name not in size_cache:
             size_cache[path_name] = _folder_size_bytes(path_name)
         source_size = size_cache[path_name]
-        # Copy/Delete on the same filesystem is performed as a move and does not
-        # need another full copy of the source tree.  Cross-filesystem copy/delete
-        # and ordinary Tag Copy both require destination free space.
-        required_bytes = 0 if effective_mode == "copy-delete" and _paths_on_same_filesystem(path_name, destination) else source_size
         entry = requirements.setdefault(os.path.normpath(destination), {"required": 0, "sources": [], "modes": set()})
-        entry["required"] += required_bytes
+        entry["required"] += source_size
         entry["sources"].append({
             "path": path_name,
             "size": source_size,
-            "required": required_bytes,
+            "required": source_size,
             "mode": effective_mode,
             "source_label": source_label,
         })
@@ -345,11 +348,15 @@ def _copy_capacity_check_requested(config, accessible_items):
 def _validate_copy_destination_capacity(config, accessible_items):
     if not _copy_capacity_check_requested(config, accessible_items):
         return
+    requirements = _collect_copy_capacity_requirements(config, accessible_items)
+    if not requirements:
+        # Every requested transfer is a same-filesystem Copy/Delete move. No
+        # source-size walk or destination-capacity comparison is necessary.
+        return
     console_print(
         config,
-        "Note: checking source folder sizes before checking whether copy/copy-delete destinations have enough capacity. Large source trees may take a while to total.",
+        "Note: checking source folder sizes before checking whether copy destinations and cross-filesystem copy/delete destinations have enough capacity. Large source trees may take a while to total.",
     )
-    requirements = _collect_copy_capacity_requirements(config, accessible_items)
     problems = []
     for destination, detail in requirements.items():
         try:
