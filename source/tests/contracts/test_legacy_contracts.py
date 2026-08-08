@@ -1,6 +1,6 @@
 """Source, documentation, packaging, and release contract tests retained from the legacy suite."""
 
-__version__ = "v359"
+__version__ = "v361"
 
 import pytest
 from tests import _legacy_suite as legacy
@@ -87,3 +87,5 @@ test_v358_build_process_v053_compatibility_entry_point_loads_categories = legacy
 test_v358_gui_module_uses_explicit_tkinter_import_skip = legacy.test_v358_gui_module_uses_explicit_tkinter_import_skip
 test_v358_integration_category_contains_ten_promoted_scenarios = legacy.test_v358_integration_category_contains_ten_promoted_scenarios
 test_v358_requirements_define_test_architecture_and_ci_compatibility = legacy.test_v358_requirements_define_test_architecture_and_ci_compatibility
+test_copy_delete_documentation_preserves_source_metadata_sequence = legacy.test_copy_delete_documentation_preserves_source_metadata_sequence
+test_copy_delete_documentation_distinguishes_move_and_copy_preflight = legacy.test_copy_delete_documentation_distinguishes_move_and_copy_preflight

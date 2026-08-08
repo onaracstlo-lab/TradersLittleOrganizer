@@ -1,6 +1,6 @@
 """Behavioral coverage for copy and Copy/Delete Original transfer verification."""
 
-__version__ = "v359"
+__version__ = "v361"
 
 from types import SimpleNamespace
 
@@ -199,3 +199,92 @@ def test_cross_partition_copy_delete_capacity_preflight_totals_source(tmp_path, 
     assert detail["required"] == 67890
     assert detail["sources"][0]["size"] == 67890
     assert detail["sources"][0]["required"] == 67890
+
+
+def _populate_full_folder_tree(source):
+    (source / "01 Song.flac").write_bytes(b"audio")
+    (source / "notes").mkdir()
+    (source / "notes" / "info.txt").write_text("show notes", encoding="utf-8")
+    (source / "artwork" / "scans").mkdir(parents=True)
+    (source / "artwork" / "cover.jpg").write_bytes(b"cover")
+    (source / "artwork" / "scans" / "back.jpg").write_bytes(b"back")
+    (source / "extras" / "empty-folder").mkdir(parents=True)
+
+
+def _assert_full_folder_tree(root):
+    assert (root / "01 Song.flac").read_bytes() == b"audio"
+    assert (root / "notes" / "info.txt").read_text(encoding="utf-8") == "show notes"
+    assert (root / "artwork" / "cover.jpg").read_bytes() == b"cover"
+    assert (root / "artwork" / "scans" / "back.jpg").read_bytes() == b"back"
+    assert (root / "extras" / "empty-folder").is_dir()
+
+
+def test_same_partition_copy_delete_moves_entire_folder_tree(tmp_path, monkeypatch):
+    import tlo_tag_lib as tag
+
+    source = tmp_path / "Complete Show Folder"
+    destination = tmp_path / "processed"
+    source.mkdir()
+    destination.mkdir()
+    _populate_full_folder_tree(source)
+    group, record = _group_and_record(source)
+
+    monkeypatch.setattr(tag, "_paths_on_same_filesystem", lambda _a, _b: True)
+    moved_group, moved_record = tag.prepare_inventory_copy_delete_target(
+        SimpleNamespace(tag_copy_and_delete_path=str(destination), rename_compliantly=False),
+        group,
+        record,
+    )
+
+    moved_root = destination / source.name
+    assert not source.exists()
+    _assert_full_folder_tree(moved_root)
+    assert moved_group["main_dir_path"] == str(moved_root)
+    assert moved_record.main_dir_path == str(moved_root)
+
+
+def test_cross_partition_copy_delete_copies_entire_folder_tree_before_delete(tmp_path, monkeypatch):
+    import tlo_tag_lib as tag
+
+    source = tmp_path / "Complete Cross Partition Folder"
+    destination = tmp_path / "processed"
+    source.mkdir()
+    destination.mkdir()
+    _populate_full_folder_tree(source)
+    group, record = _group_and_record(source)
+
+    monkeypatch.setattr(tag, "_paths_on_same_filesystem", lambda _a, _b: False)
+    tag.prepare_inventory_copy_delete_target(
+        SimpleNamespace(tag_copy_and_delete_path=str(destination), rename_compliantly=False),
+        group,
+        record,
+    )
+
+    copied_root = destination / source.name
+    assert not source.exists()
+    _assert_full_folder_tree(copied_root)
+
+
+def test_tag_copy_copies_entire_folder_tree_and_keeps_source(tmp_path):
+    import tlo_tag_lib as tag
+
+    source = tmp_path / "Complete Tag Copy Folder"
+    destination = tmp_path / "copies"
+    source.mkdir()
+    destination.mkdir()
+    _populate_full_folder_tree(source)
+    group, record = _group_and_record(source)
+
+    tag.prepare_inventory_tagging_target(
+        SimpleNamespace(
+            tag_copy_during_inventory=True,
+            tag_copy_destination=str(destination),
+            rename_compliantly=False,
+        ),
+        group,
+        record,
+    )
+
+    copied_root = destination / source.name
+    _assert_full_folder_tree(source)
+    _assert_full_folder_tree(copied_root)

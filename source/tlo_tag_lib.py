@@ -1,7 +1,7 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v359"
-# TLO-GI package version: v359
+__version__ = "v361"
+# TLO-GI package version: v361
 __version_summary__ = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
 # TLO-GI version summary: Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.
 
@@ -2346,16 +2346,39 @@ def _file_size_map(root: str) -> Dict[str, int]:
     return result
 
 
+def _directory_path_set(root: str) -> set[str]:
+    """Return every descendant directory path, including empty directories."""
+    result: set[str] = set()
+    for current_dir, dir_names, _file_names in os.walk(root):
+        for dir_name in dir_names:
+            full_path = os.path.join(current_dir, dir_name)
+            relative = os.path.relpath(full_path, root)
+            result.add(os.path.normcase(os.path.normpath(relative)))
+    return result
+
+
+def _copy_entire_directory_tree(source_root: str, destination_root: str) -> None:
+    """Copy the complete source folder recursively, not just inventoried media."""
+    shutil.copytree(source_root, destination_root, symlinks=False)
+
+
 def _verify_copy_by_file_size(source_root: str, destination_root: str) -> None:
+    # Verification covers the complete recursive tree. File paths and sizes
+    # prove file contents were copied; directory paths additionally prove empty
+    # and non-music descendant folders were retained.
     source_sizes = _file_size_map(source_root)
     destination_sizes = _file_size_map(destination_root)
-    if source_sizes != destination_sizes:
+    source_dirs = _directory_path_set(source_root)
+    destination_dirs = _directory_path_set(destination_root)
+    if source_sizes != destination_sizes or source_dirs != destination_dirs:
         missing = sorted(set(source_sizes) - set(destination_sizes))[:5]
         extra = sorted(set(destination_sizes) - set(source_sizes))[:5]
         mismatched = sorted(
             rel for rel in set(source_sizes) & set(destination_sizes)
             if source_sizes.get(rel) != destination_sizes.get(rel)
         )[:5]
+        missing_dirs = sorted(source_dirs - destination_dirs)[:5]
+        extra_dirs = sorted(destination_dirs - source_dirs)[:5]
         details = []
         if missing:
             details.append(f"missing={missing}")
@@ -2363,6 +2386,10 @@ def _verify_copy_by_file_size(source_root: str, destination_root: str) -> None:
             details.append(f"extra={extra}")
         if mismatched:
             details.append(f"size_mismatch={mismatched}")
+        if missing_dirs:
+            details.append(f"missing_dirs={missing_dirs}")
+        if extra_dirs:
+            details.append(f"extra_dirs={extra_dirs}")
         raise TaggerError("Copy verification failed" + (": " + "; ".join(details) if details else ""))
 
 
@@ -2407,7 +2434,7 @@ def prepare_inventory_copy_delete_target(
             raise TaggerError(f"Tag Copy and Delete move failed: {exc}") from exc
     else:
         try:
-            shutil.copytree(source_root, destination_root, symlinks=False)
+            _copy_entire_directory_tree(source_root, destination_root)
             _verify_copy_by_file_size(source_root, destination_root)
             shutil.rmtree(source_root)
             _emit(emit, f"TAG_COPY_DELETE_COPY: {source_root} -> {destination_root}")
@@ -2444,7 +2471,7 @@ def prepare_inventory_tagging_target(
             raise TaggerError(f"Tag Copy destination is not a valid directory: {destination_parent}")
         destination_root = _unique_destination_path(destination_parent, target_name)
         try:
-            shutil.copytree(source_root, destination_root, symlinks=False)
+            _copy_entire_directory_tree(source_root, destination_root)
             # Tag Copy always retains the source, even on the same partition, so
             # it always creates a real copy and must verify every copied file by
             # relative path and size before tagging continues.

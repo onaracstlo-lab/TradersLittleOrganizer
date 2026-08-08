@@ -1,6 +1,6 @@
 """Executable Tkinter behavior tests for layout and progress animation."""
 
-__version__ = "v359"
+__version__ = "v361"
 
 from pathlib import Path
 
@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.behavior, pytest.mark.gui]
 
 def _load_gui_module():
     from tests import _legacy_suite as legacy
-    return legacy._load_local_module("tlo-ggi.py", "tlo_ggi_v359_gui_behavior")
+    return legacy._load_local_module("tlo-ggi.py", "tlo_ggi_v361_gui_behavior")
 
 
 @pytest.fixture

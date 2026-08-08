@@ -1,6 +1,6 @@
 """Fast isolated tests for options, metadata formatting, and settings logging."""
 
-__version__ = "v359"
+__version__ = "v361"
 
 from datetime import datetime, timezone
 from pathlib import Path

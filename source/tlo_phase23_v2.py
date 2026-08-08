@@ -1,7 +1,7 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v359"
-# TLO-GI package version: v359
+__version__ = "v361"
+# TLO-GI package version: v361
 __version_summary__ = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
 # TLO-GI version summary: Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.
 
@@ -1473,6 +1473,7 @@ def _match_date_string3(text: str) -> Optional[Dict[str, str]]:
 
 
 _STRING_DASH_STRING_RE = re.compile(r"^(?P<string1>.+?)\s+-\s+(?P<string2>.+)$")
+_COMMERCIAL_RELEASE_YEAR_RE = re.compile(r"^(?:\((?P<paren_year>(?:19|20)\d{2})\)|(?P<bare_year>(?:19|20)\d{2}))$")
 
 
 def _match_string_dash_string(text: str) -> Optional[Dict[str, str]]:
@@ -1493,6 +1494,41 @@ def _match_string_dash_string(text: str) -> Optional[Dict[str, str]]:
     }
 
 
+def _commercial_release_from_dash_row(row: Optional[Dict[str, str]]) -> Optional[Dict[str, str]]:
+    """Recognize ``(YYYY) - Artist - Album`` and ``YYYY - Artist - Album``.
+
+    This is intentionally narrower than normal date parsing.  A commercial
+    release year is accepted only when the first String1 component is exactly a
+    four-digit 19xx/20xx year, optionally enclosed in parentheses.  Complete or
+    partial performance dates, ranges, and year-like text embedded in another
+    component are never classified as commercial-release years.
+    """
+    if not row:
+        return None
+    year_text = compact_ws(row.get("string1", ""))
+    year_match = _COMMERCIAL_RELEASE_YEAR_RE.fullmatch(year_text)
+    if not year_match:
+        return None
+    tail = _match_string_dash_string(row.get("string2", ""))
+    if not tail:
+        return None
+    return {
+        "year": year_match.group("paren_year") or year_match.group("bare_year") or "",
+        "artist": tail.get("string1", ""),
+        "album": tail.get("string2", ""),
+    }
+
+
+def _same_artist_component(left: str, right: str) -> bool:
+    return bool(left and right and normalized_compare_value(left) == normalized_compare_value(right))
+
+
+def _strip_redundant_artist_prefix_from_album(album_name: str, artist: str) -> Tuple[str, bool]:
+    """Remove only an exact leading ``Artist - `` component from an album tail."""
+    row = _match_string_dash_string(album_name)
+    if not row or not _same_artist_component(row.get("string1", ""), artist):
+        return compact_ws(album_name), False
+    return compact_ws(row.get("string2", "")), True
 
 
 def _date_match_consumes_entire_text(text: str) -> Optional[Dict[str, str]]:
@@ -1610,10 +1646,60 @@ def _resolve_noncompliant_from_string_dash_string(
         row = _match_string_dash_string(part)
         if not row:
             continue
-        term = row["string1"] if len(re.sub(r"[^A-Za-z]", "", row["string1"])) <= 4 and row["string1"].isupper() else (row["string1_stripped"] or row["string1"])
-        detail = _lookup_artist_detail(term, matcher)
         row["part"] = part
         row["part_path"] = part_path
+
+        commercial_release = _commercial_release_from_dash_row(row)
+        if commercial_release:
+            commercial_artist = commercial_release["artist"]
+            detail = _lookup_artist_detail(commercial_artist, matcher)
+            if detail["status"] == "collision":
+                conflicts.append(_collision_note(
+                    f"artist query collision for commercial release: {commercial_artist}",
+                    detail["masters"],
+                ))
+                return "", None
+            if detail["status"] == "matched" and detail["masters"]:
+                master = detail["masters"][0]
+                artist_name = _artist_output_name(config, commercial_artist, master)
+                evidence.setdefault("artist", []).append(Candidate(artist_name, f"commercial_release:{part_path}", 60))
+                row["commercial_release_year"] = commercial_release["year"]
+                row["commercial_release_artist"] = commercial_artist
+                row["commercial_release_album"] = commercial_release["album"]
+                return artist_name, row
+
+            path_artist = _resolve_artist_from_subdirs(
+                group,
+                matcher,
+                evidence,
+                conflicts,
+                pattern_artist="",
+                exclude_part_paths={part_path},
+                source_label="commercial_release_path_artist",
+                config=config,
+            )
+            if path_artist:
+                observations.append(
+                    f"commercial-release year prefix found; using artist found elsewhere in path: {path_artist}"
+                )
+                row["commercial_release_year"] = commercial_release["year"]
+                row["commercial_release_artist"] = commercial_artist
+                row["commercial_release_album"] = commercial_release["album"]
+                return path_artist, row
+
+            artist_name = compact_ws(commercial_artist)
+            if artist_name:
+                evidence.setdefault("artist", []).append(Candidate(artist_name, f"commercial_release_unmatched:{part_path}", 55))
+                observations.append(
+                    f"commercial-release year prefix found; artist not found in DB or elsewhere in path; using release artist: {artist_name}"
+                )
+                row["commercial_release_year"] = commercial_release["year"]
+                row["commercial_release_artist"] = commercial_artist
+                row["commercial_release_album"] = commercial_release["album"]
+                return artist_name, row
+
+        term = row["string1"] if len(re.sub(r"[^A-Za-z]", "", row["string1"])) <= 4 and row["string1"].isupper() else (row["string1_stripped"] or row["string1"])
+        detail = _lookup_artist_detail(term, matcher)
         if detail["status"] == "collision":
             conflicts.append(_collision_note(f"artist query collision for String1 - String2: {term}", detail["masters"]))
             return "", None
@@ -2015,10 +2101,31 @@ def _build_dash_album_show_name(record: ShowMetadata) -> str:
 def _apply_string_dash_album_to_record(record: ShowMetadata, dash_match: Optional[Dict[str, str]], evidence: Dict[str, List[Candidate]], source: str) -> None:
     if not dash_match:
         return
-    stripped_string2, parentheticals = _strip_trailing_parenthetical_items_with_cache(dash_match.get("string2", ""))
+
+    raw_album_tail = dash_match.get("string2", "")
+    commercial_release = _commercial_release_from_dash_row(dash_match)
+    if commercial_release:
+        # The leading year is release classification only. It must never become
+        # a performance date or appear in an Artist - Album commercial-release
+        # show name. The middle Artist component identifies the commercial form;
+        # when tags already supplied the resolved artist, their normal precedence
+        # is preserved while only the final Album component is used as ALBUM_NAME.
+        raw_album_tail = commercial_release.get("album", "")
+        dash_match["commercial_release_year"] = commercial_release.get("year", "")
+        dash_match["commercial_release_artist"] = commercial_release.get("artist", "")
+        dash_match["commercial_release_album"] = commercial_release.get("album", "")
+
+    stripped_string2, parentheticals = _strip_trailing_parenthetical_items_with_cache(raw_album_tail)
     album_name = compact_ws(stripped_string2)
     if not album_name:
         return
+
+    album_name, redundant_artist_removed = _strip_redundant_artist_prefix_from_album(album_name, record.artist)
+    if redundant_artist_removed:
+        dash_match["redundant_artist_prefix_removed"] = "1"
+    if not album_name:
+        return
+
     record.album_name = album_name
     # String1 - String2 in non-compliant mode treats String2 as an album name,
     # not parsed venue/location metadata. Keep venue/location blank so generated
@@ -3863,6 +3970,13 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
     elif dash_album_match:
         dash_album_mode = True
         _apply_string_dash_album_to_record(record, dash_album_match, evidence, f"string_dash_album:{dash_album_match.get('part_path', '')}")
+        if dash_album_match.get("commercial_release_year"):
+            observations.append(
+                "commercial-release year prefix recognized and omitted from show name: "
+                f"{dash_album_match.get('commercial_release_year')}"
+            )
+        if dash_album_match.get("redundant_artist_prefix_removed"):
+            observations.append("redundant artist prefix removed from String2 album name")
         observations.append("non-compliant String1 - String2 matched: String2 treated as album name; no date assigned")
 
     tag_date_matches = _collect_tag_date_candidates(record)

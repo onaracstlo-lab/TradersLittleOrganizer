@@ -14,8 +14,8 @@ Tkinter GUI that:
 
 from __future__ import annotations
 
-__version__ = "v359"
-# TLO-GI package version: v359
+__version__ = "v361"
+# TLO-GI package version: v361
 
 import csv
 import os
