@@ -1,9 +1,9 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v361"
-# TLO-GI package version: v361
-__version_summary__ = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
-# TLO-GI version summary: Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.
+__version__ = "v362"
+# TLO-GI package version: v362
+__version_summary__ = 'Classifies name collisions as copy only after exact recursive tree/content comparison; non-identical collisions are labeled alt.'
+# TLO-GI version summary: Classifies name collisions as copy only after exact recursive tree/content comparison; non-identical collisions are labeled alt.
 
 import os
 import re
@@ -53,6 +53,7 @@ from tlo_setlist_file_selection import find_setlist_files_for_music_dir
 from tlo_text_utils import compact_ws, setlist_text_requests_generated_from_music_files, standard_ascii_text
 from tlo_postprocess import _adjust_show_name_for_output, _candidate_setlist_name, _setlist_base_from_record
 from tlo_wrapper_rules import is_wrapper_part_folder_name
+from tlo_tree_compare import has_exact_tree_match_in_family
 
 
 TAGGER_TITLE = "Traders Little Helper™ Tagger App"
@@ -2261,16 +2262,28 @@ def _compliant_rename_show_name_from_record(record) -> str:
     return _show_name_with_parentheticals(getattr(record, "show_name", ""), getattr(record, "parentheticals", ""))
 
 
-def _unique_destination_path(parent_dir: str, folder_name: str) -> str:
+def _unique_destination_path(parent_dir: str, folder_name: str, source_root: str = "") -> str:
+    """Allocate a collision-safe destination classified as copy or alt.
+
+    A plain target name is used when available. If the target name already
+    exists, `(copyN)` is permitted only when the incoming source tree exactly
+    matches an existing directory in that target-name family. Otherwise the
+    collision is named `(altN)`. Exact means identical recursive folder
+    structure and byte-identical files, not merely matching names or sizes.
+    """
     base = safe_compliant_folder_name(folder_name)
     candidate = os.path.normpath(os.path.join(parent_dir, base))
     if not os.path.exists(candidate):
         return candidate
+
+    source_root = os.path.normpath(str(source_root or ""))
+    is_exact_copy = bool(source_root) and has_exact_tree_match_in_family(source_root, parent_dir, base)
+    suffix = "copy" if is_exact_copy else "alt"
     for idx in range(1, 10000):
-        candidate = os.path.normpath(os.path.join(parent_dir, f"{base} (copy{idx})"))
+        candidate = os.path.normpath(os.path.join(parent_dir, f"{base} ({suffix}{idx})"))
         if not os.path.exists(candidate):
             return candidate
-    raise TaggerError(f"could not allocate unique destination folder under {parent_dir}")
+    raise TaggerError(f"could not allocate unique {suffix} destination folder under {parent_dir}")
 
 
 def _rewrite_path_under_root(path_name: str, old_root: str, new_root: str) -> str:
@@ -2422,7 +2435,7 @@ def prepare_inventory_copy_delete_target(
     show_name = _compliant_rename_show_name_from_record(record)
     use_compliant_name = bool(getattr(config, "rename_compliantly", False)) and bool(show_name)
     destination_leaf = safe_compliant_folder_name(show_name if use_compliant_name else source_leaf, fallback=source_leaf)
-    destination_root = _unique_destination_path(destination_parent, destination_leaf)
+    destination_root = _unique_destination_path(destination_parent, destination_leaf, source_root)
 
     if _paths_on_same_filesystem(source_root, destination_parent):
         try:
@@ -2469,7 +2482,7 @@ def prepare_inventory_tagging_target(
         destination_parent = os.path.normpath(str(getattr(config, "tag_copy_destination", "") or ""))
         if not destination_parent or not os.path.isdir(destination_parent):
             raise TaggerError(f"Tag Copy destination is not a valid directory: {destination_parent}")
-        destination_root = _unique_destination_path(destination_parent, target_name)
+        destination_root = _unique_destination_path(destination_parent, target_name, source_root)
         try:
             _copy_entire_directory_tree(source_root, destination_root)
             # Tag Copy always retains the source, even on the same partition, so
@@ -2491,7 +2504,7 @@ def prepare_inventory_tagging_target(
         intended_root = os.path.normpath(os.path.join(parent_dir, target_name))
         if os.path.normcase(intended_root) == os.path.normcase(os.path.normpath(source_root)):
             return group, record
-        destination_root = _unique_destination_path(parent_dir, target_name)
+        destination_root = _unique_destination_path(parent_dir, target_name, source_root)
         try:
             os.rename(source_root, destination_root)
             _emit(emit, f"RENAME_COMPLIANTLY: {source_root} -> {destination_root}")

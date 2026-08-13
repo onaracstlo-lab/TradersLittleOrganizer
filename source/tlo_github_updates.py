@@ -6,10 +6,10 @@ avoids overwriting user inventory, setlists, logs, or databases.
 """
 from __future__ import annotations
 
-__version__ = "v361"
-# TLO-GI package version: v361
-__version_summary__ = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
-# TLO-GI version summary: Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.
+__version__ = "v362"
+# TLO-GI package version: v362
+__version_summary__ = 'Classifies name collisions as copy only after exact recursive tree/content comparison; non-identical collisions are labeled alt.'
+# TLO-GI version summary: Classifies name collisions as copy only after exact recursive tree/content comparison; non-identical collisions are labeled alt.
 
 import datetime as _dt
 import hashlib

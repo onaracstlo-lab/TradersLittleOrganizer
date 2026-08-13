@@ -1,9 +1,9 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v361"
-# TLO-GI package version: v361
-__version_summary__ = 'Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.'
-# TLO-GI version summary: Refines copy verification so same-partition Copy/Delete uses a size-free directory move while every real copy is verified by file size.
+__version__ = "v362"
+# TLO-GI package version: v362
+__version_summary__ = 'Classifies name collisions as copy only after exact recursive tree/content comparison; non-identical collisions are labeled alt.'
+# TLO-GI version summary: Classifies name collisions as copy only after exact recursive tree/content comparison; non-identical collisions are labeled alt.
 
 import json
 import os
@@ -42,6 +42,7 @@ from tlo_etree_lookup import ETreeDBError, lookup_venue_and_location
 from tlo_setlistfm_lookup import SetlistFMError, collect_setlists_by_performance as collect_setlistfm_setlists_by_performance, is_us_country, lookup_venue_and_location as lookup_setlistfm_venue_and_location
 from tlo_setlist_metadata_lookup import extract_setlist_venue_location, is_setlist_metadata_scan_boundary, explicit_metadata_match, looks_like_sentence_prose_line
 from tlo_runtime_control import throttle_point
+from tlo_tree_compare import has_exact_tree_match_in_family, split_collision_suffix
 
 FOUR_DIGIT_WRAPPER_RE = re.compile(r"^\d{4}$")
 INTEGER_RE = re.compile(r"^\d+$")
@@ -174,8 +175,32 @@ def _merge_parenthetical_items(*values: str) -> str:
     return " ".join(items)
 
 
+def _validated_copy_parenthetical_for_group(group: dict, parentheticals: str) -> str:
+    """Keep a `(copyN)` show qualifier only after exact tree verification.
+
+    Existing folders can arrive at inventory time already carrying a copy suffix.
+    A suffix alone is not evidence of a copy. Compare the complete source tree
+    against the same-base sibling family. If no other tree is byte-for-byte and
+    structurally identical, expose the qualifier as `(altN)` instead.
+    """
+    source_root = os.path.normpath(str(group.get("main_dir_path") or ""))
+    source_name = os.path.basename(source_root) if source_root else str(group.get("main_dir_name") or "")
+    split = split_collision_suffix(source_name)
+    if not split or split[1] != "copy":
+        return parentheticals
+
+    base, _kind, number = split
+    parent_dir = os.path.dirname(source_root) if source_root else ""
+    exact_copy = bool(parent_dir) and has_exact_tree_match_in_family(
+        source_root, parent_dir, base, exclude_source=True
+    )
+    old_marker = f"(copy{number})"
+    new_marker = old_marker if exact_copy else f"(alt{number})"
+    return re.sub(re.escape(old_marker), new_marker, parentheticals, flags=re.IGNORECASE)
+
+
 def _group_trailing_parentheticals(group: dict) -> str:
-    """Return trailing parenthetical items from the logical show folder name."""
+    """Return validated trailing parenthetical items from the logical show folder name."""
     candidates = [
         str(group.get("main_dir_name") or ""),
         os.path.basename(os.path.normpath(str(group.get("main_dir_path") or ""))),
@@ -185,7 +210,7 @@ def _group_trailing_parentheticals(group: dict) -> str:
     for candidate in candidates:
         _base, parentheticals = _strip_trailing_parenthetical_items_with_cache(candidate)
         merged = _merge_parenthetical_items(merged, parentheticals)
-    return merged
+    return _validated_copy_parenthetical_for_group(group, merged)
 
 
 

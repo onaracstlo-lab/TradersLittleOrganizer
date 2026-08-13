@@ -1,6 +1,6 @@
 """Behavioral coverage for copy and Copy/Delete Original transfer verification."""
 
-__version__ = "v361"
+__version__ = "v362"
 
 from types import SimpleNamespace
 
@@ -288,3 +288,184 @@ def test_tag_copy_copies_entire_folder_tree_and_keeps_source(tmp_path):
     copied_root = destination / source.name
     _assert_full_folder_tree(source)
     _assert_full_folder_tree(copied_root)
+
+
+def _make_collision_tree(root, *, payload=b"same", add_empty=True):
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "01 Song.flac").write_bytes(payload)
+    (root / "notes").mkdir(exist_ok=True)
+    (root / "notes" / "info.txt").write_text("notes", encoding="utf-8")
+    if add_empty:
+        (root / "extras" / "empty").mkdir(parents=True, exist_ok=True)
+
+
+def test_collision_name_uses_copy_only_for_byte_identical_tree(tmp_path):
+    import tlo_tag_lib as tag
+
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    existing = destination / "Artist 1970-01-01 Venue City ST"
+    incoming = tmp_path / "incoming"
+    _make_collision_tree(existing, payload=b"identical")
+    _make_collision_tree(incoming, payload=b"identical")
+
+    allocated = tag._unique_destination_path(destination, existing.name, incoming)
+
+    assert allocated == str(destination / f"{existing.name} (copy1)")
+
+
+def test_collision_name_uses_alt_when_same_size_file_bytes_differ(tmp_path):
+    import tlo_tag_lib as tag
+
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    existing = destination / "Artist 1970-01-01 Venue City ST"
+    incoming = tmp_path / "incoming"
+    _make_collision_tree(existing, payload=b"AAAA")
+    _make_collision_tree(incoming, payload=b"BBBB")
+
+    allocated = tag._unique_destination_path(destination, existing.name, incoming)
+
+    assert allocated == str(destination / f"{existing.name} (alt1)")
+
+
+def test_collision_name_uses_alt_when_folder_structure_differs(tmp_path):
+    import tlo_tag_lib as tag
+
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    existing = destination / "Artist 1970-01-01 Venue City ST"
+    incoming = tmp_path / "incoming"
+    _make_collision_tree(existing, add_empty=True)
+    _make_collision_tree(incoming, add_empty=False)
+
+    allocated = tag._unique_destination_path(destination, existing.name, incoming)
+
+    assert allocated == str(destination / f"{existing.name} (alt1)")
+
+
+def test_collision_name_uses_alt_when_relative_file_set_differs(tmp_path):
+    import tlo_tag_lib as tag
+
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    existing = destination / "Artist 1970-01-01 Venue City ST"
+    incoming = tmp_path / "incoming"
+    _make_collision_tree(existing)
+    _make_collision_tree(incoming)
+    (incoming / "artwork.jpg").write_bytes(b"art")
+
+    allocated = tag._unique_destination_path(destination, existing.name, incoming)
+
+    assert allocated == str(destination / f"{existing.name} (alt1)")
+
+
+def test_collision_copy_classification_can_match_existing_family_member(tmp_path):
+    import tlo_tag_lib as tag
+
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    base = "Artist 1970-01-01 Venue City ST"
+    canonical = destination / base
+    prior_alt = destination / f"{base} (alt1)"
+    incoming = tmp_path / "incoming"
+    _make_collision_tree(canonical, payload=b"different")
+    _make_collision_tree(prior_alt, payload=b"incoming")
+    _make_collision_tree(incoming, payload=b"incoming")
+
+    allocated = tag._unique_destination_path(destination, base, incoming)
+
+    assert allocated == str(destination / f"{base} (copy1)")
+
+
+def test_tag_copy_collision_labels_exact_tree_copy(tmp_path):
+    import tlo_tag_lib as tag
+
+    source = tmp_path / "source" / "Original Name"
+    destination = tmp_path / "copies"
+    destination.mkdir(parents=True)
+    source.mkdir(parents=True)
+    _make_collision_tree(source)
+    group, record = _group_and_record(source)
+    record.show_name = "Artist 1970-01-01 Venue City ST"
+    existing = destination / record.show_name
+    _make_collision_tree(existing)
+
+    copied_group, copied_record = tag.prepare_inventory_tagging_target(
+        SimpleNamespace(
+            tag_copy_during_inventory=True,
+            tag_copy_destination=str(destination),
+            rename_compliantly=True,
+        ),
+        group,
+        record,
+    )
+
+    expected = destination / f"{record.show_name} (copy1)"
+    assert copied_group["main_dir_path"] == str(expected)
+    assert copied_record.main_dir_path == str(expected)
+    assert expected.is_dir()
+
+
+def test_rename_collision_labels_nonidentical_tree_alt(tmp_path):
+    import tlo_tag_lib as tag
+
+    parent = tmp_path / "shows"
+    source = parent / "Original Name"
+    source.mkdir(parents=True)
+    _make_collision_tree(source, payload=b"incoming")
+    group, record = _group_and_record(source)
+    record.show_name = "Artist 1970-01-01 Venue City ST"
+    existing = parent / record.show_name
+    _make_collision_tree(existing, payload=b"existing")
+
+    renamed_group, renamed_record = tag.prepare_inventory_tagging_target(
+        SimpleNamespace(
+            tag_copy_during_inventory=False,
+            tag_copy_destination="",
+            rename_compliantly=True,
+        ),
+        group,
+        record,
+    )
+
+    expected = parent / f"{record.show_name} (alt1)"
+    assert renamed_group["main_dir_path"] == str(expected)
+    assert renamed_record.main_dir_path == str(expected)
+    assert expected.is_dir()
+
+
+def test_existing_copy_show_qualifier_requires_exact_sibling_tree(tmp_path):
+    import tlo_phase23_v2 as phase
+
+    base = tmp_path / "Artist 1970-01-01 Venue City ST"
+    copied = tmp_path / "Artist 1970-01-01 Venue City ST (copy2)"
+    _make_collision_tree(base, payload=b"same")
+    _make_collision_tree(copied, payload=b"same")
+    group = {"main_dir_path": str(copied), "main_dir_name": copied.name}
+
+    assert phase._group_trailing_parentheticals(group) == "(copy2)"
+
+
+def test_existing_copy_show_qualifier_becomes_alt_when_contents_differ(tmp_path):
+    import tlo_phase23_v2 as phase
+
+    base = tmp_path / "Artist 1970-01-01 Venue City ST"
+    copied = tmp_path / "Artist 1970-01-01 Venue City ST (copy2)"
+    _make_collision_tree(base, payload=b"AAAA")
+    _make_collision_tree(copied, payload=b"BBBB")
+    group = {"main_dir_path": str(copied), "main_dir_name": copied.name}
+
+    assert phase._group_trailing_parentheticals(group) == "(alt2)"
+
+
+def test_existing_copy_show_qualifier_becomes_alt_when_structure_differs(tmp_path):
+    import tlo_phase23_v2 as phase
+
+    base = tmp_path / "Artist 1970-01-01 Venue City ST"
+    copied = tmp_path / "Artist 1970-01-01 Venue City ST (copy3)"
+    _make_collision_tree(base, add_empty=True)
+    _make_collision_tree(copied, add_empty=False)
+    group = {"main_dir_path": str(copied), "main_dir_name": copied.name}
+
+    assert phase._group_trailing_parentheticals(group) == "(alt3)"

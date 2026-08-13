@@ -1,13 +1,13 @@
-"""Compatibility test entry point for TLO GitHub Build Process v054.
+"""Compatibility test entry point for TLO GitHub Build Process v055.
 
 The categorized suite lives under tests/. Importing the tests here preserves the
 existing CI command: python -m pytest -q test_tlo_requirements.py.
 """
 
-__version__ = "v361"
+__version__ = "v362"
 
 from tests.contracts.test_legacy_contracts import *  # noqa: F401,F403
-from tests.contracts.test_build361_contracts import *  # noqa: F401,F403
+from tests.contracts.test_build362_contracts import *  # noqa: F401,F403
 from tests.behavior.test_legacy_behavior import *  # noqa: F401,F403
 from tests.behavior.test_copy_transfer_behavior import *  # noqa: F401,F403
 from tests.behavior.test_commercial_release_behavior import *  # noqa: F401,F403

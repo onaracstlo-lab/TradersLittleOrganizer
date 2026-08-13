@@ -37,6 +37,9 @@ A: No. They are mutually exclusive. In the main Inventory window, checking eithe
 Q: When does TLO ask for a Tag Copy destination?
 A: Checking Tag Copy or Tag Copy/Delete Original only selects the mode. TLO asks for the destination after Inventory is started, including when Dry run is selected. Both dialogs validate the full path and show available storage. Tag Copy always totals the source, copies the complete identified folder tree, and verifies relative file paths, sizes, and descendant folder structure. The copy/delete dialog additionally warns that originals will be removed; same-partition transfers move the complete folder tree with no size totaling or comparison, while cross-partition transfers recursively copy and verify the complete tree before deletion.
 
+Q: When does TLO call a same-named show a copy instead of an alternate?
+A: A matching Show or compliant folder name is not enough. Before TLO uses a (copyN) qualifier or folder suffix, it compares the complete recursive trees. The relative folders (including empty folders), relative files, file sizes, and every file's byte contents must all match. TLO uses SHA-256 content comparison after the faster structure and size checks. If anything differs, or a comparison cannot be completed, TLO uses (altN) instead. File timestamps do not matter. A source folder that already carries (copyN) is also rechecked before that qualifier is used in the Show name.
+
 Q: Where are the settings for each run recorded?
 A: After you choose Start in Review Operation, TLO appends the action, local date/time, and the same reviewed settings lines to TLOHome/logs/runSettings.log. The file is shared by Full Inventory, Tag, Process New Shows, and Process Potential Duplicate/Upgrades, including Dry runs. Command-line Inventory and Tag use the same log. Choosing Go Back or closing Review Operation does not create an entry.
 
