@@ -1,9 +1,9 @@
 """Path and TLOHome input normalization shared by CLI, GUI, and tagging entry points."""
 
-__version__ = "v362"
-# TLO-GI package version: v362
-__version_summary__ = 'Classifies name collisions as copy only after exact recursive tree/content comparison; non-identical collisions are labeled alt.'
-# TLO-GI version summary: Classifies name collisions as copy only after exact recursive tree/content comparison; non-identical collisions are labeled alt.
+__version__ = "v363"
+# TLO-GI package version: v363
+__version_summary__ = 'Adds tlo-deleteDupes for safe recursive cleanup of copy-suffixed duplicate folders via the platform Trash/Recycle Bin.'
+# TLO-GI version summary: Adds tlo-deleteDupes for safe recursive cleanup of copy-suffixed duplicate folders via the platform Trash/Recycle Bin.
 
 import argparse
 import os

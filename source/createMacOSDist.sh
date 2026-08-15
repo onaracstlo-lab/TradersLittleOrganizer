@@ -206,12 +206,16 @@ else
         --collect-all imageio_ffmpeg
 fi
 
+build_one "$(find_script tlo-deleteDupes.py)" no \
+    --collect-all send2trash
+
 EXPECTED_EXECUTABLES=(
     search-artist-db
     tlo-gsi
     tlo-gi
     tlo-ggi
     tlo-tag
+    tlo-deleteDupes
 )
 EXPECTED_APP_BUNDLES=(
     search-artist-db.app

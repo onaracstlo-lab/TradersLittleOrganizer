@@ -54,3 +54,6 @@ A: The indeterminate activity indicator moves at one-tenth of its former speed i
 
 Q: Where does TLO store setlist.fm rate-limit information?
 A: Build 356 and later store it under TLOHome/logs/setlistfm-state. TLO no longer uses a shared system temporary-directory state file. A worker abandons a blocked reservation after 20 seconds and continues without that lookup.
+
+Q: How do I safely remove duplicate folders that TLO named as copies?
+A: Use tlo-deleteDupes with a fully qualified search path. It compares each (copyN) or (copy N) folder with its unsuffixed sibling using the complete relative folder structure plus file names and file sizes. Matching copy folders are moved to the operating-system Recycle Bin/Trash, never permanently deleted, and their original full paths are appended to TLOHome/deletedDirs.txt. The unsuffixed original is never moved.

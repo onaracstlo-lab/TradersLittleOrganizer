@@ -258,12 +258,14 @@ $ArtistArgs = @('--windowed')
 $SearchArgs = @('--windowed', "--icon=$SearchIcon")
 $GuiArgs = @('--windowed', '--collect-all', 'mutagen', '--collect-all', 'imageio_ffmpeg', '--collect-all', 'tkinterdnd2', "--icon=$InventoryIcon")
 $TagArgs = @('--collect-all', 'mutagen', '--collect-all', 'imageio_ffmpeg', "--icon=$TagIcon")
+$DeleteDupesArgs = @('--collect-all', 'send2trash')
 
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'search-artist-db.py') -AdditionalArgs $ArtistArgs
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-gsi.py') -AdditionalArgs $SearchArgs
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-gi.py')
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-ggi.py') -AdditionalArgs $GuiArgs
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-tag.py') -AdditionalArgs $TagArgs
+Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-deleteDupes.py') -AdditionalArgs $DeleteDupesArgs
 
 Assert-WindowsExeMatchesSourceIcon -ExePath (Join-Path $TargetDir 'tlo-gsi.exe') -IconPath $SearchIcon -DisplayName 'TLO Search GUI'
 Assert-WindowsExeMatchesSourceIcon -ExePath (Join-Path $TargetDir 'tlo-ggi.exe') -IconPath $InventoryIcon -DisplayName 'TLO Inventory GUI'
@@ -297,7 +299,7 @@ Invoke-Python -Runner $PythonRunner -Arguments $ScanArguments
 
 # Recheck after antivirus has had a chance to quarantine a newly written file.
 Start-Sleep -Seconds 2
-$ExpectedExecutables = @('search-artist-db.exe', 'tlo-gsi.exe', 'tlo-gi.exe', 'tlo-ggi.exe', 'tlo-tag.exe')
+$ExpectedExecutables = @('search-artist-db.exe', 'tlo-gsi.exe', 'tlo-gi.exe', 'tlo-ggi.exe', 'tlo-tag.exe', 'tlo-deleteDupes.exe')
 foreach ($name in $ExpectedExecutables) {
     $path = Join-Path $TargetDir $name
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
