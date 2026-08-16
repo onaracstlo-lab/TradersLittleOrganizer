@@ -1,11 +1,12 @@
 """Repair corrupt FLACs from duplicate copies, then move duplicates to a partition holding folder."""
 
-__version__ = "v367"
-# TLO-GI package version: v367
-__version_summary__ = 'Moves qualifying duplicate folders into a partition-root duplicates holding folder instead of Trash/Recycle Bin.'
-# TLO-GI version summary: Moves qualifying duplicate folders into a partition-root duplicates holding folder instead of Trash/Recycle Bin.
+__version__ = "v369"
+# TLO-GI package version: v369
+__version_summary__ = 'Adds Research log lookup by artist/date, venue, or date in the CLI and Inventory GUI.'
+# TLO-GI version summary: Adds Research log lookup by artist/date, venue, or date in the CLI and Inventory GUI.
 
 import argparse
+import csv
 import ntpath
 import os
 import re
@@ -185,23 +186,45 @@ def _scan_tree(root: str) -> TreeManifest:
     )
 
 
-def directory_trees_match_for_duplicate_deletion(original: str, copy_path: str) -> bool:
-    """Return True when trees have identical names/structure and file sizes.
+def _tree_manifest_mismatch_reason(left: TreeManifest, right: TreeManifest) -> str:
+    """Return one short human-readable reason two scanned trees do not match."""
+    if len(left.files) != len(right.files):
+        return "different number of files"
+    if left.directories != right.directories or left.symlinks != right.symlinks:
+        return "different sub-structure"
 
-    This deliberately implements the cleanup rule requested for tlo-deleteDupes:
-    equal relative folder structure, equal relative file names, and equal file
-    sizes. It does not hash file bytes.
-    """
+    left_files = dict(left.files)
+    right_files = dict(right.files)
+    if set(left_files) != set(right_files):
+        return "different file names"
+    for relative_path in sorted(left_files):
+        if left_files[relative_path] != right_files[relative_path]:
+            return f"{relative_path} different sizes"
+    return "different contents"
+
+
+def compare_directory_trees_for_duplicate_deletion(original: str, copy_path: str) -> Tuple[bool, str]:
+    """Return (matches, simple reason) under deleteDupes' structure/name/size rule."""
     original = os.path.normpath(str(original or ""))
     copy_path = os.path.normpath(str(copy_path or ""))
     if not os.path.isdir(original) or not os.path.isdir(copy_path):
-        return False
+        return False, "folder missing"
     try:
         if os.path.samefile(original, copy_path):
-            return False
+            return False, "same folder"
     except OSError:
         pass
-    return _scan_tree(original) == _scan_tree(copy_path)
+    left = _scan_tree(original)
+    right = _scan_tree(copy_path)
+    if left == right:
+        return True, ""
+    return False, _tree_manifest_mismatch_reason(left, right)
+
+
+def directory_trees_match_for_duplicate_deletion(original: str, copy_path: str) -> bool:
+    """Return True when trees have identical names/structure and file sizes."""
+    matches, _reason = compare_directory_trees_for_duplicate_deletion(original, copy_path)
+    return matches
 
 
 def _copy_suffix_info(directory_name: str) -> Tuple[str, Optional[int]]:
@@ -309,11 +332,19 @@ def _candidate_sort_key(candidate: CopyCandidate) -> Tuple[int, int, str, str]:
     return (1, int(candidate.alphabetical_rank), path_key.casefold(), path_key)
 
 
+def _record_tree_mismatch(recorder, left_path: str, right_path: str, reason: str) -> None:
+    """Record one comparison failure when a mismatch recorder was supplied."""
+    if recorder is None:
+        return
+    recorder(left_path, right_path, reason)
+
+
 def _matching_unsuffixed_duplicate_groups(
     search_root: str,
     *,
     emit=console_emit,
     exclude_paths: Iterable[str] = (),
+    mismatch_recorder=None,
 ) -> Tuple[Dict[str, List[CopyCandidate]], Dict[str, str]]:
     """Find matching same-artist/date sibling folders without copy suffixes.
 
@@ -348,11 +379,15 @@ def _matching_unsuffixed_duplicate_groups(
             master = ordered[0]
             for rank, later_path in enumerate(ordered[1:], start=1):
                 try:
-                    matches = directory_trees_match_for_duplicate_deletion(master, later_path)
+                    matches, mismatch_reason = compare_directory_trees_for_duplicate_deletion(master, later_path)
                 except DeleteDupesError as exc:
                     emit(f"Skipped unverifiable duplicate folder: {later_path} ({exc})", error=True)
+                    _record_tree_mismatch(mismatch_recorder, master, later_path, "unable to compare")
                     matches = False
+                    mismatch_reason = ""
                 if not matches:
+                    if mismatch_reason:
+                        _record_tree_mismatch(mismatch_recorder, master, later_path, mismatch_reason)
                     continue
                 candidate = CopyCandidate(
                     number=rank,
@@ -387,6 +422,7 @@ def _matching_duplicate_groups(
     *,
     emit=console_emit,
     exclude_paths: Iterable[str] = (),
+    mismatch_recorder=None,
 ) -> List[Tuple[str, List[CopyCandidate]]]:
     """Return every qualifying duplicate group with one surviving master folder.
 
@@ -399,7 +435,7 @@ def _matching_duplicate_groups(
     depends on a master that will itself be moved away.
     """
     grouped, canonical_master_by_path = _matching_unsuffixed_duplicate_groups(
-        search_root, emit=emit, exclude_paths=exclude_paths
+        search_root, emit=emit, exclude_paths=exclude_paths, mismatch_recorder=mismatch_recorder
     )
 
     for candidate in _copy_candidates(search_root, exclude_paths=exclude_paths):
@@ -416,11 +452,19 @@ def _matching_duplicate_groups(
                 original_path,
             )
             try:
-                matches = directory_trees_match_for_duplicate_deletion(canonical_original, candidate.path)
+                matches, mismatch_reason = compare_directory_trees_for_duplicate_deletion(
+                    canonical_original, candidate.path
+                )
             except DeleteDupesError as exc:
                 emit(f"Skipped unverifiable copy folder: {candidate.path} ({exc})", error=True)
+                _record_tree_mismatch(mismatch_recorder, canonical_original, candidate.path, "unable to compare")
                 matches = False
+                mismatch_reason = ""
             if not matches:
+                if mismatch_reason:
+                    _record_tree_mismatch(
+                        mismatch_recorder, canonical_original, candidate.path, mismatch_reason
+                    )
                 continue
             grouped.setdefault(canonical_original, []).append(candidate)
             break
@@ -684,6 +728,7 @@ def delete_duplicate_copy_directories(
     """
     search_root = validate_input_path(search_root)
     log_path = os.path.join(tlo_home, "deletedDirs.txt")
+    mismatch_log_path = os.path.join(tlo_home, "deleteDupesMismatches.txt")
     moved_count = 0
     validator = ffmpeg_executable or _bundled_ffmpeg_executable()
 
@@ -698,11 +743,32 @@ def delete_duplicate_copy_directories(
     else:
         holding_root = _prepare_duplicates_root(search_root, duplicates_root)
 
-    # Keep the log open during the operation so a Ctrl-C unwind closes it through
-    # the context manager before main() returns 130. The historic filename remains
-    # for compatibility; entries are the pre-move full source paths.
-    with open(log_path, "a", encoding="utf-8", buffering=1) as log_file:
-        groups = _matching_duplicate_groups(search_root, emit=emit, exclude_paths=(holding_root,))
+    # Keep both logs open during the operation so a Ctrl-C unwind closes them through
+    # their context managers before main() returns 130. deletedDirs.txt remains only
+    # the pre-move full paths of folders actually relocated. Non-matching comparisons
+    # are recorded separately as CSV: folder name, folder name, simple reason.
+    with open(log_path, "a", encoding="utf-8", buffering=1) as log_file, open(
+        mismatch_log_path, "a", encoding="utf-8", newline="", buffering=1
+    ) as mismatch_file:
+        mismatch_writer = csv.writer(mismatch_file, lineterminator="\n")
+        seen_mismatches: Set[Tuple[str, str, str]] = set()
+
+        def record_mismatch(left_path: str, right_path: str, reason: str) -> None:
+            left_name = os.path.basename(os.path.normpath(left_path))
+            right_name = os.path.basename(os.path.normpath(right_path))
+            key = (left_name.casefold(), right_name.casefold(), str(reason))
+            if key in seen_mismatches:
+                return
+            seen_mismatches.add(key)
+            mismatch_writer.writerow([left_name, right_name, str(reason)])
+            mismatch_file.flush()
+
+        groups = _matching_duplicate_groups(
+            search_root,
+            emit=emit,
+            exclude_paths=(holding_root,),
+            mismatch_recorder=record_mismatch,
+        )
         for original_path, qualifying in groups:
             if not os.path.isdir(original_path) or not qualifying:
                 continue

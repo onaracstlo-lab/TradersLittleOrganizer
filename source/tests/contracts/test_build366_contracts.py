@@ -1,6 +1,6 @@
-"""Build 367 alphabetical-master duplicate-cleanup contracts."""
+"""Build 369 alphabetical-master duplicate-cleanup contracts."""
 
-__version__ = "v367"
+__version__ = "v369"
 
 from pathlib import Path
 from zipfile import ZipFile
@@ -28,11 +28,11 @@ def test_build366_source_discovers_unsuffixed_same_artist_date_groups_alphabetic
     assert "_alphabetical_name_key" in source
     assert "first folder is the master" in source
     assert 'source_kind="alphabetical"' in source
-    assert "directory_trees_match_for_duplicate_deletion(master, later_path)" in source
+    assert "compare_directory_trees_for_duplicate_deletion(master, later_path)" in source
 
 
 def test_build366_requirements_define_unsuffixed_alphabetical_master_rule():
-    text = _docx_text("TLO_Inventory_Requirements_Working_v367.docx")
+    text = _docx_text("TLO_Inventory_Requirements_Working_v369.docx")
     assert "18.2 Candidate Discovery and Alphabetical Master Selection" in text
     assert "sort those unsuffixed directory names alphabetically without regard to case" in text
     assert "The alphabetically first directory is the master and shall be protected from relocation" in text
@@ -41,7 +41,7 @@ def test_build366_requirements_define_unsuffixed_alphabetical_master_rule():
 
 
 def test_build366_manual_documents_unsuffixed_alphabetical_master_rule():
-    text = (ROOT / "TLO_Inventory_User_Manual_v367.rtf").read_text(encoding="utf-8", errors="ignore")
+    text = (ROOT / "TLO_Inventory_User_Manual_v369.rtf").read_text(encoding="utf-8", errors="ignore")
     assert "folders that have no (copyN) suffix" in text
     assert "sorted alphabetically without regard to case" in text
     assert "The first folder alphabetically is the master and is always kept" in text

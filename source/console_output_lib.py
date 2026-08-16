@@ -1,7 +1,7 @@
-__version__ = "v367"
-# TLO-GI package version: v367
-__version_summary__ = 'Moves qualifying duplicate folders into a partition-root duplicates holding folder instead of Trash/Recycle Bin.'
-# TLO-GI version summary: Moves qualifying duplicate folders into a partition-root duplicates holding folder instead of Trash/Recycle Bin.
+__version__ = "v369"
+# TLO-GI package version: v369
+__version_summary__ = 'Adds Research log lookup by artist/date, venue, or date in the CLI and Inventory GUI.'
+# TLO-GI version summary: Adds Research log lookup by artist/date, venue, or date in the CLI and Inventory GUI.
 import sys
 
 

@@ -1,9 +1,9 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v367"
-# TLO-GI package version: v367
-__version_summary__ = 'Moves qualifying duplicate folders into a partition-root duplicates holding folder instead of Trash/Recycle Bin.'
-# TLO-GI version summary: Moves qualifying duplicate folders into a partition-root duplicates holding folder instead of Trash/Recycle Bin.
+__version__ = "v369"
+# TLO-GI package version: v369
+__version_summary__ = 'Adds Research log lookup by artist/date, venue, or date in the CLI and Inventory GUI.'
+# TLO-GI version summary: Adds Research log lookup by artist/date, venue, or date in the CLI and Inventory GUI.
 
 import multiprocessing
 
@@ -42,6 +42,7 @@ from tlo_bootlist_volume_policy import normalize_volume_action, volume_display_n
 from tlo_main_lib import run_inventory
 from tlo_tag_lib import TAGGER_TITLE, default_tagging_path, resolve_tlo_home, run_tagger
 from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION, PUBLIC_VERSION, versioned_title
+from tlo_research_lib import research_logs
 from tlo_github_updates import (
     check_for_updates,
     is_auto_update_enabled,
@@ -554,6 +555,7 @@ class App:
         self.tag_button = None
         self.add_shows_button = None
         self.inventory_button = None
+        self.research_button = None
         self.pause_button = None
         self.resume_button = None
         self.progress_bar = None
@@ -822,6 +824,13 @@ class App:
             style=main_button_style,
         )
         self.add_shows_button.grid(row=0, column=1, padx=4, sticky="w")
+        self.research_button = ttk.Button(
+            left_button_group,
+            text="Research\n ",
+            command=self._open_research,
+            style=main_button_style,
+        )
+        self.research_button.grid(row=0, column=2, padx=4, sticky="w")
         ttk.Button(
             button_frame,
             text="Quit\n ",
@@ -1147,6 +1156,84 @@ class App:
         except tk.TclError:
             pass
 
+
+    def _open_research(self):
+        try:
+            tlo_home = self._resolve_gui_tlo_home(error_type=ValueError)
+        except Exception as exc:
+            messagebox.showerror("TLO Research", str(exc), parent=self.root)
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title(versioned_title("TLO Research"))
+        dialog.transient(self.root)
+        dialog.resizable(True, False)
+        frame = ttk.Frame(dialog, padding=10)
+        frame.grid(sticky="nsew")
+        dialog.columnconfigure(0, weight=1)
+        frame.columnconfigure(1, weight=1)
+
+        query_var = tk.StringVar(value="")
+        ttk.Label(frame, text="Research", style="Main.TLabel").grid(
+            row=0, column=0, sticky="w", padx=(0, 8), pady=(0, 8)
+        )
+        entry = ttk.Entry(frame, textvariable=query_var, width=72, style="Main.TEntry")
+        entry.grid(row=0, column=1, sticky="ew", pady=(0, 8))
+        ttk.Label(
+            frame,
+            text="Enter an artist followed by a date, a venue, or a date.",
+            justify="left",
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 10))
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=2, column=0, columnspan=2, sticky="e")
+
+        def run_query(_event=None):
+            query_text = query_var.get().strip()
+            if not query_text:
+                messagebox.showwarning("TLO Research", "Enter a research string.", parent=dialog)
+                return
+            try:
+                result = research_logs(tlo_home, query_text)
+            except Exception as exc:
+                messagebox.showerror("TLO Research", str(exc), parent=dialog)
+                return
+            self._show_research_results(query_text, result)
+
+        ttk.Button(buttons, text="Search", command=run_query, style="Main.TButton").grid(row=0, column=0, padx=4)
+        ttk.Button(buttons, text="Close", command=dialog.destroy, style="Main.TButton").grid(row=0, column=1, padx=4)
+        entry.bind("<Return>", run_query)
+        try:
+            entry.focus_set()
+        except tk.TclError:
+            pass
+
+    def _show_research_results(self, query_text, result_text):
+        window = tk.Toplevel(self.root)
+        window.title(versioned_title("TLO Research Results"))
+        window.geometry("980x620")
+        frame = ttk.Frame(window, padding=8)
+        frame.grid(sticky="nsew")
+        window.columnconfigure(0, weight=1)
+        window.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
+        ttk.Label(frame, text=f"Research: {query_text}", style="Main.TLabel").grid(
+            row=0, column=0, sticky="w", pady=(0, 6)
+        )
+        output = scrolledtext.ScrolledText(
+            frame, width=110, height=32, font=tkfont.nametofont("TkFixedFont"), wrap="none"
+        )
+        output.grid(row=1, column=0, sticky="nsew")
+        output.insert("1.0", result_text)
+        output.configure(state="disabled")
+        ttk.Button(frame, text="Close", command=window.destroy, style="Main.TButton").grid(
+            row=2, column=0, sticky="e", pady=(8, 0)
+        )
+        try:
+            window.focus_force()
+        except tk.TclError:
+            pass
 
     def _worker_is_alive(self):
         return bool(self.worker and self.worker.is_alive())

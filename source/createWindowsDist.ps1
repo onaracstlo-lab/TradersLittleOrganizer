@@ -263,6 +263,7 @@ $DeleteDupesArgs = @('--collect-all', 'imageio_ffmpeg')
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'search-artist-db.py') -AdditionalArgs $ArtistArgs
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-gsi.py') -AdditionalArgs $SearchArgs
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-gi.py')
+Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-research.py')
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-ggi.py') -AdditionalArgs $GuiArgs
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-tag.py') -AdditionalArgs $TagArgs
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-deleteDupes.py') -AdditionalArgs $DeleteDupesArgs
@@ -299,7 +300,7 @@ Invoke-Python -Runner $PythonRunner -Arguments $ScanArguments
 
 # Recheck after antivirus has had a chance to quarantine a newly written file.
 Start-Sleep -Seconds 2
-$ExpectedExecutables = @('search-artist-db.exe', 'tlo-gsi.exe', 'tlo-gi.exe', 'tlo-ggi.exe', 'tlo-tag.exe', 'tlo-deleteDupes.exe')
+$ExpectedExecutables = @('search-artist-db.exe', 'tlo-gsi.exe', 'tlo-gi.exe', 'tlo-research.exe', 'tlo-ggi.exe', 'tlo-tag.exe', 'tlo-deleteDupes.exe')
 foreach ($name in $ExpectedExecutables) {
     $path = Join-Path $TargetDir $name
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {

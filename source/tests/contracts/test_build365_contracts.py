@@ -1,6 +1,6 @@
-"""Build 367 FAQ and delete-duplicate contracts."""
+"""Build 369 FAQ and delete-duplicate contracts."""
 
-__version__ = "v367"
+__version__ = "v369"
 
 from pathlib import Path
 
@@ -44,7 +44,7 @@ def _docx_text(name: str) -> str:
 
 
 def test_build365_requirements_document_same_artist_date_and_folder_level_move():
-    text = _docx_text("TLO_Inventory_Requirements_Working_v367.docx")
+    text = _docx_text("TLO_Inventory_Requirements_Working_v369.docx")
     assert "same-parent non-copy sibling" in text
     assert "normalized artist and date" in text
     assert "same-artist/date name match alone is never sufficient" in text
@@ -53,7 +53,7 @@ def test_build365_requirements_document_same_artist_date_and_folder_level_move()
 
 
 def test_build365_manual_documents_same_artist_date_and_folder_level_move():
-    text = (ROOT / "TLO_Inventory_User_Manual_v367.rtf").read_text(encoding="utf-8", errors="ignore")
+    text = (ROOT / "TLO_Inventory_User_Manual_v369.rtf").read_text(encoding="utf-8", errors="ignore")
     assert "same normalized artist and date" in text
     assert "A matching artist and date is only a way to select folders for comparison" in text
     assert "moved as a complete folder tree" in text

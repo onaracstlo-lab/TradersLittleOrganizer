@@ -1,6 +1,6 @@
 """Behavior tests for the tlo-deleteDupes main."""
 
-__version__ = "v367"
+__version__ = "v369"
 
 import importlib.util
 from pathlib import Path
@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _load_module():
-    spec = importlib.util.spec_from_file_location("tlo_delete_dupes_v367", ROOT / "tlo-deleteDupes.py")
+    spec = importlib.util.spec_from_file_location("tlo_delete_dupes_v369", ROOT / "tlo-deleteDupes.py")
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
@@ -831,3 +831,115 @@ def test_input_path_inside_duplicates_holding_folder_is_rejected(tmp_path):
 
     with pytest.raises(module.DeleteDupesError, match="duplicates holding folder"):
         module._prepare_duplicates_root(str(nested), str(duplicates))
+
+
+def test_delete_dupes_records_simple_mismatch_reasons_in_separate_log(tmp_path):
+    module = _load_module()
+    home = tmp_path / "home"
+    root = tmp_path / "music"
+    home.mkdir()
+
+    master = root / "Bill 2013 HOB Boston"
+    size_diff = root / "Bill 2013 House of Blues Boston"
+    extra_file = root / "Bill 2013 Paradise Boston"
+    structure_diff = root / "Bill 2013 Orpheum Boston"
+
+    _write(master / "01.flac", b"AAAA")
+    _write(master / "notes.txt", b"notes")
+
+    _write(size_diff / "01.flac", b"LONGER")
+    _write(size_diff / "notes.txt", b"notes")
+
+    _write(extra_file / "01.flac", b"AAAA")
+    _write(extra_file / "notes.txt", b"notes")
+    _write(extra_file / "extra.txt", b"extra")
+
+    _write(structure_diff / "disc1" / "01.flac", b"AAAA")
+    _write(structure_diff / "notes.txt", b"notes")
+
+    moved = module.delete_duplicate_copy_directories(
+        str(root),
+        str(home),
+        trash_func=lambda _path: None,
+        emit=lambda *a, **k: None,
+        ffmpeg_executable="fake-ffmpeg",
+        health_check=lambda *_a, **_k: True,
+    )
+
+    assert moved == 0
+    rows = list(__import__("csv").reader((home / "deleteDupesMismatches.txt").open(encoding="utf-8")))
+    by_candidate = {row[1]: row[2] for row in rows if row[0] == master.name}
+    assert by_candidate[size_diff.name] == "01.flac different sizes"
+    assert by_candidate[extra_file.name] == "different number of files"
+    assert by_candidate[structure_diff.name] == "different sub-structure"
+    assert (home / "deletedDirs.txt").read_text(encoding="utf-8") == ""
+
+
+def test_delete_dupes_mismatch_log_csv_quotes_folder_names_with_commas(tmp_path):
+    module = _load_module()
+    home = tmp_path / "home"
+    root = tmp_path / "music"
+    home.mkdir()
+    master = root / "Alejandro Escovedo 2005-03-18 SXSW Bugsby hill, Auditorium Shores Austin, TX"
+    candidate = root / "Alejandro Escovedo 2005-03-18 SXSW, Auditorium Shores Austin, TX"
+    _write(master / "01.flac", b"AAAA")
+    _write(candidate / "01.flac", b"BBBBB")
+
+    module.delete_duplicate_copy_directories(
+        str(root),
+        str(home),
+        trash_func=lambda _path: None,
+        emit=lambda *a, **k: None,
+        ffmpeg_executable="fake-ffmpeg",
+        health_check=lambda *_a, **_k: True,
+    )
+
+    import csv
+    with (home / "deleteDupesMismatches.txt").open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.reader(handle))
+    assert rows == [[master.name, candidate.name, "01.flac different sizes"]]
+
+
+def test_alejandro_six_folder_case_moves_matching_plain_folder_and_logs_extra_flac(tmp_path):
+    module = _load_module()
+    home = tmp_path / "home"
+    root = tmp_path / "music"
+    home.mkdir()
+
+    names = [
+        "Alejandro Escovedo 2005-03-18 SXSW, Auditorium Shores Austin, TX (copy2) - Copy",
+        "Alejandro Escovedo 2005-03-18 SXSW, Auditorium Shores Austin, TX (copy2) - Copy (2)",
+        "Alejandro Escovedo 2005-03-18 SXSW Bugsby hill, Auditorium Shores Austin, TX",
+        "Alejandro Escovedo 2005-03-18 SXSW, Auditorium Shores Austin, TX - Copy (2)",
+        "Alejandro Escovedo 2005-03-18 SXSW, Auditorium Shores Austin, TX (copy2)",
+        "Alejandro Escovedo 2005-03-18 SXSW, Auditorium Shores Austin, TX",
+    ]
+    folders = {name: root / name for name in names}
+    for folder in folders.values():
+        _write(folder / "01.flac", b"AAAA")
+    extra_name = names[1]
+    _write(folders[extra_name] / "02.flac", b"EXTRA")
+
+    moved_paths = []
+    count = module.delete_duplicate_copy_directories(
+        str(root),
+        str(home),
+        trash_func=lambda path: moved_paths.append(path),
+        emit=lambda *a, **k: None,
+        ffmpeg_executable="fake-ffmpeg",
+        health_check=lambda *_a, **_k: True,
+    )
+
+    moved_names = {Path(path).name for path in moved_paths}
+    assert count == 4
+    assert names[5] in moved_names  # plain ...Austin, TX folder
+    assert names[4] in moved_names  # terminal (copy2)
+    assert names[0] in moved_names
+    assert names[3] in moved_names
+    assert names[2] not in moved_names  # alphabetical Bugsby master
+    assert extra_name not in moved_names
+
+    import csv
+    with (home / "deleteDupesMismatches.txt").open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.reader(handle))
+    assert [names[2], extra_name, "different number of files"] in rows
