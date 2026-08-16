@@ -207,7 +207,7 @@ else
 fi
 
 build_one "$(find_script tlo-deleteDupes.py)" no \
-    --collect-all send2trash
+    --collect-all imageio_ffmpeg
 
 EXPECTED_EXECUTABLES=(
     search-artist-db

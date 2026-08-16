@@ -98,7 +98,7 @@ build_one "$(find_script tlo-tag.py)" \
     --collect-all mutagen \
     --collect-all imageio_ffmpeg
 build_one "$(find_script tlo-deleteDupes.py)" \
-    --collect-all send2trash
+    --collect-all imageio_ffmpeg
 
 "$PYTHON_BIN" "$SCAN_SCRIPT" \
     --platform linux \

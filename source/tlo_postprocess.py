@@ -1,9 +1,9 @@
 """Postprocess metadata logs into setlist files, bootlist.csv, duplicate/group outputs, and summary/unidentified-show files."""
 
-__version__ = "v363"
-# TLO-GI package version: v363
-__version_summary__ = 'Adds tlo-deleteDupes for safe recursive cleanup of copy-suffixed duplicate folders via the platform Trash/Recycle Bin.'
-# TLO-GI version summary: Adds tlo-deleteDupes for safe recursive cleanup of copy-suffixed duplicate folders via the platform Trash/Recycle Bin.
+__version__ = "v367"
+# TLO-GI package version: v367
+__version_summary__ = 'Moves qualifying duplicate folders into a partition-root duplicates holding folder instead of Trash/Recycle Bin.'
+# TLO-GI version summary: Moves qualifying duplicate folders into a partition-root duplicates holding folder instead of Trash/Recycle Bin.
 import csv
 import glob
 import json

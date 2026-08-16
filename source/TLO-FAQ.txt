@@ -4,6 +4,9 @@ A: No. TLO is freeware.
 Q: What does TLO do well?
 A: TLO inventories live-music collections, identifies show metadata, creates searchable inventory output, and can tag supported audio files. Results depend on folder names, setlists, tags, database coverage, and optional online lookup sources.
 
+Q: Does TLO inventory absolutely every music file?
+A: No. Once TLO identifies a music file, it stops looking. If you have a folder containing both music files and a nested folder with more music files, the nested folder will be ignored. Typically found where an opening act is included in the main folder.
+
 Q: Do I need to define TLOHome before I start?
 A: Yes. TLOHome is the root for the applications, databases, logs, setlists, and inventory output. Set it with the TLOHome environment variable or the documented --TLOHome command-line option. The Inventory and Search GUIs resolve it at startup and display it as a read-only label.
 
@@ -55,5 +58,5 @@ A: The indeterminate activity indicator moves at one-tenth of its former speed i
 Q: Where does TLO store setlist.fm rate-limit information?
 A: Build 356 and later store it under TLOHome/logs/setlistfm-state. TLO no longer uses a shared system temporary-directory state file. A worker abandons a blocked reservation after 20 seconds and continues without that lookup.
 
-Q: How do I safely remove duplicate folders that TLO named as copies?
-A: Use tlo-deleteDupes with a fully qualified search path. It compares each (copyN) or (copy N) folder with its unsuffixed sibling using the complete relative folder structure plus file names and file sizes. Matching copy folders are moved to the operating-system Recycle Bin/Trash, never permanently deleted, and their original full paths are appended to TLOHome/deletedDirs.txt. The unsuffixed original is never moved.
+Q: How do I safely remove duplicate folders?
+A: Use tlo-deleteDupes with a fully qualified search path. Folders ending in (copyN) or (copy N) are compared with eligible same-parent kept folders using the complete relative folder structure plus file names and file sizes. TLO also compares same-parent folders with no copy suffix when their normalized artist and date match: those folders are analyzed alphabetically, the first folder is kept as the master, and later folders are treated as copies only when their complete recursive structure, file names, and file sizes match the master. Matching duplicate folders are moved as whole folders into a folder named duplicates at the root of the partition containing the search path. TLO creates that folder if needed, never overwrites an existing holding-folder entry, and appends each duplicate folder's original full path to TLOHome/deletedDirs.txt.

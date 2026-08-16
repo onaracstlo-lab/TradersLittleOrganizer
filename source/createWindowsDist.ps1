@@ -258,7 +258,7 @@ $ArtistArgs = @('--windowed')
 $SearchArgs = @('--windowed', "--icon=$SearchIcon")
 $GuiArgs = @('--windowed', '--collect-all', 'mutagen', '--collect-all', 'imageio_ffmpeg', '--collect-all', 'tkinterdnd2', "--icon=$InventoryIcon")
 $TagArgs = @('--collect-all', 'mutagen', '--collect-all', 'imageio_ffmpeg', "--icon=$TagIcon")
-$DeleteDupesArgs = @('--collect-all', 'send2trash')
+$DeleteDupesArgs = @('--collect-all', 'imageio_ffmpeg')
 
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'search-artist-db.py') -AdditionalArgs $ArtistArgs
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-gsi.py') -AdditionalArgs $SearchArgs
