@@ -1,6 +1,6 @@
 """Behavioral coverage for copy and Copy/Delete Original transfer verification."""
 
-__version__ = "v369"
+__version__ = "v370"
 
 from types import SimpleNamespace
 

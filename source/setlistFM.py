@@ -18,10 +18,10 @@ The input date is yyyy-mm-dd. The setlist.fm API search date is dd-MM-yyyy.
 
 from __future__ import annotations
 
-__version__ = "v369"
-# TLO-GI package version: v369
-__version_summary__ = 'Adds Research log lookup by artist/date, venue, or date in the CLI and Inventory GUI.'
-# TLO-GI version summary: Adds Research log lookup by artist/date, venue, or date in the CLI and Inventory GUI.
+__version__ = "v370"
+# TLO-GI package version: v370
+__version_summary__ = 'Compares duplicate copies with each other using content-equivalence clusters and preferred keepers.'
+# TLO-GI version summary: Compares duplicate copies with each other using content-equivalence clusters and preferred keepers.
 
 
 import argparse

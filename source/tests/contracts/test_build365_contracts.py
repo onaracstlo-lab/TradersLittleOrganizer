@@ -1,6 +1,6 @@
-"""Build 369 FAQ and delete-duplicate contracts."""
+"""Build 370 FAQ and delete-duplicate contracts."""
 
-__version__ = "v369"
+__version__ = "v370"
 
 from pathlib import Path
 
@@ -29,7 +29,7 @@ def test_build365_delete_dupes_supports_same_artist_date_nonexact_names():
     source = (ROOT / "tlo-deleteDupes.py").read_text(encoding="utf-8")
     assert "_same_artist_and_date" in source
     assert "_potential_originals_for_copy" in source
-    assert "same artist and date" in source.lower()
+    assert "same artist/date" in source.lower()
 
 
 def _docx_text(name: str) -> str:
@@ -44,17 +44,17 @@ def _docx_text(name: str) -> str:
 
 
 def test_build365_requirements_document_same_artist_date_and_folder_level_move():
-    text = _docx_text("TLO_Inventory_Requirements_Working_v369.docx")
-    assert "same-parent non-copy sibling" in text
+    text = _docx_text("TLO_Inventory_Requirements_Working_v370.docx")
+    assert "same-parent sibling directories" in text
     assert "normalized artist and date" in text
-    assert "same-artist/date name match alone is never sufficient" in text
+    assert "Candidate discovery alone shall never establish that two folders are duplicates" in text
     assert "moved as one complete directory tree" in text
     assert "duplicates" in text
 
 
 def test_build365_manual_documents_same_artist_date_and_folder_level_move():
-    text = (ROOT / "TLO_Inventory_User_Manual_v369.rtf").read_text(encoding="utf-8", errors="ignore")
-    assert "same normalized artist and date" in text
+    text = (ROOT / "TLO_Inventory_User_Manual_v370.rtf").read_text(encoding="utf-8", errors="ignore")
+    assert "normalized artist and date match" in text
     assert "A matching artist and date is only a way to select folders for comparison" in text
     assert "moved as a complete folder tree" in text
     assert "duplicates" in text

@@ -1,9 +1,9 @@
 """Repair corrupt FLACs from duplicate copies, then move duplicates to a partition holding folder."""
 
-__version__ = "v369"
-# TLO-GI package version: v369
-__version_summary__ = 'Adds Research log lookup by artist/date, venue, or date in the CLI and Inventory GUI.'
-# TLO-GI version summary: Adds Research log lookup by artist/date, venue, or date in the CLI and Inventory GUI.
+__version__ = "v370"
+# TLO-GI package version: v370
+__version_summary__ = 'Compares duplicate copies with each other using content-equivalence clusters and preferred keepers.'
+# TLO-GI version summary: Compares duplicate copies with each other using content-equivalence clusters and preferred keepers.
 
 import argparse
 import csv
@@ -339,6 +339,115 @@ def _record_tree_mismatch(recorder, left_path: str, right_path: str, reason: str
     recorder(left_path, right_path, reason)
 
 
+def _keeper_preference_key(path_name: str) -> Tuple[int, int, str, str]:
+    """Prefer an unsuffixed folder, then the most natural deterministic name.
+
+    Unsuffixed folders are preferred because they are generally the user's
+    intended master.  When a content-equivalence cluster contains only numbered
+    copy folders, the lowest copy number is preferred.  Ties are resolved
+    alphabetically without regard to case.
+    """
+    name = os.path.basename(os.path.normpath(path_name))
+    _base, copy_number = _copy_suffix_info(name)
+    if copy_number is None:
+        return (0, 0, name.casefold(), name)
+    return (1, int(copy_number), name.casefold(), name)
+
+
+def _copy_candidate_for_cluster_member(path_name: str, alphabetical_rank: int) -> CopyCandidate:
+    """Return a CopyCandidate descriptor for a folder that will be relocated."""
+    _base, copy_number = _copy_suffix_info(os.path.basename(os.path.normpath(path_name)))
+    if copy_number is not None:
+        return CopyCandidate(number=int(copy_number), path=path_name, source_kind="numbered")
+    return CopyCandidate(
+        number=int(alphabetical_rank),
+        path=path_name,
+        source_kind="alphabetical",
+        alphabetical_rank=int(alphabetical_rank),
+    )
+
+
+def _candidate_components_for_parent(current_dir: str, dir_names: Iterable[str]) -> List[List[str]]:
+    """Return sibling candidate components that warrant duplicate comparison.
+
+    Two sibling folders enter the same discovery component when either:
+      * they share the same normalized artist/date identity, or
+      * they belong to the same exact copy family (X, X (copy2), X (copy3)).
+
+    The second rule intentionally allows copy folders to be compared with each
+    other even when no unsuffixed X folder exists or when X has different
+    contents.  Candidate discovery is not duplicate proof; tree equivalence is
+    established separately.
+    """
+    paths: List[str] = []
+    names: List[str] = []
+    for dir_name in dir_names:
+        full_path = os.path.normpath(os.path.join(current_dir, dir_name))
+        if not os.path.isdir(full_path) or os.path.islink(full_path):
+            continue
+        paths.append(full_path)
+        names.append(dir_name)
+    if len(paths) < 2:
+        return []
+
+    parent = list(range(len(paths)))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    def union(left: int, right: int) -> None:
+        left_root = find(left)
+        right_root = find(right)
+        if left_root != right_root:
+            parent[right_root] = left_root
+
+    # Exact X/(copyN) families.  Unsuffixed X and all numbered copies of X
+    # receive the same family key.  Multiple numbered copies therefore compare
+    # with one another even if X is absent.
+    exact_families: Dict[str, List[int]] = {}
+    exact_family_has_copy: Set[str] = set()
+    for index, name in enumerate(names):
+        base, copy_number = _copy_suffix_info(name)
+        family_name = base if copy_number is not None else name
+        family_key = os.path.normcase(str(family_name).strip())
+        exact_families.setdefault(family_key, []).append(index)
+        if copy_number is not None:
+            exact_family_has_copy.add(family_key)
+    for family_key, members in exact_families.items():
+        if family_key not in exact_family_has_copy or len(members) < 2:
+            continue
+        first = members[0]
+        for member in members[1:]:
+            union(first, member)
+
+    # Same artist/date broadens candidate discovery across non-identical names.
+    identity_groups: Dict[Tuple[str, str], List[int]] = {}
+    for index, name in enumerate(names):
+        identity = _show_identity(name)
+        if identity[0]:
+            identity_groups.setdefault(identity, []).append(index)
+    for members in identity_groups.values():
+        if len(members) < 2:
+            continue
+        first = members[0]
+        for member in members[1:]:
+            union(first, member)
+
+    components: Dict[int, List[str]] = {}
+    for index, path_name in enumerate(paths):
+        components.setdefault(find(index), []).append(path_name)
+    result = [
+        sorted(component, key=_alphabetical_name_key)
+        for component in components.values()
+        if len(component) >= 2
+    ]
+    result.sort(key=lambda component: _alphabetical_name_key(component[0]))
+    return result
+
+
 def _matching_unsuffixed_duplicate_groups(
     search_root: str,
     *,
@@ -346,59 +455,25 @@ def _matching_unsuffixed_duplicate_groups(
     exclude_paths: Iterable[str] = (),
     mismatch_recorder=None,
 ) -> Tuple[Dict[str, List[CopyCandidate]], Dict[str, str]]:
-    """Find matching same-artist/date sibling folders without copy suffixes.
+    """Compatibility wrapper for callers of the former single-master helper.
 
-    For each same-parent artist/date set, folders are analyzed alphabetically. The
-    first folder is the master. Every later folder is treated as a copy candidate
-    and qualifies only when the existing recursive name/structure/size rule says
-    that its tree matches the master. The returned canonical map points each
-    qualifying later folder at the master that must survive.
+    Build 370 no longer protects one alphabetically first master for an entire
+    artist/date set.  It forms content-equivalence clusters across unsuffixed and
+    copy-suffixed candidates.  This wrapper exposes the resulting groups while
+    returning a canonical-map shape compatible with older internal callers.
     """
-    grouped: Dict[str, List[CopyCandidate]] = {}
-    canonical_master_by_path: Dict[str, str] = {}
-
-    for current_dir, dir_names, _file_names in os.walk(search_root, topdown=True, followlinks=False):
-        _prune_excluded_dir_names(current_dir, dir_names, exclude_paths)
-        identity_groups: Dict[Tuple[str, str], List[str]] = {}
-        for dir_name in list(dir_names):
-            full_path = os.path.normpath(os.path.join(current_dir, dir_name))
-            if not os.path.isdir(full_path) or os.path.islink(full_path):
-                continue
-            _base, copy_number = _copy_suffix_info(dir_name)
-            if copy_number is not None:
-                continue
-            identity = _show_identity(dir_name)
-            if not identity[0]:
-                continue
-            identity_groups.setdefault(identity, []).append(full_path)
-
-        for siblings in identity_groups.values():
-            if len(siblings) < 2:
-                continue
-            ordered = sorted(siblings, key=_alphabetical_name_key)
-            master = ordered[0]
-            for rank, later_path in enumerate(ordered[1:], start=1):
-                try:
-                    matches, mismatch_reason = compare_directory_trees_for_duplicate_deletion(master, later_path)
-                except DeleteDupesError as exc:
-                    emit(f"Skipped unverifiable duplicate folder: {later_path} ({exc})", error=True)
-                    _record_tree_mismatch(mismatch_recorder, master, later_path, "unable to compare")
-                    matches = False
-                    mismatch_reason = ""
-                if not matches:
-                    if mismatch_reason:
-                        _record_tree_mismatch(mismatch_recorder, master, later_path, mismatch_reason)
-                    continue
-                candidate = CopyCandidate(
-                    number=rank,
-                    path=later_path,
-                    source_kind="alphabetical",
-                    alphabetical_rank=rank,
-                )
-                grouped.setdefault(master, []).append(candidate)
-                canonical_master_by_path[os.path.normcase(os.path.normpath(later_path))] = master
-
-    return grouped, canonical_master_by_path
+    groups = _matching_duplicate_groups(
+        search_root,
+        emit=emit,
+        exclude_paths=exclude_paths,
+        mismatch_recorder=mismatch_recorder,
+    )
+    grouped = {keeper: list(candidates) for keeper, candidates in groups}
+    canonical: Dict[str, str] = {}
+    for keeper, candidates in groups:
+        for candidate in candidates:
+            canonical[os.path.normcase(os.path.normpath(candidate.path))] = keeper
+    return grouped, canonical
 
 
 def _copy_candidates(search_root: str, *, exclude_paths: Iterable[str] = ()) -> List[CopyCandidate]:
@@ -424,64 +499,85 @@ def _matching_duplicate_groups(
     exclude_paths: Iterable[str] = (),
     mismatch_recorder=None,
 ) -> List[Tuple[str, List[CopyCandidate]]]:
-    """Return every qualifying duplicate group with one surviving master folder.
+    """Return duplicate equivalence clusters and the one folder kept per cluster.
 
-    Unsuffixed same-artist/date siblings are analyzed alphabetically: the first
-    folder is the master and later folders can qualify as copies under the same
-    recursive structure/name/size rule. Copy-suffixed folders retain the existing
-    exact-base/same-artist-date discovery rules. If their apparent original is an
-    unsuffixed folder already proven to be a duplicate, the qualifying copy is
-    attached to that folder's canonical alphabetical master so cleanup never
-    depends on a master that will itself be moved away.
+    Candidate discovery happens among siblings.  Same artist/date folders are
+    candidates regardless of their remaining name text, and exact X/(copyN)
+    families are candidates even when artist/date cannot be parsed.  Every
+    candidate tree is scanned once and folders with identical manifests form a
+    content-equivalence cluster.  This means copies are compared with one another
+    as well as with unsuffixed folders.
+
+    Each cluster with two or more identical trees keeps exactly one folder.  An
+    unsuffixed folder is preferred when available; otherwise the lowest-numbered
+    copy is preferred.  Remaining ties are alphabetical.  All other identical
+    cluster members are relocation candidates.  Different content clusters stay
+    in place as independent masters/variants.
     """
-    grouped, canonical_master_by_path = _matching_unsuffixed_duplicate_groups(
-        search_root, emit=emit, exclude_paths=exclude_paths, mismatch_recorder=mismatch_recorder
-    )
+    result: List[Tuple[str, List[CopyCandidate]]] = []
 
-    for candidate in _copy_candidates(search_root, exclude_paths=exclude_paths):
-        if not os.path.isdir(candidate.path):
-            continue
-        try:
-            originals = _potential_originals_for_copy(candidate.path)
-        except DeleteDupesError as exc:
-            emit(f"Skipped unverifiable copy folder: {candidate.path} ({exc})", error=True)
-            continue
-        for original_path in originals:
-            canonical_original = canonical_master_by_path.get(
-                os.path.normcase(os.path.normpath(original_path)),
-                original_path,
-            )
-            try:
-                matches, mismatch_reason = compare_directory_trees_for_duplicate_deletion(
-                    canonical_original, candidate.path
-                )
-            except DeleteDupesError as exc:
-                emit(f"Skipped unverifiable copy folder: {candidate.path} ({exc})", error=True)
-                _record_tree_mismatch(mismatch_recorder, canonical_original, candidate.path, "unable to compare")
-                matches = False
-                mismatch_reason = ""
-            if not matches:
-                if mismatch_reason:
+    for current_dir, dir_names, _file_names in os.walk(search_root, topdown=True, followlinks=False):
+        _prune_excluded_dir_names(current_dir, dir_names, exclude_paths)
+        components = _candidate_components_for_parent(current_dir, list(dir_names))
+        for component in components:
+            manifests: Dict[str, TreeManifest] = {}
+            scan_failed: Set[str] = set()
+            for path_name in component:
+                try:
+                    manifests[path_name] = _scan_tree(path_name)
+                except DeleteDupesError as exc:
+                    emit(f"Skipped unverifiable duplicate folder: {path_name} ({exc})", error=True)
+                    scan_failed.add(path_name)
+
+            # Keep mismatch logging simple but comprehensive: every pair in the
+            # discovery component that can be compared and differs receives one
+            # concise reason.  A failed scan is logged once against the first
+            # other component member when possible.
+            ordered_component = sorted(component, key=_alphabetical_name_key)
+            for left_index, left_path in enumerate(ordered_component):
+                for right_path in ordered_component[left_index + 1 :]:
+                    if left_path in scan_failed or right_path in scan_failed:
+                        if left_path in scan_failed or right_path in scan_failed:
+                            _record_tree_mismatch(mismatch_recorder, left_path, right_path, "unable to compare")
+                        continue
+                    left_manifest = manifests[left_path]
+                    right_manifest = manifests[right_path]
+                    if left_manifest == right_manifest:
+                        continue
                     _record_tree_mismatch(
-                        mismatch_recorder, canonical_original, candidate.path, mismatch_reason
+                        mismatch_recorder,
+                        left_path,
+                        right_path,
+                        _tree_manifest_mismatch_reason(left_manifest, right_manifest),
                     )
-                continue
-            grouped.setdefault(canonical_original, []).append(candidate)
-            break
 
-    result = []
-    for original_path, candidates in grouped.items():
-        # De-duplicate candidate paths defensively in case multiple discovery
-        # routes reach the same folder. Numbered copies keep numeric order;
-        # unsuffixed copies keep their alphabetical rank.
-        unique: Dict[str, CopyCandidate] = {}
-        for candidate in candidates:
-            unique.setdefault(os.path.normcase(os.path.normpath(candidate.path)), candidate)
-        ordered = sorted(unique.values(), key=_candidate_sort_key)
-        result.append((original_path, ordered))
+            manifest_clusters: Dict[TreeManifest, List[str]] = {}
+            for path_name, manifest in manifests.items():
+                manifest_clusters.setdefault(manifest, []).append(path_name)
+
+            for cluster_paths in manifest_clusters.values():
+                if len(cluster_paths) < 2:
+                    continue
+                ordered_cluster = sorted(cluster_paths, key=_keeper_preference_key)
+                keeper = ordered_cluster[0]
+                movers = ordered_cluster[1:]
+                alphabetical_order = {
+                    path_name: rank
+                    for rank, path_name in enumerate(
+                        sorted(movers, key=_alphabetical_name_key), start=1
+                    )
+                }
+                candidates = [
+                    _copy_candidate_for_cluster_member(path_name, alphabetical_order[path_name])
+                    for path_name in movers
+                ]
+                candidates.sort(key=_candidate_sort_key)
+                result.append((keeper, candidates))
+
+    # Shallow groups retain the historical processing order; keeper name makes
+    # order deterministic within a directory depth.
     result.sort(key=lambda item: (item[0].count(os.sep), _alphabetical_name_key(item[0])))
     return result
-
 
 def _unique_duplicates_destination(duplicates_root: str, source_name: str) -> str:
     """Return a collision-safe destination without overwriting earlier moved folders."""
@@ -808,14 +904,15 @@ def _parse_args(argv=None):
     parser = argparse.ArgumentParser(
         prog="tlo-deleteDupes.py",
         description=(
-            "Recursively find duplicate sibling directories. Copy-suffixed folders ending in (copyN) or (copy N) "
-            "retain the exact-base/same-artist-date rules. When multiple unsuffixed sibling "
-            "folders have the same artist and date, they are analyzed alphabetically: the first folder "
-            "is kept as the master and later folders are treated as copy candidates. The recursive "
-            "directory structure, file names, and file sizes must still match before relocation. Before "
-            "moving matching duplicates, fully decode-check FLAC files in the kept folder and repair "
-            "corrupt files from qualifying copies. Each qualifying duplicate directory is moved as a whole "
-            "into a folder named duplicates at the root of the partition containing the Input Path."
+            "Recursively find duplicate sibling directories. Candidate folders are discovered from exact "
+            "X/(copyN) families and from same-artist/date sibling names. Copies are compared with one another "
+            "as well as with unsuffixed folders, and identical recursive trees form content-equivalence "
+            "clusters. Each cluster keeps one preferred folder (an unsuffixed name when available; otherwise "
+            "the lowest-numbered copy) and relocates the other identical members. The recursive directory "
+            "structure, file names, and file sizes must match before relocation. Before moving matching "
+            "duplicates, fully decode-check FLAC files in the kept folder and repair corrupt files from the "
+            "other qualifying cluster members. Each duplicate directory is moved as a whole into a folder "
+            "named duplicates at the root of the partition containing the Input Path."
         ),
     )
     parser.add_argument(

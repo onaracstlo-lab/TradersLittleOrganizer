@@ -1,6 +1,6 @@
 """Behavior tests for the tlo-deleteDupes main."""
 
-__version__ = "v369"
+__version__ = "v370"
 
 import importlib.util
 from pathlib import Path
@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _load_module():
-    spec = importlib.util.spec_from_file_location("tlo_delete_dupes_v369", ROOT / "tlo-deleteDupes.py")
+    spec = importlib.util.spec_from_file_location("tlo_delete_dupes_v370", ROOT / "tlo-deleteDupes.py")
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
@@ -943,3 +943,87 @@ def test_alejandro_six_folder_case_moves_matching_plain_folder_and_logs_extra_fl
     with (home / "deleteDupesMismatches.txt").open(encoding="utf-8", newline="") as handle:
         rows = list(csv.reader(handle))
     assert [names[2], extra_name, "different number of files"] in rows
+
+
+def test_numbered_copies_form_their_own_duplicate_cluster_when_both_differ_from_unsuffixed_x(tmp_path):
+    module = _load_module()
+    home = tmp_path / "home"
+    root = tmp_path / "music"
+    home.mkdir()
+
+    master = root / "X"
+    copy2 = root / "X (copy2)"
+    copy3 = root / "X (copy3)"
+    _write(master / "01.flac", b"AAAA")
+    _write(copy2 / "01.flac", b"BBBB")
+    _write(copy2 / "02.flac", b"CCCC")
+    _write(copy3 / "01.flac", b"DDDD")
+    _write(copy3 / "02.flac", b"EEEE")
+
+    moved = []
+    count = module.delete_duplicate_copy_directories(
+        str(root),
+        str(home),
+        trash_func=lambda path: moved.append(path),
+        emit=lambda *a, **k: None,
+        ffmpeg_executable="fake-ffmpeg",
+        health_check=lambda *_a, **_k: True,
+    )
+
+    assert count == 1
+    assert master.exists()
+    assert copy2.exists()
+    assert moved == [str(copy3.resolve())]
+
+
+def test_numbered_copies_compare_with_each_other_even_when_unsuffixed_master_is_absent(tmp_path):
+    module = _load_module()
+    home = tmp_path / "home"
+    root = tmp_path / "music"
+    home.mkdir()
+
+    copy2 = root / "X (copy2)"
+    copy3 = root / "X (copy3)"
+    _write(copy2 / "disc1" / "01.flac", b"AAAA")
+    _write(copy3 / "disc1" / "01.flac", b"BBBB")
+
+    moved = []
+    count = module.delete_duplicate_copy_directories(
+        str(root),
+        str(home),
+        trash_func=lambda path: moved.append(path),
+        emit=lambda *a, **k: None,
+        ffmpeg_executable="fake-ffmpeg",
+        health_check=lambda *_a, **_k: True,
+    )
+
+    assert count == 1
+    assert copy2.exists()
+    assert moved == [str(copy3.resolve())]
+
+
+def test_identical_content_cluster_prefers_unsuffixed_folder_over_lower_numbered_copy(tmp_path):
+    module = _load_module()
+    home = tmp_path / "home"
+    root = tmp_path / "music"
+    home.mkdir()
+
+    copy1 = root / "Bill 2013 HOB Boston (copy1)"
+    unsuffixed = root / "Bill 2013 House of Blues Boston"
+    copy2 = root / "Bill 2013 HOB Boston (copy2)"
+    for folder, payload in ((copy1, b"AAAA"), (unsuffixed, b"BBBB"), (copy2, b"CCCC")):
+        _write(folder / "01.flac", payload)
+
+    moved = []
+    count = module.delete_duplicate_copy_directories(
+        str(root),
+        str(home),
+        trash_func=lambda path: moved.append(path),
+        emit=lambda *a, **k: None,
+        ffmpeg_executable="fake-ffmpeg",
+        health_check=lambda *_a, **_k: True,
+    )
+
+    assert count == 2
+    assert unsuffixed.exists()
+    assert {Path(path).name for path in moved} == {copy1.name, copy2.name}

@@ -25,9 +25,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-__version__ = "v369"
-# TLO-GI package version: v369
-__version_summary__ = 'Adds Research log lookup by artist/date, venue, or date in the CLI and Inventory GUI.'
+__version__ = "v370"
+# TLO-GI package version: v370
+__version_summary__ = 'Compares duplicate copies with each other using content-equivalence clusters and preferred keepers.'
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 MIN_REQUEST_INTERVAL_SECONDS = 0.600

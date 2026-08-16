@@ -1,6 +1,6 @@
-"""Build 369 alphabetical-master duplicate-cleanup contracts."""
+"""Current duplicate-cleanup discovery/keeper contracts (originated in Build 366)."""
 
-__version__ = "v369"
+__version__ = "v370"
 
 from pathlib import Path
 from zipfile import ZipFile
@@ -22,38 +22,37 @@ def _docx_text(name: str) -> str:
     return "\n".join(chunks)
 
 
-def test_build366_source_discovers_unsuffixed_same_artist_date_groups_alphabetically():
+def test_duplicate_source_uses_content_equivalence_clusters_and_preferred_keeper():
     source = (ROOT / "tlo-deleteDupes.py").read_text(encoding="utf-8")
-    assert "_matching_unsuffixed_duplicate_groups" in source
-    assert "_alphabetical_name_key" in source
-    assert "first folder is the master" in source
-    assert 'source_kind="alphabetical"' in source
-    assert "compare_directory_trees_for_duplicate_deletion(master, later_path)" in source
+    assert "_candidate_components_for_parent" in source
+    assert "_keeper_preference_key" in source
+    assert "content-equivalence cluster" in source
+    assert "manifest_clusters" in source
+    assert "lowest copy number is preferred" in source
 
 
-def test_build366_requirements_define_unsuffixed_alphabetical_master_rule():
-    text = _docx_text("TLO_Inventory_Requirements_Working_v369.docx")
-    assert "18.2 Candidate Discovery and Alphabetical Master Selection" in text
-    assert "sort those unsuffixed directory names alphabetically without regard to case" in text
-    assert "The alphabetically first directory is the master and shall be protected from relocation" in text
-    assert "Each later unsuffixed directory is treated as a copy candidate" in text
-    assert "A later unsuffixed folder that does not match the alphabetically first master remains in place" in text
+def test_requirements_define_content_cluster_keeper_rule():
+    text = _docx_text("TLO_Inventory_Requirements_Working_v370.docx")
+    assert "18.2 Candidate Discovery and Content-Equivalence Clusters" in text
+    assert "numbered copies shall be compared with one another" in text
+    assert "Prefer an unsuffixed folder as the keeper" in text
+    assert "keep the lowest-numbered copy" in text
+    assert "X and copy2 remain while copy3 is relocated" in text
 
 
-def test_build366_manual_documents_unsuffixed_alphabetical_master_rule():
-    text = (ROOT / "TLO_Inventory_User_Manual_v369.rtf").read_text(encoding="utf-8", errors="ignore")
-    assert "folders that have no (copyN) suffix" in text
-    assert "sorted alphabetically without regard to case" in text
-    assert "The first folder alphabetically is the master and is always kept" in text
-    assert "Every later folder is treated as a copy candidate" in text
-    assert "later folder that differs from the first master is left alone" in text
+def test_manual_documents_content_cluster_keeper_rule():
+    text = (ROOT / "TLO_Inventory_User_Manual_v370.rtf").read_text(encoding="utf-8", errors="ignore")
+    assert "Copies are compared with one another as well as with unsuffixed folders" in text
+    assert "content-equivalence clusters" in text
+    assert "lowest-numbered copy is kept" in text
+    assert "TLO keeps X and copy2 and moves copy3" in text
 
 
-def test_build366_faq_mentions_unsuffixed_alphabetical_master_cleanup():
+def test_faq_mentions_copy_to_copy_comparison():
     text = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8")
-    assert "same-parent folders with no copy suffix" in text
-    assert "analyzed alphabetically" in text
-    assert "the first folder is kept as the master" in text
+    assert "compares copies with one another" in text
+    assert "content-equivalence cluster" in text
+    assert "keeps X and copy2 and moves copy3" in text
 
 
 def test_build366_archives_build365_change_log():
