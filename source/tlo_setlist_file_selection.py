@@ -1,5 +1,5 @@
-__version__ = "v375"
-# TLO-GI package version: v375
+__version__ = "v376"
+# TLO-GI package version: v376
 __version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
 # TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
 import os
@@ -55,10 +55,10 @@ SETLIST_CONTENT_PATTERNS = [
 ]
 
 DATE_PATTERNS = [
-    r"(?<![0-9xX])(?:\d{2}|(?:19|20)\d{2})(?:\s*[._-]\s*|\s+)[0-9xX]{1,2}(?:\s*[._-]\s*|\s+)[0-9xX]{1,2}(?![0-9xX])",
+    r"(?<![0-9xX])(?:\d{2}|(?:19|20)(?:\d{2}|\d[xX]|[xX]{2})|[xX]{4})(?:\s*[._-]\s*|\s+)[0-9xX]{1,2}(?:\s*[._-]\s*|\s+)[0-9xX]{1,2}(?![0-9xX])",
     r"(?<![0-9xX])[0-9xX]{1,2}(?:\s*[._-]\s*|\s+)[0-9xX]{1,2}(?:\s*[._-]\s*|\s+)(?:\d{2}|(?:19|20)\d{2})(?![0-9xX])",
     r"(?<![0-9xX])[0-9xX]{1,2}\s*/\s*[0-9xX]{1,2}\s*/\s*(?:\d{2}|(?:19|20)\d{2})(?![0-9xX])",
-    r"(?<![0-9xX])(?:19|20)\d{6}(?![0-9xX])",
+    r"(?<![0-9xX])(?:(?:19|20)\d{6}|(?:19|20)[xX]{6}|[xX]{8})(?![0-9xX])",
     r"(?<![0-9xX])(?:19|20)\d{2}[ -]\d{4}(?![0-9xX])",
     rf"(?<![A-Za-z0-9]){MONTH_NAME_CASED_PATTERN}[\s._,\-]*\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?[\s._,\-]*(?:\d{{2}}|(?:19|20)\d{{2}})(?![A-Za-z0-9])",
     rf"(?<![A-Za-z0-9])\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?[\s._,\-]*{MONTH_NAME_CASED_PATTERN}[\s._,\-]*(?:\d{{2}}|(?:19|20)\d{{2}})(?![A-Za-z0-9])",

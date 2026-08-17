@@ -1,7 +1,7 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v375"
-# TLO-GI package version: v375
+__version__ = "v376"
+# TLO-GI package version: v376
 __version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
 # TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
 
@@ -51,7 +51,7 @@ MULTI_EXT_RE = re.compile(
 SEP_REQ = r"[\s._-]+"
 TEXT_DATE_SEP_OPT = r"[\s._,\-]*"
 YEAR4_FULL_RE_TEXT = r"(?:19|20)\d{2}"
-YEAR4_PARTIAL_RE_TEXT = r"(?:(?:19|20)\d[xX]|[xX]{4})"
+YEAR4_PARTIAL_RE_TEXT = r"(?:(?:19|20)(?:\d[xX]|[xX]{2})|[xX]{4})"
 YEAR4_TOKEN_RE_TEXT = rf"(?:{YEAR4_FULL_RE_TEXT}|{YEAR4_PARTIAL_RE_TEXT})"
 YEAR_TOKEN_RE_TEXT = rf"(?:\d{{2}}|{YEAR4_TOKEN_RE_TEXT})"
 NUMERIC_COMPONENT_SEP_RE_TEXT = r"(?:\s*[._-]\s*|\s+)"
@@ -944,9 +944,9 @@ def _unknown_placeholders_are_right_suffix(year_norm: str, month_norm: str, day_
     """Allow x placeholders only as a contiguous right-side suffix.
 
     Valid examples include 2001-04-1x, 2001-04-xx, 2004-0x-xx,
-    200x-xx-xx, 202x-xx-xx, and xxxx-xx-xx. Once an x appears
-    in the fourth digit of the year, the only broader unknown-year form
-    is xxxx; examples such as 20xx-xx-xx and 2xxx-xx-xx are rejected.
+    200x-xx-xx, 202x-xx-xx, 19xx-xx-xx, 20xx-xx-xx, and xxxx-xx-xx.
+    The century-known forms 19xx and 20xx are legitimate partial years;
+    broader one-digit-known forms such as 1xxx and 2xxx remain rejected.
     Invalid examples also include xxxx-04-14, 2001-x4-14,
     2001-xx-14, and 2001-04-x4.
     """
