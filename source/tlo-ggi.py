@@ -1,7 +1,7 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v376"
-# TLO-GI package version: v376
+__version__ = "v377"
+# TLO-GI package version: v377
 __version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
 # TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
 
@@ -1200,9 +1200,20 @@ class App:
                 return
             self._show_research_results(query_text, result)
 
-        ttk.Button(buttons, text="Search", command=run_query, style="Main.TButton").grid(row=0, column=0, padx=4)
+        search_button = ttk.Button(
+            buttons,
+            text="Search",
+            command=run_query,
+            style="Main.TButton",
+            default="active",
+        )
+        search_button.grid(row=0, column=0, padx=4)
         ttk.Button(buttons, text="Close", command=dialog.destroy, style="Main.TButton").grid(row=0, column=1, padx=4)
-        entry.bind("<Return>", run_query)
+        # The Search button is the Research dialog's default action.  Binding
+        # Return to the Toplevel makes Enter run the search whenever focus is
+        # anywhere inside this Research window, not only while the entry owns
+        # keyboard focus.
+        dialog.bind("<Return>", run_query)
         try:
             entry.focus_set()
         except tk.TclError:
@@ -1221,10 +1232,24 @@ class App:
         ttk.Label(frame, text=f"Research: {query_text}", style="Main.TLabel").grid(
             row=0, column=0, sticky="w", pady=(0, 6)
         )
-        output = scrolledtext.ScrolledText(
-            frame, width=110, height=32, font=tkfont.nametofont("TkFixedFont"), wrap="none"
+        output_frame = ttk.Frame(frame)
+        output_frame.grid(row=1, column=0, sticky="nsew")
+        output_frame.columnconfigure(0, weight=1)
+        output_frame.rowconfigure(0, weight=1)
+
+        output = tk.Text(
+            output_frame,
+            width=110,
+            height=32,
+            font=tkfont.nametofont("TkFixedFont"),
+            wrap="none",
         )
-        output.grid(row=1, column=0, sticky="nsew")
+        vscroll = ttk.Scrollbar(output_frame, orient="vertical", command=output.yview)
+        hscroll = ttk.Scrollbar(output_frame, orient="horizontal", command=output.xview)
+        output.configure(yscrollcommand=vscroll.set, xscrollcommand=hscroll.set)
+        output.grid(row=0, column=0, sticky="nsew")
+        vscroll.grid(row=0, column=1, sticky="ns")
+        hscroll.grid(row=1, column=0, sticky="ew")
         output.insert("1.0", result_text)
         output.configure(state="disabled")
         ttk.Button(frame, text="Close", command=window.destroy, style="Main.TButton").grid(

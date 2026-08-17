@@ -1,6 +1,6 @@
 """Build 375 Research CLI/GUI and log-search behavior."""
 
-__version__ = "v376"
+__version__ = "v377"
 
 from pathlib import Path
 import importlib.util
@@ -231,6 +231,23 @@ def test_inventory_gui_research_button_opens_input_and_results(tmp_path, monkeyp
                 collect_buttons(child)
         collect_buttons(dialog)
         assert search_buttons
+        assert str(search_buttons[0].cget("default")) == "active"
+        assert dialog.bind("<Return>")
+
+        # Return is bound at the Research Toplevel, so it remains the default
+        # Search action even when focus is not in the text-entry widget.
+        close_buttons = []
+        def collect_close_buttons(widget):
+            for child in widget.winfo_children():
+                if isinstance(child, __import__('tkinter.ttk').ttk.Button) and child.cget("text") == "Close":
+                    close_buttons.append(child)
+                collect_close_buttons(child)
+        collect_close_buttons(dialog)
+        assert close_buttons
+        close_buttons[0].focus_set()
+        # The Toplevel-level Return binding above is the behavior contract; use
+        # direct invocation here to exercise the same run_query callback without
+        # depending on window-manager keyboard focus under headless Tk.
         search_buttons[0].invoke()
         root.update()
 
@@ -247,6 +264,17 @@ def test_inventory_gui_research_button_opens_input_and_results(tmp_path, monkeyp
                 collect_text(child)
         collect_text(result_windows[-1])
         assert text_widgets
+
+        scrollbars = []
+        def collect_scrollbars(widget):
+            for child in widget.winfo_children():
+                if isinstance(child, __import__('tkinter.ttk').ttk.Scrollbar):
+                    scrollbars.append(child)
+                collect_scrollbars(child)
+        collect_scrollbars(result_windows[-1])
+        assert any(str(bar.cget("orient")) == "horizontal" for bar in scrollbars)
+        assert text_widgets[0].cget("xscrollcommand")
+
         result = text_widgets[0].get("1.0", "end")
         assert "Matches: 1" in result
         assert "VENUE: Barton Hall" in result
