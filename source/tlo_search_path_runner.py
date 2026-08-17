@@ -1,7 +1,7 @@
-__version__ = "v370"
-# TLO-GI package version: v370
-__version_summary__ = 'Compares duplicate copies with each other using content-equivalence clusters and preferred keepers.'
-# TLO-GI version summary: Compares duplicate copies with each other using content-equivalence clusters and preferred keepers.
+__version__ = "v372"
+# TLO-GI package version: v372
+__version_summary__ = 'Research accepts the full canonical TLO date grammar, and the public application version advances to 1.4.'
+# TLO-GI version summary: Research accepts the full canonical TLO date grammar, and the public application version advances to 1.4.
 from console_output_lib import console_print
 from initial_dir_walk_lib import initial_dir_walk
 from tlo_complete_path_log import compact_complete_path_log

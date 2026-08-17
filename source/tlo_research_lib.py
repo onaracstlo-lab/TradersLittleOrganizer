@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v370"
+__version__ = "v372"
 
 from dataclasses import dataclass
 import glob
@@ -12,24 +12,57 @@ import re
 from typing import Iterable
 
 
-# Research accepts the normalized date forms users see in TLO metadata. A
-# single four-digit year is also valid. Unknown-only dates such as xxxx-xx-xx
-# are intentionally not classified as date queries because they are not a
-# specific date to research.
-_DATE_TOKEN_RE = re.compile(
-    r"^(?:19|20)\d{2}(?:"
-    r"-(?:0[1-9]|1[0-2]|xx)(?:-(?:0[1-9]|[12]\d|3[01]|xx))?"
-    r"|-(?:(?:19|20)?\d{2})"
-    r")?$",
-    re.IGNORECASE,
-)
-_TRAILING_DATE_RE = re.compile(
-    r"^(?P<artist>.+?)\s+(?P<date>(?:19|20)\d{2}(?:"
-    r"-(?:0[1-9]|1[0-2]|xx)(?:-(?:0[1-9]|[12]\d|3[01]|xx))?"
-    r"|-(?:(?:19|20)?\d{2})"
-    r")?)$",
-    re.IGNORECASE,
-)
+# Research deliberately reuses TLO's canonical inventory date parser instead
+# of maintaining a separate date grammar. This keeps Research classification in
+# lock-step with every date form Inventory accepts, including x-placeholders,
+# textual months, compact dates, ranges, and slash forms. Standalone 19xx/20xx
+# years remain valid Research dates even though Inventory does not generally
+# treat a bare year as a performance-date match.
+_STANDALONE_YEAR_RE = re.compile(r"^(?:19|20)\d{2}$", re.IGNORECASE)
+
+
+def _exact_date_normalizations(value: str) -> tuple[str, ...]:
+    raw = " ".join(str(value or "").strip().split())
+    if not raw:
+        return ()
+    if _STANDALONE_YEAR_RE.fullmatch(raw):
+        return (raw,)
+
+    # Lazy import keeps ordinary Inventory GUI startup light; the full metadata
+    # parser is loaded only when Research actually needs to classify a query.
+    from tlo_phase23_v2 import _find_date_matches
+
+    matches = _find_date_matches(
+        raw,
+        allow_slash=True,
+        allow_year_space_month_day_exception=True,
+    )
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for match in matches:
+        if match.get("start") != 0 or match.get("end") != len(raw):
+            continue
+        candidate = str(match.get("normalized") or "").strip()
+        key = candidate.casefold()
+        if candidate and key not in seen:
+            seen.add(key)
+            normalized.append(candidate)
+    return tuple(normalized)
+
+
+def _split_artist_trailing_date(raw: str) -> tuple[str, tuple[str, ...]]:
+    # Try every whitespace boundary from left to right. The first exact date
+    # suffix is the longest date expression, which correctly handles inputs such
+    # as "Grateful Dead April 14, 2001" rather than misclassifying only "2001".
+    for match in re.finditer(r"\s+", raw):
+        artist = raw[: match.start()].strip()
+        suffix = raw[match.end() :].strip()
+        if not artist or not suffix:
+            continue
+        candidates = _exact_date_normalizations(suffix)
+        if candidates:
+            return artist, candidates
+    return "", ()
 
 
 @dataclass(frozen=True)
@@ -38,6 +71,7 @@ class ResearchQuery:
     raw: str
     artist: str = ""
     date: str = ""
+    date_candidates: tuple[str, ...] = ()
     venue: str = ""
 
 
@@ -72,16 +106,23 @@ def parse_research_query(value: str) -> ResearchQuery:
     if not raw:
         raise ValueError("Research input must not be empty.")
 
-    if _DATE_TOKEN_RE.fullmatch(raw):
-        return ResearchQuery(kind="date", raw=raw, date=raw)
+    date_candidates = _exact_date_normalizations(raw)
+    if date_candidates:
+        return ResearchQuery(
+            kind="date",
+            raw=raw,
+            date=date_candidates[0],
+            date_candidates=date_candidates,
+        )
 
-    match = _TRAILING_DATE_RE.fullmatch(raw)
-    if match and match.group("artist").strip():
+    artist, date_candidates = _split_artist_trailing_date(raw)
+    if artist and date_candidates:
         return ResearchQuery(
             kind="artist_date",
             raw=raw,
-            artist=match.group("artist").strip(),
-            date=match.group("date"),
+            artist=artist,
+            date=date_candidates[0],
+            date_candidates=date_candidates,
         )
 
     return ResearchQuery(kind="venue", raw=raw, venue=raw)
@@ -164,11 +205,13 @@ def load_comp_entries(log_dir: str) -> list[CompEntry]:
 
 def record_matches(record: MetaRecord, query: ResearchQuery) -> bool:
     if query.kind == "date":
-        return _norm_text(record.first("DATE")) == _norm_text(query.date)
+        record_date = _norm_text(record.first("DATE"))
+        return any(record_date == _norm_text(candidate) for candidate in (query.date_candidates or (query.date,)))
     if query.kind == "artist_date":
+        record_date = _norm_text(record.first("DATE"))
         return (
             _norm_text(record.first("ARTIST")) == _norm_text(query.artist)
-            and _norm_text(record.first("DATE")) == _norm_text(query.date)
+            and any(record_date == _norm_text(candidate) for candidate in (query.date_candidates or (query.date,)))
         )
     if query.kind == "venue":
         venue = _norm_text(record.first("VENUE"))

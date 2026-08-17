@@ -18,10 +18,10 @@ The input date is yyyy-mm-dd. The setlist.fm API search date is dd-MM-yyyy.
 
 from __future__ import annotations
 
-__version__ = "v370"
-# TLO-GI package version: v370
-__version_summary__ = 'Compares duplicate copies with each other using content-equivalence clusters and preferred keepers.'
-# TLO-GI version summary: Compares duplicate copies with each other using content-equivalence clusters and preferred keepers.
+__version__ = "v372"
+# TLO-GI package version: v372
+__version_summary__ = 'Research accepts the full canonical TLO date grammar, and the public application version advances to 1.4.'
+# TLO-GI version summary: Research accepts the full canonical TLO date grammar, and the public application version advances to 1.4.
 
 
 import argparse
@@ -38,7 +38,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from console_output_lib import console_emit
 
-VERSION = "1.3"
+VERSION = "1.4"
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 

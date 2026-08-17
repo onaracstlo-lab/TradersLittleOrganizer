@@ -1,6 +1,6 @@
 """Behavioral coverage for commercial-release String1 - String2 parsing."""
 
-__version__ = "v370"
+__version__ = "v372"
 
 import os
 from types import SimpleNamespace

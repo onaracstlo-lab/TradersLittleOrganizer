@@ -25,9 +25,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-__version__ = "v370"
-# TLO-GI package version: v370
-__version_summary__ = 'Compares duplicate copies with each other using content-equivalence clusters and preferred keepers.'
+__version__ = "v372"
+# TLO-GI package version: v372
+__version_summary__ = 'Research accepts the full canonical TLO date grammar, and the public application version advances to 1.4.'
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 MIN_REQUEST_INTERVAL_SECONDS = 0.600

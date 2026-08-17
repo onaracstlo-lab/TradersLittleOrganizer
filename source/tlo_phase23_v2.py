@@ -1,9 +1,9 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v370"
-# TLO-GI package version: v370
-__version_summary__ = 'Compares duplicate copies with each other using content-equivalence clusters and preferred keepers.'
-# TLO-GI version summary: Compares duplicate copies with each other using content-equivalence clusters and preferred keepers.
+__version__ = "v372"
+# TLO-GI package version: v372
+__version_summary__ = 'Research accepts the full canonical TLO date grammar, and the public application version advances to 1.4.'
+# TLO-GI version summary: Research accepts the full canonical TLO date grammar, and the public application version advances to 1.4.
 
 import json
 import os
@@ -14,7 +14,6 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from console_output_lib import console_print
 from tlo_media_rules import MEDIA_EXTENSIONS, VIDEO_EXTENSIONS, parse_music_dir_marker
 from tlo_wrapper_rules import (
-    contains_wrapper_term,
     is_exact_wrapper_name,
     is_standard_video_folder_name,
     looks_like_non_main_dir,
@@ -844,7 +843,12 @@ def _is_wrapper(name: str) -> bool:
         return True
     if FOUR_DIGIT_WRAPPER_RE.fullmatch(stripped):
         return True
-    return looks_like_non_main_dir(stripped) or is_exact_wrapper_name(stripped) or contains_wrapper_term(stripped)
+    # Metadata parsing must discard only folders that are themselves wrappers.
+    # A meaningful show/release component may legitimately contain words such
+    # as "FM Broadcast", "Soundboard", "FLAC", or "Audio".  The broader
+    # contains-wrapper test is still used by setlist/wrapper relationship code,
+    # but using it here can hide the strongest Artist/Date path evidence.
+    return looks_like_non_main_dir(stripped) or is_exact_wrapper_name(stripped)
 
 
 
@@ -2906,16 +2910,8 @@ def _blank_unusable_artist_tags_for_noncompliant(record: ShowMetadata, observati
         ])
 
 
-def _resolve_artist_from_tags(record: ShowMetadata, matcher: Optional[ArtistMatcher], evidence: Dict[str, List[Candidate]], conflicts: List[str], observations: Optional[List[str]] = None, config=None) -> str:
-    """Resolve the show artist from music tags.
-
-    Requirements rule: once a usable tag artist is found, tag-derived artist
-    wins and path-based artist identification must not be consulted for this
-    show. Prefer ARTIST over ALBUMARTIST; use ALBUMARTIST only when ARTIST is
-    blank. If the selected tag value resolves in the Artist DB, store the DB
-    master name. Otherwise keep the tag artist as supplied/normalized and
-    record only an observation.
-    """
+def _selected_artist_tag_candidate(record: ShowMetadata) -> Tuple[str, str]:
+    """Return the first usable ARTIST/ALBUMARTIST tag and its source label."""
     artist_tag = ""
     albumartist_tag = ""
     for sample in record.flac_tag_samples[:2]:
@@ -2924,18 +2920,36 @@ def _resolve_artist_from_tags(record: ShowMetadata, matcher: Optional[ArtistMatc
         if not albumartist_tag and (sample.get("albumartist") or "").strip():
             albumartist_tag = compact_ws(sample.get("albumartist", "").strip())
 
-    tag_source = "flac_tag_artist"
-    term = artist_tag
-    if not term:
-        term = albumartist_tag
-        tag_source = "flac_tag_albumartist"
+    if artist_tag:
+        return artist_tag, "flac_tag_artist"
+    if albumartist_tag:
+        return albumartist_tag, "flac_tag_albumartist"
+    return "", ""
 
+
+def _resolve_artist_from_tags(record: ShowMetadata, matcher: Optional[ArtistMatcher], evidence: Dict[str, List[Candidate]], conflicts: List[str], observations: Optional[List[str]] = None, config=None, allow_unmatched: bool = True) -> str:
+    """Resolve a show artist from music tags.
+
+    DB-backed tag artists remain high-confidence evidence.  A tag value that
+    does not resolve in the Artist DB is only a fallback in non-compliant
+    metadata extraction: path and explicit setlist evidence must be allowed to
+    identify the artist first.  ``allow_unmatched=True`` preserves the public
+    helper's historical raw-tag fallback behavior for direct callers.
+    """
+    term, tag_source = _selected_artist_tag_candidate(record)
     if not term:
         return ""
 
+    artist_tag = ""
+    albumartist_tag = ""
+    for sample in record.flac_tag_samples[:2]:
+        if not artist_tag and (sample.get("artist") or "").strip():
+            artist_tag = compact_ws(sample.get("artist", "").strip())
+        if not albumartist_tag and (sample.get("albumartist") or "").strip():
+            albumartist_tag = compact_ws(sample.get("albumartist", "").strip())
     if artist_tag and albumartist_tag and artist_tag.casefold() != albumartist_tag.casefold():
         if observations is not None:
-            observations.append(f"tag ARTIST and ALBUMARTIST differ; using ARTIST tag: {artist_tag}")
+            observations.append(f"tag ARTIST and ALBUMARTIST differ; considering ARTIST tag first: {artist_tag}")
 
     detail = _lookup_artist_detail(term, matcher)
     if detail["status"] == "matched":
@@ -2944,12 +2958,20 @@ def _resolve_artist_from_tags(record: ShowMetadata, matcher: Optional[ArtistMatc
         evidence.setdefault("artist", []).append(Candidate(artist_name, f"{tag_source}:{term}", 95))
         return artist_name
 
+    if not allow_unmatched:
+        if observations is not None:
+            if detail["status"] == "collision":
+                observations.append(_collision_note(f"tag artist query collision; deferring raw tag artist while path/setlist evidence is checked: {term}", detail["masters"]))
+            else:
+                observations.append(f"tag artist not found in DB; deferring raw tag artist while path/setlist evidence is checked: {term}")
+        return ""
+
     if detail["status"] == "collision" and observations is not None:
         observations.append(_collision_note(f"tag artist query collision; using raw tag artist: {term}", detail["masters"]))
     elif observations is not None:
         observations.append(f"tag artist not found in DB; using raw tag artist: {term}")
 
-    evidence.setdefault("artist", []).append(Candidate(term, f"{tag_source}_unmatched:{term}", 90))
+    evidence.setdefault("artist", []).append(Candidate(term, f"{tag_source}_unmatched:{term}", 45))
     return term
 
 
@@ -3911,6 +3933,8 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
         observations.append("unable to find String1 Date String2 or String1 Date in path")
 
     pattern_artist = ""
+    deferred_tag_artist = ""
+    deferred_tag_source = ""
     dash_album_match: Optional[Dict[str, str]] = None
     dash_album_mode = False
     aggregate_album_name = compact_ws(group.get("aggregate_album_name", ""))
@@ -3924,9 +3948,14 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             dash_album_match = _find_string_dash_string_match(group)
     else:
         _blank_unusable_artist_tags_for_noncompliant(record, observations)
-        tag_artist = _resolve_artist_from_tags(record, artist_matcher, evidence, conflicts, observations, config=config)
+        deferred_tag_artist, deferred_tag_source = _selected_artist_tag_candidate(record)
+        tag_artist = _resolve_artist_from_tags(
+            record, artist_matcher, evidence, conflicts, observations, config=config, allow_unmatched=False
+        )
         if tag_artist:
             record.artist = tag_artist
+            deferred_tag_artist = ""
+            deferred_tag_source = ""
 
         if not string_date_string_found:
             if record.artist:
@@ -4076,6 +4105,21 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
 
         _apply_setlist_metadata_to_noncompliant_record(config, record, evidence, observations, artist_matcher)
 
+        if not record.artist and deferred_tag_artist:
+            record.artist = deferred_tag_artist
+            evidence.setdefault("artist", []).append(
+                Candidate(record.artist, f"{deferred_tag_source}_unmatched:{deferred_tag_artist}", 45)
+            )
+            observations.append(
+                f"no DB-backed path or explicit setlist artist identified; using deferred raw tag artist: {deferred_tag_artist}"
+            )
+            # The original source order allowed a tag-derived artist to enable
+            # eTree venue/location lookup. Preserve that fallback after stronger
+            # path/setlist artist evidence has had its opportunity to win.
+            if not dash_album_mode and record.date and not etree_success:
+                etree_lookup_key = _online_lookup_key(record)
+                etree_success = _apply_etree_lookup_to_record(config, record, evidence, observations)
+
         if not dash_album_mode:
             etree_success, etree_lookup_key = _apply_setlistfm_only_after_etree_fallback(
                 config, record, evidence, observations, etree_success, etree_lookup_key
@@ -4100,6 +4144,14 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             etree_lookup_key = _online_lookup_key(record)
             etree_success = _apply_etree_lookup_to_record(config, record, evidence, observations)
         _apply_setlist_metadata_to_noncompliant_record(config, record, evidence, observations, artist_matcher)
+        if not record.artist and deferred_tag_artist:
+            record.artist = deferred_tag_artist
+            evidence.setdefault("artist", []).append(
+                Candidate(record.artist, f"{deferred_tag_source}_unmatched:{deferred_tag_artist}", 45)
+            )
+            observations.append(
+                f"no DB-backed path or explicit setlist artist identified; using deferred raw tag artist: {deferred_tag_artist}"
+            )
         if not record.date:
             setlist_date_matches = _collect_setlist_date_matches(group)
             if setlist_date_matches:

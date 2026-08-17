@@ -1,9 +1,9 @@
 """Repair corrupt FLACs from duplicate copies, then move duplicates to a partition holding folder."""
 
-__version__ = "v370"
-# TLO-GI package version: v370
-__version_summary__ = 'Compares duplicate copies with each other using content-equivalence clusters and preferred keepers.'
-# TLO-GI version summary: Compares duplicate copies with each other using content-equivalence clusters and preferred keepers.
+__version__ = "v372"
+# TLO-GI package version: v372
+__version_summary__ = 'Research accepts the full canonical TLO date grammar, and the public application version advances to 1.4.'
+# TLO-GI version summary: Research accepts the full canonical TLO date grammar, and the public application version advances to 1.4.
 
 import argparse
 import csv
@@ -457,7 +457,7 @@ def _matching_unsuffixed_duplicate_groups(
 ) -> Tuple[Dict[str, List[CopyCandidate]], Dict[str, str]]:
     """Compatibility wrapper for callers of the former single-master helper.
 
-    Build 370 no longer protects one alphabetically first master for an entire
+    Build 372 no longer protects one alphabetically first master for an entire
     artist/date set.  It forms content-equivalence clusters across unsuffixed and
     copy-suffixed candidates.  This wrapper exposes the resulting groups while
     returning a canonical-map shape compatible with older internal callers.

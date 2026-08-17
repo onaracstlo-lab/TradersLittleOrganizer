@@ -1,6 +1,6 @@
-"""Build 370 Research CLI/GUI and log-search behavior."""
+"""Build 372 Research CLI/GUI and log-search behavior."""
 
-__version__ = "v370"
+__version__ = "v372"
 
 from pathlib import Path
 import importlib.util
@@ -57,6 +57,57 @@ def test_research_query_classification():
 
     q = research.parse_research_query("Barton Hall")
     assert (q.kind, q.venue) == ("venue", "Barton Hall")
+
+
+@pytest.mark.parametrize(
+    "query,kind,artist,normalized",
+    [
+        ("xxxx-xx-xx", "date", "", "xxxx-xx-xx"),
+        ("202x-xx-xx", "date", "", "202x-xx-xx"),
+        ("2001-04-1x", "date", "", "2001-04-1x"),
+        ("2004-0x-xx", "date", "", "2004-0x-xx"),
+        ("14APR01", "date", "", "2001-04-14"),
+        ("April 14, 2001", "date", "", "2001-04-14"),
+        ("3/9/1972", "date", "", "1972-03-09"),
+        ("19981003", "date", "", "1998-10-03"),
+        ("November 2020", "date", "", "2020-11-xx"),
+        ("96-98", "date", "", "1996-1998"),
+        ("1977", "date", "", "1977"),
+        ("Grateful Dead xxxx-xx-xx", "artist_date", "Grateful Dead", "xxxx-xx-xx"),
+        ("Grateful Dead April 14, 2001", "artist_date", "Grateful Dead", "2001-04-14"),
+        ("Grateful Dead 3/9/1972", "artist_date", "Grateful Dead", "1972-03-09"),
+        ("Grateful Dead 19981003", "artist_date", "Grateful Dead", "1998-10-03"),
+    ],
+)
+def test_research_accepts_canonical_tlo_date_forms(query, kind, artist, normalized):
+    import tlo_research_lib as research
+
+    parsed = research.parse_research_query(query)
+    assert parsed.kind == kind
+    assert parsed.artist == artist
+    assert normalized in parsed.date_candidates
+
+
+def test_research_ambiguous_date_form_matches_any_canonical_normalization(tmp_path):
+    import tlo_research_lib as research
+
+    _write_logs(tmp_path, artist="Artist A", date="2001-02-03", venue="Venue A", stem="A")
+    logs = tmp_path / "logs"
+    with (logs / "metaB.log").open("w", encoding="utf-8") as handle:
+        handle.write(
+            "SHOW_NAME: Artist B 2003-01-02 Venue B\n"
+            "MAIN_DIR_PATH: E:\\Music\\ShowB\n"
+            'MUSIC_DIRS_JSON: ["E:\\\\Music\\\\ShowB"]\n'
+            "ARTIST: Artist B\n"
+            "DATE: 2003-01-02\n"
+            "VENUE: Venue B\n"
+            "END_SHOW_METADATA\n"
+        )
+    (logs / "compB.log").write_text(r"E:\Music\ShowB\01.flac" + "\n", encoding="utf-8")
+
+    output = research.research_logs(str(tmp_path), "01-02-03")
+    assert "Type: date" in output
+    assert "Matches: 2" in output
 
 
 def test_research_finds_meta_block_and_corresponding_comp_line(tmp_path):

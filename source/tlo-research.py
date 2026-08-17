@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Standalone TLO Research console application."""
 
-__version__ = "v370"
+__version__ = "v372"
 
 import argparse
 import sys
