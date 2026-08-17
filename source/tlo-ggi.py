@@ -1,9 +1,9 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v373"
-# TLO-GI package version: v373
-__version_summary__ = 'Strengthen non-compliant artist resolution using DB-backed tag, path, and setlist filename evidence.'
-# TLO-GI version summary: Strengthen non-compliant artist resolution using DB-backed tag, path, and setlist filename evidence.
+__version__ = "v375"
+# TLO-GI package version: v375
+__version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
+# TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
 
 import multiprocessing
 

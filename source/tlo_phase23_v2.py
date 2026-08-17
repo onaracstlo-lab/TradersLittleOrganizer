@@ -1,9 +1,9 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v373"
-# TLO-GI package version: v373
-__version_summary__ = 'Strengthen non-compliant artist resolution using DB-backed tag, path, and setlist filename evidence.'
-# TLO-GI version summary: Strengthen non-compliant artist resolution using DB-backed tag, path, and setlist filename evidence.
+__version__ = "v375"
+# TLO-GI package version: v375
+__version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
+# TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
 
 import json
 import os
@@ -2019,6 +2019,24 @@ def _parse_country_qualified_region(value: str, anchor: str, left: str) -> Tuple
     return "", "", "", "", ""
 
 
+def _clean_numbered_path_location_noise(venue: str, city: str) -> Tuple[str, str]:
+    """Remove day/track-style numeric debris before a real city token.
+
+    Festival/archive folder names sometimes encode multiple day numbers as
+    ``... DATE 04 05.Reidsville NC``.  The generic venue/city splitter would
+    otherwise interpret ``04`` as a venue and ``05.Reidsville`` as a city.
+    When that exact numeric-numbered pattern occurs, discard the numeric venue
+    token and strip the numeric prefix from the city while retaining the real
+    city name.
+    """
+    venue_clean = compact_ws(venue or "").strip(" ,")
+    city_clean = compact_ws(city or "").strip(" ,")
+    match = re.fullmatch(r"(?P<number>\d{1,3})[._-]+(?P<city>[A-Za-z].*)", city_clean)
+    if match and re.fullmatch(r"\d{1,3}", venue_clean):
+        return "", compact_ws(match.group("city")).strip(" ,")
+    return venue_clean, city_clean
+
+
 def _parse_string2(string2: str) -> Tuple[str, str, str, str, str]:
     value = compact_ws(string2).strip(" ,")
     if not value:
@@ -2035,6 +2053,7 @@ def _parse_string2(string2: str) -> Tuple[str, str, str, str, str]:
                 return venue, city, region, country, extra
         allow_city_only = bool(anchor in US_STATE_CODES and _ends_with_full_state_name(value))
         venue, city = _split_left_for_city_and_venue(left, allow_city_only=allow_city_only)
+        venue, city = _clean_numbered_path_location_noise(venue, city)
         if anchor in COUNTRY_ALIASES.values() and anchor not in US_STATE_CODES:
             return venue, city, "", "" if anchor == "USA" else anchor, ""
         return venue, city, anchor, "", ""
@@ -2050,6 +2069,7 @@ def _parse_string2(string2: str) -> Tuple[str, str, str, str, str]:
                 tail = compact_ws(match.group('tail')).strip(" -,")
                 is_full_state_name = len(compact_ws(match.group(1))) > 2
                 venue, city = _split_left_for_city_and_venue(left_text, allow_city_only=is_full_state_name)
+                venue, city = _clean_numbered_path_location_noise(venue, city)
                 return venue, city, region, "", tail
 
     return "", "", "", "", ""
@@ -2319,6 +2339,80 @@ def _observe_metadata_disagreement(observations: List[str], source: str, field: 
 
 def _observe_online_disagreement(observations: List[str], source: str, field: str, local_value: str, online_value: str) -> None:
     _observe_metadata_disagreement(observations, f"{source} lookup", field, local_value, online_value)
+
+
+def _matching_evidence_for_value(evidence: Dict[str, List[Candidate]], field: str, value: str) -> List[Candidate]:
+    """Return evidence rows that support the currently selected field value.
+
+    Venue/location precedence decisions must be based on the evidence that
+    actually produced the current value, not merely on source order.
+    """
+    value = compact_ws(value or "")
+    if not value:
+        return []
+    matches: List[Candidate] = []
+    value_norm = normalized_compare_value(value)
+    for candidate in evidence.get(field, []):
+        if normalized_compare_value(candidate.value or "") == value_norm:
+            matches.append(candidate)
+    return matches
+
+
+def _setlist_may_override_weak_path_value(
+    evidence: Dict[str, List[Candidate]],
+    field: str,
+    current_value: str,
+    setlist_confidence: int,
+) -> bool:
+    """Allow a selected setlist to correct only weaker path-part metadata.
+
+    Build 375 keeps normal source precedence for strong metadata.  The narrow
+    exception is when the existing value is supported only by ``path_part:``
+    evidence and the selected setlist has strictly higher confidence.  This
+    lets a 92-confidence setlist correction replace path fragments such as
+    ``VENUE=04`` / ``CITY=05.Reidsville`` without allowing setlists to replace
+    eTreeDB or other strong evidence.
+    """
+    supporters = _matching_evidence_for_value(evidence, field, current_value)
+    if not supporters:
+        return False
+    if any(not (candidate.source or "").startswith("path_part:") for candidate in supporters):
+        return False
+    return max(int(candidate.confidence or 0) for candidate in supporters) < int(setlist_confidence or 0)
+
+
+def _apply_setlist_scalar_field(
+    record: ShowMetadata,
+    evidence: Dict[str, List[Candidate]],
+    observations: List[str],
+    *,
+    field: str,
+    candidate_value: str,
+    source: str,
+    confidence: int,
+) -> bool:
+    """Fill a venue/location scalar or replace weak path-only evidence."""
+    candidate_value = compact_ws(candidate_value or "")
+    if not candidate_value:
+        return False
+    existing_value = compact_ws(getattr(record, field, "") or "")
+    if not existing_value:
+        setattr(record, field, candidate_value)
+        evidence.setdefault(field, []).append(Candidate(candidate_value, source, confidence))
+        return True
+    if normalized_compare_value(existing_value) == normalized_compare_value(candidate_value):
+        # Preserve the value but record the stronger corroborating source.
+        current_best = max((c.confidence for c in _matching_evidence_for_value(evidence, field, existing_value)), default=0)
+        if confidence > current_best:
+            evidence.setdefault(field, []).append(Candidate(existing_value, source, confidence))
+        return False
+    if _setlist_may_override_weak_path_value(evidence, field, existing_value, confidence):
+        setattr(record, field, candidate_value)
+        evidence.setdefault(field, []).append(Candidate(candidate_value, source, confidence))
+        observations.append(f"setlist metadata overrode weaker path {field}: {existing_value} -> {candidate_value}")
+        return True
+    _observe_metadata_disagreement(observations, "setlist metadata", field, existing_value, candidate_value)
+    return False
 
 
 def _has_complete_local_venue_location(record: ShowMetadata) -> bool:
@@ -3761,15 +3855,14 @@ def _apply_string2_to_record(record: ShowMetadata, match: Optional[Dict[str, str
 
 
 def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata, evidence: Dict[str, List[Candidate]], observations: List[str], artist_matcher: Optional[ArtistMatcher] = None) -> bool:
-    """Use the selected setlist text after path and eTreeDB metadata.
+    """Apply selected-setlist artist/venue/location metadata.
 
-    Non-compliant precedence is path, then eTreeDB, then selected setlist
-    metadata, then setlist.fm.  The setlist extractor always runs when a
-    selected file exists so it can log meaningful differences, but it fills only
-    blank artist/venue/location fields and never overwrites metadata that was
-    already identified.  Differences are not logged when values are equal or one
-    is a token-boundary subset of the other (for example, "Fillmore" vs.
-    "Fillmore West").
+    Normal non-compliant source order remains path, eTreeDB, selected setlist,
+    then setlist.fm.  Build 375 adds one narrow correction rule: a selected
+    setlist may replace a non-equivalent venue/location component when the
+    existing component is supported *only* by lower-confidence ``path_part:``
+    evidence.  Stronger sources such as eTreeDB are never displaced by this
+    rule.
     """
     if getattr(config, "compliant", False):
         return False
@@ -3797,43 +3890,60 @@ def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata,
         else:
             _observe_metadata_disagreement(observations, "setlist metadata", "artist", record.artist, result.artist)
 
-    if result.venue:
-        if not record.venue:
-            record.venue = result.venue
-            evidence.setdefault("venue", []).append(Candidate(record.venue, source, confidence))
-            applied = True
-        else:
-            _observe_metadata_disagreement(observations, "setlist metadata", "venue", record.venue, result.venue)
+    if _apply_setlist_scalar_field(
+        record, evidence, observations, field="venue", candidate_value=result.venue, source=source, confidence=confidence
+    ):
+        applied = True
 
-    if result.city:
-        if not record.city:
-            record.city = result.city
-            evidence.setdefault("city", []).append(Candidate(record.city, source, confidence))
-            applied = True
-        else:
-            _observe_metadata_disagreement(observations, "setlist metadata", "city", record.city, result.city)
+    if _apply_setlist_scalar_field(
+        record, evidence, observations, field="city", candidate_value=result.city, source=source, confidence=confidence
+    ):
+        applied = True
 
+    # Region/country are mutually exclusive in the final TLO location.  Allow
+    # the selected setlist to switch between them only when the existing
+    # opposite field is itself weak path-only evidence.
     if result.region:
-        if not record.region and not record.country:
-            record.region = result.region
-            evidence.setdefault("region", []).append(Candidate(record.region, source, confidence))
+        if record.country and not record.region:
+            if _setlist_may_override_weak_path_value(evidence, "country", record.country, confidence):
+                old_country = record.country
+                record.country = ""
+                observations.append(f"setlist metadata overrode weaker path country: {old_country} -> (cleared for region {result.region})")
+                record.region = result.region
+                evidence.setdefault("region", []).append(Candidate(record.region, source, confidence))
+                applied = True
+            else:
+                _observe_metadata_disagreement(observations, "setlist metadata", "region", record.country, result.region)
+        elif _apply_setlist_scalar_field(
+            record, evidence, observations, field="region", candidate_value=result.region, source=source, confidence=confidence
+        ):
             applied = True
-        elif record.region:
-            _observe_metadata_disagreement(observations, "setlist metadata", "region", record.region, result.region)
 
     if result.country:
-        if not record.country and not record.region:
-            record.country = result.country
-            evidence.setdefault("country", []).append(Candidate(record.country, source, confidence))
+        if record.region and not record.country:
+            if _setlist_may_override_weak_path_value(evidence, "region", record.region, confidence):
+                old_region = record.region
+                record.region = ""
+                observations.append(f"setlist metadata overrode weaker path region: {old_region} -> (cleared for country {result.country})")
+                record.country = result.country
+                evidence.setdefault("country", []).append(Candidate(record.country, source, confidence))
+                applied = True
+            else:
+                _observe_metadata_disagreement(observations, "setlist metadata", "country", record.region, result.country)
+        elif _apply_setlist_scalar_field(
+            record, evidence, observations, field="country", candidate_value=result.country, source=source, confidence=confidence
+        ):
             applied = True
-        elif record.country:
-            _observe_metadata_disagreement(observations, "setlist metadata", "country", record.country, result.country)
+
+    # Location is derived from the selected city/region/country components.
+    # Recompute it after any correction so stale path text cannot survive.
+    recomputed_location = _join_location(record.city, record.region, record.country)
+    if recomputed_location and record.location != recomputed_location:
+        record.location = recomputed_location
+        applied = True
 
     result_location = result.location or _join_location(result.city, result.region, result.country)
-    if not record.location and (record.city or record.region or record.country):
-        record.location = _join_location(record.city, record.region, record.country)
-        applied = True
-    elif record.location and result_location:
+    if record.location and result_location and not _metadata_values_equivalent(record.location, result_location):
         _observe_metadata_disagreement(observations, "setlist metadata", "location", record.location, result_location)
 
     if applied:

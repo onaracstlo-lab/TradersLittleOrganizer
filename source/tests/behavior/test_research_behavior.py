@@ -1,6 +1,6 @@
-"""Build 373 Research CLI/GUI and log-search behavior."""
+"""Build 375 Research CLI/GUI and log-search behavior."""
 
-__version__ = "v373"
+__version__ = "v375"
 
 from pathlib import Path
 import importlib.util
@@ -252,3 +252,74 @@ def test_inventory_gui_research_button_opens_input_and_results(tmp_path, monkeyp
         assert "VENUE: Barton Hall" in result
     finally:
         root.destroy()
+
+
+def test_research_reports_every_related_raw_meta_and_comp_line(tmp_path):
+    """Research must keep scanning after the structured record is identified."""
+    import tlo_research_lib as research
+
+    logs = tmp_path / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    query = "1976-05-05 - Pall's Mall - Boston 1976-05-05"
+    original = query + " 04 05.Reidsville, NC"
+    main_dir = r"E:\Music\Firefall"
+    (logs / "metaA.log").write_text(
+        "\n".join(
+            [
+                f"SOURCE_TEXT: {original}",
+                "SHOW_NAME: 1976-05-05 - Pall's Mall - Boston 1976-05-05 Paul's Mall Boston, MA",
+                f"MAIN_DIR_PATH: {main_dir}",
+                'MUSIC_DIRS_JSON: ["E:\\\\Music\\\\Firefall"]',
+                "ARTIST: 1976-05-05 - Pall's Mall - Boston",
+                "DATE: 1976-05-05",
+                "VENUE: Paul's Mall",
+                "LOCATION: Boston, MA",
+                "END_SHOW_METADATA",
+                f"HISTORICAL_INPUT: {original}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (logs / "compA.log").write_text(
+        "\n".join(
+            [
+                main_dir + r"\01.flac",
+                rf"E:\Source\{original}\01.flac",
+                rf"E:\Source\{original}\02.flac",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    output = research.research_logs(str(tmp_path), query)
+    assert "Matches: 1" in output
+    assert "===== ALL RELATED RAW LOG LINES =====" in output
+    assert "Raw log lines: 6" in output
+    assert f"metaA.log:1: SOURCE_TEXT: {original}" in output
+    assert f"metaA.log:10: HISTORICAL_INPUT: {original}" in output
+    assert rf"compA.log:2: E:\Source\{original}\01.flac" in output
+    assert rf"compA.log:3: E:\Source\{original}\02.flac" in output
+
+
+def test_research_raw_log_hits_are_returned_even_without_structured_meta_match(tmp_path):
+    import tlo_research_lib as research
+
+    logs = tmp_path / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    (logs / "metaA.log").write_text(
+        "SOURCE_TEXT: Mystery Artist 1976-05-05 someplace\n",
+        encoding="utf-8",
+    )
+    (logs / "compA.log").write_text(
+        r"E:\Source\Mystery Artist 1976-05-05 someplace\01.flac" + "\n",
+        encoding="utf-8",
+    )
+
+    output = research.research_logs(str(tmp_path), "Mystery Artist 1976-05-05")
+    assert "Matches: 0" in output
+    assert "No matching metadata records found." in output
+    assert "Raw log lines: 2" in output
+    assert "metaA.log:1:" in output
+    assert "compA.log:1:" in output

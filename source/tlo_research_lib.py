@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v373"
+__version__ = "v375"
 
 from dataclasses import dataclass
 import glob
@@ -92,8 +92,80 @@ class CompEntry:
     line: str
 
 
+@dataclass(frozen=True)
+class RawLogHit:
+    log_path: str
+    line_number: int
+    line: str
+
+
 def _norm_text(value: str) -> str:
     return " ".join(str(value or "").strip().split()).casefold()
+
+
+def _normalized_line(value: str) -> str:
+    return " ".join(str(value or "").strip().split()).casefold()
+
+
+def _line_directly_relates_to_query(line: str, query: ResearchQuery) -> bool:
+    """Return True when one raw log line contains the supplied Research evidence.
+
+    Structured matching remains field-aware. This broader raw-line pass exists so
+    Research can also expose historical/source evidence that lives outside the
+    selected metadata block (for example an original folder/tag string that later
+    metadata normalization replaced).
+    """
+    haystack = _normalized_line(line)
+    if not haystack:
+        return False
+
+    raw = _normalized_line(query.raw)
+    if raw and raw in haystack:
+        return True
+
+    if query.kind == "date":
+        return any(
+            _normalized_line(candidate) in haystack
+            for candidate in (query.date_candidates or (query.date,))
+            if _normalized_line(candidate)
+        )
+
+    if query.kind == "artist_date":
+        artist = _normalized_line(query.artist)
+        if not artist or artist not in haystack:
+            return False
+        return any(
+            _normalized_line(candidate) in haystack
+            for candidate in (query.date_candidates or (query.date,))
+            if _normalized_line(candidate)
+        )
+
+    if query.kind == "venue":
+        venue = _normalized_line(query.venue)
+        return bool(venue and venue in haystack)
+
+    return False
+
+
+def load_raw_query_hits(log_dir: str, query: ResearchQuery) -> list[RawLogHit]:
+    """Return every raw meta/comp log line directly related to the query.
+
+    No early exit or per-file cap is used. Line numbers are retained so Research
+    can trace an unexpected value back to the exact historical log occurrence.
+    """
+    hits: list[RawLogHit] = []
+    paths = list(glob.glob(os.path.join(log_dir, "meta*.log")))
+    paths.extend(glob.glob(os.path.join(log_dir, "comp*.log")))
+    for log_path in sorted(set(paths), key=lambda p: p.casefold()):
+        try:
+            with open(log_path, "r", encoding="utf-8", errors="replace") as handle:
+                for line_number, raw_line in enumerate(handle, 1):
+                    line = raw_line.rstrip("\r\n")
+                    if _line_directly_relates_to_query(line, query):
+                        hits.append(RawLogHit(log_path=log_path, line_number=line_number, line=line))
+        except OSError:
+            continue
+    return hits
 
 
 def parse_research_query(value: str) -> ResearchQuery:
@@ -265,6 +337,7 @@ def research_logs(tlo_home: str, query_text: str) -> str:
     meta_records = load_meta_records(log_dir)
     comp_entries = load_comp_entries(log_dir)
     matches = [record for record in meta_records if record_matches(record, query)]
+    raw_hits = load_raw_query_hits(log_dir, query)
 
     type_text = {
         "date": "date",
@@ -279,7 +352,7 @@ def research_logs(tlo_home: str, query_text: str) -> str:
     ]
     if not matches:
         lines.append("No matching metadata records found.")
-        return "\n".join(lines) + "\n"
+        lines.append("")
 
     for index, record in enumerate(matches, 1):
         lines.append(f"===== MATCH {index} =====")
@@ -293,4 +366,13 @@ def research_logs(tlo_home: str, query_text: str) -> str:
         else:
             lines.append("(no corresponding comp entry found)")
         lines.append("")
+
+    lines.append("===== ALL RELATED RAW LOG LINES =====")
+    lines.append(f"Raw log lines: {len(raw_hits)}")
+    if raw_hits:
+        for hit in raw_hits:
+            lines.append(f"{os.path.basename(hit.log_path)}:{hit.line_number}: {hit.line}")
+    else:
+        lines.append("(no additional raw meta/comp lines directly matched the research input)")
+    lines.append("")
     return "\n".join(lines).rstrip() + "\n"

@@ -1,6 +1,6 @@
-"""Build 373 regressions for stronger non-compliant artist evidence."""
+"""Build 375 regressions for stronger non-compliant artist evidence."""
 
-__version__ = "v373"
+__version__ = "v375"
 
 import os
 from types import SimpleNamespace
