@@ -1,6 +1,6 @@
 """Behavior tests for the tlo-deleteDupes main."""
 
-__version__ = "v372"
+__version__ = "v373"
 
 import importlib.util
 from pathlib import Path
@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _load_module():
-    spec = importlib.util.spec_from_file_location("tlo_delete_dupes_v372", ROOT / "tlo-deleteDupes.py")
+    spec = importlib.util.spec_from_file_location("tlo_delete_dupes_v373", ROOT / "tlo-deleteDupes.py")
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)

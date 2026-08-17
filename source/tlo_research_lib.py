@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v372"
+__version__ = "v373"
 
 from dataclasses import dataclass
 import glob

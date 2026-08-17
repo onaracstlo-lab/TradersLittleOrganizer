@@ -1,9 +1,9 @@
 """Postprocess metadata logs into setlist files, bootlist.csv, duplicate/group outputs, and summary/unidentified-show files."""
 
-__version__ = "v372"
-# TLO-GI package version: v372
-__version_summary__ = 'Research accepts the full canonical TLO date grammar, and the public application version advances to 1.4.'
-# TLO-GI version summary: Research accepts the full canonical TLO date grammar, and the public application version advances to 1.4.
+__version__ = "v373"
+# TLO-GI package version: v373
+__version_summary__ = 'Strengthen non-compliant artist resolution using DB-backed tag, path, and setlist filename evidence.'
+# TLO-GI version summary: Strengthen non-compliant artist resolution using DB-backed tag, path, and setlist filename evidence.
 import csv
 import glob
 import json
