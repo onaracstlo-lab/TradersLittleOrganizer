@@ -25,8 +25,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-__version__ = "v378"
-# TLO-GI package version: v378
+__version__ = "v379"
+# TLO-GI package version: v379
 __version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"

@@ -1,9 +1,9 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v378"
-# TLO-GI package version: v378
-__version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
-# TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
+__version__ = "v379"
+# TLO-GI package version: v379
+__version_summary__ = 'Reject extraction/ripper technical tables as track titles and preserve explicit local song-list mismatch evidence.'
+# TLO-GI version summary: Reject extraction/ripper technical tables as track titles and preserve explicit local song-list mismatch evidence.
 
 import os
 import re
@@ -273,6 +273,16 @@ AUCDTECT_RESULT_LINE_RE = re.compile(
 )
 SHNTOOL_LENGTH_ROW_RE = re.compile(
     r"(?i)^\s*\d{1,3}:\d{2}(?:\.\d{2})?\s+.+?\.(?:flac|mp3|wav|m4a|aac|ogg|oga|opus|aiff?|ape|wv|alac|shn|shnf)(?:\s|$)"
+)
+EAC_TECHNICAL_SECTION_START_RE = re.compile(
+    r"(?i)^\s*(?:exact\s+audio\s+copy\b|eac\s+extraction\s+logfile\b|toc\s+of\s+the\s+extracted\s+cd\b)"
+)
+EAC_TOC_COLUMN_HEADER_RE = re.compile(
+    r"(?i)^\s*track\s*\|\s*start\s*\|\s*length\s*\|\s*start\s+sector\s*\|\s*end\s+sector\s*$"
+)
+EAC_TOC_ROW_RE = re.compile(
+    r"(?i)^\s*\d{1,3}\s*\|\s*\d{1,3}:\d{2}(?:\.\d{1,3})?\s*\|\s*"
+    r"\d{1,3}:\d{2}(?:\.\d{1,3})?\s*\|\s*\d+\s*\|\s*\d+\s*$"
 )
 EXTINF_TRACK_RE = re.compile(r"(?i)^\s*#EXTINF\s*:\s*[^,]*,\s*(?:\[(?P<num>\d{1,3})\]\s*)?(?P<title>\S.*)$")
 BRACKETED_TRACK_RE = re.compile(r"(?i)^\s*(?:(?:cd|disc|disk|d|set|s)\s*\d{1,2}\s*\\?[/_. -]*)?\[(?P<num>\d{1,3})\]\s*(?P<title>\S.*)$")
@@ -664,16 +674,62 @@ def _looks_like_aucdtect_result_line(line: str) -> bool:
     return bool(AUCDTECT_RESULT_LINE_RE.match(str(line or "").strip()))
 
 
+def _looks_like_numeric_table_track_row(line: str) -> bool:
+    """Return True for numbered numeric table rows masquerading as tracks.
+
+    Ripper/analysis tables often start with a row number and then contain
+    timestamp/sector columns separated by vertical bars.  A sequence of those
+    rows can otherwise look exactly like a strong numbered 1..N song list.
+    """
+    raw = str(line or "").strip()
+    if raw.count("|") < 2:
+        return False
+    if not re.match(r"^\d{1,3}\s*\|", raw):
+        return False
+    duration_cells = re.findall(r"\b\d{1,3}:\d{2}(?:\.\d{1,3})?\b", raw)
+    numeric_cells = re.findall(r"(?<![A-Za-z])\d+(?![A-Za-z])", raw)
+    return len(duration_cells) >= 1 and len(numeric_cells) >= 4
+
+
+def _is_plausible_numbered_song_title(title: str, source_line: str = "") -> bool:
+    """Reject obvious technical/table values before accepting a song title.
+
+    This deliberately stays conservative so numeric song titles such as
+    ``1999`` remain valid.  It rejects only structures carrying strong table or
+    extraction-log evidence rather than requiring titles to contain words.
+    """
+    value = compact_ws(title)
+    raw = str(source_line or "").strip()
+    if not value:
+        return False
+    if EAC_TOC_ROW_RE.match(raw) or EAC_TOC_COLUMN_HEADER_RE.match(raw):
+        return False
+    if _looks_like_numeric_table_track_row(raw):
+        return False
+    if value.count("|") >= 2:
+        duration_cells = re.findall(r"\b\d{1,3}:\d{2}(?:\.\d{1,3})?\b", value)
+        if duration_cells and not re.search(r"[A-Za-z]", value):
+            return False
+    if re.search(r"(?i)\b(?:start\s+sector|end\s+sector|peak\s+level|track\s+quality|copy\s+crc)\b", value):
+        return False
+    return True
+
+
 def _is_non_song_technical_track_line(line: str) -> bool:
     """Return True for technical rows that can look like numbered songs.
 
-    auCDtect reports commonly contain rows such as
-    ``101 Ted the Mechanic.wav: track looks like CDDA with probability 100%.``.
-    The leading number and filename can look like a song row, but the row is
-    an audio-analysis result and must never be used as a track title.
+    auCDtect reports and extraction/ripper tables can contain leading track
+    numbers followed by technical values.  Those rows must never become song
+    titles merely because their numbers form a valid sequence.
     """
     raw = str(line or "").strip()
-    return bool(_looks_like_aucdtect_result_line(raw) or SHNTOOL_LENGTH_ROW_RE.match(raw))
+    return bool(
+        _looks_like_aucdtect_result_line(raw)
+        or SHNTOOL_LENGTH_ROW_RE.match(raw)
+        or EAC_TOC_COLUMN_HEADER_RE.match(raw)
+        or EAC_TOC_ROW_RE.match(raw)
+        or _looks_like_numeric_table_track_row(raw)
+    )
 
 
 def _numbered_tracks_start_like_song_list(tracks: Sequence[Dict[str, object]]) -> bool:
@@ -716,14 +772,14 @@ def _parse_track_line(line: str) -> Optional[Tuple[int, str]]:
         number = int(extinf_match.group("num") or 0)
         title = _clean_track_title(extinf_match.group("title"))
         title = re.sub(r"^\[\d{1,3}\]\s*", "", title).strip()
-        if title:
+        if title and _is_plausible_numbered_song_title(title, raw):
             return number, title
 
     bracketed_match = BRACKETED_TRACK_RE.match(raw)
     if bracketed_match and not AUDIO_FILENAME_EXT_RE.search(raw):
         number = int(bracketed_match.group("num") or 0)
         title = _clean_track_title(bracketed_match.group("title"))
-        if title:
+        if title and _is_plausible_numbered_song_title(title, raw):
             return number, title
 
     # Disc/set dash rows such as "1-1 Back Seat Betty 8:29" encode
@@ -740,7 +796,7 @@ def _parse_track_line(line: str) -> Optional[Tuple[int, str]]:
             track = 0
         if 1 <= disc <= 9 and 0 <= track <= 99:
             title = _clean_track_title(disc_dash_match.group("title"))
-            if title:
+            if title and _is_plausible_numbered_song_title(title, raw):
                 return disc * 100 + track, title
 
     side_letter_match = SIDE_LETTER_TRACK_RE.match(raw)
@@ -751,7 +807,7 @@ def _parse_track_line(line: str) -> Optional[Tuple[int, str]]:
             number = 0
         if 0 <= number <= 999:
             title = _clean_track_title(side_letter_match.group("title"))
-            if title:
+            if title and _is_plausible_numbered_song_title(title, raw):
                 return number, title
 
     for pattern in TRACK_PATTERNS:
@@ -783,6 +839,8 @@ def _parse_track_line(line: str) -> Optional[Tuple[int, str]]:
         if lowered in {"flac", "mp3", "wav", "shn", "aiff", "aif"}:
             continue
         if CHECKSUM_SECTION_RE.search(title):
+            continue
+        if not _is_plausible_numbered_song_title(title, raw):
             continue
         return number, title
     return None
@@ -1250,6 +1308,10 @@ def parse_setlist_tracks(setlist_file: str) -> List[Dict[str, object]]:
     for idx, line in enumerate(lines):
         if not line:
             continue
+        # Exact Audio Copy appends a machine-generated extraction report after
+        # any human setlist text.  Nothing after this marker is a song list.
+        if EAC_TECHNICAL_SECTION_START_RE.match(line):
+            break
         if tracks and TRACK_LIST_TERMINATOR_RE.match(line):
             if (
                 len(tracks) == 1
@@ -1525,6 +1587,8 @@ def parse_unnumbered_section_tracks(setlist_file: str, expected_count: int = 0) 
     had_title_in_section = False
     for raw_line in text.splitlines():
         line = str(raw_line or "").strip()
+        if EAC_TECHNICAL_SECTION_START_RE.match(line):
+            break
         if not line:
             if active and had_title_in_section:
                 active = False
@@ -1620,6 +1684,9 @@ def parse_unstructured_unnumbered_tracks(setlist_file: str, expected_count: int 
 
     for raw_line in text.splitlines():
         line = str(raw_line or "").strip()
+        if EAC_TECHNICAL_SECTION_START_RE.match(line):
+            flush()
+            break
         if not line or re.match(r"^[\-_=]{5,}$", line):
             flush()
             continue
@@ -1692,6 +1759,63 @@ def parse_unstructured_unnumbered_tracks(setlist_file: str, expected_count: int 
             return build_tracks(combined, "unnumbered-line-blocks"), "unnumbered-line-blocks"
 
     return [], ""
+
+
+def _explicit_unnumbered_track_section_candidate(setlist_file: str) -> List[Dict[str, object]]:
+    """Return a plausible explicit ``Songs:``/``Tracks:`` block without count-gating.
+
+    This is diagnostic evidence only.  TLO still requires a one-to-one count
+    match before using an unnumbered block for tags, but retaining the candidate
+    lets the caller explain a real 5-title-vs-4-file mismatch instead of acting
+    as though no local song list existed.
+    """
+    if not setlist_file or not os.path.isfile(setlist_file):
+        return []
+    text = _read_text(setlist_file)
+    if setlist_text_requests_generated_from_music_files(text):
+        return []
+    active = False
+    started = False
+    rows: List[Dict[str, object]] = []
+    for raw_line in text.splitlines():
+        line = str(raw_line or "").strip()
+        if EAC_TECHNICAL_SECTION_START_RE.match(line):
+            break
+        if TRACK_SECTION_RE.match(line):
+            if rows:
+                break
+            active = True
+            started = False
+            continue
+        if not active:
+            continue
+        if not line:
+            if started:
+                break
+            continue
+        if (
+            TRACK_LIST_TERMINATOR_RE.match(line)
+            or CHECKSUM_SECTION_RE.match(line)
+            or HASH_LINE_RE.match(line)
+            or _is_non_song_technical_track_line(line)
+        ):
+            break
+        if _parse_track_line(line) is not None:
+            break
+        title = _clean_unstructured_title_line(line)
+        if not title or not _looks_like_unnumbered_song_title(title) or _looks_like_personnel_or_credit_line(line):
+            if started:
+                break
+            continue
+        rows.append({
+            "original_number": len(rows) + 1,
+            "normalized_number": len(rows) + 1,
+            "title": title,
+            "source_line": line,
+            "source": "explicit-unnumbered-section",
+        })
+        started = True
+    return rows
 
 
 _NORMALIZED_TITLE_CHAR_RE = re.compile(r"[^a-z0-9]+")
@@ -3340,6 +3464,13 @@ def _select_tracks_for_tagging(
         if tracks and _has_strong_numbered_track_run(tracks):
             _emit(emit, f"WARN: {folder} | found a strong numbered setlist run with {len(tracks)} row(s) for {len(audio_files)} audio file(s); not using unnumbered prose fallback")
         else:
+            explicit_candidate = _explicit_unnumbered_track_section_candidate(setlist_file)
+            if explicit_candidate and len(explicit_candidate) != len(audio_files):
+                _emit(
+                    emit,
+                    f"WARN: {folder} | found explicit local Songs/Tracks section with {len(explicit_candidate)} plausible title(s) "
+                    f"for {len(audio_files)} audio file(s); not mapping titles because the counts do not match",
+                )
             fallback_tracks, fallback_source = _local_setlist_fallback_tracks(setlist_file, len(audio_files), folder, emit=emit)
             if fallback_tracks:
                 return fallback_tracks, fallback_source, None
