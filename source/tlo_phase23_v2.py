@@ -1,7 +1,7 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v377"
-# TLO-GI package version: v377
+__version__ = "v378"
+# TLO-GI package version: v378
 __version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
 # TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
 
@@ -3169,6 +3169,29 @@ def _pattern_matches_have_abbreviation_candidate(pattern_matches: List[Dict[str,
     return any(bool(match.get("abbr_candidate")) for match in pattern_matches)
 
 
+def _abbreviation_pattern_matches(pattern_matches: Sequence[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Return weak no-space-date artist-prefix matches.
+
+    Short all-upper/all-lower String1 tokens such as ``gd`` in
+    ``gd1977-05-08...`` are useful clues, but they are also common music-file
+    naming abbreviations.  They must not outrank a full artist name found in
+    the path, setlist metadata/filename, or usable audio tags.
+    """
+    return [match for match in pattern_matches if bool(match.get("abbr_candidate"))]
+
+
+def _non_abbreviation_pattern_matches(pattern_matches: Sequence[Dict[str, str]]) -> List[Dict[str, str]]:
+    return [match for match in pattern_matches if not bool(match.get("abbr_candidate"))]
+
+
+def _abbreviation_pattern_paths(pattern_matches: Sequence[Dict[str, str]]) -> set:
+    return {
+        match.get("part_path", "")
+        for match in pattern_matches
+        if match.get("abbr_candidate") and match.get("part_path")
+    }
+
+
 def _resolve_artist_from_path_before_abbreviation(
     group: dict,
     pattern_matches: List[Dict[str, str]],
@@ -3201,7 +3224,15 @@ def _resolve_artist_from_path_before_abbreviation(
         config=config,
     )
 
-def _resolve_artist_from_pattern_matches(pattern_matches: List[Dict[str, str]], matcher: Optional[ArtistMatcher], evidence: Dict[str, List[Candidate]], conflicts: List[str], config=None) -> Tuple[str, List[Dict[str, object]]]:
+def _resolve_artist_from_pattern_matches(
+    pattern_matches: List[Dict[str, str]],
+    matcher: Optional[ArtistMatcher],
+    evidence: Dict[str, List[Candidate]],
+    conflicts: List[str],
+    config=None,
+    *,
+    abbreviation_last_resort: bool = False,
+) -> Tuple[str, List[Dict[str, object]]]:
     lookups: List[Dict[str, object]] = []
     if not pattern_matches:
         return "", lookups
@@ -3223,7 +3254,10 @@ def _resolve_artist_from_pattern_matches(pattern_matches: List[Dict[str, str]], 
             master = row["masters"][0]
             raw_artist = row["match"].get("string1", "") or row["term"]
             artist_name = _artist_output_name(config, raw_artist, master)
-            evidence.setdefault("artist", []).append(Candidate(artist_name, f"path pattern:{row['term']}", 70))
+            if abbreviation_last_resort:
+                evidence.setdefault("artist", []).append(Candidate(artist_name, f"path_pattern_abbreviation_last_resort:{row['term']}", 35))
+            else:
+                evidence.setdefault("artist", []).append(Candidate(artist_name, f"path pattern:{row['term']}", 70))
             return artist_name, lookups
         if row["status"] == "collision":
             conflicts.append(_collision_note(f"artist query collision for String1: {row['term']}", row["masters"]))
@@ -3243,7 +3277,9 @@ def _resolve_artist_from_pattern_matches(pattern_matches: List[Dict[str, str]], 
         master = unique_masters[0]
         raw_artist = next((row["match"].get("string1", "") for row in lookups if row["status"] == "matched" and row["masters"] and row["masters"][0] == master), master)
         artist_name = _artist_output_name(config, raw_artist, master)
-        evidence.setdefault("artist", []).append(Candidate(artist_name, "path_pattern_consensus", 72))
+        source = "path_pattern_abbreviation_last_resort_consensus" if abbreviation_last_resort else "path_pattern_consensus"
+        confidence = 37 if abbreviation_last_resort else 72
+        evidence.setdefault("artist", []).append(Candidate(artist_name, source, confidence))
         return artist_name, lookups
     if len(unique_masters) > 1:
         conflicts.append(_collision_note("artist conflict across path pattern matches", unique_masters))
@@ -4161,6 +4197,9 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
     string_date_string_found = bool(required_matches)
     string_date_found = bool(optional_matches)
     pattern_matches = required_matches if required_matches else optional_matches
+    abbreviation_matches = _abbreviation_pattern_matches(pattern_matches)
+    strong_pattern_matches = _non_abbreviation_pattern_matches(pattern_matches)
+    abbreviation_exclude_paths = _abbreviation_pattern_paths(pattern_matches)
 
     if not string_date_string_found and not string_date_found:
         observations.append("unable to find String1 Date String2 or String1 Date in path")
@@ -4206,7 +4245,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                     record.artist = dash_artist
 
         if not record.artist and not dash_album_match and pattern_matches:
-            if _pattern_matches_have_abbreviation_candidate(pattern_matches):
+            if abbreviation_matches:
                 conflict_count_before_path_artist = len(conflicts)
                 path_artist_before_abbreviation = _resolve_artist_from_path_before_abbreviation(
                     group,
@@ -4219,22 +4258,42 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                 if path_artist_before_abbreviation:
                     record.artist = path_artist_before_abbreviation
                     observations.append(
-                        "artist-no-space-date pattern found; using DB-backed artist found elsewhere in path before abbreviation lookup: "
+                        "artist-no-space-date abbreviation found; using DB-backed artist found elsewhere in path instead: "
                         f"{path_artist_before_abbreviation}"
                     )
                 elif len(conflicts) == conflict_count_before_path_artist:
-                    observations.append("artist-no-space-date pattern found; no DB-backed artist found elsewhere in path before abbreviation lookup")
-            if not record.artist and len(conflicts) == 0:
-                pattern_artist, _lookups = _resolve_artist_from_pattern_matches(pattern_matches, artist_matcher, evidence, conflicts, config=config)
+                    observations.append(
+                        "artist-no-space-date abbreviation found; deferring the short prefix until stronger artist sources are exhausted"
+                    )
+            if not record.artist and len(conflicts) == 0 and strong_pattern_matches:
+                pattern_artist, _lookups = _resolve_artist_from_pattern_matches(
+                    strong_pattern_matches, artist_matcher, evidence, conflicts, config=config
+                )
                 record.artist = pattern_artist
         if not record.artist and not dash_album_match and len(conflicts) == 0:
             if not string_date_string_found and string_date_found:
                 observations.append("String1 Date retry match found in path")
-            record.artist = _resolve_artist_from_subdirs(group, artist_matcher, evidence, conflicts, pattern_artist=pattern_artist, config=config)
+            record.artist = _resolve_artist_from_subdirs(
+                group,
+                artist_matcher,
+                evidence,
+                conflicts,
+                pattern_artist=pattern_artist,
+                exclude_part_paths=abbreviation_exclude_paths,
+                config=config,
+            )
 
     if aggregate_album_name and not dash_album_match and not string_date_string_found:
         if not record.artist and len(conflicts) == 0:
-            record.artist = _resolve_artist_from_subdirs(group, artist_matcher, evidence, conflicts, pattern_artist=pattern_artist, config=config)
+            record.artist = _resolve_artist_from_subdirs(
+                group,
+                artist_matcher,
+                evidence,
+                conflicts,
+                pattern_artist=pattern_artist,
+                exclude_part_paths=abbreviation_exclude_paths,
+                config=config,
+            )
         if record.artist:
             dash_album_mode = True
             record.album_name = aggregate_album_name
@@ -4367,6 +4426,58 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                 if not record.date:
                     record.date = date_string3_date
                     date_matches.append({"raw": date_string3_date, "normalized": date_string3_date, "part": group["main_dir_path"], "source": "date_string3"})
+
+        # A short no-space-date prefix (for example, the kind of artist
+        # abbreviation commonly carried at the front of traded-music file
+        # names) is deliberately the final local artist fallback.  It must not
+        # drive eTree/setlist.fm lookup until path, setlist, tags, and the other
+        # structured artist fallbacks have all failed.
+        if not record.artist and abbreviation_matches and len(conflicts) == 0:
+            abbreviation_artist, _abbr_lookups = _resolve_artist_from_pattern_matches(
+                abbreviation_matches,
+                artist_matcher,
+                evidence,
+                conflicts,
+                config=config,
+                abbreviation_last_resort=True,
+            )
+            if abbreviation_artist:
+                record.artist = abbreviation_artist
+                raw_abbreviations = _unique_preserve([
+                    compact_ws(match.get("string1", "")) for match in abbreviation_matches if compact_ws(match.get("string1", ""))
+                ])
+                observations.append(
+                    "no stronger artist evidence found; using short artist abbreviation as last resort: "
+                    + (", ".join(raw_abbreviations) if raw_abbreviations else abbreviation_artist)
+                    + f" -> {abbreviation_artist}"
+                )
+
+                # If online lookup is enabled and the performance date is
+                # usable, a successful artist/date lookup provides an
+                # additional confirmation of the weak abbreviation before the
+                # final metadata is emitted.
+                abbreviation_confirmed_online = False
+                if record.date and _is_exact_yyyy_mm_dd_date(record.date):
+                    if getattr(config, "etree_lookup", False):
+                        abbreviation_confirmed_online = _apply_etree_lookup_to_record(
+                            config, record, evidence, observations
+                        )
+                        if abbreviation_confirmed_online:
+                            observations.append(
+                                f"last-resort artist abbreviation confirmed by eTreeDB for {record.artist} on {record.date}"
+                            )
+                    if not abbreviation_confirmed_online and getattr(config, "setlistfm_lookup", False):
+                        abbreviation_confirmed_online = _apply_setlistfm_lookup_to_record(
+                            config, record, evidence, observations
+                        )
+                        if abbreviation_confirmed_online:
+                            observations.append(
+                                f"last-resort artist abbreviation confirmed by setlist.fm for {record.artist} on {record.date}"
+                            )
+                if not abbreviation_confirmed_online:
+                    observations.append(
+                        "last-resort artist abbreviation remained unconfirmed by stronger local or enabled online evidence"
+                    )
     else:
         # Even album-style String1 - String2 folders may have selected setlist
         # files with explicit Artist:/Date:/Venue:/Location: labels. Apply the
