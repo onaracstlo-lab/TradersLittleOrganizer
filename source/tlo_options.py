@@ -1,7 +1,7 @@
-__version__ = "v379"
-# TLO-GI package version: v379
-__version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
-# TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
+__version__ = "v394"
+# TLO-GI package version: v394
+__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
+# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
 
 import argparse
 from dataclasses import dataclass
@@ -23,6 +23,16 @@ def parse_bool(value):
     raise argparse.ArgumentTypeError(
         f"Invalid boolean value '{value}' (use true/false, yes/no, y/n, 1/0)."
     )
+
+
+def parse_percent_0_100(value):
+    try:
+        num = int(str(value).strip())
+    except Exception:
+        raise argparse.ArgumentTypeError("acceptable-corruption-percent must be an integer from 0 through 100")
+    if num < 0 or num > 100:
+        raise argparse.ArgumentTypeError("acceptable-corruption-percent must be an integer from 0 through 100")
+    return num
 
 
 def parse_max_workers(value):
@@ -149,6 +159,16 @@ OPTIONS = [
         "setlistfm_lookup", "--setlistfm-lookup", "flag",
         gui="checkbox", gui_label="setlist.fm", gui_row=1, gui_col=0,
         help="If eTreeDB returns no usable result, look up venue/location from setlist.fm. Requires --etree-lookup on the command line.",
+    ),
+    Option(
+        "setlistfm_upgrade", "--setlistfm-upgrade", "flag",
+        gui="checkbox", gui_label="setlist.fm upgrade", gui_row=2, gui_col=0,
+        help="When setlist.fm lookup is enabled, use upgraded access limits of 14 requests/second and 48,000 requests/day.",
+    ),
+    Option(
+        "acceptable_corruption_percent", "--acceptable-corruption-percent", "int",
+        default=100, metavar="N", type_func=parse_percent_0_100,
+        help="If more than this percentage of a logical show folder's audio files are corrupt, move the show folder to the OS Trash/Recycle Bin and omit it from inventory. Integer 0-100; default 100.",
     ),
     Option(
         "performance_mode", "--performance-mode", "choice",

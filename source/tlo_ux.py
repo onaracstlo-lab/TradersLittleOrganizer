@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-__version__ = "v379"
-# TLO-GI package version: v379
-__version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
-# TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
+__version__ = "v394"
+# TLO-GI package version: v394
+__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
+# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
 
 
 import copy
@@ -213,6 +213,7 @@ MAIN_WINDOW_CHECKBOX_SPECS = (
     ("tag_during_inventory", "Tag in Place"),
     ("artist_in_album", "Artist in Album Tag"),
     ("setlistfm_lookup", "setlist.fm"),
+    ("setlistfm_upgrade", "setlist.fm upgrade"),
     ("rename_compliantly", "Rename Compliantly"),
     ("tag_copy_during_inventory", "Tag Copy"),
     ("convert_shn", "Convert shn"),
@@ -240,6 +241,7 @@ def main_window_checkbox_values(source, *, dry_run=None) -> dict[str, bool]:
         "tag_during_inventory": bool(read("tag_during_inventory", False)),
         "artist_in_album": bool(read("artist_in_album", True)),
         "setlistfm_lookup": bool(read("setlistfm_lookup", False)),
+        "setlistfm_upgrade": bool(read("setlistfm_upgrade", False)),
         "rename_compliantly": bool(read("rename_compliantly", False)),
         "tag_copy_during_inventory": bool(tag_copy),
         "convert_shn": bool(read("convert_shn", False)),
@@ -289,6 +291,7 @@ def operation_review_lines(
             f"Performance: {getattr(config, 'performance_mode', 'balanced')} / "
             f"max workers {getattr(config, 'max_workers', 0)}"
         )
+        lines.append(f"Acceptable corruption %: {int(getattr(config, 'acceptable_corruption_percent', 100) or 0)}")
         copy_delete = str(getattr(config, "tag_copy_and_delete_path", "") or "").strip()
         destination = str(getattr(config, "tag_copy_destination", "") or copy_delete).strip()
         if destination:
@@ -520,6 +523,17 @@ def preview_operation(
                     result.media_files += len(audio_files)
                     result.shn_files += shn_count
                     actions = _preview_actions(preview_config, copy_mode=copy_mode, tagger=tagger, shn_count=shn_count)
+                    if not tagger:
+                        try:
+                            from tlo_corruption import group_audio_files, corrupt_audio_files, exceeds_threshold
+                            corruption_audio = group_audio_files(group)
+                            corruption_bad = corrupt_audio_files(group)
+                            corruption_limit = int(getattr(preview_config, "acceptable_corruption_percent", 100) or 0)
+                            if corruption_bad and exceeds_threshold(len(corruption_audio), len(corruption_bad), corruption_limit):
+                                pct = (100.0 * len(corruption_bad) / len(corruption_audio)) if corruption_audio else 0.0
+                                actions = tuple(actions) + (f"WOULD_REMOVE_CORRUPTION ({len(corruption_bad)}/{len(corruption_audio)} = {pct:.2f}% > {corruption_limit}%)",)
+                        except Exception as exc:
+                            result.issues.append(RunIssue("Corruption dry-run check failed", str(exc), str(group.get("main_dir_path") or root), "warning", "preview"))
                     tags = [PreviewTag(**entry) for entry in (plan.get("tags", []) or [])]
                     item = PreviewItem(
                         path=os.path.normpath(str(plan.get("folder") or group.get("main_dir_path") or root)),

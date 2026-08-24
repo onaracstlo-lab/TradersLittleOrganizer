@@ -1,9 +1,9 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v379"
-# TLO-GI package version: v379
-__version_summary__ = 'Reject extraction/ripper technical tables as track titles and preserve explicit local song-list mismatch evidence.'
-# TLO-GI version summary: Reject extraction/ripper technical tables as track titles and preserve explicit local song-list mismatch evidence.
+__version__ = "v394"
+# TLO-GI package version: v394
+__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
+# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
 
 import os
 import re

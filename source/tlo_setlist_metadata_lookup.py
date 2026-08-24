@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-__version__ = "v379"
-# TLO-GI package version: v379
-__version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
-# TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
+__version__ = "v394"
+# TLO-GI package version: v394
+__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
+# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
 
 import csv
 import os
@@ -14,13 +14,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from tlo_constants import COUNTRY_ALIASES, COUNTRY_SEARCH_TERMS, MONTH_NAME_CASED_PATTERN, US_STATE_ALIASES, US_STATE_CODES
+from tlo_constants import COUNTRY_ALIASES, COUNTRY_SEARCH_TERMS, LOWERCASE_COMMON_STATE_CODES, MONTH_NAME_CASED_PATTERN, US_STATE_ALIASES, US_STATE_CODES
 from tlo_text_utils import compact_ws, normalized_compare_value, safe_title
 
 
 @dataclass(frozen=True)
 class SetlistVenueLocationResult:
     artist: str = ""
+    artist_source: str = ""
+    artist_confidence: int = 0
     venue: str = ""
     city: str = ""
     region: str = ""
@@ -541,8 +543,8 @@ _TRAILING_NUMERIC_DATE_RE = re.compile(
 )
 _TRAILING_TEXT_DATE_RE = re.compile(
     rf"\s+(?:"
-    rf"{MONTH_NAME_CASED_PATTERN}\.?\s*,?\s*\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?(?:\s*,?\s*(?:\d{{2}}|(?:19|20)\d{{2}}))?|"
-    rf"\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?\s*{MONTH_NAME_CASED_PATTERN}\.?(?:\s*(?:\d{{2}}|(?:19|20)\d{{2}}))?"
+    rf"{MONTH_NAME_CASED_PATTERN}\.?\s*,?\s*\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?(?:\s*,?\s*(?:(?:19|20)\d{{2}}|\d{{2}}))?|"
+    rf"\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?\s*{MONTH_NAME_CASED_PATTERN}\.?(?:\s*(?:(?:19|20)\d{{2}}|\d{{2}}))?"
     rf")\s*$"
 )
 
@@ -738,12 +740,39 @@ def _region_anchor_at_end(line: str, support: _SupportData) -> Tuple[str, str, s
     return _clean_spaces(line[: match.start(1)].rstrip(" ,")), region, country, _clean_spaces(match.group(1))
 
 
+def _parse_comma_state_code_location(line: str, support: _SupportData) -> Tuple[str, str, str, str, str, int]:
+    """Parse a city followed by a comma and a two-letter state code.
+
+    Old setlists commonly write state codes in title case (``Santa Cruz,Ca``).
+    That casing is safe to normalize when the code is the complete comma-delimited
+    tail.  Ambiguous/common-word state codes remain case-sensitive so text such as
+    ``You, Me`` cannot silently become Maine.
+    """
+    match = re.match(r"^\s*([A-Za-z][A-Za-z.'-]*(?:\s+[A-Za-z][A-Za-z.'-]*){0,4})\s*,\s*([A-Za-z]{2})\s*$", line)
+    if not match:
+        return "", "", "", "", "", 0
+    raw_code = match.group(2)
+    code = raw_code.upper()
+    if code not in US_STATE_CODES or code not in support.regions:
+        return "", "", "", "", "", 0
+    if raw_code != code and code in LOWERCASE_COMMON_STATE_CODES:
+        return "", "", "", "", "", 0
+    info = support.regions[code]
+    city = _clean_spaces(match.group(1))
+    if not city or _looks_like_sentence_prose_line(city):
+        return "", "", "", "", "", 0
+    return city, info.get("region", code), info.get("country", "USA"), match.group(0), "LOCATION_COMMA_STATE_CODE", 92
+
+
 def _parse_trailing_region_location(line: str, support: _SupportData) -> Tuple[str, str, str, str, str, int]:
     terms = _region_search_terms(support)
     if not terms:
         return "", "", "", "", "", 0
     region_alt = "|".join(f"(?P<R{i}>{pattern})" for i, (_display, pattern, _region, _country) in enumerate(terms))
-    match = re.search(rf"\b([A-Za-z][A-Za-z.'-]+(?:\s+[A-Za-z][A-Za-z.'-]+){{0,4}})(?:,|\s)+({region_alt})\b", line)
+    # This is a *trailing* region parser.  Requiring the region to terminate the
+    # line prevents artist/title text such as ``The Georgia Satellites`` from
+    # being reinterpreted as city=The, state=GA.
+    match = re.search(rf"\b([A-Za-z][A-Za-z.'-]+(?:\s+[A-Za-z][A-Za-z.'-]+){{0,4}})(?:,|\s)+({region_alt})\b\s*$", line)
     if not match:
         return "", "", "", "", "", 0
     matched_term_index = -1
@@ -824,6 +853,10 @@ def _parse_location_from_text(raw: str, support: _SupportData) -> Tuple[str, str
 
     parsed_city, parsed_region, parsed_country, parsed_raw, parsed_pattern, parsed_conf = _parse_region_country_location(line, support)
     if parsed_city and (parsed_region or parsed_country):
+        return parsed_city, parsed_region, parsed_country, parsed_raw, parsed_pattern, parsed_conf
+
+    parsed_city, parsed_region, parsed_country, parsed_raw, parsed_pattern, parsed_conf = _parse_comma_state_code_location(line, support)
+    if parsed_city and parsed_region:
         return parsed_city, parsed_region, parsed_country, parsed_raw, parsed_pattern, parsed_conf
 
     line_norm_blob = f" {_norm_key(line)} "
@@ -1103,12 +1136,12 @@ WEEKDAY_CASED_PATTERN = r"(?:mon|monday|tue|tuesday|wed|wednesday|thu|thursday|f
 _DATE_HEADER_RE = re.compile(
     rf"^(?:"
     rf"{WEEKDAY_CASED_PATTERN}[,\s-]+)?"
-    rf"(?:\d{{1,2}}(?:\s*[-_.]\s*|\s+)\d{{1,2}}(?:\s*[-_.]\s*|\s+)(?:\d{{2}}|(?:19|20)\d{{2}})|"
+    rf"(?:\d{{1,2}}(?:\s*[-_.]\s*|\s+)\d{{1,2}}(?:\s*[-_.]\s*|\s+)(?:(?:19|20)\d{{2}}|\d{{2}})|"
     rf"(?:19|20)\d{{2}}(?:\s*[-_.]\s*|\s+)\d{{1,2}}(?:\s*[-_.]\s*|\s+)\d{{1,2}}|"
-    rf"\d{{1,2}}\s*/\s*\d{{1,2}}\s*/\s*(?:\d{{2}}|(?:19|20)\d{{2}})|"
+    rf"\d{{1,2}}\s*/\s*\d{{1,2}}\s*/\s*(?:(?:19|20)\d{{2}}|\d{{2}})|"
     rf"(?:19|20)\d{{2}}[ -]\d{{4}}|"
-    rf"{MONTH_NAME_CASED_PATTERN}[\s._,\-]*\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?(?:[\s._,\-]*(?:\d{{2}}|(?:19|20)\d{{2}}))?|"
-    rf"\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?[\s._,\-]*{MONTH_NAME_CASED_PATTERN}(?:[\s._,\-]*(?:\d{{2}}|(?:19|20)\d{{2}}))?"
+    rf"{MONTH_NAME_CASED_PATTERN}[\s._,\-]*\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?(?:[\s._,\-]*(?:(?:19|20)\d{{2}}|\d{{2}}))?|"
+    rf"\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?[\s._,\-]*{MONTH_NAME_CASED_PATTERN}(?:[\s._,\-]*(?:(?:19|20)\d{{2}}|\d{{2}}))?"
     rf")\s*$"
 )
 
@@ -1172,7 +1205,38 @@ def _parse_unlabeled_location_header_line(line: str, support: _SupportData) -> T
     return _parse_location_from_text(line, support)
 
 
-def _extract_structured_unlabeled_header_block(lines: List[str], support: _SupportData) -> Tuple[str, str, str, str, str, str, int]:
+
+
+_INLINE_DATE_TOKEN_RE = re.compile(
+    rf"(?P<date>(?:(?:19|20)\d{{2}}[-/.]\d{{1,2}}[-/.]\d{{1,2}}|"
+    rf"\d{{1,2}}[-/.]\d{{1,2}}[-/.](?:(?:19|20)\d{{2}}|\d{{2}})|"
+    rf"{MONTH_NAME_CASED_PATTERN}\.?\s*,?\s*\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?(?:\s*,?\s*(?:(?:19|20)\d{{2}}|\d{{2}}))?|"
+    rf"\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?\s*{MONTH_NAME_CASED_PATTERN}\.?(?:\s*(?:(?:19|20)\d{{2}}|\d{{2}}))?))",
+    re.IGNORECASE,
+)
+
+def _extract_inline_artist_date_header(lines: List[str], support: _SupportData) -> Tuple[str, str, int]:
+    """Return (artist, optional venue, confidence) for Artist Date [Venue]."""
+    for line in lines[:20]:
+        raw = _clean_spaces(str(line or "").strip(" *-_=#~"))
+        if not raw or _looks_like_tracklist_start(raw) or _looks_like_sentence_prose_line(raw):
+            continue
+        match = _INLINE_DATE_TOKEN_RE.search(raw)
+        if not match:
+            continue
+        before = _clean_spaces(raw[:match.start()].strip(" ,;-"))
+        after = _clean_spaces(raw[match.end():].strip(" ,;-"))
+        if not before or not _looks_like_unlabeled_artist_header_line(before, support):
+            continue
+        venue = after if after and _looks_like_unlabeled_venue_line(after) else ""
+        if after and not venue:
+            known_venue, _raw, known_conf, _idx = _best_venue_from_lines([after], support)
+            if known_venue and _norm_key(known_venue) == _norm_key(after):
+                venue = known_venue
+        return before, venue, 90 if venue else 88
+    return "", "", 0
+
+def _extract_structured_unlabeled_header_block(lines: List[str], support: _SupportData) -> Tuple[str, str, str, str, str, str, str, int]:
     """Extract strict unlabeled Artist/Venue/Location/Date style headers.
 
     Handles both ordinary top-of-file headers and repeated/copied header blocks
@@ -1186,7 +1250,7 @@ def _extract_structured_unlabeled_header_block(lines: List[str], support: _Suppo
     """
     items = _structured_scan_items(lines)
     if len(items) < 3:
-        return "", "", "", "", "", "", 0
+        return "", "", "", "", "", "", "", 0
 
     for pos, (_idx, line) in enumerate(items):
         # One-line combined venue/location may sit below an artist/event header.
@@ -1196,13 +1260,15 @@ def _extract_structured_unlabeled_header_block(lines: List[str], support: _Suppo
                 next_is_date = pos + 1 < len(items) and _looks_like_date_header_line(items[pos + 1][1])
                 prev_is_artist = _looks_like_unlabeled_artist_header_line(items[pos - 1][1], support)
                 if prev_is_artist or next_is_date:
-                    return split_venue, split_city, split_region, split_country, split_raw or line, split_pattern or "LOCATION_STRUCTURED_UNLABELED_HEADER", max(split_conf, 88)
+                    structured_artist = items[pos - 1][1] if prev_is_artist else ""
+                    return structured_artist, split_venue, split_city, split_region, split_country, split_raw or line, split_pattern or "LOCATION_STRUCTURED_UNLABELED_HEADER", max(split_conf, 88)
             split_venue, split_city, split_region, split_country, split_raw, split_pattern, split_conf = _split_unlabeled_space_combined_venue_location_line(line, support)
             if split_venue and split_city and (split_region or split_country):
                 next_is_date = pos + 1 < len(items) and _looks_like_date_header_line(items[pos + 1][1])
                 prev_is_artist_or_event = _looks_like_unlabeled_artist_header_line(items[pos - 1][1], support) or _looks_like_numbered_event_header_line(items[pos - 1][1])
                 if prev_is_artist_or_event or next_is_date:
-                    return split_venue, split_city, split_region, split_country, split_raw or line, split_pattern or "LOCATION_STRUCTURED_UNLABELED_HEADER", max(split_conf, 84)
+                    structured_artist = items[pos - 1][1] if _looks_like_unlabeled_artist_header_line(items[pos - 1][1], support) else ""
+                    return structured_artist, split_venue, split_city, split_region, split_country, split_raw or line, split_pattern or "LOCATION_STRUCTURED_UNLABELED_HEADER", max(split_conf, 84)
 
         if not _looks_like_unlabeled_artist_header_line(line, support):
             continue
@@ -1216,7 +1282,7 @@ def _extract_structured_unlabeled_header_block(lines: List[str], support: _Suppo
                 if city and (region or country):
                     date_nearby = pos + 3 < len(items) and _looks_like_date_header_line(items[pos + 3][1])
                     if date_nearby or pos <= 10:
-                        return venue_line, city, region, country, raw or location_line, pattern_id or "LOCATION_STRUCTURED_UNLABELED_HEADER", max(conf, 88)
+                        return line, venue_line, city, region, country, raw or location_line, pattern_id or "LOCATION_STRUCTURED_UNLABELED_HEADER", max(conf, 88)
 
         # Artist / Date / Venue / Location
         if pos + 3 < len(items) and _looks_like_date_header_line(items[pos + 1][1]):
@@ -1225,7 +1291,7 @@ def _extract_structured_unlabeled_header_block(lines: List[str], support: _Suppo
             if _looks_like_unlabeled_venue_line(venue_line):
                 city, region, country, raw, pattern_id, conf = _parse_unlabeled_location_header_line(location_line, support)
                 if city and (region or country):
-                    return venue_line, city, region, country, raw or location_line, pattern_id or "LOCATION_STRUCTURED_UNLABELED_HEADER", max(conf, 88)
+                    return line, venue_line, city, region, country, raw or location_line, pattern_id or "LOCATION_STRUCTURED_UNLABELED_HEADER", max(conf, 88)
 
         # Artist / combined Venue, City, Country / Date
         if pos + 1 < len(items):
@@ -1234,9 +1300,9 @@ def _extract_structured_unlabeled_header_block(lines: List[str], support: _Suppo
             if split_venue and split_city and (split_region or split_country):
                 date_nearby = pos + 2 < len(items) and _looks_like_date_header_line(items[pos + 2][1])
                 if date_nearby or pos <= 10:
-                    return split_venue, split_city, split_region, split_country, split_raw or combined_line, split_pattern or "LOCATION_STRUCTURED_UNLABELED_HEADER", max(split_conf, 88)
+                    return line, split_venue, split_city, split_region, split_country, split_raw or combined_line, split_pattern or "LOCATION_STRUCTURED_UNLABELED_HEADER", max(split_conf, 88)
 
-    return "", "", "", "", "", "", 0
+    return "", "", "", "", "", "", "", 0
 
 
 def _best_venue_from_lines(lines: List[str], support: _SupportData) -> Tuple[str, str, int, int]:
@@ -1294,10 +1360,21 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
         return SetlistVenueLocationResult(source="setlist_metadata:no_usable_header_metadata_before_tracklist")
 
     support = _SupportData(tlo_dbs_dir)
-    structured_venue, structured_city, structured_region, structured_country, structured_raw, structured_pattern, structured_conf = _extract_structured_unlabeled_header_block(metadata_lines, support)
+    structured_artist, structured_venue, structured_city, structured_region, structured_country, structured_raw, structured_pattern, structured_conf = _extract_structured_unlabeled_header_block(metadata_lines, support)
+    inline_artist, inline_venue, inline_conf = _extract_inline_artist_date_header(metadata_lines, support)
+    if not structured_artist and inline_artist:
+        structured_artist = inline_artist
+        structured_conf = max(structured_conf, inline_conf)
+    if not structured_venue and inline_venue:
+        structured_venue = inline_venue
+        structured_conf = max(structured_conf, inline_conf)
     fields = _extract_explicit_fields(metadata_lines)
 
-    artist = safe_title(_clean_spaces(fields.get("artist", "")))
+    explicit_artist = safe_title(_clean_spaces(fields.get("artist", "")))
+    structured_artist = safe_title(_clean_spaces(structured_artist))
+    artist = explicit_artist or structured_artist
+    artist_source = "setlist_metadata:EXPLICIT_ARTIST_KEY" if explicit_artist else ("setlist_metadata:STRUCTURED_UNLABELED_ARTIST_HEADER" if structured_artist else "")
+    artist_confidence = 95 if explicit_artist else (max(88, structured_conf) if structured_artist else 0)
     venue = _clean_spaces(fields.get("venue", ""))
     raw_venue = venue
     venue_confidence = 0
@@ -1384,6 +1461,27 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
             break
 
     location = _join_location(city, region, country)
+
+    # A known venue followed by a strong parsed location can establish the
+    # same structured unlabeled header even when the combined-line splitter
+    # intentionally declines an ambiguous city/state name such as
+    # ``New York, NY``.  In that case, accept the immediately preceding short
+    # header line as artist *evidence*; the caller still requires a unique
+    # Artist DB resolution before it may become or replace the record artist.
+    if (
+        not artist
+        and venue_line_index > 0
+        and venue
+        and location
+        and venue_confidence >= 80
+        and location_confidence >= 80
+    ):
+        previous_line = metadata_lines[venue_line_index - 1]
+        if _looks_like_unlabeled_artist_header_line(previous_line, support):
+            artist = safe_title(_clean_spaces(previous_line))
+            artist_source = "setlist_metadata:STRUCTURED_UNLABELED_ARTIST_HEADER"
+            artist_confidence = max(88, min(95, max(venue_confidence, location_confidence)))
+
     raw = _clean_spaces(" | ".join(part for part in [raw_venue, raw_location] if part))
     confidence = max(venue_confidence, location_confidence)
     if venue and location:
@@ -1393,6 +1491,8 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
         source = f"setlist_metadata:{pattern_id}"
     return SetlistVenueLocationResult(
         artist=artist,
+        artist_source=artist_source,
+        artist_confidence=min(99, int(artist_confidence or 0)),
         venue=venue,
         city=city,
         region=region,

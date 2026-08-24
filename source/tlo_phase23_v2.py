@@ -1,9 +1,9 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v379"
-# TLO-GI package version: v379
-__version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
-# TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
+__version__ = "v394"
+# TLO-GI package version: v394
+__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
+# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
 
 import json
 import os
@@ -455,8 +455,10 @@ def _discover_music_dirs(config, start_path: str) -> List[dict]:
 
         if media_files:
             discovered.append(_entry_from_media_files(current_path, media_files))
-            return
 
+        # A parent may be a complete main-act show while a nested child is a
+        # separate opening act. Continue discovery; wrapper aggregation later
+        # keeps ordinary CD/Disc/Set structures together where appropriate.
         for child_dir in child_dirs:
             walk(child_dir)
 
@@ -1523,6 +1525,49 @@ def _match_string_dash_string(text: str) -> Optional[Dict[str, str]]:
     }
 
 
+def _match_compliant_string_dash_string_date(text: str) -> Optional[Dict[str, str]]:
+    """Return a narrow compliant ``String1 - String2 Date`` boundary match.
+
+    The generic compliant dash form intentionally treats all of String2 as raw
+    text.  Before accepting that fallback, inspect String2 for one *complete*
+    performance date at its beginning or end.  Bare years, year ranges, partial
+    dates, and dates embedded in the middle of an album/title remain ordinary
+    String2 text so existing ``Artist - Album`` behavior is preserved.
+    """
+    row = _match_string_dash_string(text)
+    if not row:
+        return None
+
+    raw_string2 = compact_ws(row.get("string2", ""))
+    string2_core, parentheticals = _strip_trailing_parenthetical_items_with_cache(raw_string2)
+    if not string2_core:
+        return None
+
+    for date_match in _find_date_matches(string2_core):
+        normalized = compact_ws(date_match.get("normalized", ""))
+        if not re.fullmatch(r"(?:19|20)\d{2}-\d{2}-\d{2}", normalized):
+            continue
+
+        before = _clean_piece(string2_core[: int(date_match["start"])])
+        after = _clean_piece(string2_core[int(date_match["end"]) :])
+        if bool(before) == bool(after):
+            # Exactly one side must contain the remaining String2 text.  This
+            # rejects date-only String2 values and dates embedded in the middle.
+            continue
+
+        out = dict(row)
+        out["date_raw"] = date_match.get("raw", "")
+        out["date_norm"] = normalized
+        out["string2"] = before or after
+        out["date_position"] = "trailing" if before else "leading"
+        out["parentheticals"] = parentheticals
+        for key in ("date_order", "needs_setlist_confirmation", "date_separator_repaired"):
+            if date_match.get(key):
+                out[key] = date_match[key]
+        return out
+    return None
+
+
 def _commercial_release_from_dash_row(row: Optional[Dict[str, str]]) -> Optional[Dict[str, str]]:
     """Recognize ``(YYYY) - Artist - Album`` and ``YYYY - Artist - Album``.
 
@@ -2147,6 +2192,59 @@ def _build_dash_album_show_name(record: ShowMetadata) -> str:
     return _append_parentheticals_to_show_name(compact_ws(f"{record.artist} - {album_name}"), record.parentheticals)
 
 
+def _analyze_dash_string2_before_album(string2: str) -> Dict[str, str]:
+    """Return conservative performance metadata found inside dash String2.
+
+    A complete date and/or a state/country-anchored venue/location is stronger
+    evidence than the generic commercial-release fallback. Bare/ambiguous text
+    still falls through unchanged to Artist - Album handling.
+    """
+    raw = compact_ws(string2 or "").strip(" ,")
+    if not raw:
+        return {}
+    date_value = ""
+    remainder = raw
+    matches = _find_date_matches(raw, allow_slash=True)
+    complete = [m for m in matches if _is_exact_yyyy_mm_dd_date(m.get("normalized", ""))]
+    if complete:
+        chosen = complete[0]
+        date_value = chosen.get("normalized", "")
+        remainder = compact_ws((raw[:chosen.get("start", 0)] + " " + raw[chosen.get("end", 0):]).strip(" ,-"))
+    venue = city = region = country = extra = ""
+    if remainder:
+        venue, city, region, country, extra = _parse_string2(remainder)
+    strong_location = bool(city and (region or country) and not extra)
+    if not date_value and not strong_location:
+        return {}
+    if not strong_location:
+        venue = city = region = country = extra = ""
+    return {
+        "date": date_value, "venue": compact_ws(venue), "city": compact_ws(city),
+        "region": compact_ws(region), "country": compact_ws(country),
+        "extra": compact_ws(extra), "raw": raw, "remainder": remainder,
+    }
+
+def _apply_dash_string2_performance(record: ShowMetadata, parsed: Dict[str, str], evidence: Dict[str, List[Candidate]], source: str) -> None:
+    if not parsed:
+        return
+    if parsed.get("date"):
+        record.date = parsed["date"]
+        evidence.setdefault("date", []).append(Candidate(record.date, source + ":date", 72))
+    if parsed.get("venue"):
+        record.venue = parsed["venue"]
+        evidence.setdefault("venue", []).append(Candidate(record.venue, source + ":venue", 70))
+    if parsed.get("city"):
+        record.city = parsed["city"]
+    if parsed.get("region"):
+        record.region = parsed["region"]
+    if parsed.get("country"):
+        record.country = parsed["country"]
+    record.location = _join_location(record.city, record.region, record.country)
+    if record.location:
+        evidence.setdefault("location", []).append(Candidate(record.location, source + ":location", 70))
+    record.album_name = ""
+
+
 def _apply_string_dash_album_to_record(record: ShowMetadata, dash_match: Optional[Dict[str, str]], evidence: Dict[str, List[Candidate]], source: str) -> None:
     if not dash_match:
         return
@@ -2381,6 +2479,75 @@ def _setlist_may_override_weak_path_value(
     return max(int(candidate.confidence or 0) for candidate in supporters) < int(setlist_confidence or 0)
 
 
+def _clear_resolved_weak_path_artist_conflicts(
+    conflicts: Optional[List[str]],
+    confirmed_artist: str,
+    observations: Optional[List[str]] = None,
+) -> None:
+    """Clear generic path-artist conflicts resolved by a DB-confirmed setlist header.
+
+    Only conflicts created by generic subdirectory/path scanning are eligible.
+    Artist DB collisions and conflicts involving explicit/stronger sources are
+    preserved.
+    """
+    if not conflicts or not confirmed_artist:
+        return
+    weak_prefixes = (
+        "artist conflict across subdirectory matches:",
+        "artist conflict across path_artist_before_abbreviation matches:",
+        "artist conflict between pattern artist and subdirectory artist:",
+        "artist conflict between pattern artist and path_artist_before_abbreviation artist:",
+        "artist conflict across path pattern matches:",
+    )
+    kept: List[str] = []
+    removed: List[str] = []
+    for conflict in conflicts:
+        text = str(conflict or "")
+        if text.startswith(weak_prefixes):
+            removed.append(text)
+        else:
+            kept.append(conflict)
+    if removed:
+        conflicts[:] = kept
+        if observations is not None:
+            observations.append(
+                f"DB-confirmed structured setlist artist resolved weaker path artist conflict: {confirmed_artist}"
+            )
+
+
+def _setlist_may_override_weak_path_artist(
+    evidence: Dict[str, List[Candidate]],
+    current_value: str,
+    setlist_confidence: int,
+) -> bool:
+    """Allow a DB-confirmed structured setlist artist to correct weak path scans.
+
+    This is intentionally narrower than the venue/location path override.  Only
+    artist values produced by generic path-pattern/subdirectory scanning are
+    replaceable.  Explicit folder-pattern artist rules, audio tags, $slam,
+    commercial-release rules, setlist filenames, and other non-path sources
+    remain authoritative over an unlabeled setlist header.
+    """
+    supporters = _matching_evidence_for_value(evidence, "artist", current_value)
+    if not supporters:
+        return False
+
+    def weak_path_source(source: str) -> bool:
+        source = str(source or "")
+        return (
+            source.startswith("subdirectory:")
+            or source.startswith("path_artist_before_abbreviation:")
+            or source.startswith("path pattern:")
+            or source.startswith("path_pattern_consensus")
+            or source.startswith("path_pattern_abbreviation_last_resort:")
+            or source.startswith("path_pattern_abbreviation_last_resort_consensus")
+        )
+
+    if any(not weak_path_source(candidate.source) for candidate in supporters):
+        return False
+    return max(int(candidate.confidence or 0) for candidate in supporters) < int(setlist_confidence or 0)
+
+
 def _apply_setlist_scalar_field(
     record: ShowMetadata,
     evidence: Dict[str, List[Candidate]],
@@ -2579,7 +2746,8 @@ def _apply_setlistfm_lookup_to_record(config, record: ShowMetadata, evidence: Di
             record.date,
             debug=bool(getattr(config, "debug", False)),
             min_interval_seconds=float(getattr(config, "setlistfm_min_interval_seconds", 0.600) or 0.600),
-            max_calls=int(getattr(config, "setlistfm_max_calls", 1400) or 1400),
+            max_calls=int(getattr(config, "setlistfm_max_calls", 1400) or 0),
+            max_calls_per_day=int(getattr(config, "setlistfm_max_calls_per_day", 0) or 0),
             run_id=str(getattr(config, "setlistfm_run_id", "") or ""),
             tlo_home=str(getattr(config, "TLOHome", "") or ""),
             lock_timeout_seconds=float(getattr(config, "setlistfm_lock_timeout_seconds", 20.0) or 20.0),
@@ -2827,6 +2995,7 @@ def _format_switches_log_line(config, action: str = "Full Inventory") -> str:
         f"As-Is Artist Name: {_yes_no(_as_is_artist_name(config))}",
         f"etreeDB: {_yes_no(getattr(config, 'etree_lookup', False))}",
         f"setlist.fm: {_yes_no(getattr(config, 'setlistfm_lookup', False))}",
+        f"setlist.fm upgrade: {_yes_no(getattr(config, 'setlistfm_upgrade', False))}",
     ]
     if bool(getattr(config, "compliant", False)):
         parts.append(f"Compliant Artist Mode: {'as-is' if _as_is_artist_name(config) else 'master'}")
@@ -3037,11 +3206,12 @@ def _selected_artist_tag_candidate(
     matcher: Optional[ArtistMatcher] = None,
     observations: Optional[List[str]] = None,
 ) -> Tuple[str, str]:
-    """Return the first usable sampled ARTIST/ALBUMARTIST tag.
+    """Return the first usable sampled ALBUMARTIST/ARTIST tag.
 
     Unmatched numeric/date-like values are skipped rather than monopolizing the
-    two-sample tag search.  ARTIST values retain priority over ALBUMARTIST, but
-    later samples can win when an earlier tag is obvious garbage.
+    two-sample tag search.  ALBUMARTIST wins over ARTIST *within tag evidence*,
+    while tag evidence as a whole retains its existing low precedence behind
+    stronger path/setlist artist identification.
     """
     artist_candidates: List[str] = []
     albumartist_candidates: List[str] = []
@@ -3053,7 +3223,7 @@ def _selected_artist_tag_candidate(
         if albumartist and albumartist.casefold() not in {item.casefold() for item in albumartist_candidates}:
             albumartist_candidates.append(albumartist)
 
-    for source_label, values in (("flac_tag_artist", artist_candidates), ("flac_tag_albumartist", albumartist_candidates)):
+    for source_label, values in (("flac_tag_albumartist", albumartist_candidates), ("flac_tag_artist", artist_candidates)):
         for term in values:
             reason = _obviously_nonartist_tag_reason(term, matcher)
             if reason:
@@ -3081,7 +3251,7 @@ def _resolve_artist_from_tags(record: ShowMetadata, matcher: Optional[ArtistMatc
     albumartist_tag = next((compact_ws((sample.get("albumartist") or "").strip()) for sample in record.flac_tag_samples[:2] if (sample.get("albumartist") or "").strip()), "")
     if artist_tag and albumartist_tag and artist_tag.casefold() != albumartist_tag.casefold():
         if observations is not None:
-            observations.append(f"tag ARTIST and ALBUMARTIST differ; considering usable ARTIST tags before ALBUMARTIST: {artist_tag}")
+            observations.append(f"tag ARTIST and ALBUMARTIST differ; considering usable ALBUMARTIST tags before ARTIST: {albumartist_tag}")
 
     detail = _lookup_artist_detail(term, matcher)
     if detail["status"] == "matched":
@@ -3890,7 +4060,7 @@ def _apply_string2_to_record(record: ShowMetadata, match: Optional[Dict[str, str
         evidence.setdefault("country", []).append(Candidate(record.country, f"path_part:{match['part']}", 35))
 
 
-def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata, evidence: Dict[str, List[Candidate]], observations: List[str], artist_matcher: Optional[ArtistMatcher] = None) -> bool:
+def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata, evidence: Dict[str, List[Candidate]], observations: List[str], artist_matcher: Optional[ArtistMatcher] = None, conflicts: Optional[List[str]] = None) -> bool:
     """Apply selected-setlist artist/venue/location metadata.
 
     Normal non-compliant source order remains path, eTreeDB, selected setlist,
@@ -3917,14 +4087,60 @@ def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata,
     source = result.source or "setlist_metadata"
 
     if getattr(result, "artist", ""):
-        if not record.artist:
-            detail = _lookup_artist_detail(result.artist, artist_matcher)
-            master = detail["masters"][0] if detail["status"] == "matched" and detail["masters"] else ""
-            record.artist = _artist_output_name(config, result.artist, master)
-            evidence.setdefault("artist", []).append(Candidate(record.artist, "setlist_metadata:EXPLICIT_ARTIST_KEY", max(confidence, 80)))
-            applied = True
+        raw_setlist_artist = compact_ws(result.artist)
+        artist_source = getattr(result, "artist_source", "") or "setlist_metadata:EXPLICIT_ARTIST_KEY"
+        artist_confidence = int(getattr(result, "artist_confidence", 0) or max(confidence, 80))
+        structured_unlabeled = artist_source == "setlist_metadata:STRUCTURED_UNLABELED_ARTIST_HEADER"
+        detail = _lookup_artist_detail(raw_setlist_artist, artist_matcher)
+
+        # An unlabeled first line is only promoted to artist metadata when the
+        # surrounding header is structurally strong *and* the Artist DB resolves
+        # that line uniquely.  Explicit Artist: keys preserve their historical
+        # raw fallback when the DB does not contain the value.
+        if structured_unlabeled and detail["status"] != "matched":
+            if detail["status"] == "collision":
+                observations.append(
+                    _collision_note(
+                        f"structured setlist artist header is ambiguous; not using as artist: {raw_setlist_artist}",
+                        detail["masters"],
+                    )
+                )
+            else:
+                observations.append(
+                    f"structured setlist artist header not found uniquely in Artist DB; not using as artist: {raw_setlist_artist}"
+                )
         else:
-            _observe_metadata_disagreement(observations, "setlist metadata", "artist", record.artist, result.artist)
+            master = detail["masters"][0] if detail["status"] == "matched" and detail["masters"] else ""
+            candidate_artist = _artist_output_name(config, raw_setlist_artist, master)
+            if not record.artist:
+                record.artist = candidate_artist
+                evidence.setdefault("artist", []).append(Candidate(record.artist, artist_source, artist_confidence))
+                if structured_unlabeled:
+                    observations.append(
+                        f"DB-confirmed artist identified from structured unlabeled setlist header: {raw_setlist_artist} -> {record.artist}"
+                    )
+                    _clear_resolved_weak_path_artist_conflicts(conflicts, record.artist, observations)
+                applied = True
+            elif _metadata_values_equivalent(record.artist, candidate_artist):
+                current_best = max(
+                    (c.confidence for c in _matching_evidence_for_value(evidence, "artist", record.artist)),
+                    default=0,
+                )
+                if artist_confidence > current_best:
+                    evidence.setdefault("artist", []).append(Candidate(record.artist, artist_source, artist_confidence))
+            elif structured_unlabeled and _setlist_may_override_weak_path_artist(
+                evidence, record.artist, artist_confidence
+            ):
+                old_artist = record.artist
+                record.artist = candidate_artist
+                evidence.setdefault("artist", []).append(Candidate(record.artist, artist_source, artist_confidence))
+                observations.append(
+                    f"DB-confirmed structured setlist artist overrode weaker path artist: {old_artist} -> {record.artist}"
+                )
+                _clear_resolved_weak_path_artist_conflicts(conflicts, record.artist, observations)
+                applied = True
+            else:
+                _observe_metadata_disagreement(observations, "setlist metadata", "artist", record.artist, candidate_artist)
 
     if _apply_setlist_scalar_field(
         record, evidence, observations, field="venue", candidate_value=result.venue, source=source, confidence=confidence
@@ -4017,6 +4233,7 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
     unresolved_reasons: List[str] = []
     date_matches: List[Dict[str, str]] = []
     compliant_dash_match = False
+    compliant_dash_date_match = False
     compliant_string_date_match = False
     compliant_folder_name_show_match = False
     compliant_mp3_year_show_match = False
@@ -4025,22 +4242,24 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
     matches = _compliant_string_date_matches(compliant_text, allow_string2=False)
     if not matches:
         observations.append("unable to find String1 Date String2 in compliant path text")
-        dash_match = _match_string_dash_string(compliant_text)
+        dash_date_match = _match_compliant_string_dash_string_date(compliant_text)
+        dash_match = None if dash_date_match else _match_string_dash_string(compliant_text)
         dash_artist = ""
-        if dash_match:
-            dash_match["part"] = compliant_text
-            dash_match["part_path"] = compliant_source_path
-            dash_term = dash_match["string1"] if len(re.sub(r"[^A-Za-z]", "", dash_match["string1"])) <= 4 and dash_match["string1"].isupper() else (dash_match["string1_stripped"] or dash_match["string1"])
+        active_dash_match = dash_date_match or dash_match
+        if active_dash_match:
+            active_dash_match["part"] = compliant_text
+            active_dash_match["part_path"] = compliant_source_path
+            dash_term = active_dash_match["string1"] if len(re.sub(r"[^A-Za-z]", "", active_dash_match["string1"])) <= 4 and active_dash_match["string1"].isupper() else (active_dash_match["string1_stripped"] or active_dash_match["string1"])
             dash_artist = _set_compliant_artist_from_string1(
                 config,
-                dash_match.get("string1", ""),
+                active_dash_match.get("string1", ""),
                 dash_term,
                 artist_matcher,
                 evidence,
                 observations,
-                "compliant:string_dash_string",
-                66,
-                "String1 - String2",
+                "compliant:string_dash_string_date" if dash_date_match else "compliant:string_dash_string",
+                68 if dash_date_match else 66,
+                "String1 - String2 Date" if dash_date_match else "String1 - String2",
             )
         else:
             if _compliant_artist_mode(config) == "as-is":
@@ -4049,7 +4268,26 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
                 dash_artist, dash_match = _resolve_from_string_dash_string(group, artist_matcher, evidence, conflicts, compliant=True, config=config)
         if dash_artist:
             record.artist = dash_artist
-        if dash_match:
+        if dash_date_match:
+            compliant_dash_date_match = True
+            record.date = dash_date_match.get("date_norm", "")
+            if record.date:
+                evidence.setdefault("date", []).append(Candidate(record.date, "compliant:string_dash_string_date", 68))
+                date_matches.append({"raw": dash_date_match.get("date_raw", ""), "normalized": record.date, "part": compliant_text, "source": "compliant_string_dash_string_date"})
+                if dash_date_match.get("date_separator_repaired"):
+                    observations.append(f"compliant date separator repair: {dash_date_match.get('date_raw', '')} normalized to {record.date}")
+            _set_compliant_string2_raw(
+                record,
+                dash_date_match.get("string2", ""),
+                dash_date_match.get("parentheticals", ""),
+                evidence,
+                f"compliant:string_dash_string_date:{dash_date_match.get('part_path', '')}",
+            )
+            observations.append(
+                f"compliant String1 - String2 Date matched ({dash_date_match.get('date_position', 'boundary')} date): "
+                "complete date extracted from String2; remaining String2 stored as raw venue and album name"
+            )
+        elif dash_match:
             compliant_dash_match = True
             raw_string2 = compact_ws(dash_match.get("string2", ""))
             stripped_string2, parentheticals = _strip_trailing_parenthetical_items_with_cache(raw_string2)
@@ -4094,7 +4332,7 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
                 else:
                     record.show_name = compliant_text
                     compliant_folder_name_show_match = bool(record.show_name)
-                    observations.append("unable to find compliant String1 Date String2, String1 - String2, or String1 Date pattern")
+                    observations.append("unable to find compliant String1 Date String2, String1 - String2 Date, String1 - String2, or String1 Date pattern")
                     observations.append("compliant fallback matched: using folder name as show name with no artist, date, venue, or location")
     else:
         chosen = dict(matches[0])
@@ -4301,7 +4539,25 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             observations.append("non-compliant wrapper-part aggregation matched: stripped folder base treated as album name; no date assigned")
 
     dash_string2_date = _string_dash_string_tail_date(dash_album_match)
-    if dash_album_match and dash_string2_date:
+    dash_string2_performance = {}
+    if dash_album_match and not _commercial_release_from_dash_row(dash_album_match):
+        dash_string2_performance = _analyze_dash_string2_before_album(dash_album_match.get("string2", ""))
+    if dash_album_match and dash_string2_performance:
+        _apply_dash_string2_performance(
+            record, dash_string2_performance, evidence,
+            f"string_dash_performance:{dash_album_match.get('part_path', '')}"
+        )
+        if record.date:
+            date_matches.append({
+                "raw": dash_album_match.get("string2", record.date),
+                "normalized": record.date,
+                "part": dash_album_match.get("part", ""),
+                "part_path": dash_album_match.get("part_path", ""),
+                "source": "string_dash_performance",
+            })
+        observations.append("non-compliant String1 - String2 contained performance date/location evidence; structured metadata used before album fallback")
+        dash_album_match = None
+    elif dash_album_match and dash_string2_date:
         record.date = dash_string2_date
         date_matches.append({
             "raw": dash_album_match.get("string2", dash_string2_date),
@@ -4395,7 +4651,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             etree_lookup_key = _online_lookup_key(record)
             etree_success = _apply_etree_lookup_to_record(config, record, evidence, observations)
 
-        _apply_setlist_metadata_to_noncompliant_record(config, record, evidence, observations, artist_matcher)
+        _apply_setlist_metadata_to_noncompliant_record(config, record, evidence, observations, artist_matcher, conflicts)
         if not record.artist:
             record.artist = _resolve_artist_from_setlist_filename(record, artist_matcher, evidence, observations, config=config)
 
@@ -4489,7 +4745,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
         if record.artist and record.date:
             etree_lookup_key = _online_lookup_key(record)
             etree_success = _apply_etree_lookup_to_record(config, record, evidence, observations)
-        _apply_setlist_metadata_to_noncompliant_record(config, record, evidence, observations, artist_matcher)
+        _apply_setlist_metadata_to_noncompliant_record(config, record, evidence, observations, artist_matcher, conflicts)
         if not record.artist:
             record.artist = _resolve_artist_from_setlist_filename(record, artist_matcher, evidence, observations, config=config)
         if not record.artist and deferred_tag_artist:
@@ -4730,6 +4986,24 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
         inventory_group = group
         inventory_record = record
         tag_group_ready = True
+
+        acceptable_corruption = int(getattr(config, "acceptable_corruption_percent", 100) or 0)
+        try:
+            from tlo_corruption import group_audio_files, corrupt_audio_files, exceeds_threshold, move_to_trash
+            _audio_files = group_audio_files(group)
+            _bad_files = corrupt_audio_files(group)
+            if _bad_files and exceeds_threshold(len(_audio_files), len(_bad_files), acceptable_corruption):
+                _percent = (100.0 * len(_bad_files) / len(_audio_files)) if _audio_files else 0.0
+                try:
+                    move_to_trash(record.main_dir_path)
+                except Exception as exc:
+                    config.logs.conflicts("CORRUPTION_REMOVAL_FAILED: %s | files=%s corrupt=%s percent=%.2f acceptable=%s | %s", record.main_dir_path, len(_audio_files), len(_bad_files), _percent, acceptable_corruption, exc)
+                else:
+                    config.logs.conflicts("REMOVED_CORRUPTION: %s | files=%s corrupt=%s corruption_percent=%.2f acceptable_corruption_percent=%s | moved to Trash/Recycle Bin and omitted from inventory", record.main_dir_path, len(_audio_files), len(_bad_files), _percent, acceptable_corruption)
+                    config.logs.tag("REMOVED_CORRUPTION: %s | files=%s corrupt=%s corruption_percent=%.2f acceptable=%s", record.main_dir_path, len(_audio_files), len(_bad_files), _percent, acceptable_corruption)
+                    continue
+        except Exception as exc:
+            config.logs.conflicts("CORRUPTION_CHECK_FAILED: %s | %s", record.main_dir_path, exc)
         unidentified_for_mutation = _record_is_unidentified_for_mutation(record, unresolved_reasons)
         if unidentified_for_mutation and (tag_during_inventory or tag_copy_and_delete_enabled or bool(getattr(config, "rename_compliantly", False))):
             if tag_copy_and_delete_enabled:

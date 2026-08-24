@@ -1,6 +1,6 @@
 """Build 375 FAQ and delete-duplicate contracts."""
 
-__version__ = "v379"
+__version__ = "v394"
 
 from pathlib import Path
 
@@ -10,11 +10,10 @@ pytestmark = pytest.mark.contract
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_build365_faq_explains_first_music_folder_stops_descent():
+def test_build365_faq_explains_nested_music_folder_behavior():
     text = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8")
     assert "Q: Does TLO inventory absolutely every music file?" in text
-    assert "Once TLO identifies a music file, it stops looking." in text
-    assert "nested folder with more music files" in text
+    assert "nested opening act can be discovered as a separate show" in text
     assert "opening act" in text
 
 
@@ -44,7 +43,7 @@ def _docx_text(name: str) -> str:
 
 
 def test_build365_requirements_document_same_artist_date_and_folder_level_move():
-    text = _docx_text("TLO_Inventory_Requirements_Working_v379.docx")
+    text = _docx_text("TLO_Inventory_Requirements_Working_v394.docx")
     assert "same-parent sibling directories" in text
     assert "normalized artist and date" in text
     assert "Candidate discovery alone shall never establish that two folders are duplicates" in text
@@ -53,7 +52,7 @@ def test_build365_requirements_document_same_artist_date_and_folder_level_move()
 
 
 def test_build365_manual_documents_same_artist_date_and_folder_level_move():
-    text = (ROOT / "TLO_Inventory_User_Manual_v379.rtf").read_text(encoding="utf-8", errors="ignore")
+    text = (ROOT / "TLO_Inventory_User_Manual_v394.rtf").read_text(encoding="utf-8", errors="ignore")
     assert "normalized artist and date match" in text
     assert "A matching artist and date is only a way to select folders for comparison" in text
     assert "moved as a complete folder tree" in text

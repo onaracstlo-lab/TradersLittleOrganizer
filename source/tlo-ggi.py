@@ -1,9 +1,9 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v379"
-# TLO-GI package version: v379
-__version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
-# TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
+__version__ = "v394"
+# TLO-GI package version: v394
+__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
+# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
 
 import multiprocessing
 
@@ -43,6 +43,7 @@ from tlo_main_lib import run_inventory
 from tlo_tag_lib import TAGGER_TITLE, default_tagging_path, resolve_tlo_home, run_tagger
 from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION, PUBLIC_VERSION, versioned_title
 from tlo_research_lib import research_logs
+from tlo_reverse_copy_delete import prepare_reverse_selection, reverse_copy_delete_and_rename
 from tlo_github_updates import (
     check_for_updates,
     is_auto_update_enabled,
@@ -164,6 +165,8 @@ HELP_TEXT = (
     "GUI buttons:\n"
     "  Tag               Open the TLO Tagger window; displayed at the far left and uses TLOHome/readyForXfer unless --tag-path is supplied. The tagger window has its own Quit button that stops tagging and closes only that window.\n"
     "  Add Shows (incremental)  Open the updater workflow for readyForXfer/staged/dups processing. The updater inherits all applicable main-window options, including Dry run, and validates the storage volume before processing.\n"
+    "  Research          Search TLOHome comp/meta logs.\n"
+    "  Reverse Copy/Delete + Rename  Restore folders moved by a logged combined Tag Copy/Delete Original + Rename Compliantly run to their exact original names and locations; audio tags are unchanged.\n"
     "  Quit              Close the GUI. If a run is still active, active workers are stopped and active search-path logs are removed before exit; displayed in the middle.\n"
     "  Inventory (full)  Validate the form and show Review Operation. When Dry run is checked, scan and report planned work without changing files; otherwise run the full inventory job.\n"
     "  Pause             Pause traversal between directory operations; displayed in the right-side inventory group.\n"
@@ -556,6 +559,8 @@ class App:
         self.add_shows_button = None
         self.inventory_button = None
         self.research_button = None
+        self.reverse_copy_delete_button = None
+        self.active_reverse_window = None
         self.pause_button = None
         self.resume_button = None
         self.progress_bar = None
@@ -658,6 +663,7 @@ class App:
             "search_path_slam_override": (getattr(self.cli_args, "search_path_slam_override", "") or "").strip(),
             "performance_mode": performance_mode_default,
             "max_workers": str(initial_max_workers),
+            "acceptable_corruption_percent": str(int(getattr(self.cli_args, "acceptable_corruption_percent", 100) or 0)),
         }
         self.vars = {key: tk.StringVar(value=value) for key, value in defaults.items()}
         self.option_status_var = tk.StringVar(value="Checking option combination...")
@@ -667,7 +673,7 @@ class App:
         self.progress_elapsed_var = tk.StringVar(value="Elapsed: 0:00")
         self.vars["performance_mode"].trace_add("write", self._sync_max_workers_to_performance_mode)
         self.vars["max_workers"].trace_add("write", self._mark_max_workers_manual)
-        for validation_field in ("search_path_override", "max_workers"):
+        for validation_field in ("search_path_override", "max_workers", "acceptable_corruption_percent"):
             self.vars[validation_field].trace_add("write", self._schedule_inline_validation)
 
         row = 0
@@ -744,6 +750,12 @@ class App:
 
         ttk.Label(frm, text="Max Workers", style="Main.TLabel").grid(row=row, column=0, sticky="w", padx=6, pady=(4, 3))
         ttk.Entry(frm, textvariable=self.vars["max_workers"], width=12, style="Main.TEntry").grid(
+            row=row, column=1, sticky="w", padx=(12, 6), pady=(4, 3)
+        )
+        row += 1
+
+        ttk.Label(frm, text="acceptable corruption %", style="Main.TLabel").grid(row=row, column=0, sticky="w", padx=6, pady=(4, 3))
+        ttk.Entry(frm, textvariable=self.vars["acceptable_corruption_percent"], width=12, style="Main.TEntry").grid(
             row=row, column=1, sticky="w", padx=(12, 6), pady=(4, 3)
         )
         row += 1
@@ -831,6 +843,13 @@ class App:
             style=main_button_style,
         )
         self.research_button.grid(row=0, column=2, padx=4, sticky="w")
+        self.reverse_copy_delete_button = ttk.Button(
+            left_button_group,
+            text="Reverse Copy/Delete\n+ Rename",
+            command=self._open_reverse_copy_delete,
+            style=main_button_style,
+        )
+        self.reverse_copy_delete_button.grid(row=0, column=3, padx=4, sticky="w")
         ttk.Button(
             button_frame,
             text="Quit\n ",
@@ -874,8 +893,17 @@ class App:
         self.progress_bar.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(5, 0))
         row += 1
 
-        self.output = scrolledtext.ScrolledText(frm, width=96, height=21, font=tkfont.nametofont("TkFixedFont"))
-        self.output.grid(row=row, column=0, columnspan=3, sticky="nsew")
+        output_frame = ttk.Frame(frm)
+        output_frame.grid(row=row, column=0, columnspan=3, sticky="nsew")
+        output_frame.columnconfigure(0, weight=1)
+        output_frame.rowconfigure(0, weight=1)
+        self.output = tk.Text(output_frame, width=96, height=21, font=tkfont.nametofont("TkFixedFont"), wrap="none")
+        output_vscroll = ttk.Scrollbar(output_frame, orient="vertical", command=self.output.yview)
+        output_hscroll = ttk.Scrollbar(output_frame, orient="horizontal", command=self.output.xview)
+        self.output.configure(yscrollcommand=output_vscroll.set, xscrollcommand=output_hscroll.set)
+        self.output.grid(row=0, column=0, sticky="nsew")
+        output_vscroll.grid(row=0, column=1, sticky="ns")
+        output_hscroll.grid(row=1, column=0, sticky="ew")
         frm.rowconfigure(row, weight=1)
         self._initialize_update_menu_state()
         self._update_main_action_states()
@@ -915,6 +943,14 @@ class App:
         except Exception:
             max_workers_valid = False
 
+        corruption_percent_valid = True
+        try:
+            corruption_percent = int((self.vars["acceptable_corruption_percent"].get() or "0").strip())
+            if corruption_percent < 0 or corruption_percent > 100:
+                raise ValueError
+        except Exception:
+            corruption_percent_valid = False
+
         option_messages = []
         if bool(self.bool_vars["tag_copy_during_inventory"].get()):
             option_messages.append("Tag Copy destination will be requested after Inventory is started.")
@@ -931,9 +967,13 @@ class App:
             option_messages.append("Option combination is ready.")
         if not max_workers_valid:
             option_messages = ["Max Workers must be an integer of zero or greater."]
+        if not corruption_percent_valid:
+            option_messages = ["acceptable corruption % must be an integer from 0 through 100."]
 
-        self.option_status_var.set(("Error: " if not max_workers_valid else "Info: ") + " ".join(option_messages))
+        form_values_valid = bool(max_workers_valid and corruption_percent_valid)
+        self.option_status_var.set(("Error: " if not form_values_valid else "Info: ") + " ".join(option_messages))
         self._form_valid = bool(search_status.valid and max_workers_valid)
+        self._form_valid = bool(self._form_valid and corruption_percent_valid)
         self._update_main_action_states()
 
     def _refresh_elapsed_display(self):
@@ -1278,14 +1318,261 @@ class App:
                 self.tag_button.configure(state=("disabled" if inventory_active or updater_open or tagger_open else "normal"))
             if self.add_shows_button is not None:
                 self.add_shows_button.configure(state=("disabled" if inventory_active or tagger_open else "normal"))
+            reverse_open = self._reverse_copy_delete_is_open()
             if self.inventory_button is not None:
-                self.inventory_button.configure(state=("disabled" if updater_open or tagger_open or inventory_active else "normal"))
+                self.inventory_button.configure(state=("disabled" if updater_open or tagger_open or inventory_active or reverse_open else "normal"))
+            if self.reverse_copy_delete_button is not None:
+                self.reverse_copy_delete_button.configure(state=("disabled" if inventory_active or updater_open or tagger_open or reverse_open else "normal"))
+            if self.tag_button is not None and reverse_open:
+                self.tag_button.configure(state="disabled")
+            if self.add_shows_button is not None and reverse_open:
+                self.add_shows_button.configure(state="disabled")
             if self.pause_button is not None:
                 self.pause_button.configure(state=("normal" if inventory_active else "disabled"))
             if self.resume_button is not None:
                 self.resume_button.configure(state=("normal" if inventory_active else "disabled"))
         except tk.TclError:
             pass
+
+    def _reverse_copy_delete_is_open(self):
+        window = getattr(self, "active_reverse_window", None)
+        if window is None:
+            return False
+        try:
+            exists = bool(window.winfo_exists())
+        except tk.TclError:
+            exists = False
+        if not exists:
+            self.active_reverse_window = None
+        return exists
+
+    def _open_reverse_copy_delete(self):
+        if self._inventory_is_running() or self._updater_is_open() or self._tagger_is_open():
+            messagebox.showwarning(
+                "Reverse Copy/Delete + Rename",
+                "Finish the active Inventory, Add Shows, or Tag operation before reversing folders.",
+                parent=self.root,
+            )
+            return
+        if self._reverse_copy_delete_is_open():
+            try:
+                self.active_reverse_window.lift()
+                self.active_reverse_window.focus_force()
+            except tk.TclError:
+                pass
+            return
+        try:
+            tlo_home = self._resolve_gui_tlo_home(error_type=ValueError)
+        except Exception as exc:
+            messagebox.showerror("Reverse Copy/Delete + Rename", str(exc), parent=self.root)
+            return
+
+        dialog = tk.Toplevel(self.root)
+        self.active_reverse_window = dialog
+        dialog.title(versioned_title("Reverse Copy/Delete + Rename"))
+        dialog.transient(self.root)
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(0, weight=1)
+
+        frame = ttk.Frame(dialog, padding=12)
+        frame.grid(row=0, column=0, sticky="nsew")
+        frame.columnconfigure(1, weight=1)
+        frame.rowconfigure(5, weight=1)
+
+        ttk.Label(frame, text=f"TLOHome: {tlo_home}", style="Main.TLabel").grid(
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 10)
+        )
+        ttk.Label(frame, text="Original Partition / Path").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        original_var = tk.StringVar(value="")
+        original_entry = ttk.Entry(frame, textvariable=original_var, width=58)
+        original_entry.grid(row=1, column=1, columnspan=2, sticky="ew", pady=4)
+        ttk.Label(
+            frame,
+            text="Enter the current volume name, drive/root, or full original path such as D:\\somePath or /mnt/d/somePath.",
+            justify="left",
+        ).grid(row=2, column=1, columnspan=2, sticky="w", pady=(0, 6))
+
+        ttk.Label(frame, text="Copy/Delete Destination").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=4)
+        moved_var = tk.StringVar(value=self._tag_copy_delete_destination or "")
+        moved_entry = ttk.Entry(frame, textvariable=moved_var, width=58)
+        moved_entry.grid(row=3, column=1, columnspan=2, sticky="ew", pady=4)
+        ttk.Label(
+            frame,
+            text="Enter the location where the combined Copy/Delete + Rename operation placed the folders.",
+            justify="left",
+        ).grid(row=4, column=1, columnspan=2, sticky="w", pady=(0, 8))
+
+        output = scrolledtext.ScrolledText(frame, width=92, height=15, wrap="none", state="disabled")
+        output.grid(row=5, column=0, columnspan=3, sticky="nsew", pady=(4, 8))
+
+        status_var = tk.StringVar(value="Ready")
+        ttk.Label(frame, textvariable=status_var).grid(row=6, column=0, columnspan=3, sticky="w", pady=(0, 6))
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=7, column=0, columnspan=3, sticky="e")
+        reverse_button = ttk.Button(buttons, text="Reverse", style="Main.TButton")
+        reverse_button.grid(row=0, column=0, padx=4)
+        close_button = ttk.Button(buttons, text="Close", style="Main.TButton")
+        close_button.grid(row=0, column=1, padx=4)
+
+        q = queue.Queue()
+        worker_state = {"thread": None}
+
+        def append_output(text):
+            try:
+                output.configure(state="normal")
+                output.insert("end", str(text).rstrip("\r\n") + "\n")
+                output.see("end")
+                output.configure(state="disabled")
+            except tk.TclError:
+                pass
+
+        def set_running(running):
+            state = "disabled" if running else "normal"
+            try:
+                original_entry.configure(state=state)
+                moved_entry.configure(state=state)
+                reverse_button.configure(state=state)
+                close_button.configure(state=("disabled" if running else "normal"))
+            except tk.TclError:
+                pass
+
+        def close_dialog():
+            thread = worker_state.get("thread")
+            if thread is not None and thread.is_alive():
+                messagebox.showwarning(
+                    "Reverse Copy/Delete + Rename",
+                    "The reverse operation is still running.",
+                    parent=dialog,
+                )
+                return
+            try:
+                dialog.destroy()
+            finally:
+                self.active_reverse_window = None
+                self._update_main_action_states()
+
+        def drain_queue():
+            try:
+                while True:
+                    kind, payload = q.get_nowait()
+                    if kind == "line":
+                        append_output(payload)
+                    elif kind == "done":
+                        result = payload
+                        worker_state["thread"] = None
+                        set_running(False)
+                        status_var.set(
+                            f"Complete: restored={result.restored}, already restored={result.already_restored}, "
+                            f"skipped={result.skipped_unmatched}, conflicts={result.conflicts}, errors={result.errors}"
+                        )
+                        messagebox.showinfo(
+                            "Reverse Copy/Delete + Rename",
+                            "Reverse operation complete.\n\n"
+                            f"Restored: {result.restored}\n"
+                            f"Already restored: {result.already_restored}\n"
+                            f"Skipped unmatched: {result.skipped_unmatched}\n"
+                            f"Conflicts: {result.conflicts}\n"
+                            f"Errors: {result.errors}\n\n"
+                            "Details were appended to TLOHome/logs/reverseCopyDelete.log.",
+                            parent=dialog,
+                        )
+                    elif kind == "error":
+                        worker_state["thread"] = None
+                        set_running(False)
+                        status_var.set("Reverse failed")
+                        append_output(f"ERROR: {payload}")
+                        messagebox.showerror("Reverse Copy/Delete + Rename", str(payload), parent=dialog)
+            except queue.Empty:
+                pass
+            try:
+                if dialog.winfo_exists():
+                    dialog.after(120, drain_queue)
+            except tk.TclError:
+                pass
+
+        def start_reverse():
+            thread = worker_state.get("thread")
+            if thread is not None and thread.is_alive():
+                return
+            original_text = original_var.get().strip()
+            moved_text = moved_var.get().strip()
+            try:
+                selection = prepare_reverse_selection(
+                    tlo_home=self._cli_tlo_home_value(),
+                    my_tlo=self._cli_my_tlo_value(),
+                    original_partition=original_text,
+                    moved_to=moved_text,
+                )
+                original_root = selection.original_root
+                moved_root = selection.moved_root
+                records = list(selection.records)
+            except Exception as exc:
+                messagebox.showerror("Reverse Copy/Delete + Rename", str(exc), parent=dialog)
+                return
+            if not records:
+                messagebox.showwarning(
+                    "Reverse Copy/Delete + Rename",
+                    "No successful combined Copy/Delete + Rename mappings could be identified for these inputs.",
+                    parent=dialog,
+                )
+                return
+
+            existing = sum(1 for item in records if os.path.isdir(item.current_path))
+            summary = (
+                f"Identified {os.path.basename(selection.log_path)} with {len(records)} logged folder mapping(s); "
+                f"{existing} exact destination folder(s) currently exist.\n\n"
+                f"Original partition/path: {original_root}\n"
+                f"Copy/Delete destination: {moved_root}\n"
+                f"Log evidence: {selection.evidence}\n\n"
+                "TLO will restore each folder to its exact logged original name and location. "
+                "Audio tags will not be changed. If the original path already exists, both folders are left untouched. "
+                "Cross-partition restores are copied and verified before the moved copy is deleted.\n\n"
+                "Continue?"
+            )
+            if not messagebox.askyesno("Reverse Copy/Delete + Rename", summary, parent=dialog):
+                return
+
+            try:
+                append_run_settings(
+                    tlo_home,
+                    "Reverse Copy/Delete + Rename",
+                    [
+                        f"Original partition input: {original_text}",
+                        f"Resolved original partition/path: {original_root}",
+                        f"Copy/Delete destination: {moved_root}",
+                        f"Selected success log: {selection.log_path}",
+                        f"Matching logged mappings: {len(records)}",
+                        "Internal audio tagging: unchanged",
+                    ],
+                )
+            except Exception:
+                pass
+            append_output(f"Starting reverse for {len(records)} logged mapping(s).")
+            status_var.set("Reversing folders...")
+            set_running(True)
+            self._update_main_action_states()
+
+            def worker():
+                try:
+                    result = reverse_copy_delete_and_rename(
+                        selection=selection,
+                        emit=lambda line: q.put(("line", line)),
+                    )
+                    q.put(("done", result))
+                except Exception as exc:
+                    q.put(("error", exc))
+
+            thread = threading.Thread(target=worker, name="tlo-reverse-copy-delete", daemon=True)
+            worker_state["thread"] = thread
+            thread.start()
+
+        reverse_button.configure(command=start_reverse)
+        close_button.configure(command=close_dialog)
+        dialog.protocol("WM_DELETE_WINDOW", close_dialog)
+        dialog.bind("<Return>", lambda _event: (start_reverse(), "break")[1])
+        original_entry.focus_set()
+        self._update_main_action_states()
+        dialog.after(120, drain_queue)
 
     def _updater_is_open(self):
         updater = getattr(self, "active_updater_window", None)
@@ -1858,6 +2145,8 @@ class App:
             artist_in_album=self.bool_vars["artist_in_album"].get(),
             etree_lookup=self.bool_vars["etree_lookup"].get(),
             setlistfm_lookup=self.bool_vars["setlistfm_lookup"].get(),
+            setlistfm_upgrade=bool(getattr(self.bool_vars.get("setlistfm_upgrade"), "get", lambda: False)()),
+            acceptable_corruption_percent=int((getattr(self.vars.get("acceptable_corruption_percent"), "get", lambda: "100")() or "0").strip()),
             performance_mode=performance_mode,
             max_workers=max_workers,
         )
@@ -1867,6 +2156,10 @@ class App:
         config.main_window_tag_copy_delete_selected = requested_copy_delete
         config.main_window_dry_run = bool(getattr(getattr(self, "dry_run_var", None), "get", lambda: False)())
         apply_lookup_dependency(vars(config), mode="auto")
+        if config.setlistfm_lookup and config.setlistfm_upgrade:
+            config.setlistfm_min_interval_seconds = 1.0 / 14.0
+            config.setlistfm_max_calls = 0
+            config.setlistfm_max_calls_per_day = 48000
         return config
 
     def _pause_inventory(self):
@@ -2277,10 +2570,15 @@ class TaggerWindow:
             tag_copy_and_delete_path="",
             etree_lookup=values["etree_lookup"],
             setlistfm_lookup=values["setlistfm_lookup"],
+            setlistfm_upgrade=bool(values.get("setlistfm_upgrade", False)),
             rename_compliantly=values["rename_compliantly"],
             convert_shn=values["convert_shn"],
             artist_in_album=values["artist_in_album"],
         )
+        if config.setlistfm_lookup and config.setlistfm_upgrade:
+            config.setlistfm_min_interval_seconds = 1.0 / 14.0
+            config.setlistfm_max_calls = 0
+            config.setlistfm_max_calls_per_day = 48000
         config.main_window_tag_in_place_selected = values["tag_during_inventory"]
         config.main_window_tag_copy_selected = values["tag_copy_during_inventory"]
         config.main_window_tag_copy_delete_selected = values["tag_copy_and_delete_enabled"]
@@ -2363,6 +2661,7 @@ class TaggerWindow:
                     tag_path=status.normalized,
                     etree_lookup=bool(config.etree_lookup),
                     setlistfm_lookup=bool(config.setlistfm_lookup),
+                    setlistfm_upgrade=bool(getattr(config, "setlistfm_upgrade", False)),
                     debug=self.debug,
                     rename_compliantly=bool(config.rename_compliantly),
                     convert_shn=bool(config.convert_shn),
@@ -2597,6 +2896,15 @@ class AddToInventoryWindow:
         self.config.artist_in_album = values["artist_in_album"]
         self.config.etree_lookup = values["etree_lookup"]
         self.config.setlistfm_lookup = values["setlistfm_lookup"]
+        self.config.setlistfm_upgrade = bool(values.get("setlistfm_upgrade", False))
+        if self.config.setlistfm_lookup and self.config.setlistfm_upgrade:
+            self.config.setlistfm_min_interval_seconds = 1.0 / 14.0
+            self.config.setlistfm_max_calls = 0
+            self.config.setlistfm_max_calls_per_day = 48000
+        else:
+            self.config.setlistfm_min_interval_seconds = 0.600
+            self.config.setlistfm_max_calls = 1400
+            self.config.setlistfm_max_calls_per_day = 0
         self.config.current_volume_label = self.volume_var.get().strip()
         self.config.main_window_dry_run = values["dry_run"]
         self.config.add_shows_dry_run = values["dry_run"]

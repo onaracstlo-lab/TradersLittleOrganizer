@@ -1,7 +1,7 @@
-__version__ = "v379"
-# TLO-GI package version: v379
-__version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
-# TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
+__version__ = "v394"
+# TLO-GI package version: v394
+__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
+# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
 import argparse
 import sys
 import os
@@ -16,6 +16,7 @@ from tlo_options import (
     parse_bool,
     parse_compliant_artist_mode,
     parse_max_workers,
+    parse_percent_0_100,
     parse_performance_mode,
     validate_compliant_rename_exclusivity,
 )
@@ -61,8 +62,11 @@ class Config:
     artist_in_album: bool = True
     etree_lookup: bool = False
     setlistfm_lookup: bool = False
+    setlistfm_upgrade: bool = False
+    acceptable_corruption_percent: int = 100
     setlistfm_min_interval_seconds: float = 0.600
     setlistfm_max_calls: int = 1400
+    setlistfm_max_calls_per_day: int = 0
     setlistfm_lock_timeout_seconds: float = 20.0
     setlistfm_run_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     active_search_paths: list[str] = field(default_factory=list)
@@ -184,6 +188,8 @@ def build_inventory_parser() -> argparse.ArgumentParser:
         "artist_in_album",
         "etree_lookup",
         "setlistfm_lookup",
+        "setlistfm_upgrade",
+        "acceptable_corruption_percent",
         "performance_mode",
         "max_workers",
         "current_storage_volume",
@@ -260,11 +266,17 @@ def build_config():
         artist_in_album=bool(values.get("artist_in_album", True)),
         etree_lookup=bool(values.get("etree_lookup", False)),
         setlistfm_lookup=bool(values.get("setlistfm_lookup", False)),
+        setlistfm_upgrade=bool(values.get("setlistfm_upgrade", False)),
+        acceptable_corruption_percent=int(values.get("acceptable_corruption_percent", 100) or 0),
         performance_mode=values.get("performance_mode", "balanced") or "balanced",
         max_workers=int(values.get("max_workers", 0) or 0),
         current_volume_label=resolve_current_storage_volume(values.get("current_storage_volume")),
     )
     apply_lookup_dependency(vars(config), mode="strict")
+    if config.setlistfm_lookup and config.setlistfm_upgrade:
+        config.setlistfm_min_interval_seconds = 1.0 / 14.0
+        config.setlistfm_max_calls = 0
+        config.setlistfm_max_calls_per_day = 48000
     validate_compliant_rename_exclusivity(vars(config))
     _validate_tag_copy_values(vars(config))
     return config

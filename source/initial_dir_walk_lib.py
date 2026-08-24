@@ -1,7 +1,7 @@
-__version__ = "v379"
-# TLO-GI package version: v379
-__version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
-# TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
+__version__ = "v394"
+# TLO-GI package version: v394
+__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
+# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
 import os
 import re
 
@@ -116,13 +116,12 @@ def _walk_and_log_recursive(config, current_path, dir_counter):
 
     sample_media_file = _phase1_first_real_music_file(current_path, sorted_entries)
     if sample_media_file:
-        # One full media path is enough for later phases to derive the music
-        # directory and representative media type.  Do not carry directory
-        # listings, setlist filenames, or all media filenames in the tree-walk
-        # log; later phases rescan the known folder or allowed parent only when
-        # those details are actually needed.
+        # Record this complete show, but continue into child directories. A
+        # nested child can be a distinct opening act and must not disappear
+        # merely because the parent already contains music. Wrapper/grouping
+        # logic later prevents ordinary CD/Disc/Set children from becoming
+        # unrelated shows.
         config.logs.complete_paths(sample_media_file)
-        return dir_counter
 
     for entry in sorted_entries:
         child_path = entry.path
@@ -147,7 +146,7 @@ def initial_dir_walk(config, start_path):
     Walk a directory tree and write paths to the complete_paths log.
 
     Rules:
-      - recursively descend until a real media file is found
+      - recursively descend through nested folders even after a media folder is found
       - when a media folder is found, log one representative full media-file path only
       - do not log directories, non-media files, setlist candidates, or every media filename
       - later phases rescan known media folders/allowed parents only when those details are needed

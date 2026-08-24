@@ -1,7 +1,7 @@
-__version__ = "v379"
-# TLO-GI package version: v379
-__version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
-# TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
+__version__ = "v394"
+# TLO-GI package version: v394
+__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
+# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
 import multiprocessing
 import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -57,8 +57,10 @@ def _config_snapshot(config, force_silent=False):
         "artist_in_album": getattr(config, "artist_in_album", True),
         "etree_lookup": config.etree_lookup,
         "setlistfm_lookup": getattr(config, "setlistfm_lookup", False),
+        "setlistfm_upgrade": getattr(config, "setlistfm_upgrade", False),
         "setlistfm_min_interval_seconds": getattr(config, "setlistfm_min_interval_seconds", 0.600),
         "setlistfm_max_calls": getattr(config, "setlistfm_max_calls", 1400),
+        "setlistfm_max_calls_per_day": getattr(config, "setlistfm_max_calls_per_day", 0),
         "setlistfm_run_id": getattr(config, "setlistfm_run_id", ""),
         "active_search_paths": [],
         "inventory_complete": False,

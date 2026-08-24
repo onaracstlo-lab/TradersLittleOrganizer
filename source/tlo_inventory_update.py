@@ -1,7 +1,7 @@
-__version__ = "v379"
-# TLO-GI package version: v379
-__version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
-# TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
+__version__ = "v394"
+# TLO-GI package version: v394
+__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
+# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
 
 import csv
 import glob
@@ -29,6 +29,7 @@ from tlo_phase23_v2 import (
     _format_show_metadata_log_lines,
     _format_switches_log_line,
     _match_string_dash_string,
+    _match_compliant_string_dash_string_date,
     _string_date_matches,
     _compliant_string_date_matches,
 )
@@ -370,6 +371,25 @@ def _compliant_string_date_string2(folder_path: str) -> Optional[Dict[str, str]]
     return row
 
 
+def _compliant_string_dash_string2_date(folder_path: str) -> Optional[Dict[str, str]]:
+    """Return narrow compliant String1 - String2 Date information for one leaf."""
+    leaf = os.path.basename(os.path.normpath(folder_path))
+    row = _match_compliant_string_dash_string_date(leaf)
+    if not row:
+        return None
+    out = dict(row)
+    out["folder_leaf"] = leaf
+    out["pattern"] = "string_dash_string_date"
+    out["artist"] = row.get("string1", "").strip()
+    out["show_name"] = " ".join(
+        part for part in [out["artist"], row.get("date_norm", ""), row.get("string2", "")] if str(part or "").strip()
+    ).strip()
+    parentheticals = str(row.get("parentheticals", "") or "").strip()
+    if parentheticals and out["show_name"] and not out["show_name"].endswith(parentheticals):
+        out["show_name"] = f"{out['show_name']} {parentheticals}".strip()
+    return out
+
+
 def _compliant_string_dash_string2(folder_path: str) -> Optional[Dict[str, str]]:
     """Return compliant String1 - String2 information for one folder leaf.
 
@@ -459,6 +479,8 @@ def find_compliant_potential_duplicate_rows(tlo_home: str, folder_path: str, art
     """
     match = _compliant_string_date_string2(folder_path)
     if not match:
+        match = _compliant_string_dash_string2_date(folder_path)
+    if not match:
         return [], None, []
     date_value = match.get("date_norm", "") or ""
     string1 = (match.get("string1", "") or "").strip()
@@ -520,9 +542,11 @@ def _record_dict_for_new_folder(config, folder_path: str, record, artist_matcher
     record_dict = _metadata_to_record_dict(record)
     if getattr(config, "compliant", False):
         matches, match, artist_values = find_compliant_potential_duplicate_rows(config.TLOHome, folder_path, artist_matcher, getattr(config, "compliant_artist_mode", "master"))
-        if match is not None and not artist_values:
+        if match is not None and not artist_values and match.get("pattern") != "string_dash_string_date":
             # Compliant String1 Date String2 with no artist DB match: keep the
-            # folder leaf as the show name, per Add to Inventory rules.
+            # folder leaf as the show name, per Add to Inventory rules.  The
+            # newer String1 - String2 Date branch already has a safe raw-artist
+            # fallback from the full compliant metadata parser, so preserve it.
             record_dict["show_name"] = os.path.basename(os.path.normpath(folder_path))
         elif match is None:
             # Compliant fallback: if the folder leaf is String1 - String2,

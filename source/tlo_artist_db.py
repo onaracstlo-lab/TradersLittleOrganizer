@@ -1,7 +1,7 @@
-__version__ = "v379"
-# TLO-GI package version: v379
-__version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
-# TLO-GI version summary: Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.
+__version__ = "v394"
+# TLO-GI package version: v394
+__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
+# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
 import re
 import sqlite3
 from dataclasses import dataclass, field
@@ -13,6 +13,7 @@ from tlo_text_utils import compact_ws
 
 THE_PREFIX_RE = re.compile(r"^(?:the|a)\s+", re.IGNORECASE)
 THE_SUFFIX_RE = re.compile(r",\s*(?:the|a)$", re.IGNORECASE)
+TERMINAL_BAND_RE = re.compile(r"\s+band$", re.IGNORECASE)
 
 
 def _strip_article_forms(text: str) -> str:
@@ -26,6 +27,20 @@ def _strip_article_forms(text: str) -> str:
 
 def _letters_only(text: str) -> str:
     return "".join(ch for ch in (text or "").lower() if ch.isalpha())
+
+
+def _strip_terminal_band(text: str) -> str:
+    """Return *text* without one terminal word ``Band``, or an empty string.
+
+    This is intentionally a secondary Artist DB lookup form.  The unmodified
+    candidate must be tried first so a real database artist whose name ends in
+    ``Band`` always wins over a shorter alias/master match.
+    """
+    cleaned = compact_ws(text)
+    if not cleaned or not TERMINAL_BAND_RE.search(cleaned):
+        return ""
+    stripped = compact_ws(TERMINAL_BAND_RE.sub("", cleaned))
+    return stripped if stripped and stripped.casefold() != cleaned.casefold() else ""
 
 
 def artist_search_variants(text: str) -> List[str]:
@@ -146,7 +161,9 @@ def _get_query_result(matcher: ArtistMatcher, cache_key: str) -> Tuple[str, Tupl
             pass
     return cached
 
-def lookup_artist_masters(text: str, matcher: Optional[ArtistMatcher]) -> List[str]:
+def lookup_artist_masters(
+    text: str, matcher: Optional[ArtistMatcher], *, _allow_terminal_band_fallback: bool = True
+) -> List[str]:
     if matcher is None:
         return []
     variants = artist_search_variants(text)
@@ -170,6 +187,20 @@ def lookup_artist_masters(text: str, matcher: Optional[ArtistMatcher]) -> List[s
     found: Set[str] = set()
     for variant in variants:
         found.update(matcher.exact_map.get(variant.casefold(), set()))
+
+    # Secondary fallback for potential artist names ending in the word "Band".
+    # Never mix the stripped form into the primary variant set: if the full
+    # artist name exists in the DB, that exact/full result must win.  Only a
+    # unique stripped-form result is accepted; ambiguous stripped matches leave
+    # the original candidate unresolved.
+    if not found and _allow_terminal_band_fallback:
+        stripped_band = _strip_terminal_band(text)
+        if stripped_band:
+            stripped_masters = lookup_artist_masters(
+                stripped_band, matcher, _allow_terminal_band_fallback=False
+            )
+            if len(stripped_masters) == 1:
+                found.add(stripped_masters[0])
 
     masters = tuple(sorted(found, key=lambda item: item.casefold()))
     status = "matched" if len(masters) == 1 else ("collision" if len(masters) > 1 else "no_match")

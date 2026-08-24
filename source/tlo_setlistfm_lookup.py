@@ -22,16 +22,18 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-__version__ = "v379"
-# TLO-GI package version: v379
-__version_summary__ = 'Correct weak path venue/location parsing and allow stronger selected-setlist metadata to replace it.'
+__version__ = "v394"
+# TLO-GI package version: v394
+__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 MIN_REQUEST_INTERVAL_SECONDS = 0.600
 MAX_REQUESTS_PER_RUN = 1400
+UPGRADE_REQUESTS_PER_SECOND = 14
+UPGRADE_MAX_REQUESTS_PER_DAY = 48000
 RATE_LIMIT_LOCK_TIMEOUT_SECONDS = 20.0
 RATE_LIMIT_STALE_AFTER_SECONDS = 10.0
 RATE_LIMIT_STATE_SUBDIR = os.path.join("logs", "setlistfm-state")
@@ -165,7 +167,7 @@ def _safe_run_id(run_id: str = "") -> str:
 
 def _read_rate_state(state_file: str) -> Dict[str, Any]:
     if not os.path.exists(state_file):
-        return {"last_request": 0.0, "counts": {}}
+        return {"last_request": 0.0, "counts": {}, "daily": {}}
     if os.path.islink(state_file):
         raise SetlistFMError(f"Refusing symlinked setlist.fm state file: {state_file}")
     try:
@@ -174,27 +176,27 @@ def _read_rate_state(state_file: str) -> Dict[str, Any]:
         with os.fdopen(fd, "r", encoding="utf-8") as fh:
             raw = fh.read().strip()
     except FileNotFoundError:
-        return {"last_request": 0.0, "counts": {}}
+        return {"last_request": 0.0, "counts": {}, "daily": {}}
     except OSError as exc:
         raise SetlistFMError(f"Cannot read setlist.fm rate-limit state: {state_file}: {exc}") from exc
 
     if not raw:
-        return {"last_request": 0.0, "counts": {}}
+        return {"last_request": 0.0, "counts": {}, "daily": {}}
 
     # Backward compatibility with older rate-limit files, which contained only a
     # timestamp as plain text.
     try:
-        return {"last_request": float(raw), "counts": {}}
+        return {"last_request": float(raw), "counts": {}, "daily": {}}
     except Exception:
         pass
 
     try:
         data = json.loads(raw)
     except Exception:
-        return {"last_request": 0.0, "counts": {}}
+        return {"last_request": 0.0, "counts": {}, "daily": {}}
 
     if not isinstance(data, dict):
-        return {"last_request": 0.0, "counts": {}}
+        return {"last_request": 0.0, "counts": {}, "daily": {}}
     counts = data.get("counts")
     if not isinstance(counts, dict):
         counts = {}
@@ -202,7 +204,10 @@ def _read_rate_state(state_file: str) -> Dict[str, Any]:
         last_request = float(data.get("last_request", 0.0) or 0.0)
     except Exception:
         last_request = 0.0
-    return {"last_request": last_request, "counts": counts}
+    daily = data.get("daily")
+    if not isinstance(daily, dict):
+        daily = {}
+    return {"last_request": last_request, "counts": counts, "daily": daily}
 
 
 def _write_rate_state(state_file: str, state: Dict[str, Any]) -> None:
@@ -261,6 +266,7 @@ def wait_for_rate_limit(
     min_interval_seconds: float = MIN_REQUEST_INTERVAL_SECONDS,
     *,
     max_calls: int = MAX_REQUESTS_PER_RUN,
+    max_calls_per_day: int = 0,
     run_id: str = "",
     tlo_home: str = "",
     lock_timeout_seconds: float = RATE_LIMIT_LOCK_TIMEOUT_SECONDS,
@@ -279,6 +285,7 @@ def wait_for_rate_limit(
     stale_after = RATE_LIMIT_STALE_AFTER_SECONDS
     safe_run_id = _safe_run_id(run_id)
     max_calls = int(max_calls or 0)
+    max_calls_per_day = int(max_calls_per_day or 0)
 
     while True:
         _acquire_rate_limit_lock(
@@ -299,6 +306,17 @@ def wait_for_rate_limit(
                     f"setlist.fm call limit reached for this inventory run: {current_count}/{max_calls}"
                 )
 
+            day_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            daily = state.setdefault("daily", {})
+            try:
+                daily_count = int(daily.get(day_key, 0) or 0)
+            except Exception:
+                daily_count = 0
+            if max_calls_per_day > 0 and daily_count >= max_calls_per_day:
+                raise SetlistFMError(
+                    f"setlist.fm daily call limit reached: {daily_count}/{max_calls_per_day}"
+                )
+
             last_request = float(state.get("last_request", 0.0) or 0.0)
             now = time.time()
             wait_time = float(min_interval_seconds) - (now - last_request)
@@ -314,6 +332,10 @@ def wait_for_rate_limit(
 
             call_number = current_count + 1
             counts[safe_run_id] = call_number
+            if max_calls_per_day > 0:
+                daily[day_key] = daily_count + 1
+                # Retain only the current UTC day; prior-day quota state is no longer relevant.
+                state["daily"] = {day_key: daily[day_key]}
             state["last_request"] = time.time()
 
             # Keep the file from growing forever if several test/manual runs use
@@ -340,6 +362,7 @@ def api_get(
     *,
     min_interval_seconds: float = MIN_REQUEST_INTERVAL_SECONDS,
     max_calls: int = MAX_REQUESTS_PER_RUN,
+    max_calls_per_day: int = 0,
     run_id: str = "",
     tlo_home: str = "",
     lock_timeout_seconds: float = RATE_LIMIT_LOCK_TIMEOUT_SECONDS,
@@ -347,6 +370,7 @@ def api_get(
     wait_for_rate_limit(
         min_interval_seconds,
         max_calls=max_calls,
+        max_calls_per_day=max_calls_per_day,
         run_id=run_id,
         tlo_home=tlo_home,
         lock_timeout_seconds=lock_timeout_seconds,
@@ -473,6 +497,7 @@ def search_setlists(
     *,
     min_interval_seconds: float = MIN_REQUEST_INTERVAL_SECONDS,
     max_calls: int = MAX_REQUESTS_PER_RUN,
+    max_calls_per_day: int = 0,
     run_id: str = "",
     tlo_home: str = "",
     lock_timeout_seconds: float = RATE_LIMIT_LOCK_TIMEOUT_SECONDS,
@@ -489,6 +514,7 @@ def search_setlists(
         api_key,
         min_interval_seconds=min_interval_seconds,
         max_calls=max_calls,
+        max_calls_per_day=max_calls_per_day,
         run_id=run_id,
         tlo_home=tlo_home,
         lock_timeout_seconds=lock_timeout_seconds,
@@ -509,6 +535,7 @@ def lookup_venue_and_location(
     *,
     min_interval_seconds: float = MIN_REQUEST_INTERVAL_SECONDS,
     max_calls: int = MAX_REQUESTS_PER_RUN,
+    max_calls_per_day: int = 0,
     run_id: str = "",
     tlo_home: str = "",
     lock_timeout_seconds: float = RATE_LIMIT_LOCK_TIMEOUT_SECONDS,
@@ -520,6 +547,7 @@ def lookup_venue_and_location(
         date_yyyy_mm_dd,
         min_interval_seconds=min_interval_seconds,
         max_calls=max_calls,
+        max_calls_per_day=max_calls_per_day,
         run_id=run_id,
         tlo_home=tlo_home,
         lock_timeout_seconds=lock_timeout_seconds,
