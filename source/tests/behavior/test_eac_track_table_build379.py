@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = pytest.mark.behavior
 from pathlib import Path
 
 from inventory_parser_lib import Config

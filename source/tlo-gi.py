@@ -1,7 +1,5 @@
-__version__ = "v394"
-# TLO-GI package version: v394
-__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
-# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
+__version__ = "v397"
+from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
 
 if __name__ == "__main__":
@@ -30,15 +28,15 @@ def main() -> int:
         if config is not None:
             try:
                 config.cancel_requested = True
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 - best-effort boundary
+                debug_suppressed_exception(__name__, exc)
             request_cancel_and_terminate_active_executor()
             terminate_all_children()
             try:
                 tokens = getattr(config, "newly_allocated_log_tokens", [])
                 delete_logs_for_tokens(config.TLOHome, tokens)
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 - best-effort boundary
+                debug_suppressed_exception(__name__, exc)
         else:
             request_cancel_and_terminate_active_executor()
             terminate_all_children()

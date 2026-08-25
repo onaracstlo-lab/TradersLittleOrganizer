@@ -3,6 +3,8 @@ import os
 
 import pytest
 
+pytestmark = pytest.mark.behavior
+
 import tlo_reverse_copy_delete as R
 
 

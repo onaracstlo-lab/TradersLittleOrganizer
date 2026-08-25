@@ -12,6 +12,8 @@ between API requests.
 
 from __future__ import annotations
 
+from tlo_diagnostics import debug_suppressed_exception
+
 import json
 import os
 import re
@@ -25,9 +27,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-__version__ = "v394"
-# TLO-GI package version: v394
-__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
+__version__ = "v397"
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 MIN_REQUEST_INTERVAL_SECONDS = 0.600
@@ -187,8 +187,8 @@ def _read_rate_state(state_file: str) -> Dict[str, Any]:
     # timestamp as plain text.
     try:
         return {"last_request": float(raw), "counts": {}, "daily": {}}
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 - best-effort boundary
+        debug_suppressed_exception(__name__, exc)
 
     try:
         data = json.loads(raw)
@@ -325,8 +325,8 @@ def wait_for_rate_limit(
                 # behind a lock holder that is only sleeping.
                 try:
                     os.rmdir(lock_dir)
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001 - best-effort boundary
+                    debug_suppressed_exception(__name__, exc)
                 time.sleep(wait_time)
                 continue
 
@@ -351,8 +351,8 @@ def wait_for_rate_limit(
         finally:
             try:
                 os.rmdir(lock_dir)
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 - best-effort boundary
+                debug_suppressed_exception(__name__, exc)
 
 def api_get(
     path: str,

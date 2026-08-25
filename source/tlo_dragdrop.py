@@ -1,7 +1,4 @@
-__version__ = "v394"
-# TLO-GI package version: v394
-__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
-# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
+__version__ = "v397"
 
 """Native-Windows-only drag-and-drop helpers for the TLO Tk GUI.
 
@@ -10,6 +7,7 @@ Windows are expected to include tkinterdnd2/TkDND via PyInstaller.  WSL and
 regular Linux deliberately do not try to enable this feature.
 """
 
+from tlo_diagnostics import debug_suppressed_exception
 import os
 import re
 import sys
@@ -128,8 +126,8 @@ def enable_folder_path_drop(
         try:
             entry_widget.icursor("end")
             entry_widget.focus_set()
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
 
     entry_widget.drop_target_register(DND_FILES)
     entry_widget.dnd_bind("<<Drop>>", lambda event: handle_data(getattr(event, "data", "")))

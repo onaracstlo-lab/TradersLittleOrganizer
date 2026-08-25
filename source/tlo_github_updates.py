@@ -6,17 +6,15 @@ avoids overwriting user inventory, setlists, logs, or databases.
 """
 from __future__ import annotations
 
-__version__ = "v394"
-# TLO-GI package version: v394
-__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
-# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
+from tlo_diagnostics import debug_suppressed_exception
+
+__version__ = "v397"
 
 import datetime as _dt
 import hashlib
 import json
 import os
 import re
-import shutil
 import sys
 import tempfile
 import urllib.error
@@ -26,12 +24,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION, PUBLIC_VERSION
+from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION, OFFICIAL_GITHUB_OWNER, OFFICIAL_GITHUB_REPO, PUBLIC_VERSION
 
-DEFAULT_REPO_OWNER = os.environ.get("TLO_GITHUB_OWNER", "onaracstlo-lab")
-DEFAULT_REPO_NAME = os.environ.get("TLO_GITHUB_REPO", "TradersLittleOrganizer")
+DEFAULT_REPO_OWNER = OFFICIAL_GITHUB_OWNER
+DEFAULT_REPO_NAME = OFFICIAL_GITHUB_REPO
 SETTINGS_FILE_NAME = "update-settings.json"
 AUTO_CHECK_INTERVAL_HOURS = 24
+MAX_UPDATE_ASSET_BYTES = 1024 * 1024 * 1024  # 1 GiB hard safety ceiling
+DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 USER_AGENT = f"TLO-update-checker/{DISPLAY_VERSION.replace(' ', '-') }"
 ALLOWED_DOWNLOAD_HOSTS = {
     "github.com",
@@ -119,17 +119,18 @@ def should_auto_check(tlo_home: str | os.PathLike[str] | None, *, minimum_hours:
     return (_utc_now() - last_check) >= _dt.timedelta(hours=minimum_hours)
 
 
-def _write_last_check(tlo_home: str | os.PathLike[str] | None, latest_build: int | None = None) -> None:
+def _write_last_check(tlo_home: str | os.PathLike[str] | None, latest_build: int | None = None) -> str:
     if not tlo_home:
-        return
+        return ""
     settings = load_update_settings(tlo_home)
     settings["last_check_utc"] = _utc_now().isoformat(timespec="seconds").replace("+00:00", "Z")
     if latest_build is not None:
         settings["last_checked_build"] = int(latest_build)
     try:
         save_update_settings(tlo_home, settings)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 - persistence error must be disclosed, not fatal
+        return f"Update settings could not be saved: {exc}"
+    return ""
 
 
 def _fetch_latest_release(owner: str, repo: str) -> dict[str, Any]:
@@ -281,6 +282,14 @@ def _file_matches_asset(path: Path, asset: dict[str, Any]) -> bool:
     return not digest or _sha256_file(path).lower() == digest
 
 
+def _declared_asset_size(asset: dict[str, Any]) -> int:
+    try:
+        size = int(asset.get("size") or 0)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, size)
+
+
 def _download_asset(asset: dict[str, Any], destination: Path) -> bool:
     url = _asset_download_url(asset)
     if not url:
@@ -290,16 +299,39 @@ def _download_asset(asset: dict[str, Any], destination: Path) -> bool:
     if destination.exists() and _file_matches_asset(destination, asset):
         return False
 
+    declared_size = _declared_asset_size(asset)
+    if declared_size > MAX_UPDATE_ASSET_BYTES:
+        raise ValueError(
+            f"Refusing implausibly large TLO update asset ({declared_size} bytes; "
+            f"maximum {MAX_UPDATE_ASSET_BYTES} bytes)."
+        )
+
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     destination.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=destination.name + ".", suffix=".download", dir=str(destination.parent))
     os.close(fd)
     temp_path = Path(temp_name)
     try:
+        downloaded_bytes = 0
         with urllib.request.urlopen(request, timeout=60) as response, temp_path.open("wb") as handle:
-            shutil.copyfileobj(response, handle)
-        size = asset.get("size")
-        if size is not None and int(size) > 0 and temp_path.stat().st_size != int(size):
+            response_length = 0
+            try:
+                response_length = int(response.headers.get("Content-Length") or 0)
+            except (AttributeError, TypeError, ValueError):
+                response_length = 0
+            if response_length > MAX_UPDATE_ASSET_BYTES:
+                raise ValueError("Refusing update response larger than the TLO download safety ceiling.")
+            while True:
+                chunk = response.read(DOWNLOAD_CHUNK_BYTES)
+                if not chunk:
+                    break
+                downloaded_bytes += len(chunk)
+                if downloaded_bytes > MAX_UPDATE_ASSET_BYTES:
+                    raise IOError("TLO update download exceeded the hard size ceiling.")
+                if declared_size and downloaded_bytes > declared_size:
+                    raise IOError(f"Downloaded data exceeded the declared size for {destination.name}.")
+                handle.write(chunk)
+        if declared_size and downloaded_bytes != declared_size:
             raise IOError(f"Downloaded size mismatch for {destination.name}.")
         digest = _expected_digest(asset)
         if digest and _sha256_file(temp_path).lower() != digest:
@@ -310,13 +342,13 @@ def _download_asset(asset: dict[str, Any], destination: Path) -> bool:
         try:
             if temp_path.exists():
                 temp_path.unlink()
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
 
 
-def _update_download_settings(tlo_home: str | os.PathLike[str] | None, latest_build: int, asset_name: str, path: Path, package_kind: str) -> None:
+def _update_download_settings(tlo_home: str | os.PathLike[str] | None, latest_build: int, asset_name: str, path: Path, package_kind: str) -> str:
     if not tlo_home:
-        return
+        return ""
     settings = load_update_settings(tlo_home)
     settings["last_check_utc"] = _utc_now().isoformat(timespec="seconds").replace("+00:00", "Z")
     settings["last_checked_build"] = int(latest_build)
@@ -326,8 +358,9 @@ def _update_download_settings(tlo_home: str | os.PathLike[str] | None, latest_bu
     settings["last_downloaded_kind"] = package_kind
     try:
         save_update_settings(tlo_home, settings)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 - download succeeded; disclose persistence failure
+        return f"Update settings could not be saved: {exc}"
+    return ""
 
 
 def check_for_updates(
@@ -352,39 +385,39 @@ def check_for_updates(
             " ".join(_asset_name(asset) for asset in assets),
         )
         if latest_build is None:
-            _write_last_check(tlo_home)
-            return UpdateCheckResult(
-                status="error",
-                title="TLO update check failed",
-                message="The latest GitHub Release did not contain a recognizable TLO build number.",
-            )
+            settings_warning = _write_last_check(tlo_home)
+            message = "The latest GitHub Release did not contain a recognizable TLO build number."
+            if settings_warning:
+                message += f"\n\n{settings_warning}"
+            return UpdateCheckResult(status="error", title="TLO update check failed", message=message)
         if latest_build <= BUNDLE_BUILD:
-            _write_last_check(tlo_home, latest_build)
+            settings_warning = _write_last_check(tlo_home, latest_build)
+            message = f"Installed: {DISPLAY_VERSION}\nLatest: v{PUBLIC_VERSION} Build {latest_build}"
+            if settings_warning:
+                message += f"\n\n{settings_warning}"
             return UpdateCheckResult(
-                status="up_to_date",
-                title="TLO is up to date",
-                message=f"Installed: {DISPLAY_VERSION}\nLatest: v{PUBLIC_VERSION} Build {latest_build}",
-                latest_build=latest_build,
+                status="up_to_date", title="TLO is up to date", message=message, latest_build=latest_build,
             )
 
         asset, package_kind, platform_key = _choose_asset(release, latest_build)
         if not asset:
-            _write_last_check(tlo_home, latest_build)
+            settings_warning = _write_last_check(tlo_home, latest_build)
+            message = (
+                f"Installed: {DISPLAY_VERSION}\n"
+                f"Latest: v{PUBLIC_VERSION} Build {latest_build}\n\n"
+                f"No update ZIP for {platform_key} and no complete ZIP were found in the latest GitHub Release."
+            )
+            if settings_warning:
+                message += f"\n\n{settings_warning}"
             return UpdateCheckResult(
-                status="no_asset",
-                title="TLO update found, but no ZIP matched this platform",
-                message=(
-                    f"Installed: {DISPLAY_VERSION}\n"
-                    f"Latest: v{PUBLIC_VERSION} Build {latest_build}\n\n"
-                    f"No update ZIP for {platform_key} and no complete ZIP were found in the latest GitHub Release."
-                ),
-                latest_build=latest_build,
+                status="no_asset", title="TLO update found, but no ZIP matched this platform",
+                message=message, latest_build=latest_build,
             )
 
         asset_name = _asset_name(asset)
         destination = _downloads_dir() / _safe_asset_filename(asset_name)
         downloaded = _download_asset(asset, destination)
-        _update_download_settings(tlo_home, latest_build, asset_name, destination, package_kind)
+        settings_warning = _update_download_settings(tlo_home, latest_build, asset_name, destination, package_kind)
         if package_kind == "update":
             kind_text = "executable-only update"
             extra = "This ZIP does not contain your inventory, setlists, logs, or databases."
@@ -403,7 +436,7 @@ def check_for_updates(
         return UpdateCheckResult(
             status=status,
             title=title,
-            message=f"{lead}\n\n{destination}\n\n{extra}{verification_note}",
+            message=f"{lead}\n\n{destination}\n\n{extra}{verification_note}" + (f"\n\n{settings_warning}" if settings_warning else ""),
             latest_build=latest_build,
             path=str(destination),
             asset_name=asset_name,

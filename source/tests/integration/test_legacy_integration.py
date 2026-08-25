@@ -1,11 +1,11 @@
 """Filesystem and workflow integration scenarios promoted from the legacy suite."""
 
-__version__ = "v394"
+__version__ = "v397"
 
 import pytest
 from tests import _legacy_suite as legacy
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.slow]
 
 test_existing_volume_reinventory_reuses_existing_token_and_replaces_exact_logs = legacy.test_existing_volume_reinventory_reuses_existing_token_and_replaces_exact_logs
 test_v246_add_shows_rename_compliantly_renames_ready_folder_in_place = legacy.test_v246_add_shows_rename_compliantly_renames_ready_folder_in_place

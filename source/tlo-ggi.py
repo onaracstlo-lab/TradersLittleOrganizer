@@ -1,10 +1,8 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v394"
-# TLO-GI package version: v394
-__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
-# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
+__version__ = "v397"
 
+from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
 
 if __name__ == "__main__":
@@ -1130,8 +1128,8 @@ class App:
                 self.queue.put(result.title + "\n")
             elif result.status in {"error", "no_asset"}:
                 self.queue.put(result.title + ": " + result.message.replace("\n", " ") + "\n")
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
 
     def _show_about(self):
         dialog = tk.Toplevel(self.root)
@@ -1545,8 +1543,8 @@ class App:
                         "Internal audio tagging: unchanged",
                     ],
                 )
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 - best-effort boundary
+                debug_suppressed_exception(__name__, exc)
             append_output(f"Starting reverse for {len(records)} logged mapping(s).")
             status_var.set("Reversing folders...")
             set_running(True)
@@ -1902,8 +1900,8 @@ class App:
                 f"Inventory cancelled; terminated active worker process(es): {terminated}; "
                 f"deleted active log file(s): {len(deleted)}\n"
             )
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
         return deleted
 
     def _force_exit_after_child_cleanup(self, code: int = 130):
@@ -2775,8 +2773,8 @@ class TaggerWindow:
             clear_pause()
             try:
                 self.queue.put("Tagger quit requested; stopping active tagging work.\n")
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 - best-effort boundary
+                debug_suppressed_exception(__name__, exc)
             self._destroy_tagger_window(release_main=False)
             return
         self._destroy_tagger_window()
@@ -2788,8 +2786,8 @@ class TaggerWindow:
             self.parent_app.active_tagger_window = None
         try:
             self.parent_app._update_main_action_states()
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
         try:
             self.window.destroy()
         except tk.TclError:
@@ -3255,8 +3253,8 @@ class AddToInventoryWindow:
             for child in list(self.child_windows):
                 try:
                     child.window.destroy()
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001 - best-effort boundary
+                    debug_suppressed_exception(__name__, exc)
             self.child_windows = []
         self._destroy_updater_window()
 

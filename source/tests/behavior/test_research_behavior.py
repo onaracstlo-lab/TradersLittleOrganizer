@@ -1,6 +1,6 @@
 """Build 375 Research CLI/GUI and log-search behavior."""
 
-__version__ = "v394"
+__version__ = "v397"
 
 from pathlib import Path
 import importlib.util
@@ -8,6 +8,8 @@ import os
 import sys
 
 import pytest
+
+pytestmark = pytest.mark.behavior
 
 ROOT = Path(__file__).resolve().parents[2]
 

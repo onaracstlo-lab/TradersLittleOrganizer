@@ -1,6 +1,6 @@
 """Build 375 documentation and release contracts."""
 
-__version__ = "v394"
+__version__ = "v397"
 
 from pathlib import Path
 from zipfile import ZipFile
@@ -18,7 +18,7 @@ def _docx_text(name):
 
 
 def test_build364_requirements_define_commercial_release_year_and_no_duplicate_artist():
-    text = _docx_text("TLO_Inventory_Requirements_Working_v394.docx")
+    text = _docx_text("TLO_Inventory_Requirements_Working_v397.docx")
     assert "(1991) - Rod Stewart - Vagabond Heart" in text
     assert "The release year is classification evidence only" in text
     assert "do not assign it to DATE and do not include it in SHOW_NAME" in text
@@ -28,14 +28,14 @@ def test_build364_requirements_define_commercial_release_year_and_no_duplicate_a
 
 
 def test_build364_requirements_define_complete_recursive_transfer_tree():
-    text = _docx_text("TLO_Inventory_Requirements_Working_v394.docx")
+    text = _docx_text("TLO_Inventory_Requirements_Working_v397.docx")
     assert "complete identified source folder tree rooted at MAIN_DIR_PATH" in text
     assert "including non-music files and empty directories" in text
     assert "descendant directory structure" in text
 
 
 def test_build364_manual_documents_commercial_release_and_complete_tree_copy():
-    text = (ROOT / "TLO_Inventory_User_Manual_v394.rtf").read_text(encoding="utf-8", errors="ignore")
+    text = (ROOT / "TLO_Inventory_User_Manual_v397.rtf").read_text(encoding="utf-8", errors="ignore")
     assert "Commercial releases may use (YYYY) - Artist - Album or YYYY - Artist - Album" in text
     assert "does not write the year to DATE or include it in the Show Name" in text
     assert "Rod Stewart - Rod Stewart - Camouflage becomes Rod Stewart - Camouflage" in text
@@ -49,7 +49,7 @@ def test_build364_archives_prior_change_log():
 
 
 def test_build364_requirements_define_exact_copy_vs_alt_classification():
-    text = _docx_text("TLO_Inventory_Requirements_Working_v394.docx")
+    text = _docx_text("TLO_Inventory_Requirements_Working_v397.docx")
     assert "Copy-versus-alternate naming is determined by exact recursive tree identity" in text
     assert "relative descendant directory set (including empty directories)" in text
     assert "byte contents of every corresponding file are all identical" in text
@@ -58,7 +58,7 @@ def test_build364_requirements_define_exact_copy_vs_alt_classification():
 
 
 def test_build364_manual_documents_copy_vs_alt_classification():
-    text = (ROOT / "TLO_Inventory_User_Manual_v394.rtf").read_text(encoding="utf-8", errors="ignore")
+    text = (ROOT / "TLO_Inventory_User_Manual_v397.rtf").read_text(encoding="utf-8", errors="ignore")
     assert "does not call the new folder a copy merely because the name is already present" in text
     assert "A (copyN) suffix is used only when" in text
     assert "make the new item an (altN) instead" in text
@@ -86,7 +86,7 @@ def test_build364_delete_dupes_contracts_and_packaging():
 
 
 def test_build364_requirements_document_delete_dupes_behavior():
-    text = _docx_text("TLO_Inventory_Requirements_Working_v394.docx")
+    text = _docx_text("TLO_Inventory_Requirements_Working_v397.docx")
     assert "tlo-deleteDupes.py" in text
     assert "deletedDirs.txt" in text
     assert "same relative directory structure" in text
@@ -100,7 +100,7 @@ def test_build364_requirements_document_delete_dupes_behavior():
 
 
 def test_build364_manual_documents_delete_dupes_behavior():
-    text = (ROOT / "TLO_Inventory_User_Manual_v394.rtf").read_text(encoding="utf-8", errors="ignore")
+    text = (ROOT / "TLO_Inventory_User_Manual_v397.rtf").read_text(encoding="utf-8", errors="ignore")
     assert "tlo-deleteDupes" in text
     assert "deletedDirs.txt" in text
     assert "duplicates" in text

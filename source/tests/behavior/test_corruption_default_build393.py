@@ -1,7 +1,10 @@
 """Build 393 regressions for the acceptable-corruption default."""
 
-__version__ = "v394"
+__version__ = "v397"
 
+import pytest
+
+pytestmark = pytest.mark.behavior
 import tlo_options
 from inventory_parser_lib import Config
 

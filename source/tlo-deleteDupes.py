@@ -1,9 +1,6 @@
 """Repair corrupt FLACs from duplicate copies, then move duplicates to a partition holding folder."""
 
-__version__ = "v394"
-# TLO-GI package version: v394
-__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
-# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
+__version__ = "v397"
 
 import argparse
 import csv
@@ -36,6 +33,9 @@ _SHOW_IDENTITY_DATE_RE = re.compile(
     r")(?![0-9-])",
     re.IGNORECASE,
 )
+
+
+FLAC_VALIDATION_TIMEOUT_SECONDS = 180
 
 
 class DeleteDupesError(RuntimeError):
@@ -651,8 +651,9 @@ def flac_file_is_healthy(
     *,
     ffmpeg_executable: Optional[str] = None,
     run_func=subprocess.run,
-) -> bool:
-    """Return True only when the entire FLAC audio stream decodes without error."""
+    timeout_seconds: float = FLAC_VALIDATION_TIMEOUT_SECONDS,
+) -> Optional[bool]:
+    """Return True/False for healthy/corrupt, or None when validation times out."""
     normalized = os.path.normpath(str(path_name or ""))
     if os.path.splitext(normalized)[1].lower() != ".flac" or not os.path.isfile(normalized):
         return False
@@ -680,10 +681,13 @@ def flac_file_is_healthy(
             stderr=subprocess.PIPE,
             text=True,
             check=False,
+            timeout=max(1.0, float(timeout_seconds)),
             **_subprocess_no_window_kwargs(),
         )
     except KeyboardInterrupt:
         raise
+    except subprocess.TimeoutExpired:
+        return None
     except Exception:
         return False
     return int(getattr(completed, "returncode", 1) or 0) == 0
@@ -733,11 +737,11 @@ def repair_corrupt_flacs_from_copies(
     health_check=flac_file_is_healthy,
     replace_func=_replace_file_from_copy,
     emit=console_emit,
-) -> Tuple[int, int]:
+) -> Tuple[int, int, bool]:
     """Repair corrupt original FLACs from healthy copies in numeric copy order.
 
-    Returns (repaired_count, unrepaired_count). Failure to repair a corrupt file
-    is non-fatal; duplicate-folder cleanup continues as requested.
+    Returns (repaired_count, unrepaired_count, keeper_unverifiable). A timeout
+    makes the keeper unverifiable so its duplicate cluster is not relocated.
     """
     ordered_copies = sorted(list(copies), key=_candidate_sort_key)
     repaired_count = 0
@@ -745,8 +749,12 @@ def repair_corrupt_flacs_from_copies(
 
     for relative_path in _relative_flac_paths(original_path):
         original_flac = os.path.normpath(os.path.join(original_path, relative_path))
-        if health_check(original_flac, ffmpeg_executable=ffmpeg_executable):
+        original_health = health_check(original_flac, ffmpeg_executable=ffmpeg_executable)
+        if original_health is True:
             continue
+        if original_health is None:
+            emit(f"FLAC validation timed out; keeper cluster is unverifiable: {original_flac}", error=True)
+            return repaired_count, unrepaired_count, True
 
         emit(f"Corrupt FLAC detected in kept folder: {original_flac}", error=True)
         repaired = False
@@ -754,7 +762,10 @@ def repair_corrupt_flacs_from_copies(
             candidate_flac = os.path.normpath(os.path.join(candidate.path, relative_path))
             if not os.path.isfile(candidate_flac) or os.path.islink(candidate_flac):
                 continue
-            if not health_check(candidate_flac, ffmpeg_executable=ffmpeg_executable):
+            candidate_health = health_check(candidate_flac, ffmpeg_executable=ffmpeg_executable)
+            if candidate_health is not True:
+                if candidate_health is None:
+                    emit(f"FLAC validation timed out for repair candidate; skipping: {candidate_flac}", error=True)
                 continue
             try:
                 replace_func(candidate_flac, original_flac)
@@ -769,11 +780,15 @@ def repair_corrupt_flacs_from_copies(
                 continue
 
             # Verify the bytes as installed, not merely the source copy.
-            if health_check(original_flac, ffmpeg_executable=ffmpeg_executable):
+            replacement_health = health_check(original_flac, ffmpeg_executable=ffmpeg_executable)
+            if replacement_health is True:
                 emit(f"Replaced corrupt FLAC from copy {candidate.number}: {original_flac}")
                 repaired_count += 1
                 repaired = True
                 break
+            if replacement_health is None:
+                emit(f"Replacement validation timed out; keeper cluster is unverifiable: {original_flac}", error=True)
+                return repaired_count, unrepaired_count, True
 
             emit(
                 f"Replacement from copy {candidate.number} did not validate: {original_flac}",
@@ -784,7 +799,7 @@ def repair_corrupt_flacs_from_copies(
             unrepaired_count += 1
             emit(f"Corrupt FLAC could not be replaced; continuing: {original_flac}", error=True)
 
-    return repaired_count, unrepaired_count
+    return repaired_count, unrepaired_count, False
 
 
 def validate_input_path(path_text: str) -> str:
@@ -871,7 +886,7 @@ def delete_duplicate_copy_directories(
 
             # Validate/repair the folder that will be kept before any qualifying
             # copies are moved. An unrepaired corrupt FLAC does not retain copies.
-            repair_corrupt_flacs_from_copies(
+            _repaired, _unrepaired, keeper_unverifiable = repair_corrupt_flacs_from_copies(
                 original_path,
                 qualifying,
                 ffmpeg_executable=validator,
@@ -879,6 +894,12 @@ def delete_duplicate_copy_directories(
                 replace_func=replace_func,
                 emit=emit,
             )
+            if keeper_unverifiable:
+                emit(
+                    f"Skipping duplicate cluster because kept folder has an unverifiable FLAC: {original_path}",
+                    error=True,
+                )
+                continue
 
             for candidate in qualifying:
                 copy_path = candidate.path

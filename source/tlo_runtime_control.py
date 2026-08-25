@@ -1,8 +1,6 @@
-__version__ = "v394"
-# TLO-GI package version: v394
-__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
-# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
+__version__ = "v397"
 
+from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
 import os
 import sys
@@ -46,8 +44,8 @@ def request_pause():
     if proxy is not None:
         try:
             proxy.set()
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
 
 
 def clear_pause():
@@ -57,8 +55,8 @@ def clear_pause():
     if proxy is not None:
         try:
             proxy.clear()
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
 
 
 def register_active_pause_proxy(proxy):
@@ -70,8 +68,8 @@ def register_active_pause_proxy(proxy):
                 proxy.set()
             else:
                 proxy.clear()
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
 
 
 def unregister_active_pause_proxy(proxy=None):
@@ -167,8 +165,8 @@ def request_cancel_and_terminate_active_executor(join_timeout=1.0):
             try:
                 method()
                 return 1
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 - best-effort boundary
+                debug_suppressed_exception(__name__, exc)
 
     processes = _active_processes_for_executor(executor)
     for process in processes:
@@ -179,8 +177,8 @@ def request_cancel_and_terminate_active_executor(join_timeout=1.0):
         try:
             if hasattr(process, "join"):
                 process.join(timeout=join_timeout)
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
 
     for process in processes:
         if _kill_process(process):
@@ -191,10 +189,10 @@ def request_cancel_and_terminate_active_executor(join_timeout=1.0):
     except TypeError:
         try:
             executor.shutdown(wait=False)
-        except Exception:
-            pass
-    except Exception:
-        pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
+    except Exception as exc:  # noqa: BLE001 - best-effort boundary
+        debug_suppressed_exception(__name__, exc)
 
     return process_count
 
@@ -219,28 +217,28 @@ def terminate_all_children(join_timeout=1.0, kill_timeout=0.5):
             if child.is_alive():
                 child.terminate()
                 terminated += 1
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
 
     for child in children:
         try:
             child.join(timeout=join_timeout)
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
 
     for child in children:
         try:
             if child.is_alive() and hasattr(child, "kill"):
                 child.kill()
                 terminated += 1
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
 
     for child in children:
         try:
             child.join(timeout=kill_timeout)
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
 
     return terminated
 
@@ -251,8 +249,8 @@ def flush_standard_streams():
         try:
             if stream is not None:
                 stream.flush()
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
 
 
 def _windows_set_priority(priority_class):

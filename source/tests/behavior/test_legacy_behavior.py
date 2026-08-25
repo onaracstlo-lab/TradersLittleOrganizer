@@ -1,6 +1,6 @@
 """Behavioral regression tests retained from the legacy suite."""
 
-__version__ = "v394"
+__version__ = "v397"
 
 import pytest
 from tests import _legacy_suite as legacy

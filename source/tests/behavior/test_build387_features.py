@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = pytest.mark.behavior
 import tlo_phase23_v2 as phase
 
 def test_build387_dash_string2_checks_date_and_location_before_album_fallback():

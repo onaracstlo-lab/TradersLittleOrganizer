@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v394"
-# TLO-GI package version: v394
-__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
-# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
+__version__ = "v397"
 
 import csv
 import os
@@ -14,8 +11,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from tlo_constants import COUNTRY_ALIASES, COUNTRY_SEARCH_TERMS, LOWERCASE_COMMON_STATE_CODES, MONTH_NAME_CASED_PATTERN, US_STATE_ALIASES, US_STATE_CODES
-from tlo_text_utils import compact_ws, normalized_compare_value, safe_title
+from tlo_constants import (
+    COUNTRY_ALIASES, COUNTRY_SEARCH_TERMS, LOCATION_CONNECTIVE_WORDS,
+    LOWERCASE_COMMON_STATE_CODES, MONTH_NAME_CASED_PATTERN, US_STATE_ALIASES, US_STATE_CODES,
+)
+from tlo_text_utils import (
+    MAX_TEXT_FULL_BYTES, MAX_TEXT_SAMPLE_BYTES, compact_ws, normalized_compare_value, safe_title,
+)
 
 
 @dataclass(frozen=True)
@@ -54,7 +56,20 @@ def _norm_key(value: str) -> str:
 
 
 def _read_text_file(path: str) -> Tuple[str, str]:
-    data = Path(path).read_bytes()
+    """Read only the bounded setlist sample needed by the header parser.
+
+    Files larger than the full-input ceiling are rejected; otherwise at most
+    the configured sample ceiling is read because callers consume only the
+    first 100 metadata lines.
+    """
+    file_path = Path(path)
+    try:
+        if file_path.stat().st_size > MAX_TEXT_FULL_BYTES:
+            return "", "too-large"
+        with file_path.open("rb") as handle:
+            data = handle.read(MAX_TEXT_SAMPLE_BYTES)
+    except OSError:
+        raise
     if not data:
         return "", "empty"
     for enc in ("utf-8-sig", "utf-16", "utf-16-le", "utf-16-be"):
@@ -764,6 +779,11 @@ def _parse_comma_state_code_location(line: str, support: _SupportData) -> Tuple[
     return city, info.get("region", code), info.get("country", "USA"), match.group(0), "LOCATION_COMMA_STATE_CODE", 92
 
 
+def _city_fragment_has_title_like_trailing_connective(city: str) -> bool:
+    words = re.findall(r"[A-Za-z]+", _clean_spaces(city or ""))
+    return bool(words and words[-1].casefold() in LOCATION_CONNECTIVE_WORDS)
+
+
 def _parse_trailing_region_location(line: str, support: _SupportData) -> Tuple[str, str, str, str, str, int]:
     terms = _region_search_terms(support)
     if not terms:
@@ -784,6 +804,17 @@ def _parse_trailing_region_location(line: str, support: _SupportData) -> Tuple[s
         return "", "", "", "", "", 0
     _display, _pattern, region, country = terms[matched_term_index]
     city = _clean_spaces(match.group(1))
+    raw_region = _clean_spaces(match.group(2))
+    # Full state/region names embedded in ordinary titles are a common false
+    # positive: ``Two Gentlemen In New York`` previously became
+    # city=Two Gentlemen In / region=NY.  If there is no comma before the
+    # region and the putative city ends with a connective/preposition, reject
+    # the location interpretation entirely.  Real forms such as
+    # ``Boca Raton Florida`` and ``New York New York`` remain valid.
+    is_full_region_name = len(re.sub(r"[^A-Za-z]", "", raw_region)) > 2
+    prefix_before_region = line[: match.start(2)]
+    if is_full_region_name and "," not in prefix_before_region and _city_fragment_has_title_like_trailing_connective(city):
+        return "", "", "", "", "", 0
     return city, region, country, match.group(0), "LOCATION_TRAILING_REGION", 84
 
 
@@ -1146,11 +1177,21 @@ _DATE_HEADER_RE = re.compile(
 )
 
 
+_DATE_DURATION_TAIL_RE = re.compile(
+    r"\s+(?:--+|[–—])\s+\d{1,3}:\d{2}(?::\d{2})?(?:\.\d+)?\s*$"
+)
+
+
 def _looks_like_date_header_line(line: str) -> bool:
     raw = _clean_spaces(str(line or "").strip(" *-_=#~"))
     if not raw or len(raw) > 80:
         return False
-    return bool(_DATE_HEADER_RE.match(raw))
+    # Radio/broadcast setlists commonly put duration after the performance or
+    # broadcast date, e.g. ``1991-09-21 -- 51:27``.  Treat the duration as a
+    # header annotation rather than making the otherwise exact date invisible
+    # to structured-header detection.
+    date_side = _DATE_DURATION_TAIL_RE.sub("", raw).strip()
+    return bool(_DATE_HEADER_RE.match(date_side))
 
 
 def _is_decorative_separator_line(line: str) -> bool:
@@ -1236,6 +1277,89 @@ def _extract_inline_artist_date_header(lines: List[str], support: _SupportData) 
         return before, venue, 90 if venue else 88
     return "", "", 0
 
+_SPACED_HEADER_DASH_RE = re.compile(r"\s+(?:--+|[–—])\s+")
+_DURATION_ONLY_RE = re.compile(r"^\d{1,3}:\d{2}(?::\d{2})?(?:\.\d+)?$")
+
+
+def _split_dash_location_venue_header_line(line: str, support: _SupportData) -> Tuple[str, str, str, str, str, str, int]:
+    """Split a concise ``Location -- Venue`` or ``Venue -- Location`` header.
+
+    The separator must be surrounded by whitespace and exactly one side must
+    parse as a strong region/country-anchored location.  This keeps ordinary
+    hyphenated names and ``Date -- duration`` rows out of venue inference.
+    """
+    raw = _clean_spaces(str(line or "").strip(" *#~_="))
+    if not raw or _looks_like_sentence_prose_line(raw):
+        return "", "", "", "", "", "", 0
+    parts = _SPACED_HEADER_DASH_RE.split(raw, maxsplit=1)
+    if len(parts) != 2:
+        return "", "", "", "", "", "", 0
+    left = _clean_spaces(parts[0].strip(" ,-"))
+    right = _clean_spaces(parts[1].strip(" ,-"))
+    if not left or not right:
+        return "", "", "", "", "", "", 0
+    if _looks_like_date_header_line(left) or _looks_like_date_header_line(right):
+        return "", "", "", "", "", "", 0
+    if _DURATION_ONLY_RE.fullmatch(left) or _DURATION_ONLY_RE.fullmatch(right):
+        return "", "", "", "", "", "", 0
+
+    left_loc = _parse_location_from_text(left, support)
+    right_loc = _parse_location_from_text(right, support)
+    left_is_location = bool(left_loc[0] and (left_loc[1] or left_loc[2]))
+    right_is_location = bool(right_loc[0] and (right_loc[1] or right_loc[2]))
+    if left_is_location == right_is_location:
+        return "", "", "", "", "", "", 0
+
+    if left_is_location:
+        venue_candidate = right
+        city, region, country, loc_raw, loc_pattern, loc_conf = left_loc
+    else:
+        venue_candidate = left
+        city, region, country, loc_raw, loc_pattern, loc_conf = right_loc
+    if not _looks_like_unlabeled_venue_line(venue_candidate):
+        return "", "", "", "", "", "", 0
+    return (
+        venue_candidate, city, region, country, loc_raw or (left if left_is_location else right),
+        "LOCATION_DASH_LOCATION_VENUE", max(92, int(loc_conf or 0)),
+    )
+
+
+def _looks_like_comma_separated_performer_list(line: str, support: _SupportData) -> bool:
+    """Return True for concise comma-separated person/performer lists.
+
+    A line such as ``Townes Van Zandt, Guy Clark, Marc Jordan, Murray
+    McLauchlan`` must not be searched for venue substrings.  Location-bearing
+    comma forms are excluded from this test by checking the final component for
+    a configured region/country and by allowing the normal location parser to
+    recognize the whole line first.
+    """
+    raw = _clean_spaces(str(line or ""))
+    parts = [_clean_spaces(part) for part in raw.split(",") if _clean_spaces(part)]
+    if len(parts) < 3:
+        return False
+    if _parse_location_from_text(raw, support)[0]:
+        return False
+    tail_key = _norm_key(parts[-1])
+    if parts[-1].upper() in support.regions or tail_key in support.regions or tail_key in support.countries:
+        return False
+    if any(re.search(r"\d", part) for part in parts):
+        return False
+    return all(1 <= _line_word_count(part) <= 5 and len(part) <= 60 for part in parts)
+
+
+def _short_one_word_venue_match_allowed(venue: str, line: str) -> bool:
+    key = _norm_key(venue)
+    if not key or " " in key or len(key) > 5:
+        return True
+    if _norm_key(line) == key:
+        return True
+    explicit = _explicit_metadata_match(line)
+    if explicit and explicit[0] == "venue":
+        value = _sanitize_explicit_metadata_value(explicit[0], explicit[1])
+        return bool(re.search(rf"(?:^|\b){re.escape(key)}(?:\b|$)", _norm_key(value)))
+    return False
+
+
 def _extract_structured_unlabeled_header_block(lines: List[str], support: _SupportData) -> Tuple[str, str, str, str, str, str, str, int]:
     """Extract strict unlabeled Artist/Venue/Location/Date style headers.
 
@@ -1253,8 +1377,17 @@ def _extract_structured_unlabeled_header_block(lines: List[str], support: _Suppo
         return "", "", "", "", "", "", "", 0
 
     for pos, (_idx, line) in enumerate(items):
-        # One-line combined venue/location may sit below an artist/event header.
+        # One-line location/venue or venue/location may sit below an artist/event
+        # header.  Try the explicit spaced double-dash form first because it is
+        # stronger than generic venue-database substring matching.
         if pos >= 1:
+            split_venue, split_city, split_region, split_country, split_raw, split_pattern, split_conf = _split_dash_location_venue_header_line(line, support)
+            if split_venue and split_city and (split_region or split_country):
+                next_is_date = pos + 1 < len(items) and _looks_like_date_header_line(items[pos + 1][1])
+                prev_is_artist_or_event = _looks_like_unlabeled_artist_header_line(items[pos - 1][1], support) or _looks_like_numbered_event_header_line(items[pos - 1][1])
+                if prev_is_artist_or_event or next_is_date:
+                    structured_artist = items[pos - 1][1] if _looks_like_unlabeled_artist_header_line(items[pos - 1][1], support) else ""
+                    return structured_artist, split_venue, split_city, split_region, split_country, split_raw or line, split_pattern, max(split_conf, 92)
             split_venue, split_city, split_region, split_country, split_raw, split_pattern, split_conf = _split_unlabeled_combined_venue_location_line(line, support)
             if split_venue and split_city and (split_region or split_country):
                 next_is_date = pos + 1 < len(items) and _looks_like_date_header_line(items[pos + 1][1])
@@ -1311,6 +1444,7 @@ def _best_venue_from_lines(lines: List[str], support: _SupportData) -> Tuple[str
         (idx, line, f" {_norm_key(line)} ")
         for idx, line in enumerate(lines[:80])
         if _is_usable_metadata_candidate_line(line)
+        and not _looks_like_comma_separated_performer_list(line, support)
     ]
     if not usable_lines:
         return best
@@ -1321,6 +1455,8 @@ def _best_venue_from_lines(lines: List[str], support: _SupportData) -> Tuple[str
         raw_line = venue
         for idx, line, line_norm in usable_lines:
             if f" {key} " in line_norm:
+                if not _short_one_word_venue_match_allowed(venue, line):
+                    continue
                 line_index = idx
                 raw_line = line
                 break
@@ -1351,6 +1487,8 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
         text, _encoding = _read_text_file(setlist_file)
     except Exception as exc:
         return SetlistVenueLocationResult(source="setlist_metadata:read_error", raw=str(exc))
+    if _encoding == "too-large":
+        return SetlistVenueLocationResult(source="setlist_metadata:file_too_large", raw=setlist_file)
 
     lines = _content_lines(text, 100)
     if not lines:
@@ -1422,6 +1560,16 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
         if not _is_usable_metadata_candidate_line(line):
             continue
         if not venue:
+            split_venue, split_city, split_region, split_country, split_raw, split_pattern, split_conf = _split_dash_location_venue_header_line(line, support)
+            if split_venue and split_city and (split_region or split_country):
+                venue = split_venue
+                raw_venue = split_venue
+                venue_confidence = max(venue_confidence, 92)
+                city, region, country = split_city, split_region, split_country
+                raw_location = split_raw or line
+                pattern_id = split_pattern or "LOCATION_DASH_LOCATION_VENUE"
+                location_confidence = max(location_confidence, split_conf)
+                break
             split_venue, split_city, split_region, split_country, split_raw, split_pattern, split_conf = _split_unlabeled_combined_venue_location_line(line, support)
             if split_venue and split_city and (split_region or split_country):
                 venue = split_venue

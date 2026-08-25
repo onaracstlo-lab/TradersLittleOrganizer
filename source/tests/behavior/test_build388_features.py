@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = pytest.mark.behavior
 import tlo_setlist_metadata_lookup as setmeta
 
 def test_build388_inline_setlist_artist_date_header_is_recognized():

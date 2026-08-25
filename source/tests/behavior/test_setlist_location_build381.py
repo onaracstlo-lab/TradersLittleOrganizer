@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = pytest.mark.behavior
 from pathlib import Path
 
 import tlo_setlist_metadata_lookup as M

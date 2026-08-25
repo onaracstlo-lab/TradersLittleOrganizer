@@ -1,7 +1,5 @@
-__version__ = "v394"
-# TLO-GI package version: v394
-__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
-# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
+__version__ = "v397"
+from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
 import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -327,8 +325,8 @@ def _run_parallel_paths(config, volume_groups, worker_count):
         if manager is not None:
             try:
                 manager.shutdown()
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 - best-effort boundary
+                debug_suppressed_exception(__name__, exc)
 
     all_metadata_records = []
     total_directories_identified = 0

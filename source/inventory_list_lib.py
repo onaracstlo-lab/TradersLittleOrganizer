@@ -1,7 +1,5 @@
-__version__ = "v394"
-# TLO-GI package version: v394
-__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
-# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
+__version__ = "v397"
+from tlo_diagnostics import debug_suppressed_exception
 import os
 import re
 import shutil
@@ -394,8 +392,8 @@ def _validate_copy_destination_capacity(config, accessible_items):
     if callable(callback):
         try:
             callback(message)
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
     raise ValueError(message)
 
 

@@ -1,10 +1,8 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v394"
-# TLO-GI package version: v394
-__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
-# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
+__version__ = "v397"
 
+from tlo_diagnostics import debug_suppressed_exception
 import json
 import os
 import re
@@ -34,6 +32,7 @@ from tlo_constants import (
     QUALIFIER_PATTERNS,
     US_STATE_CODES,
     US_STATE_ALIASES,
+    LOCATION_CONNECTIVE_WORDS,
 )
 from tlo_models import Candidate, ShowMetadata
 from tlo_text_utils import compact_ws, normalized_compare_value, standard_ascii_text
@@ -1997,6 +1996,12 @@ def _adjust_city_prefix(venue_tokens: List[str], city_tokens: List[str]) -> Tupl
 
 
 
+
+def _is_invalid_single_word_city(value: str) -> bool:
+    city = compact_ws(value or "").strip(" ,")
+    return bool(city and " " not in city and city.casefold() in LOCATION_CONNECTIVE_WORDS)
+
+
 def _split_left_for_city_and_venue(left_text: str, *, allow_city_only: bool = False) -> Tuple[str, str]:
     left = compact_ws(left_text).strip(" ,")
     if not left:
@@ -2021,6 +2026,11 @@ def _split_left_for_city_and_venue(left_text: str, *, allow_city_only: bool = Fa
     venue_tokens, city_tokens = _adjust_city_prefix(venue_tokens, city_tokens)
     venue = compact_ws(" ".join(token for token in venue_tokens if token)).strip(" ,")
     city = compact_ws(" ".join(token for token in city_tokens if token)).strip(" ,")
+    # Do not convert connective/preposition tails into a one-word city.  This
+    # protects title-like text such as ``Two Gentlemen In, NY`` from becoming
+    # venue=Two Gentlemen / city=In on a later re-inventory.
+    if _is_invalid_single_word_city(city):
+        return "", ""
     return venue, city
 
 
@@ -2099,6 +2109,11 @@ def _parse_string2(string2: str) -> Tuple[str, str, str, str, str]:
         allow_city_only = bool(anchor in US_STATE_CODES and _ends_with_full_state_name(value))
         venue, city = _split_left_for_city_and_venue(left, allow_city_only=allow_city_only)
         venue, city = _clean_numbered_path_location_noise(venue, city)
+        if left and not venue and not city:
+            # A non-empty left side that failed the city/venue split (for
+            # example ``Two Gentlemen In, NY`` where ``In`` would be the city)
+            # is not valid location evidence.
+            return "", "", "", "", ""
         if anchor in COUNTRY_ALIASES.values() and anchor not in US_STATE_CODES:
             return venue, city, "", "" if anchor == "USA" else anchor, ""
         return venue, city, anchor, "", ""
@@ -2870,8 +2885,8 @@ def _normalize_record_ascii_for_output(record: ShowMetadata) -> ShowMetadata:
             value = getattr(record, attr, "")
             if value:
                 setattr(record, attr, standard_ascii_text(value))
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
     return record
 
 
@@ -3513,6 +3528,46 @@ def _db_backed_artist_hits_for_path_part(
     return hits, _unique_preserve(collisions)
 
 
+def _one_word_setlist_filename_artist_has_strong_structure(remainder: str) -> bool:
+    """Return True when a one-word artist is followed by strong filename structure.
+
+    A date counts only when it is the first substantive component after the
+    artist; ordinary filename separators may sit between the artist and date.
+    This prevents title-like names such as ``Two Gentlemen 1979-10-05`` from
+    promoting the DB artist ``Two`` merely because a date appears later.
+    """
+    remainder = str(remainder or "")
+    for date_match in _find_date_matches(remainder, allow_slash=True):
+        if not remainder[: int(date_match.get("start", 0) or 0)].strip(" ._-"):
+            return True
+    # Delimited forms such as ``Prince - Purple Rain Tour`` remain explicit
+    # enough to support established setlist filename conventions.
+    return bool(re.match(r"^\s*[-_.]\s*\S", remainder))
+
+
+def _setlist_filename_artist_match_is_credible(stem: str, phrase: str) -> bool:
+    """Return whether a partial setlist-filename artist hit is credible.
+
+    Multi-word DB matches retain the historical behavior. A single-word artist
+    embedded in a longer filename is accepted only when the whole filename is
+    that artist or the leading artist component is followed by strong structure.
+    """
+    stem_clean = compact_ws(stem or "").strip()
+    phrase_clean = compact_ws(phrase or "").strip()
+    if not stem_clean or not phrase_clean:
+        return False
+    phrase_tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9'&.+-]*", phrase_clean)
+    if len(phrase_tokens) != 1:
+        return True
+    if _clean_piece(stem_clean).casefold() == _clean_piece(phrase_clean).casefold():
+        return True
+
+    leading = re.match(rf"^\s*{re.escape(phrase_clean)}(?=$|[\s._-])", stem_clean, re.I)
+    if not leading:
+        return False
+    return _one_word_setlist_filename_artist_has_strong_structure(stem_clean[leading.end():])
+
+
 def _resolve_artist_from_setlist_filename(
     record: ShowMetadata,
     matcher: Optional[ArtistMatcher],
@@ -3530,7 +3585,11 @@ def _resolve_artist_from_setlist_filename(
     stem = _clean_piece(_strip_multi_extension(os.path.basename(record.setlist_file)))
     if not stem:
         return ""
-    matches = match_line_to_artists(stem, matcher)
+    matches = [
+        (master, phrase)
+        for master, phrase in match_line_to_artists(stem, matcher)
+        if _setlist_filename_artist_match_is_credible(stem, phrase)
+    ]
     masters = _unique_preserve([master for master, _phrase in matches])
     if len(masters) != 1:
         if len(masters) > 1:
@@ -4404,6 +4463,74 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
     return record, date_matches, _unique_preserve(unresolved_reasons + record.conflicts)
 
 
+
+def _resolve_dash_album_or_performance_before_date_resolution(
+    record: ShowMetadata,
+    dash_album_match: Optional[Dict[str, str]],
+    evidence: Dict[str, List[Candidate]],
+    date_matches: List[Dict[str, str]],
+    observations: List[str],
+) -> Tuple[Optional[Dict[str, str]], bool]:
+    """Resolve one String1 - String2 row before the general date pipeline."""
+    if not dash_album_match:
+        return dash_album_match, False
+
+    dash_string2_date = _string_dash_string_tail_date(dash_album_match)
+    dash_string2_performance: Dict[str, str] = {}
+    if not _commercial_release_from_dash_row(dash_album_match):
+        dash_string2_performance = _analyze_dash_string2_before_album(dash_album_match.get("string2", ""))
+
+    if dash_string2_performance:
+        _apply_dash_string2_performance(
+            record, dash_string2_performance, evidence,
+            f"string_dash_performance:{dash_album_match.get('part_path', '')}"
+        )
+        if record.date:
+            date_matches.append({
+                "raw": dash_album_match.get("string2", record.date),
+                "normalized": record.date,
+                "part": dash_album_match.get("part", ""),
+                "part_path": dash_album_match.get("part_path", ""),
+                "source": "string_dash_performance",
+            })
+        observations.append(
+            "non-compliant String1 - String2 contained performance date/location evidence; "
+            "structured metadata used before album fallback"
+        )
+        return None, False
+
+    if dash_string2_date:
+        record.date = dash_string2_date
+        date_matches.append({
+            "raw": dash_album_match.get("string2", dash_string2_date),
+            "normalized": dash_string2_date,
+            "part": dash_album_match.get("part", ""),
+            "part_path": dash_album_match.get("part_path", ""),
+            "source": "string_dash_string_date_tail",
+        })
+        evidence.setdefault("date", []).append(Candidate(
+            dash_string2_date,
+            f"string_dash_string_date_tail:{dash_album_match.get('part_path', '')}",
+            68,
+        ))
+        observations.append(
+            "non-compliant String1 - String2 matched with date-like String2; String2 treated as date, not album name"
+        )
+        return None, False
+
+    _apply_string_dash_album_to_record(
+        record, dash_album_match, evidence, f"string_dash_album:{dash_album_match.get('part_path', '')}"
+    )
+    if dash_album_match.get("commercial_release_year"):
+        observations.append(
+            "commercial-release year prefix recognized and omitted from show name: "
+            f"{dash_album_match.get('commercial_release_year')}"
+        )
+    if dash_album_match.get("redundant_artist_prefix_removed"):
+        observations.append("redundant artist prefix removed from String2 album name")
+    observations.append("non-compliant String1 - String2 matched: String2 treated as album name; no date assigned")
+    return dash_album_match, True
+
 def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[ArtistMatcher]) -> Tuple[ShowMetadata, List[Dict[str, str]], List[str]]:
     if getattr(config, "compliant", False):
         return _extract_metadata_for_group_compliant(config, group, artist_matcher)
@@ -4538,48 +4665,9 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             evidence.setdefault("album", []).append(Candidate(aggregate_album_name, "wrapper_part_aggregation", 72))
             observations.append("non-compliant wrapper-part aggregation matched: stripped folder base treated as album name; no date assigned")
 
-    dash_string2_date = _string_dash_string_tail_date(dash_album_match)
-    dash_string2_performance = {}
-    if dash_album_match and not _commercial_release_from_dash_row(dash_album_match):
-        dash_string2_performance = _analyze_dash_string2_before_album(dash_album_match.get("string2", ""))
-    if dash_album_match and dash_string2_performance:
-        _apply_dash_string2_performance(
-            record, dash_string2_performance, evidence,
-            f"string_dash_performance:{dash_album_match.get('part_path', '')}"
-        )
-        if record.date:
-            date_matches.append({
-                "raw": dash_album_match.get("string2", record.date),
-                "normalized": record.date,
-                "part": dash_album_match.get("part", ""),
-                "part_path": dash_album_match.get("part_path", ""),
-                "source": "string_dash_performance",
-            })
-        observations.append("non-compliant String1 - String2 contained performance date/location evidence; structured metadata used before album fallback")
-        dash_album_match = None
-    elif dash_album_match and dash_string2_date:
-        record.date = dash_string2_date
-        date_matches.append({
-            "raw": dash_album_match.get("string2", dash_string2_date),
-            "normalized": dash_string2_date,
-            "part": dash_album_match.get("part", ""),
-            "part_path": dash_album_match.get("part_path", ""),
-            "source": "string_dash_string_date_tail",
-        })
-        evidence.setdefault("date", []).append(Candidate(dash_string2_date, f"string_dash_string_date_tail:{dash_album_match.get('part_path', '')}", 68))
-        observations.append("non-compliant String1 - String2 matched with date-like String2; String2 treated as date, not album name")
-        dash_album_match = None
-    elif dash_album_match:
-        dash_album_mode = True
-        _apply_string_dash_album_to_record(record, dash_album_match, evidence, f"string_dash_album:{dash_album_match.get('part_path', '')}")
-        if dash_album_match.get("commercial_release_year"):
-            observations.append(
-                "commercial-release year prefix recognized and omitted from show name: "
-                f"{dash_album_match.get('commercial_release_year')}"
-            )
-        if dash_album_match.get("redundant_artist_prefix_removed"):
-            observations.append("redundant artist prefix removed from String2 album name")
-        observations.append("non-compliant String1 - String2 matched: String2 treated as album name; no date assigned")
+    dash_album_match, dash_album_mode = _resolve_dash_album_or_performance_before_date_resolution(
+        record, dash_album_match, evidence, date_matches, observations
+    )
 
     tag_date_matches = _collect_tag_date_candidates(record)
     date_candidates: List[Dict[str, str]] = []

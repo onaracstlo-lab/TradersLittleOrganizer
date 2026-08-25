@@ -1,8 +1,12 @@
 """Build 375 Research application and GUI contracts."""
 
-__version__ = "v394"
+__version__ = "v397"
 
 from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.contract
 from docx import Document
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -40,8 +44,8 @@ def test_research_is_built_on_all_platforms():
 
 
 def test_research_documentation_is_present():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v394.docx")
-    manual = (ROOT / "TLO_Inventory_User_Manual_v394.rtf").read_text(encoding="utf-8", errors="ignore")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v397.docx")
+    manual = (ROOT / "TLO_Inventory_User_Manual_v397.rtf").read_text(encoding="utf-8", errors="ignore")
     for text in (requirements, manual):
         assert "tlo-research" in text
         assert "artist followed by a date" in text.lower()

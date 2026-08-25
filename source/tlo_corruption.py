@@ -1,10 +1,7 @@
 """Pre-mutation audio corruption threshold handling for TLO."""
 from __future__ import annotations
 
-__version__ = "v394"
-# TLO-GI package version: v394
-__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
-# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
+__version__ = "v397"
 import ctypes, os, subprocess, sys
 from pathlib import Path
 from mutagen import File as MutagenFile
@@ -55,7 +52,14 @@ def move_to_trash(path):
     if sys.platform.startswith("win"):
         return _trash_windows(path)
     if sys.platform=="darwin":
-        escaped=path.replace("\\","\\\\").replace('"','\\"')
-        subprocess.run(["osascript","-e",f'tell application "Finder" to delete POSIX file "{escaped}"'],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,text=True)
+        script = (
+            'on run argv\n'
+            'tell application "Finder" to delete POSIX file (item 1 of argv)\n'
+            'end run'
+        )
+        subprocess.run(
+            ["osascript", "-e", script, path],
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+        )
         return
     subprocess.run(["gio","trash",path],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,text=True)

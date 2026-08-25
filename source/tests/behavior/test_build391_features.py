@@ -1,4 +1,6 @@
 import pytest
+
+pytestmark = pytest.mark.behavior
 import tlo_corruption as corruption
 import tlo_options
 

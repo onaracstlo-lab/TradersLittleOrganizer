@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = pytest.mark.behavior
 from types import SimpleNamespace
 import tlo_phase23_v2 as phase
 

@@ -1,10 +1,8 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v394"
-# TLO-GI package version: v394
-__version_summary__ = 'Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.'
-# TLO-GI version summary: Harden Linux CI regression tests so synthetic FLAC fixtures explicitly opt out of corruption removal; runtime behavior is unchanged.
+__version__ = "v397"
 
+from tlo_diagnostics import debug_suppressed_exception
 import os
 import re
 import shutil
@@ -151,8 +149,8 @@ def _delete_mapping_key_case_insensitive(mapping, key_name: str) -> None:
             except Exception:
                 try:
                     mapping.pop(existing, None)
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001 - best-effort boundary
+                    debug_suppressed_exception(__name__, exc)
 
 
 def _clear_total_disc_easy_tags(audio) -> None:
@@ -172,8 +170,8 @@ def _clear_total_disc_id3_tags(tags) -> None:
     """Remove ID3 disc/total fields corresponding to requested cleared tags."""
     try:
         tags.delall("TPOS")  # DISCNUMBER / disc position
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 - best-effort boundary
+        debug_suppressed_exception(__name__, exc)
     for frame_key in list(getattr(tags, "keys", lambda: [])()):
         frame = tags.get(frame_key)
         desc = str(getattr(frame, "desc", "") or "").upper()
@@ -184,8 +182,8 @@ def _clear_total_disc_id3_tags(tags) -> None:
             except Exception:
                 try:
                     del tags[frame_key]
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001 - best-effort boundary
+                    debug_suppressed_exception(__name__, exc)
 
 
 def _clear_total_disc_mp4_tags(audio) -> None:
@@ -195,8 +193,8 @@ def _clear_total_disc_mp4_tags(audio) -> None:
         try:
             if key in audio:
                 del audio[key]
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
 
 SHN_AUDIO_EXTENSIONS = {".shn", ".shnf"}
 AUDIO_EXTENSIONS_FOR_COUNTING = TAGGABLE_AUDIO_EXTENSIONS | SHN_AUDIO_EXTENSIONS
@@ -1028,8 +1026,8 @@ def read_existing_audio_title_tag(path_name: str) -> str:
                 title = ""
             if compact_ws(title):
                 return compact_ws(title)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 - best-effort boundary
+        debug_suppressed_exception(__name__, exc)
 
     try:
         audio = MutagenFile(path_name)
@@ -2156,8 +2154,8 @@ def ensure_corrupt_flacs_log(config: Config) -> None:
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
         with open(log_path, "a", encoding="utf-8"):
             pass
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 - best-effort boundary
+        debug_suppressed_exception(__name__, exc)
 
 
 def record_corrupt_flac(config: Config, path_name: str) -> None:
@@ -2176,8 +2174,8 @@ def record_corrupt_flac(config: Config, path_name: str) -> None:
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
         with open(log_path, "a", encoding="utf-8", newline="") as outfile:
             outfile.write(os.path.normpath(str(path_name)) + "\n")
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 - best-effort boundary
+        debug_suppressed_exception(__name__, exc)
 
 
 def _skip_reason_code(reason: str) -> str:
@@ -2742,8 +2740,8 @@ def convert_shn_to_flac(path_name: str, emit: Optional[Callable[[str], None]] = 
         try:
             if os.path.exists(temp_target):
                 os.remove(temp_target)
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
         raise
 
 
@@ -3981,15 +3979,15 @@ def emit_tag_problem_summary(config: Config, emit: Optional[Callable[[str], None
         return
     try:
         setattr(getattr(config, "logs", None), "_emitting_tag_reason_summary", True)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 - best-effort boundary
+        debug_suppressed_exception(__name__, exc)
     _emit(emit, "WARN_SUMMARY: tagging problem summary by reason code")
     for code in sorted(counts):
         _emit(emit, f"WARN_SUMMARY: {code}: {counts[code]}")
     try:
         setattr(getattr(config, "logs", None), "_emitting_tag_reason_summary", False)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 - best-effort boundary
+        debug_suppressed_exception(__name__, exc)
 
 def _append_tag_log_line(config: Config, log_line: str) -> None:
     """Append one line directly to the active success/error tag log.
@@ -4014,9 +4012,9 @@ def _append_tag_log_line(config: Config, log_line: str) -> None:
                 recorder(log_line)
         with open(log_path, "a", encoding="utf-8", newline="") as outfile:
             outfile.write(str(log_line or "") + "\n")
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - best-effort boundary
         # Tag logging must never stop a tagging run or GUI update.
-        pass
+        debug_suppressed_exception(__name__, exc)
 
 
 def _build_tag_log_emit(config: Config, emit: Optional[Callable[[str], None]]) -> Callable[[str], None]:
