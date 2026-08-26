@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
 
-__version__ = "v397"
+__version__ = "v406"
 
 REPORT_VERSION = 1
 PLATFORMS = ("windows", "macos", "linux", "final")
@@ -161,9 +161,22 @@ def builtin_scanner_command(
 
 
 def quote_for_shell(value: str) -> str:
-    if os.name == "nt":
-        return subprocess.list2cmdline([value])
+    """Quote a value for a POSIX shell command string.
+
+    Windows custom scanner paths are not interpolated into cmd.exe text; they
+    are supplied through an environment variable by _custom_scanner_command.
+    """
     return shlex.quote(value)
+
+
+def _custom_scanner_command(template: str, artifact_dir: Path, *, windows: bool | None = None):
+    """Return (command, env) without injecting a Windows path into cmd text."""
+    use_windows = os.name == "nt" if windows is None else bool(windows)
+    if use_windows:
+        env = os.environ.copy()
+        env["TLO_SCAN_ARTIFACT_PATH"] = str(artifact_dir)
+        return template.replace("{path}", '"%TLO_SCAN_ARTIFACT_PATH%"'), env
+    return template.replace("{path}", quote_for_shell(str(artifact_dir))), None
 
 
 def run_scanner(
@@ -172,6 +185,7 @@ def run_scanner(
     *,
     shell: bool,
     timeout_seconds: int,
+    env: dict[str, str] | None = None,
 ) -> dict[str, object]:
     started = dt.datetime.now(dt.timezone.utc)
     started_monotonic = time.monotonic()
@@ -185,6 +199,7 @@ def run_scanner(
             stderr=subprocess.STDOUT,
             timeout=timeout_seconds,
             check=False,
+            env=env,
         )
     except subprocess.TimeoutExpired as exc:
         captured = exc.stdout or ""
@@ -287,17 +302,17 @@ def scan(
             )
         )
 
-    quoted_path = quote_for_shell(str(artifact_dir))
     for index, template in enumerate(custom_scanners, start=1):
         if not template.strip():
             raise ValueError(f"Custom scanner {index} is empty.")
-        command = template.replace("{path}", quoted_path)
+        command, scanner_env = _custom_scanner_command(template, artifact_dir)
         scanner_records.append(
             run_scanner(
                 f"Custom scanner {index}",
                 command,
                 shell=True,
                 timeout_seconds=timeout_seconds,
+                env=scanner_env,
             )
         )
 

@@ -8,23 +8,25 @@ and name without changing audio tags.
 
 from __future__ import annotations
 
-__version__ = "v397"
+__version__ = "v406"
 
 from dataclasses import dataclass
 from datetime import datetime
-import glob
 import os
 import re
 import shutil
 import string
 import sys
 import unicodedata
+import uuid
 from typing import Callable, Iterable, List, Optional, Sequence
 
 from logging_lib import ensure_logs_dir
+from tlo_file_listing import scandir_matching_files
 from tlo_bootlist_volume_policy import normalize_volume_label, parse_volume_path_value
 from tlo_path_inputs import normalize_platform_input_path, resolve_tlo_home, strip_optional_quotes
 from tlo_volume_label import resolve_volume_label
+from tlo_tree_compare import directory_trees_exactly_match
 
 
 _REVERSE_RECORD_RE = re.compile(
@@ -302,7 +304,7 @@ def _candidate_tag_logs(tlo_home: str) -> List[str]:
     patterns = ("tags*.txt", "tag*.log")
     found: List[str] = []
     for pattern in patterns:
-        found.extend(glob.glob(os.path.join(logs_dir, pattern)))
+        found.extend(scandir_matching_files(logs_dir, pattern))
     return sorted(set(os.path.normpath(path) for path in found if os.path.isfile(path)))
 
 
@@ -756,10 +758,19 @@ def _directory_path_set(root: str) -> set[str]:
 
 
 def _verify_copy(source_root: str, destination_root: str) -> None:
-    if _file_size_map(source_root) != _file_size_map(destination_root):
-        raise ReverseCopyDeleteError("reverse copy verification failed: relative file paths or sizes differ")
-    if _directory_path_set(source_root) != _directory_path_set(destination_root):
-        raise ReverseCopyDeleteError("reverse copy verification failed: descendant directory structure differs")
+    """Require complete structure, size, and SHA-256 identity before delete."""
+    if not directory_trees_exactly_match(source_root, destination_root):
+        raise ReverseCopyDeleteError("reverse copy verification failed: SHA-256 directory trees differ or could not be verified")
+
+
+def _owned_restore_temp_path(original: str) -> str:
+    parent = os.path.dirname(original)
+    leaf = os.path.basename(original) or "TLO"
+    for _ in range(20):
+        candidate = os.path.join(parent, f".{leaf}.tlo-restore-{uuid.uuid4().hex}")
+        if not os.path.lexists(candidate):
+            return candidate
+    raise ReverseCopyDeleteError("could not allocate a unique temporary restore path")
 
 
 def _same_filesystem(existing_path: str, destination_parent: str) -> bool:
@@ -851,22 +862,36 @@ def reverse_copy_delete_and_rename(
 
         original_parent = os.path.dirname(original)
         try:
-            os.makedirs(original_parent, exist_ok=True)
             allowed_root = original_root
+            # Validate containment before creating any directory derived from a
+            # historical log record.
             if not _same_or_under(original, allowed_root):
                 raise ReverseCopyDeleteError("logged original path escaped the selected original partition/path")
+            os.makedirs(original_parent, exist_ok=True)
+
+            # Re-check immediately before mutation. A path that appeared after
+            # initial selection is a conflict and must never be overwritten.
+            if os.path.lexists(original):
+                raise ReverseCopyDeleteError("original path appeared during restore; leaving both locations untouched")
 
             if _same_filesystem(current, original_parent):
                 os.rename(current, original)
                 result.restored += 1
                 report(f"RESTORED_MOVE: {current} -> {original}")
             else:
+                temp_restore = _owned_restore_temp_path(original)
                 try:
-                    shutil.copytree(current, original, symlinks=False)
-                    _verify_copy(current, original)
+                    shutil.copytree(current, temp_restore, symlinks=False)
+                    _verify_copy(current, temp_restore)
+                    if os.path.lexists(original):
+                        raise ReverseCopyDeleteError("original path appeared during restore; verified temporary copy retained only until rollback")
+                    os.rename(temp_restore, original)
+                    temp_restore = ""
                 except Exception:
-                    if os.path.isdir(original):
-                        shutil.rmtree(original, ignore_errors=True)
+                    # Roll back only the temporary directory created by this
+                    # operation. Never remove ``original`` in an exception path.
+                    if temp_restore and os.path.isdir(temp_restore):
+                        shutil.rmtree(temp_restore, ignore_errors=True)
                     raise
                 shutil.rmtree(current)
                 result.restored += 1

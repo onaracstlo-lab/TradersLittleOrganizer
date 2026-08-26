@@ -1,6 +1,6 @@
 """Source, documentation, packaging, and release contract tests retained from the legacy suite."""
 
-__version__ = "v397"
+__version__ = "v406"
 
 import pytest
 from tests import _legacy_suite as legacy

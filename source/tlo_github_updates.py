@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from tlo_diagnostics import debug_suppressed_exception
 
-__version__ = "v397"
+__version__ = "v406"
 
 import datetime as _dt
 import hashlib
@@ -198,6 +198,23 @@ def _download_host_allowed(url: str) -> bool:
     return host in ALLOWED_DOWNLOAD_HOSTS or any(host.endswith(suffix) for suffix in ALLOWED_DOWNLOAD_HOST_SUFFIXES)
 
 
+class _GitHubOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject any download redirect that leaves the GitHub host allowlist."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        resolved = urllib.parse.urljoin(req.full_url, str(newurl or ""))
+        if not _download_host_allowed(resolved):
+            raise urllib.error.HTTPError(
+                resolved, code, "Refusing update redirect outside the GitHub download allowlist", headers, fp
+            )
+        return super().redirect_request(req, fp, code, msg, headers, resolved)
+
+
+def _open_download_url(request: urllib.request.Request, *, timeout: int):
+    opener = urllib.request.build_opener(_GitHubOnlyRedirectHandler())
+    return opener.open(request, timeout=timeout)
+
+
 def _matching_assets(release: dict[str, Any]) -> list[dict[str, Any]]:
     assets = release.get("assets")
     return [asset for asset in assets if isinstance(asset, dict)] if isinstance(assets, list) else []
@@ -279,7 +296,9 @@ def _file_matches_asset(path: Path, asset: dict[str, Any]) -> bool:
     except Exception:
         return False
     digest = _expected_digest(asset)
-    return not digest or _sha256_file(path).lower() == digest
+    if not digest:
+        return False
+    return _sha256_file(path).lower() == digest
 
 
 def _declared_asset_size(asset: dict[str, Any]) -> int:
@@ -296,15 +315,17 @@ def _download_asset(asset: dict[str, Any], destination: Path) -> bool:
         raise ValueError("The selected release asset does not include a download URL.")
     if not _download_host_allowed(url):
         raise ValueError("The selected release asset download URL is not hosted by GitHub.")
-    if destination.exists() and _file_matches_asset(destination, asset):
-        return False
-
     declared_size = _declared_asset_size(asset)
     if declared_size > MAX_UPDATE_ASSET_BYTES:
         raise ValueError(
             f"Refusing implausibly large TLO update asset ({declared_size} bytes; "
             f"maximum {MAX_UPDATE_ASSET_BYTES} bytes)."
         )
+    digest = _expected_digest(asset)
+    if not digest:
+        raise ValueError("The selected release asset does not provide a valid SHA-256 digest; refusing an unverifiable update download.")
+    if destination.exists() and _file_matches_asset(destination, asset):
+        return False
 
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -313,7 +334,7 @@ def _download_asset(asset: dict[str, Any], destination: Path) -> bool:
     temp_path = Path(temp_name)
     try:
         downloaded_bytes = 0
-        with urllib.request.urlopen(request, timeout=60) as response, temp_path.open("wb") as handle:
+        with _open_download_url(request, timeout=60) as response, temp_path.open("wb") as handle:
             response_length = 0
             try:
                 response_length = int(response.headers.get("Content-Length") or 0)
@@ -333,8 +354,7 @@ def _download_asset(asset: dict[str, Any], destination: Path) -> bool:
                 handle.write(chunk)
         if declared_size and downloaded_bytes != declared_size:
             raise IOError(f"Downloaded size mismatch for {destination.name}.")
-        digest = _expected_digest(asset)
-        if digest and _sha256_file(temp_path).lower() != digest:
+        if _sha256_file(temp_path).lower() != digest:
             raise IOError(f"Downloaded SHA-256 digest mismatch for {destination.name}.")
         temp_path.replace(destination)
         return True

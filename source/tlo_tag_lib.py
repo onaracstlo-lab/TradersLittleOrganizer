@@ -1,6 +1,6 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v397"
+__version__ = "v406"
 
 from tlo_diagnostics import debug_suppressed_exception
 import os
@@ -12,6 +12,7 @@ import unicodedata
 import sys
 import traceback
 import html
+import uuid
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from mutagen import File as MutagenFile
@@ -36,6 +37,7 @@ from tlo_artist_db import load_artist_matcher
 from tlo_audio_tags import collect_group_flac_tag_info
 from tlo_db_validation import validate_required_databases
 from tlo_media_rules import VIDEO_EXTENSIONS
+from tlo_tree_compare import directory_trees_exactly_match
 from tlo_phase23_v2 import (
     _build_groups_from_search_path,
     _extract_metadata_for_group,
@@ -2469,15 +2471,17 @@ def _paths_on_same_filesystem(path_a: str, path_b: str) -> bool:
 
 
 def _file_size_map(root: str) -> Dict[str, int]:
+    """Return relative file sizes or fail verification on any unreadable stat."""
     result: Dict[str, int] = {}
     for current_dir, _dir_names, file_names in os.walk(root):
         for file_name in file_names:
             full_path = os.path.join(current_dir, file_name)
+            relative = os.path.relpath(full_path, root)
+            key = os.path.normcase(os.path.normpath(relative))
             try:
-                relative = os.path.relpath(full_path, root)
-                result[os.path.normcase(os.path.normpath(relative))] = os.path.getsize(full_path)
-            except OSError:
-                result[os.path.normcase(os.path.normpath(os.path.relpath(full_path, root)))] = -1
+                result[key] = os.path.getsize(full_path)
+            except OSError as exc:
+                raise TaggerError(f"Copy verification could not stat {full_path}: {exc}") from exc
     return result
 
 
@@ -2495,6 +2499,28 @@ def _directory_path_set(root: str) -> set[str]:
 def _copy_entire_directory_tree(source_root: str, destination_root: str) -> None:
     """Copy the complete source folder recursively, not just inventoried media."""
     shutil.copytree(source_root, destination_root, symlinks=False)
+
+
+def _owned_partial_copy_path(destination_root: str) -> str:
+    """Return a non-existent sibling path reserved by name for this operation."""
+    parent = os.path.dirname(destination_root)
+    leaf = os.path.basename(destination_root) or "TLO"
+    for _ in range(20):
+        candidate = os.path.join(parent, f".{leaf}.tlo-partial-{uuid.uuid4().hex}")
+        if not os.path.lexists(candidate):
+            return candidate
+    raise TaggerError("Could not allocate a unique temporary copy path")
+
+
+def _cleanup_owned_partial(path_name: str) -> None:
+    if path_name and os.path.isdir(path_name):
+        shutil.rmtree(path_name, ignore_errors=True)
+
+
+def _verify_copy_exact(source_root: str, destination_root: str) -> None:
+    """Require complete structure, size, and SHA-256 identity before deletion."""
+    if not directory_trees_exactly_match(source_root, destination_root):
+        raise TaggerError("Copy verification failed: SHA-256 tree comparison did not match")
 
 
 def _verify_copy_by_file_size(source_root: str, destination_root: str) -> None:
@@ -2568,12 +2594,30 @@ def prepare_inventory_copy_delete_target(
         except Exception as exc:
             raise TaggerError(f"Tag Copy and Delete move failed: {exc}") from exc
     else:
+        partial_root = _owned_partial_copy_path(destination_root)
+        destination_owned = False
+        source_delete_started = False
         try:
-            _copy_entire_directory_tree(source_root, destination_root)
+            _copy_entire_directory_tree(source_root, partial_root)
+            if os.path.lexists(destination_root):
+                raise TaggerError(f"Copy/Delete destination appeared during transfer: {destination_root}")
+            os.rename(partial_root, destination_root)
+            partial_root = ""
+            destination_owned = True
+            # Preserve the existing relative-path/size verification and add a
+            # full SHA-256 tree comparison before source deletion.
             _verify_copy_by_file_size(source_root, destination_root)
+            _verify_copy_exact(source_root, destination_root)
+            source_delete_started = True
             shutil.rmtree(source_root)
             _emit(emit, f"TAG_COPY_DELETE_COPY: {source_root} -> {destination_root}")
         except Exception as exc:
+            _cleanup_owned_partial(partial_root)
+            # Before source deletion starts the final destination is known to be
+            # ours and can be rolled back safely. Once deletion starts, retain
+            # the verified destination even if source cleanup later errors.
+            if destination_owned and not source_delete_started and os.path.isdir(destination_root):
+                shutil.rmtree(destination_root, ignore_errors=True)
             if isinstance(exc, TaggerError):
                 raise
             raise TaggerError(f"Tag Copy and Delete copy/delete failed: {exc}") from exc
@@ -2605,14 +2649,23 @@ def prepare_inventory_tagging_target(
         if not destination_parent or not os.path.isdir(destination_parent):
             raise TaggerError(f"Tag Copy destination is not a valid directory: {destination_parent}")
         destination_root = _unique_destination_path(destination_parent, target_name, source_root)
+        partial_root = _owned_partial_copy_path(destination_root)
+        destination_owned = False
         try:
-            _copy_entire_directory_tree(source_root, destination_root)
-            # Tag Copy always retains the source, even on the same partition, so
-            # it always creates a real copy and must verify every copied file by
-            # relative path and size before tagging continues.
+            _copy_entire_directory_tree(source_root, partial_root)
+            if os.path.lexists(destination_root):
+                raise TaggerError(f"Tag Copy destination appeared during transfer: {destination_root}")
+            os.rename(partial_root, destination_root)
+            partial_root = ""
+            destination_owned = True
+            # Tag Copy retains the source, so size/structure verification remains
+            # sufficient by policy; byte hashing is reserved for delete-gating.
             _verify_copy_by_file_size(source_root, destination_root)
             _emit(emit, f"TAG_COPY: {source_root} -> {destination_root}")
         except Exception as exc:
+            _cleanup_owned_partial(partial_root)
+            if destination_owned and os.path.isdir(destination_root):
+                shutil.rmtree(destination_root, ignore_errors=True)
             if isinstance(exc, TaggerError):
                 raise
             raise TaggerError(f"Tag Copy failed: {exc}") from exc

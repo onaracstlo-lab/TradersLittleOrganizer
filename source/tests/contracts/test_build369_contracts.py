@@ -1,6 +1,6 @@
 """Build 375 Research application and GUI contracts."""
 
-__version__ = "v397"
+__version__ = "v406"
 
 from pathlib import Path
 
@@ -44,8 +44,8 @@ def test_research_is_built_on_all_platforms():
 
 
 def test_research_documentation_is_present():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v397.docx")
-    manual = (ROOT / "TLO_Inventory_User_Manual_v397.rtf").read_text(encoding="utf-8", errors="ignore")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v406.docx")
+    manual = (ROOT / "TLO_Inventory_User_Manual_v406.rtf").read_text(encoding="utf-8", errors="ignore")
     for text in (requirements, manual):
         assert "tlo-research" in text
         assert "artist followed by a date" in text.lower()

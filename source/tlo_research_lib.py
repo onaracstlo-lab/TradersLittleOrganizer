@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-__version__ = "v397"
+__version__ = "v406"
 
 from dataclasses import dataclass
-import glob
 import json
 import os
 import re
 from typing import Iterable
+
+from tlo_file_listing import scandir_matching_files
 
 
 # Research deliberately reuses TLO's canonical inventory date parser instead
@@ -154,8 +155,8 @@ def load_raw_query_hits(log_dir: str, query: ResearchQuery) -> list[RawLogHit]:
     can trace an unexpected value back to the exact historical log occurrence.
     """
     hits: list[RawLogHit] = []
-    paths = list(glob.glob(os.path.join(log_dir, "meta*.log")))
-    paths.extend(glob.glob(os.path.join(log_dir, "comp*.log")))
+    paths = scandir_matching_files(log_dir, "meta*.log")
+    paths.extend(scandir_matching_files(log_dir, "comp*.log"))
     for log_path in sorted(set(paths), key=lambda p: p.casefold()):
         try:
             with open(log_path, "r", encoding="utf-8", errors="replace") as handle:
@@ -221,7 +222,7 @@ def _parse_meta_block(log_path: str, lines: list[str]) -> MetaRecord | None:
 def load_meta_records(log_dir: str) -> list[MetaRecord]:
     """Read SHOW_NAME..END_SHOW_METADATA records from every meta*.log."""
     records: list[MetaRecord] = []
-    for log_path in sorted(glob.glob(os.path.join(log_dir, "meta*.log")), key=lambda p: p.casefold()):
+    for log_path in scandir_matching_files(log_dir, "meta*.log"):
         try:
             with open(log_path, "r", encoding="utf-8", errors="replace") as handle:
                 block: list[str] = []
@@ -261,7 +262,7 @@ def load_meta_records(log_dir: str) -> list[MetaRecord]:
 def load_comp_entries(log_dir: str) -> list[CompEntry]:
     """Load non-comment path entries from every comp*.log."""
     entries: list[CompEntry] = []
-    for log_path in sorted(glob.glob(os.path.join(log_dir, "comp*.log")), key=lambda p: p.casefold()):
+    for log_path in scandir_matching_files(log_dir, "comp*.log"):
         try:
             with open(log_path, "r", encoding="utf-8", errors="replace") as handle:
                 for raw_line in handle:

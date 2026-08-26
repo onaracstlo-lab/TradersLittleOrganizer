@@ -1,8 +1,7 @@
 """Postprocess metadata logs into setlist files, bootlist.csv, duplicate/group outputs, and summary/unidentified-show files."""
 
-__version__ = "v397"
+__version__ = "v406"
 import csv
-import glob
 import json
 import os
 import re
@@ -15,6 +14,7 @@ from typing import Dict, List, Sequence
 
 from console_output_lib import console_print
 from logging_lib import logs_dir_for_home
+from tlo_file_listing import is_setlist_family_name, scandir_matching_files
 from tlo_text_utils import compact_ws, read_text_file_full, setlist_text_requests_generated_from_music_files, standard_ascii_text
 from tlo_runtime_control import throttle_point, is_cancel_requested, normalize_performance_mode
 from tlo_bootlist_volume_policy import (
@@ -96,8 +96,7 @@ def _show_metadata_log_paths(tlo_home: str, tokens: Sequence[str] | None = None)
     if clean_tokens:
         paths = [os.path.join(logs_dir, f"meta{token}.log") for token in clean_tokens]
         return [path for path in paths if os.path.isfile(path)]
-    pattern = os.path.join(logs_dir, "meta*.log")
-    return sorted(path for path in glob.glob(pattern) if os.path.isfile(path))
+    return scandir_matching_files(logs_dir, "meta*.log")
 
 
 def _metadata_record_to_postprocess_dict(record) -> Dict[str, str]:
@@ -660,7 +659,7 @@ def _prepare_setlists_dir(tlo_home: str, clear_existing: bool = True) -> str:
     setlists_dir = os.path.join(tlo_home, "setlists")
     os.makedirs(setlists_dir, exist_ok=True)
     if clear_existing:
-        for old_txt in glob.glob(os.path.join(setlists_dir, "*.txt")):
+        for old_txt in scandir_matching_files(setlists_dir, "*.txt"):
             try:
                 os.remove(old_txt)
             except OSError:
@@ -1198,8 +1197,7 @@ def _write_unidentified_shows(tlo_home: str, paths: List[str]) -> str:
 
 def _conflict_log_paths(tlo_home: str) -> List[str]:
     logs_dir = logs_dir_for_home(tlo_home)
-    pattern = os.path.join(logs_dir, "conf*.log")
-    return sorted(path for path in glob.glob(pattern) if os.path.isfile(path))
+    return scandir_matching_files(logs_dir, "conf*.log")
 
 
 def _write_conflict_summary_log(tlo_home: str, records: List[Dict[str, str]] | None = None) -> str:
@@ -1272,29 +1270,34 @@ def _remove_replaced_setlists(tlo_home: str, replaced_rows: Sequence[Dict[str, s
     if not os.path.isdir(setlists_dir) or not replaced_rows:
         return
     kept_shows = {(row.get("Show") or "").strip().casefold() for row in kept_rows}
+    kept_bases = [
+        _normalized_setlist_base((row.get("Show") or "").strip(), fallback="Show")
+        for row in kept_rows
+        if (row.get("Show") or "").strip()
+    ]
     names = _existing_setlist_names(setlists_dir)
-    by_fold = {name.casefold(): name for name in names}
-    sorted_names = sorted(names, key=lambda value: value.casefold())
     to_remove = set()
     for row in replaced_rows:
         show = (row.get("Show") or "").strip()
         if not show or show.casefold() in kept_shows:
             continue
         base = _normalized_setlist_base(show, fallback="Show")
-        exact = f"{base}{SETLIST_EXTENSION}"
-        exact_name = by_fold.get(exact.casefold())
-        if exact_name:
-            to_remove.add(exact_name)
-        base_fold = base.casefold()
-        for name in sorted_names:
-            folded = name.casefold()
-            if folded.startswith(base_fold) and folded.endswith(SETLIST_EXTENSION):
-                to_remove.add(name)
-    for name in to_remove:
+        for name in names:
+            if not is_setlist_family_name(name, base, SETLIST_EXTENSION):
+                continue
+            # A filename belonging to any retained show always wins over a
+            # removal candidate.  This is mostly redundant once prefix matching
+            # is gone, but protects unusual sanitized-name collisions.
+            if any(is_setlist_family_name(name, kept_base, SETLIST_EXTENSION) for kept_base in kept_bases):
+                continue
+            to_remove.add(name)
+    for name in sorted(to_remove, key=str.casefold):
+        path = os.path.join(setlists_dir, name)
         try:
-            os.remove(os.path.join(setlists_dir, name))
-        except OSError:
-            pass
+            os.remove(path)
+        except OSError as exc:
+            # Setlist cleanup failure is observable instead of silently ignored.
+            print(f"WARNING: Could not remove replaced setlist {path}: {exc}")
 
 
 def _is_reinventory_action(action) -> bool:

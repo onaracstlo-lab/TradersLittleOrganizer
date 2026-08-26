@@ -1,4 +1,4 @@
-__version__ = "v397"
+__version__ = "v406"
 import logging
 import os
 import re
@@ -153,12 +153,25 @@ def allocate_log_tokens(tlo_home, count):
 
 
 def delete_logs_for_tokens(tlo_home, tokens):
-    deleted = []
-    logs_dir = logs_dir_for_home(tlo_home)
+    """Delete token-scoped logs after validating every token.
+
+    Log tokens become path components, so reject malformed input before performing
+    any deletion.  Current tokens are alphanumeric; accepting path separators or
+    punctuation here would turn this cleanup helper into an unsafe deletion
+    primitive if a future caller passed untrusted state.
+    """
+    token_texts = []
     for token in tokens or []:
         token_text = str(token or "").strip()
         if not token_text:
             continue
+        if re.fullmatch(r"[A-Za-z0-9]+", token_text) is None:
+            raise ValueError(f"Invalid log token for deletion: {token_text!r}")
+        token_texts.append(token_text)
+
+    deleted = []
+    logs_dir = logs_dir_for_home(tlo_home)
+    for token_text in token_texts:
         for prefix in LOG_FILE_PREFIXES.values():
             log_file = _log_path_for_prefix(logs_dir, prefix, token_text)
             try:

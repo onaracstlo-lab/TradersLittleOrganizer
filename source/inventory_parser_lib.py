@@ -1,4 +1,4 @@
-__version__ = "v397"
+__version__ = "v406"
 import argparse
 import sys
 import os
@@ -71,7 +71,6 @@ class Config:
     inventory_scanning_complete: bool = False
     current_log_token: str = ""
     current_log_mode: str = "w"
-    active_log_tokens: list[str] = field(default_factory=list)
     current_run_log_tokens: list[str] = field(default_factory=list)
     current_metadata_records: list = field(default_factory=list)
     newly_allocated_log_tokens: list[str] = field(default_factory=list)

@@ -1,7 +1,6 @@
-__version__ = "v397"
+__version__ = "v406"
 
 import csv
-import glob
 import json
 import ntpath
 import os
@@ -16,6 +15,8 @@ from types import SimpleNamespace
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from tlo_artist_db import load_artist_matcher, lookup_artist_master_with_status, match_line_to_artists
+from tlo_file_listing import is_setlist_family_name, scandir_matching_files
+from tlo_corruption import move_to_trash
 from logging_lib import allocate_log_tokens, setup_logging
 from tlo_db_validation import validate_required_databases
 from tlo_audio_tags import collect_group_flac_tag_info
@@ -48,6 +49,7 @@ BOOTLIST_HEADER = ["Show", "VolumePath"]
 UPDATER_TITLE = "Traders Little Helper™ Inventory Update App"
 UPDATER_DISPLAY_VERSION = versioned_title("TLO Inventory Updater")
 INVALID_FOLDER_CHARS_RE = re.compile(r'[<>:"/\\|?*]+')
+PDUP_SUFFIX_RE = re.compile(r"\s+\(pdup(?P<number>\d+)\)$", re.IGNORECASE)
 
 
 class InventoryUpdateError(RuntimeError):
@@ -299,6 +301,15 @@ def _show_has_date(show_name: str, date: str) -> bool:
 
 
 def _artist_values_for_duplicate_check(artist: str, artist_matcher=None, extra_values: Optional[Sequence[str]] = None) -> List[str]:
+    """Return only independently validated artist values for duplicate checks.
+
+    ``artist`` is metadata explicitly identified as the artist, so its raw value
+    is valid evidence even when it is not present in the artist database.
+    ``extra_values`` are only search probes (for example, a resolved show name
+    or folder leaf).  They must never be admitted verbatim as artist evidence:
+    doing so can let a date or other non-artist text satisfy the artist half of
+    an Artist+Date duplicate predicate.
+    """
     values: List[str] = []
     seen = set()
 
@@ -309,9 +320,8 @@ def _artist_values_for_duplicate_check(artist: str, artist_matcher=None, extra_v
             seen.add(key)
             values.append(cleaned)
 
+    # The resolved metadata artist is independently identified artist evidence.
     add(artist)
-    for value in extra_values or []:
-        add(value)
 
     if artist_matcher is not None:
         for probe in [artist] + list(extra_values or []):
@@ -324,6 +334,8 @@ def _artist_values_for_duplicate_check(artist: str, artist_matcher=None, extra_v
                     add(master)
                     for alias in getattr(artist_matcher, "master_aliases", {}).get(master, []):
                         add(alias)
+            # For broader show/folder probes, keep only artist text that the
+            # matcher actually extracts.  Never add the entire probe itself.
             for master, phrase in match_line_to_artists(cleaned_probe, artist_matcher):
                 add(master)
                 add(phrase)
@@ -416,7 +428,7 @@ def _bootlist_show_name_matches(tlo_home: str, show_name: str) -> List[Dict[str,
         return []
     return [
         row for row in read_bootlist(tlo_home)
-        if normalized_compare_value(row.get("Show", "")) == target
+        if normalized_compare_value(_strip_pdup_suffix(row.get("Show", ""))) == target
     ]
 
 
@@ -454,14 +466,22 @@ def _artist_values_for_compliant_string1(string1: str, artist_matcher) -> List[s
 
 
 def _show_matches_any_artist_value(show_name: str, values: Sequence[str]) -> bool:
+    """Return True when a validated artist phrase occurs on token boundaries.
+
+    Arbitrary substring matching is unsafe for artist identity (for example,
+    ``Yes`` must not match ``Hayes``).  ``normalized_compare_value`` converts
+    punctuation to spaces, so padding both sides gives a simple whole-token /
+    whole-phrase containment test that still supports multi-word aliases.
+    """
     show_norm = normalized_compare_value(show_name)
     if not show_norm:
         return False
+    padded_show = f" {show_norm} "
     for value in values:
         value_norm = normalized_compare_value(value)
         if not value_norm:
             continue
-        if value_norm == show_norm or value_norm in show_norm or show_norm in value_norm:
+        if value_norm == show_norm or f" {value_norm} " in padded_show:
             return True
     return False
 
@@ -659,7 +679,7 @@ def _rename_add_shows_folder_compliantly(config, folder_path: str, record_dict: 
 def _used_setlist_names(tlo_home: str) -> set:
     setlists_dir = os.path.join(tlo_home, "setlists")
     os.makedirs(setlists_dir, exist_ok=True)
-    return {os.path.basename(path_name) for path_name in glob.glob(os.path.join(setlists_dir, "*.txt"))}
+    return {os.path.basename(path_name) for path_name in scandir_matching_files(setlists_dir, "*.txt")}
 
 
 def create_or_replace_generated_setlist(tlo_home: str, record_dict: Dict[str, str]) -> str:
@@ -747,6 +767,106 @@ def _split_storage_designation(value: str) -> Tuple[str, str]:
     return text, ""
 
 
+def _normalized_volume_label(value: str) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip().casefold()
+
+
+def _syntactic_partition_key(path_text: str) -> str:
+    """Return a stable partition key for common Windows/WSL/macOS/Linux roots."""
+    text = str(path_text or "").strip()
+    if not text:
+        return ""
+    windows = re.match(r"^(?P<drive>[A-Za-z]):(?:[\\/].*)?$", text)
+    if windows:
+        return f"drive:{windows.group('drive').casefold()}"
+    slash = text.replace("\\", "/")
+    wsl = re.match(r"^/mnt/(?P<drive>[A-Za-z])(?:/.*)?$", slash, re.IGNORECASE)
+    if wsl:
+        return f"drive:{wsl.group('drive').casefold()}"
+    parts = [part for part in slash.split("/") if part]
+    if len(parts) >= 2 and parts[0].casefold() == "volumes":
+        return f"mount:/volumes/{parts[1].casefold()}"
+    if len(parts) >= 3 and parts[0].casefold() == "media":
+        return f"mount:/media/{parts[1].casefold()}/{parts[2].casefold()}"
+    if len(parts) >= 4 and parts[0].casefold() == "run" and parts[1].casefold() == "media":
+        return f"mount:/run/media/{parts[2].casefold()}/{parts[3].casefold()}"
+    return ""
+
+
+def _storage_designation_parts(value: str, *, bootlist_row: bool = False) -> Tuple[str, str]:
+    if bootlist_row:
+        label, path_text = parse_volume_path_value(value)
+    else:
+        label, path_text = _split_storage_designation(value)
+    return _normalized_volume_label(label), str(path_text or "").strip()
+
+
+def _same_partition_relation(current_storage: str, bootlist_volume_path: str) -> Optional[bool]:
+    """Return True/False for same/different partition, or None if unknowable.
+
+    Rooted drive/mount identity takes precedence over a volume-label mismatch.
+    Label comparison is the fallback for legacy rows that do not retain a
+    physical root.  When neither side provides enough information, callers keep
+    the pre-Build-399 duplicate workflow rather than guessing that a comparison
+    is unavailable.
+    """
+    current_label, current_path = _storage_designation_parts(current_storage, bootlist_row=False)
+    row_label, row_path = _storage_designation_parts(bootlist_volume_path, bootlist_row=True)
+
+    current_key = _syntactic_partition_key(current_path)
+    row_key = _syntactic_partition_key(row_path)
+    if current_key and row_key:
+        return current_key == row_key
+
+    if current_path and row_path and os.path.exists(current_path) and os.path.exists(row_path):
+        try:
+            return os.stat(current_path).st_dev == os.stat(row_path).st_dev
+        except OSError:
+            pass
+
+    if current_label and row_label:
+        return current_label == row_label
+    return None
+
+
+def potential_duplicate_matches_are_remote_only(matches: Sequence[Dict[str, str]], current_storage: str) -> bool:
+    """Return True only when every potential match is definitely on another partition."""
+    relations = [
+        _same_partition_relation(current_storage, row.get("VolumePath", ""))
+        for row in (matches or [])
+    ]
+    return bool(relations) and all(relation is False for relation in relations)
+
+
+def _strip_pdup_suffix(show_name: str) -> str:
+    return PDUP_SUFFIX_RE.sub("", str(show_name or "").strip()).strip()
+
+
+def _next_pdup_number(matches: Sequence[Dict[str, str]]) -> int:
+    used = set()
+    for row in matches or []:
+        match = PDUP_SUFFIX_RE.search(str(row.get("Show", "") or "").strip())
+        if match:
+            try:
+                used.add(int(match.group("number")))
+            except (TypeError, ValueError):
+                continue
+    return (max(used) + 1) if used else 1
+
+
+def _apply_pdup_marker(record_dict: Dict[str, str], number: int) -> str:
+    """Append one zero-padded potential-duplicate marker to show identity."""
+    marker = f"(pdup{int(number):02d})"
+    show_name = _strip_pdup_suffix(record_dict.get("show_name", ""))
+    parentheticals = str(record_dict.get("parentheticals", "") or "").strip()
+    parentheticals = PDUP_SUFFIX_RE.sub("", parentheticals).strip()
+    if parentheticals and show_name and not show_name.endswith(parentheticals):
+        show_name = f"{show_name} {parentheticals}".strip()
+    record_dict["parentheticals"] = " ".join(part for part in [parentheticals, marker] if part).strip()
+    record_dict["show_name"] = " ".join(part for part in [show_name, marker] if part).strip()
+    return marker
+
+
 def _format_add_shows_volume_path(current_storage: str, folder_leaf: str) -> str:
     label, root_path = _split_storage_designation(current_storage)
     if root_path:
@@ -803,13 +923,11 @@ def infer_setlist_paths_for_show(tlo_home: str, show_name: str) -> List[str]:
     exact = os.path.join(setlists_dir, f"{base}.txt")
     if os.path.isfile(exact):
         candidates.append(exact)
-    base_fold = base.casefold()
-    for path_name in sorted(glob.glob(os.path.join(setlists_dir, "*.txt")), key=lambda value: os.path.basename(value).casefold()):
+    for path_name in scandir_matching_files(setlists_dir, "*.txt"):
         name = os.path.basename(path_name)
-        name_fold = name.casefold()
         if path_name in candidates:
             continue
-        if name_fold.startswith(base_fold) and name_fold.endswith(".txt"):
+        if is_setlist_family_name(name, base, ".txt"):
             candidates.append(path_name)
     return candidates
 
@@ -1026,6 +1144,7 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
     dirs = ensure_updater_directories(config.TLOHome)
     artist_matcher = load_artist_matcher(config)
     duplicate_count = 0
+    pdup_count = 0
     staged_count = 0
     processed_count = 0
     error_count = 0
@@ -1037,13 +1156,23 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
             matches = []
             if check_duplicates:
                 matches = find_potential_duplicate_rows_for_folder(config, folder, record, artist_matcher)
-            if matches:
-                record_dict = _record_dict_for_new_folder(config, folder, record, artist_matcher)
+            record_dict = _record_dict_for_new_folder(config, folder, record, artist_matcher)
+            if matches and potential_duplicate_matches_are_remote_only(matches, current_volume):
+                pdup_number = _next_pdup_number(matches)
+                marker = _apply_pdup_marker(record_dict, pdup_number)
+                _log_add_shows_metadata(
+                    config,
+                    record_dict,
+                    folder,
+                    current_volume,
+                    f"Add Shows potential duplicate retained as {marker}; matching bootlist rows are on another partition and unavailable for comparison",
+                )
+                pdup_count += 1
+            elif matches:
                 _log_add_shows_metadata(config, record_dict, folder, current_volume, "Add Shows duplicate candidate moved to dups")
                 move_folder_to(folder, dirs["dups"])
                 duplicate_count += 1
                 continue
-            record_dict = _record_dict_for_new_folder(config, folder, record, artist_matcher)
             folder = _rename_add_shows_folder_compliantly(config, folder, record_dict)
             folder_leaf = os.path.basename(os.path.normpath(folder))
             generated_setlist = create_or_replace_generated_setlist(config.TLOHome, record_dict)
@@ -1062,6 +1191,7 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
         "processed": processed_count,
         "staged": staged_count,
         "duplicates": duplicate_count,
+        "potential_duplicates_unavailable": pdup_count,
         "errors": error_count,
         "issues": issue_records,
     }
@@ -1129,4 +1259,9 @@ def process_duplicate_folder(config, item: Dict[str, object], selected_rows: Seq
 def delete_new_keep_old(item: Dict[str, object]) -> None:
     folder = str(item.get("folder") or "")
     if folder and os.path.isdir(folder):
-        shutil.rmtree(folder)
+        try:
+            move_to_trash(folder)
+        except Exception as exc:
+            raise InventoryUpdateError(
+                f"Unable to move the new duplicate folder to Trash/Recycle Bin; it remains in place: {folder} ({exc})"
+            ) from exc

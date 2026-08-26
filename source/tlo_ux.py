@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v397"
+__version__ = "v406"
 
 
 import copy
@@ -522,13 +522,28 @@ def preview_operation(
                     actions = _preview_actions(preview_config, copy_mode=copy_mode, tagger=tagger, shn_count=shn_count)
                     if not tagger:
                         try:
-                            from tlo_corruption import group_audio_files, corrupt_audio_files, exceeds_threshold
-                            corruption_audio = group_audio_files(group)
-                            corruption_bad = corrupt_audio_files(group)
+                            from tlo_corruption import classify_audio_paths, corruption_action, fully_corrupt_music_dirs, group_audio_snapshot
+                            corruption_audio, snapshot_errors = group_audio_snapshot(group)
+                            corruption_bad, unverifiable_files = classify_audio_paths(corruption_audio)
                             corruption_limit = int(getattr(preview_config, "acceptable_corruption_percent", 100) or 0)
-                            if corruption_bad and exceeds_threshold(len(corruption_audio), len(corruption_bad), corruption_limit):
-                                pct = (100.0 * len(corruption_bad) / len(corruption_audio)) if corruption_audio else 0.0
-                                actions = tuple(actions) + (f"WOULD_REMOVE_CORRUPTION ({len(corruption_bad)}/{len(corruption_audio)} = {pct:.2f}% > {corruption_limit}%)",)
+                            unverifiable = list(snapshot_errors) + list(unverifiable_files)
+                            corruption_policy = "unverifiable" if unverifiable else corruption_action(len(corruption_audio), len(corruption_bad), corruption_limit)
+                            pct = (100.0 * len(corruption_bad) / len(corruption_audio)) if corruption_audio else 0.0
+                            if corruption_policy == "unverifiable":
+                                actions = tuple(actions) + (f"CORRUPTION_UNVERIFIABLE ({len(unverifiable)} read/validator error(s); WOULD_NOT_TRASH; mutation steps would be skipped)",)
+                            if corruption_policy == "trash_folder_all_corrupt":
+                                actions = tuple(actions) + (f"WOULD_TRASH_CORRUPT_FOLDER ({len(corruption_bad)}/{len(corruption_audio)} = {pct:.2f}%; all audio corrupt; acceptable setting ignored)",)
+                            elif corruption_policy == "trash_folder_threshold":
+                                actions = tuple(actions) + (f"WOULD_TRASH_CORRUPT_FOLDER ({len(corruption_bad)}/{len(corruption_audio)} = {pct:.2f}% > {corruption_limit}%)",)
+                            elif corruption_policy == "trash_corrupt_files":
+                                all_bad_dirs = fully_corrupt_music_dirs(group, corruption_audio, corruption_bad)
+                                if all_bad_dirs:
+                                    labels = ", ".join(os.path.basename(os.path.normpath(path)) or os.path.normpath(path) for path in all_bad_dirs)
+                                    actions = tuple(actions) + (f"WOULD_TRASH_ALL_CORRUPT_MUSIC_FOLDER(S) ({len(all_bad_dirs)}: {labels}; acceptable setting does not protect an all-corrupt folder)",)
+                                bad_dir_keys = {os.path.normcase(os.path.normpath(path)) for path in all_bad_dirs}
+                                remaining_bad = [path for path in corruption_bad if os.path.normcase(os.path.normpath(os.path.dirname(path))) not in bad_dir_keys]
+                                if remaining_bad:
+                                    actions = tuple(actions) + (f"WOULD_TRASH_CORRUPT_FILES ({len(remaining_bad)} file(s); overall {pct:.2f}% <= {corruption_limit}%)",)
                         except Exception as exc:
                             result.issues.append(RunIssue("Corruption dry-run check failed", str(exc), str(group.get("main_dir_path") or root), "warning", "preview"))
                     tags = [PreviewTag(**entry) for entry in (plan.get("tags", []) or [])]
@@ -571,9 +586,12 @@ def preview_add_shows(
     from tlo_artist_db import load_artist_matcher
     from tlo_inventory_update import (
         _build_single_folder_group,
+        _apply_pdup_marker,
         _metadata_to_record_dict,
+        _next_pdup_number,
         _record_dict_for_new_folder,
         find_potential_duplicate_rows_for_folder,
+        potential_duplicate_matches_are_remote_only,
     )
     from tlo_postprocess import _adjust_show_name_for_output
     from tlo_tag_lib import _album_for_record, build_dry_run_group_plan
@@ -636,8 +654,16 @@ def preview_add_shows(
                 record_dict = _metadata_to_record_dict(record)
             else:
                 record_dict = _record_dict_for_new_folder(config, entry.path, record, artist_matcher)
-            final_show_name = _adjust_show_name_for_output(record_dict)
             matches = find_potential_duplicate_rows_for_folder(config, entry.path, record, artist_matcher) if (duplicate_mode or check_duplicates) else []
+            remote_pdup_marker = ""
+            if (
+                not duplicate_mode
+                and check_duplicates
+                and matches
+                and potential_duplicate_matches_are_remote_only(matches, str(getattr(config, "current_volume_label", "") or ""))
+            ):
+                remote_pdup_marker = _apply_pdup_marker(record_dict, _next_pdup_number(matches))
+            final_show_name = _adjust_show_name_for_output(record_dict)
             plan["show_name"] = final_show_name
             final_artist = str(record_dict.get("artist") or plan.get("artist") or "")
             final_album = _album_for_record(config, SimpleNamespace(**record_dict))
@@ -677,6 +703,16 @@ def preview_add_shows(
             if duplicate_mode:
                 actions.append("prepare duplicate/upgrade review")
                 actions.append("leave folders unchanged during this scan")
+            elif check_duplicates and matches and remote_pdup_marker:
+                actions.append(f"mark show {remote_pdup_marker}; existing potential matches are on another partition")
+                actions.append("add resulting show to bootlist.csv without unavailable cross-partition comparison")
+                if bool(getattr(config, "rename_compliantly", False)):
+                    actions.append("rename folder to resulting pdup show name")
+                if bool(getattr(config, "convert_shn", False)) and shn_count:
+                    actions.append("convert SHN to FLAC and remove verified SHN source")
+                if tag_enabled:
+                    actions.append("write tags in place")
+                actions.append("move accepted pdup folder to staged")
             elif check_duplicates and matches:
                 actions.append("move folder to dups as a potential duplicate")
             else:

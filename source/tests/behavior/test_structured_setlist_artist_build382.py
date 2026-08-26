@@ -1,6 +1,6 @@
 """Build 382 regressions for structured unlabeled setlist artist evidence."""
 
-__version__ = "v397"
+__version__ = "v406"
 
 from types import SimpleNamespace
 

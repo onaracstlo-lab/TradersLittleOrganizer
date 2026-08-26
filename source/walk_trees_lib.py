@@ -1,4 +1,4 @@
-__version__ = "v397"
+__version__ = "v406"
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
 import os
@@ -65,7 +65,6 @@ def _config_snapshot(config, force_silent=False):
         "inventory_scanning_complete": False,
         "current_log_token": "",
         "current_log_mode": "w",
-        "active_log_tokens": [],
         "current_run_log_tokens": [],
         "current_metadata_records": [],
         "newly_allocated_log_tokens": [],
@@ -388,7 +387,6 @@ def walk_trees(config):
     # overwrite/re-inventory may contain earlier results and must not be deleted
     # wholesale if a run is interrupted.
     config.newly_allocated_log_tokens = list(allocated_tokens)
-    config.active_log_tokens = list(allocated_tokens)
     console_print(config, "Starting inventory")
     for search_index, item in enumerate(inventory_items, start=1):
         path_name, slam_value, _volume_label, _volume_key, _log_token, _log_mode, copy_mode, copy_destination, inventory_path = _unpack_inventory_item(item)

@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v397"
+__version__ = "v406"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -1851,7 +1851,7 @@ class App:
             return []
         return delete_logs_for_tokens(
             self.current_config.TLOHome,
-            getattr(self.current_config, "active_log_tokens", []),
+            getattr(self.current_config, "newly_allocated_log_tokens", []),
         )
 
     def _run_on_gui_thread(self, func, *args, **kwargs):
@@ -3102,6 +3102,7 @@ class AddToInventoryWindow:
         result = result or {}
         processed = int(result.get("processed", 0) or 0)
         duplicates = int(result.get("duplicates", 0) or 0)
+        pdups = int(result.get("potential_duplicates_unavailable", 0) or 0)
         errors = int(result.get("errors", 0) or 0)
         staged = int(result.get("staged", 0) or 0)
         issues = []
@@ -3121,6 +3122,7 @@ class AddToInventoryWindow:
             f"Folders considered: {processed}",
             f"Folders staged: {staged}",
             f"Potential duplicates moved to dups: {duplicates}",
+            f"Cross-partition potential duplicates staged as pdup: {pdups}",
             f"Folder errors: {errors}",
             f"Elapsed: {format_elapsed(elapsed_seconds)}",
         ])

@@ -1,6 +1,6 @@
 """Behavior tests for the tlo-deleteDupes main."""
 
-__version__ = "v397"
+__version__ = "v406"
 
 import importlib.util
 from pathlib import Path
@@ -48,7 +48,8 @@ def test_exact_names_sizes_and_nested_structure_are_trashed_and_logged(tmp_path)
 
     trashed = []
     count = module.delete_duplicate_copy_directories(
-        str(root), str(home), trash_func=lambda path: trashed.append(path), emit=lambda *a, **k: None
+        str(root), str(home), trash_func=lambda path: trashed.append(path), emit=lambda *a, **k: None,
+        ffmpeg_executable="fake-ffmpeg", health_check=lambda *_a, **_k: True,
     )
 
     assert count == 1
@@ -121,7 +122,8 @@ def test_search_is_recursive_and_original_is_never_sent_to_trash(tmp_path):
     _write(copy / "01.flac", b"zzzz")
     trashed = []
     module.delete_duplicate_copy_directories(
-        str(root), str(home), trash_func=lambda path: trashed.append(path), emit=lambda *a, **k: None
+        str(root), str(home), trash_func=lambda path: trashed.append(path), emit=lambda *a, **k: None,
+        ffmpeg_executable="fake-ffmpeg", health_check=lambda *_a, **_k: True,
     )
     assert trashed == [str(copy.resolve())]
     assert str(original.resolve()) not in trashed
@@ -215,7 +217,8 @@ def test_keyboard_interrupt_inside_cleanup_closes_real_log_context(tmp_path, mon
     monkeypatch.setattr(module, "open", tracking_open, raising=False)
     with pytest.raises(KeyboardInterrupt):
         module.delete_duplicate_copy_directories(
-            str(root), str(home), trash_func=interrupting_trash, emit=lambda *a, **k: None
+            str(root), str(home), trash_func=interrupting_trash, emit=lambda *a, **k: None,
+            ffmpeg_executable="fake-ffmpeg", health_check=lambda *_a, **_k: True,
         )
 
     assert tracked["log"].closed
@@ -266,7 +269,7 @@ def test_corrupt_kept_flac_is_repaired_from_lowest_healthy_numeric_copy(tmp_path
     assert trashed == [str(copy1.resolve()), str(copy2.resolve()), str(copy10.resolve())]
 
 
-def test_unrepairable_corrupt_kept_flac_does_not_keep_qualifying_copies(tmp_path):
+def test_unrepairable_corrupt_kept_flac_keeps_qualifying_copies_for_later_review(tmp_path):
     module = _load_module()
     home = tmp_path / "home"
     root = tmp_path / "music"
@@ -293,10 +296,12 @@ def test_unrepairable_corrupt_kept_flac_does_not_keep_qualifying_copies(tmp_path
         health_check=health,
     )
 
-    assert count == 2
+    assert count == 0
     assert (original / "01.flac").read_bytes() == b"BAD0"
-    assert trashed == [str(copy1.resolve()), str(copy2.resolve())]
+    assert trashed == []
+    assert copy1.exists() and copy2.exists()
     assert any("could not be replaced; continuing" in message for message, _ in messages)
+    assert any("still has unrepaired corrupt FLAC" in message for message, _ in messages)
 
 
 def test_only_structurally_qualifying_copies_are_repair_sources_or_trashed(tmp_path):

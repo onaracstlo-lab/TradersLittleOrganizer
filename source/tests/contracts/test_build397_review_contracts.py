@@ -1,5 +1,5 @@
 """Build 397 contracts for the v396 technical-review remediation."""
-__version__ = "v397"
+__version__ = "v406"
 
 import ast
 import re
@@ -37,7 +37,7 @@ def test_every_test_module_has_exactly_one_category_marker_and_traits_are_used()
 
 
 def test_requirements_authoritative_range_has_no_numbered_heading_above_20():
-    doc=Document(ROOT/"TLO_Inventory_Requirements_Working_v397.docx")
+    doc=Document(ROOT/"TLO_Inventory_Requirements_Working_v406.docx")
     numbered=[]
     for p in doc.paragraphs:
         if p.style.name == "Heading 1":
@@ -55,10 +55,11 @@ def test_no_stale_per_module_version_summary_metadata_remains():
 
 
 def test_manual_keywords_and_version_are_current():
-    text=(ROOT/"TLO_Inventory_User_Manual_v397.rtf").read_text(encoding="utf-8", errors="ignore")
-    assert "Build,, ,397" in text or "Build, 397" in text or "Build, \\b 397" in text
+    text=(ROOT/"TLO_Inventory_User_Manual_v406.rtf").read_text(encoding="utf-8", errors="ignore")
+    import tlo_version as V
+    assert f"Build, {V.BUNDLE_BUILD}" in text or f"Build,, ,{V.BUNDLE_BUILD}" in text
     assert "Build,, ,373" not in text
-    assert "Version v1.4 Build 397" in text
+    assert f"Version {V.DISPLAY_VERSION}" in text
 
 
 def test_updater_has_no_environment_repository_redirect():

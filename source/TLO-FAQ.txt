@@ -69,3 +69,6 @@ A: In the main Inventory window, click Research and enter an artist followed by 
 
 Q: Does TLO accept 19xx-xx-xx and 20xx-xx-xx as dates?
 A: Yes. They are legitimate century-known partial dates. TLO requires the less-significant components to remain unknown, so 19xx-xx-xx and 20xx-xx-xx are valid, while forms such as 19xx-05-xx, 20xx-xx-14, 1xxx-xx-xx, and 2xxx-xx-xx are not.
+
+Q: What does (pdupNN) mean in Add Shows?
+A: Beginning with Build 399, when Process New Shows has Check for Duplicates selected and every matching bootlist entry is on another storage partition, TLO assumes those existing folders are unavailable for comparison and keeps the incoming show with a potential-duplicate marker such as (pdup01), (pdup02), and so on. This is not a copy/alternate determination. If a matching entry is on the current partition, or TLO cannot determine the partition, the existing duplicate review and copy/alternate checks remain in effect. Rename Compliantly applies the pdup marker to the physical folder name; otherwise the folder name is left as supplied.

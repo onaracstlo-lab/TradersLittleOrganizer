@@ -1,4 +1,4 @@
-__version__ = "v397"
+__version__ = "v406"
 
 import argparse
 from dataclasses import dataclass
@@ -165,7 +165,7 @@ OPTIONS = [
     Option(
         "acceptable_corruption_percent", "--acceptable-corruption-percent", "int",
         default=100, metavar="N", type_func=parse_percent_0_100,
-        help="If more than this percentage of a logical show folder's audio files are corrupt, move the show folder to the OS Trash/Recycle Bin and omit it from inventory. Integer 0-100; default 100.",
+        help="If more than this percentage of a logical show's audio files are corrupt, move the logical show folder to the OS Trash/Recycle Bin and omit it from inventory. If all logical-show audio is corrupt, always trash the logical show folder regardless of this setting. When the logical show remains, any individual music folder whose direct audio is all corrupt is trashed regardless of the setting, and all other detected corrupt audio files are trashed individually. Integer 0-100; default 100.",
     ),
     Option(
         "performance_mode", "--performance-mode", "choice",

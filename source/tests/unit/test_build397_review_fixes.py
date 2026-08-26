@@ -1,5 +1,5 @@
 """Focused unit regressions for the Build 397 technical-review remediations."""
-__version__ = "v397"
+__version__ = "v406"
 
 import importlib
 import subprocess
@@ -114,8 +114,8 @@ def test_update_stream_aborts_when_response_exceeds_declared_size(tmp_path, monk
         def read(self, _size):
             if getattr(self, "done", False): return b""
             self.done=True; return b"12345"
-    monkeypatch.setattr(U.urllib.request, "urlopen", lambda *a, **k: Response())
-    asset = {"name":"TLO.zip", "browser_download_url":"https://github.com/x/y/TLO.zip", "size":4}
+    asset = {"name":"TLO.zip", "browser_download_url":"https://github.com/x/y/TLO.zip", "size":4, "digest":"sha256:" + "0"*64}
+    monkeypatch.setattr(U, "_open_download_url", lambda *a, **k: Response())
     with pytest.raises(IOError, match="exceeded the declared size"):
         U._download_asset(asset, tmp_path/"TLO.zip")
     assert not (tmp_path/"TLO.zip").exists()

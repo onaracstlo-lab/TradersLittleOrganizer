@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v397"
+__version__ = "v406"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
@@ -5076,24 +5076,147 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
         tag_group_ready = True
 
         acceptable_corruption = int(getattr(config, "acceptable_corruption_percent", 100) or 0)
+        corruption_unverifiable = False
+        corruption_unverifiable_details = []
         try:
-            from tlo_corruption import group_audio_files, corrupt_audio_files, exceeds_threshold, move_to_trash
-            _audio_files = group_audio_files(group)
-            _bad_files = corrupt_audio_files(group)
-            if _bad_files and exceeds_threshold(len(_audio_files), len(_bad_files), acceptable_corruption):
-                _percent = (100.0 * len(_bad_files) / len(_audio_files)) if _audio_files else 0.0
+            from tlo_corruption import (
+                classify_audio_paths,
+                corruption_action,
+                fully_corrupt_music_dirs,
+                group_audio_files,
+                group_audio_snapshot,
+                move_to_trash,
+            )
+            _audio_files, _snapshot_errors = group_audio_snapshot(group)
+            _bad_files, _unverifiable_files = classify_audio_paths(_audio_files)
+            corruption_unverifiable_details = list(_snapshot_errors) + list(_unverifiable_files)
+            corruption_unverifiable = bool(corruption_unverifiable_details)
+            _corruption_action = "none" if corruption_unverifiable else corruption_action(len(_audio_files), len(_bad_files), acceptable_corruption)
+            _percent = (100.0 * len(_bad_files) / len(_audio_files)) if _audio_files else 0.0
+            _whole_folder_trash_failed = False
+            _trashed_dirs = []
+            _trashed_files = []
+
+            if corruption_unverifiable:
+                _detail_text = "; ".join(f"{path}: {detail}" for path, detail in corruption_unverifiable_details[:8])
+                if len(corruption_unverifiable_details) > 8:
+                    _detail_text += f"; ... {len(corruption_unverifiable_details) - 8} more"
+                config.logs.conflicts(
+                    "CORRUPTION_UNVERIFIABLE: %s | proven_corrupt=%s files_seen=%s | no corruption-driven Trash action; mutation steps skipped | %s",
+                    record.main_dir_path, len(_bad_files), len(_audio_files), _detail_text,
+                )
+                config.logs.tag(
+                    "CORRUPTION_UNVERIFIABLE: %s | no Trash/rename/tag/copy-delete/SHN mutation | %s",
+                    record.main_dir_path, _detail_text,
+                )
+
+            if _corruption_action in ("trash_folder_all_corrupt", "trash_folder_threshold"):
+                _reason = "all audio files are corrupt; acceptable setting ignored" if _corruption_action == "trash_folder_all_corrupt" else "corruption exceeds acceptable setting"
                 try:
                     move_to_trash(record.main_dir_path)
                 except Exception as exc:
-                    config.logs.conflicts("CORRUPTION_REMOVAL_FAILED: %s | files=%s corrupt=%s percent=%.2f acceptable=%s | %s", record.main_dir_path, len(_audio_files), len(_bad_files), _percent, acceptable_corruption, exc)
+                    _whole_folder_trash_failed = True
+                    config.logs.conflicts("CORRUPTION_REMOVAL_FAILED: %s | files=%s corrupt=%s percent=%.2f acceptable=%s reason=%s | %s", record.main_dir_path, len(_audio_files), len(_bad_files), _percent, acceptable_corruption, _reason, exc)
                 else:
-                    config.logs.conflicts("REMOVED_CORRUPTION: %s | files=%s corrupt=%s corruption_percent=%.2f acceptable_corruption_percent=%s | moved to Trash/Recycle Bin and omitted from inventory", record.main_dir_path, len(_audio_files), len(_bad_files), _percent, acceptable_corruption)
-                    config.logs.tag("REMOVED_CORRUPTION: %s | files=%s corrupt=%s corruption_percent=%.2f acceptable=%s", record.main_dir_path, len(_audio_files), len(_bad_files), _percent, acceptable_corruption)
+                    config.logs.conflicts("REMOVED_CORRUPTION: %s | files=%s corrupt=%s corruption_percent=%.2f acceptable_corruption_percent=%s | %s | moved to Trash/Recycle Bin and omitted from inventory", record.main_dir_path, len(_audio_files), len(_bad_files), _percent, acceptable_corruption, _reason)
+                    config.logs.tag("REMOVED_CORRUPTION: %s | files=%s corrupt=%s corruption_percent=%.2f acceptable=%s | %s", record.main_dir_path, len(_audio_files), len(_bad_files), _percent, acceptable_corruption, _reason)
                     continue
+
+            # Even when the logical-show percentage is acceptable, a physical music
+            # directory whose direct audio files are all corrupt is itself discarded.
+            # If a required whole-show Trash operation failed, still make the best
+            # effort required by policy to Trash every corrupt file individually.
+            if _bad_files and (_corruption_action == "trash_corrupt_files" or _whole_folder_trash_failed):
+                _fully_bad_dirs = fully_corrupt_music_dirs(group, _audio_files, _bad_files)
+                _main_key = os.path.normcase(os.path.normpath(record.main_dir_path or ""))
+                _music_dirs = [os.path.normpath(path) for path in (group.get("music_dirs", []) or []) if path]
+
+                for _bad_dir in _fully_bad_dirs:
+                    _bad_dir_key = os.path.normcase(os.path.normpath(_bad_dir))
+                    # Do not retry the exact logical-show folder after a failed whole
+                    # folder move. Also avoid trashing an ancestor of another known
+                    # music directory, which could contain healthy sibling audio.
+                    if _whole_folder_trash_failed and _bad_dir_key == _main_key:
+                        continue
+                    _contains_other_music_dir = False
+                    for _other_dir in _music_dirs:
+                        _other_key = os.path.normcase(os.path.normpath(_other_dir))
+                        if _other_key == _bad_dir_key:
+                            continue
+                        try:
+                            if os.path.commonpath([os.path.abspath(_other_dir), os.path.abspath(_bad_dir)]) == os.path.abspath(_bad_dir):
+                                _contains_other_music_dir = True
+                                break
+                        except (OSError, ValueError):
+                            continue
+                    if _contains_other_music_dir:
+                        continue
+                    try:
+                        move_to_trash(_bad_dir)
+                    except Exception as exc:
+                        config.logs.conflicts("CORRUPT_FOLDER_TRASH_FAILED: %s | logical_show=%s | %s", _bad_dir, record.main_dir_path, exc)
+                        config.logs.tag("CORRUPT_FOLDER_TRASH_FAILED: %s | %s", _bad_dir, exc)
+                    else:
+                        _trashed_dirs.append(os.path.normpath(_bad_dir))
+                        config.logs.conflicts("TRASHED_ALL_CORRUPT_FOLDER: %s | logical_show=%s | acceptable_corruption_percent=%s", _bad_dir, record.main_dir_path, acceptable_corruption)
+                        config.logs.tag("TRASHED_ALL_CORRUPT_FOLDER: %s", _bad_dir)
+
+                def _under_trashed_dir(path_name):
+                    for _trashed_dir in _trashed_dirs:
+                        try:
+                            if os.path.commonpath([os.path.abspath(path_name), os.path.abspath(_trashed_dir)]) == os.path.abspath(_trashed_dir):
+                                return True
+                        except (OSError, ValueError):
+                            continue
+                    return False
+
+                for _bad_path in _bad_files:
+                    if _under_trashed_dir(_bad_path):
+                        continue
+                    try:
+                        move_to_trash(_bad_path)
+                    except Exception as exc:
+                        config.logs.conflicts("CORRUPT_FILE_TRASH_FAILED: %s | %s", _bad_path, exc)
+                        config.logs.tag("CORRUPT_FILE_TRASH_FAILED: %s | %s", _bad_path, exc)
+                    else:
+                        _trashed_files.append(os.path.normpath(_bad_path))
+                        config.logs.conflicts("TRASHED_CORRUPT_FILE: %s | logical_show=%s | corruption_percent=%.2f acceptable_corruption_percent=%s", _bad_path, record.main_dir_path, _percent, acceptable_corruption)
+                        config.logs.tag("TRASHED_CORRUPT_FILE: %s", _bad_path)
+
+                # Keep carried group/record paths consistent with the filesystem so
+                # later tag/copy/rename stages cannot fall back to a trashed path.
+                if _trashed_dirs or _trashed_files:
+                    _trashed_file_keys = {os.path.normcase(os.path.normpath(path)) for path in _trashed_files}
+
+                    def _keep_path(path_name):
+                        _norm = os.path.normpath(str(path_name or ""))
+                        if not _norm or os.path.normcase(_norm) in _trashed_file_keys:
+                            return False
+                        return not _under_trashed_dir(_norm)
+
+                    group["music_dirs"] = [path for path in (group.get("music_dirs", []) or []) if _keep_path(path)]
+                    for _key in ("music_files", "music_sample_files", "setlist_files", "txt_files"):
+                        group[_key] = [path for path in (group.get(_key, []) or []) if _keep_path(path)]
+                    if group.get("setlist_file") and not _keep_path(group.get("setlist_file")):
+                        group["setlist_file"] = next((path for path in group.get("setlist_files", []) if os.path.isfile(path)), "")
+                    _remaining_audio = group_audio_files(group)
+                    group["music_file_count"] = len(_remaining_audio)
+                    record.music_dirs = list(group.get("music_dirs", []) or [])
+                    record.music_file_count = len(_remaining_audio)
+                    record.setlist_files = list(group.get("setlist_files", []) or [])
+                    if record.setlist_file and not _keep_path(record.setlist_file):
+                        record.setlist_file = group.get("setlist_file", "")
         except Exception as exc:
-            config.logs.conflicts("CORRUPTION_CHECK_FAILED: %s | %s", record.main_dir_path, exc)
+            corruption_unverifiable = True
+            corruption_unverifiable_details = [(record.main_dir_path, f"{type(exc).__name__}: {exc}")]
+            config.logs.conflicts("CORRUPTION_CHECK_FAILED_UNVERIFIABLE: %s | no corruption-driven Trash action; mutation steps skipped | %s", record.main_dir_path, exc)
         unidentified_for_mutation = _record_is_unidentified_for_mutation(record, unresolved_reasons)
-        if unidentified_for_mutation and (tag_during_inventory or tag_copy_and_delete_enabled or bool(getattr(config, "rename_compliantly", False))):
+        if corruption_unverifiable:
+            if tag_during_inventory:
+                tag_totals["groups"] += 1
+                tag_totals["skipped"] += 1
+            tag_group_ready = False
+        elif unidentified_for_mutation and (tag_during_inventory or tag_copy_and_delete_enabled or bool(getattr(config, "rename_compliantly", False))):
             if tag_copy_and_delete_enabled:
                 config.logs.tag(
                     "TAG_COPY_AND_DELETE_SKIP: %s | show unidentified; leaving original folder untouched",

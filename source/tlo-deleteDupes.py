@@ -1,8 +1,9 @@
 """Repair corrupt FLACs from duplicate copies, then move duplicates to a partition holding folder."""
 
-__version__ = "v397"
+__version__ = "v406"
 
 import argparse
+import hashlib
 import csv
 import ntpath
 import os
@@ -688,8 +689,12 @@ def flac_file_is_healthy(
         raise
     except subprocess.TimeoutExpired:
         return None
+    except (OSError, MemoryError):
+        return None
     except Exception:
-        return False
+        # Unexpected validator/infrastructure failures are unverifiable, not
+        # proof that the FLAC itself is corrupt.
+        return None
     return int(getattr(completed, "returncode", 1) or 0) == 0
 
 
@@ -711,22 +716,67 @@ def _relative_flac_paths(root: str) -> List[str]:
     return sorted(relative_paths, key=lambda value: os.path.normcase(os.path.normpath(value)))
 
 
+def _sha256_file(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def _replace_file_from_copy(source_path: str, destination_path: str) -> None:
-    """Copy a healthy replacement beside destination, then atomically replace it."""
+    """Stage and byte-verify a replacement, then atomically install it.
+
+    The current keeper bytes remain at destination until the fully staged copy
+    has been verified.  A temporary backup is retained through the atomic
+    replacement so an installation error never destroys the prior bytes.
+    """
     destination_dir = os.path.dirname(destination_path)
     temp_path = ""
+    backup_path = ""
     try:
         fd, temp_path = tempfile.mkstemp(prefix=".tlo-deleteDupes-repair-", suffix=".flac", dir=destination_dir)
         os.close(fd)
         shutil.copy2(source_path, temp_path)
+        if os.path.getsize(source_path) != os.path.getsize(temp_path) or _sha256_file(source_path) != _sha256_file(temp_path):
+            raise DeleteDupesError(f"Staged FLAC repair copy failed byte verification: {source_path}")
+
+        fd, backup_path = tempfile.mkstemp(prefix=".tlo-deleteDupes-backup-", suffix=".flac", dir=destination_dir)
+        os.close(fd)
+        shutil.copy2(destination_path, backup_path)
         os.replace(temp_path, destination_path)
         temp_path = ""
+        try:
+            os.remove(backup_path)
+            backup_path = ""
+        except OSError:
+            # The repair succeeded; retaining a backup is safer than treating a
+            # cleanup failure as a failed repair.
+            pass
     finally:
-        if temp_path:
+        for cleanup_path in (temp_path,):
+            if cleanup_path:
+                try:
+                    os.remove(cleanup_path)
+                except OSError:
+                    pass
+        # If destination installation failed, destination was never replaced.
+        # The backup is therefore redundant and can be removed.  If installation
+        # succeeded but backup cleanup failed, intentionally leave it in place.
+        if backup_path and os.path.exists(destination_path):
             try:
-                os.remove(temp_path)
-            except OSError:
+                if _sha256_file(destination_path) == _sha256_file(source_path):
+                    pass
+                else:
+                    os.replace(backup_path, destination_path)
+                    backup_path = ""
+            except Exception:
                 pass
+            if backup_path and os.path.exists(backup_path):
+                try:
+                    os.remove(backup_path)
+                except OSError:
+                    pass
 
 
 def repair_corrupt_flacs_from_copies(
@@ -897,6 +947,12 @@ def delete_duplicate_copy_directories(
             if keeper_unverifiable:
                 emit(
                     f"Skipping duplicate cluster because kept folder has an unverifiable FLAC: {original_path}",
+                    error=True,
+                )
+                continue
+            if _unrepaired > 0:
+                emit(
+                    f"Skipping duplicate cluster because kept folder still has unrepaired corrupt FLAC files: {original_path}",
                     error=True,
                 )
                 continue

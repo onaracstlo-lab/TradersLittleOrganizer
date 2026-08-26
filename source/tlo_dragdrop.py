@@ -1,4 +1,4 @@
-__version__ = "v397"
+__version__ = "v406"
 
 """Native-Windows-only drag-and-drop helpers for the TLO Tk GUI.
 
