@@ -1,6 +1,6 @@
 """Build 375 regressions for setlist correction of weak path venue/location evidence."""
 
-__version__ = "v406"
+__version__ = "v407"
 
 from types import SimpleNamespace
 

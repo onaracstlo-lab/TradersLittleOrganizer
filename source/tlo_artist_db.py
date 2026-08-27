@@ -1,4 +1,4 @@
-__version__ = "v406"
+__version__ = "v407"
 import re
 import sqlite3
 from dataclasses import dataclass, field
@@ -10,7 +10,10 @@ from tlo_text_utils import compact_ws
 
 THE_PREFIX_RE = re.compile(r"^(?:the|a)\s+", re.IGNORECASE)
 THE_SUFFIX_RE = re.compile(r",\s*(?:the|a)$", re.IGNORECASE)
-TERMINAL_BAND_RE = re.compile(r"\s+band$", re.IGNORECASE)
+TERMINAL_ARTIST_SUFFIX_RE = re.compile(
+    r"(?:\s+band|(?:\s+|-\s*)all(?:\s*\-\s*|\s*)stars?)$",
+    re.IGNORECASE,
+)
 
 
 def _strip_article_forms(text: str) -> str:
@@ -26,17 +29,20 @@ def _letters_only(text: str) -> str:
     return "".join(ch for ch in (text or "").lower() if ch.isalpha())
 
 
-def _strip_terminal_band(text: str) -> str:
-    """Return *text* without one terminal word ``Band``, or an empty string.
+def _strip_terminal_artist_suffix(text: str) -> str:
+    """Return *text* without one recognized terminal artist-group suffix.
 
-    This is intentionally a secondary Artist DB lookup form.  The unmodified
-    candidate must be tried first so a real database artist whose name ends in
-    ``Band`` always wins over a shorter alias/master match.
+    ``Band`` and the common ``All Star``/``All Stars`` spellings are secondary
+    Artist DB lookup forms only.  The unmodified candidate is always tried
+    first, so an exact database artist such as ``Example All-Stars`` wins over
+    a shorter alias/master match.  Accepted All-Star spellings include spaces,
+    dashes, or no separator between ``All`` and ``Star``, in singular/plural
+    form and case-insensitively.
     """
     cleaned = compact_ws(text)
-    if not cleaned or not TERMINAL_BAND_RE.search(cleaned):
+    if not cleaned or not TERMINAL_ARTIST_SUFFIX_RE.search(cleaned):
         return ""
-    stripped = compact_ws(TERMINAL_BAND_RE.sub("", cleaned))
+    stripped = compact_ws(TERMINAL_ARTIST_SUFFIX_RE.sub("", cleaned))
     return stripped if stripped and stripped.casefold() != cleaned.casefold() else ""
 
 
@@ -159,7 +165,7 @@ def _get_query_result(matcher: ArtistMatcher, cache_key: str) -> Tuple[str, Tupl
     return cached
 
 def lookup_artist_masters(
-    text: str, matcher: Optional[ArtistMatcher], *, _allow_terminal_band_fallback: bool = True
+    text: str, matcher: Optional[ArtistMatcher], *, _allow_terminal_artist_suffix_fallback: bool = True
 ) -> List[str]:
     if matcher is None:
         return []
@@ -185,16 +191,17 @@ def lookup_artist_masters(
     for variant in variants:
         found.update(matcher.exact_map.get(variant.casefold(), set()))
 
-    # Secondary fallback for potential artist names ending in the word "Band".
-    # Never mix the stripped form into the primary variant set: if the full
-    # artist name exists in the DB, that exact/full result must win.  Only a
-    # unique stripped-form result is accepted; ambiguous stripped matches leave
-    # the original candidate unresolved.
-    if not found and _allow_terminal_band_fallback:
-        stripped_band = _strip_terminal_band(text)
-        if stripped_band:
+    # Secondary fallback for potential artist names ending in ``Band`` or a
+    # supported ``All Star(s)`` spelling.  Never mix the stripped form into the
+    # primary variant set: if the full artist name exists in the DB, that
+    # exact/full result must win.  Only a unique stripped-form result is
+    # accepted; ambiguous stripped matches leave the original candidate
+    # unresolved.
+    if not found and _allow_terminal_artist_suffix_fallback:
+        stripped_artist = _strip_terminal_artist_suffix(text)
+        if stripped_artist:
             stripped_masters = lookup_artist_masters(
-                stripped_band, matcher, _allow_terminal_band_fallback=False
+                stripped_artist, matcher, _allow_terminal_artist_suffix_fallback=False
             )
             if len(stripped_masters) == 1:
                 found.add(stripped_masters[0])

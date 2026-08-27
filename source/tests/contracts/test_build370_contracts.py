@@ -1,6 +1,6 @@
 """Build 375 copy-to-copy duplicate cluster contracts."""
 
-__version__ = "v406"
+__version__ = "v407"
 
 from pathlib import Path
 
@@ -33,14 +33,14 @@ def test_build370_source_compares_copy_family_members_with_each_other():
 
 
 def test_build370_requirements_include_x_copy2_copy3_example():
-    text = _docx_text("TLO_Inventory_Requirements_Working_v406.docx")
+    text = _docx_text("TLO_Inventory_Requirements_Working_v407.docx")
     assert "X, X (copy2), and X (copy3)" in text
     assert "copy2 and copy3 match one another" in text
     assert "X and copy2 remain while copy3 is relocated" in text
 
 
 def test_build370_manual_and_faq_explain_cluster_preference():
-    manual = (ROOT / "TLO_Inventory_User_Manual_v406.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual = (ROOT / "TLO_Inventory_User_Manual_v407.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8")
     for text in (manual, faq):
         assert "copy2" in text

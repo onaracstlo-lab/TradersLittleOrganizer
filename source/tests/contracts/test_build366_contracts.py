@@ -1,6 +1,6 @@
 """Current duplicate-cleanup discovery/keeper contracts (originated in Build 366)."""
 
-__version__ = "v406"
+__version__ = "v407"
 
 from pathlib import Path
 from zipfile import ZipFile
@@ -32,7 +32,7 @@ def test_duplicate_source_uses_content_equivalence_clusters_and_preferred_keeper
 
 
 def test_requirements_define_content_cluster_keeper_rule():
-    text = _docx_text("TLO_Inventory_Requirements_Working_v406.docx")
+    text = _docx_text("TLO_Inventory_Requirements_Working_v407.docx")
     assert "18.2 Candidate Discovery and Content-Equivalence Clusters" in text
     assert "numbered copies shall be compared with one another" in text
     assert "Prefer an unsuffixed folder as the keeper" in text
@@ -41,7 +41,7 @@ def test_requirements_define_content_cluster_keeper_rule():
 
 
 def test_manual_documents_content_cluster_keeper_rule():
-    text = (ROOT / "TLO_Inventory_User_Manual_v406.rtf").read_text(encoding="utf-8", errors="ignore")
+    text = (ROOT / "TLO_Inventory_User_Manual_v407.rtf").read_text(encoding="utf-8", errors="ignore")
     assert "Copies are compared with one another as well as with unsuffixed folders" in text
     assert "content-equivalence clusters" in text
     assert "lowest-numbered copy is kept" in text

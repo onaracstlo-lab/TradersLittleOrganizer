@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v406"
+__version__ = "v407"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -1247,11 +1247,22 @@ class App:
         )
         search_button.grid(row=0, column=0, padx=4)
         ttk.Button(buttons, text="Close", command=dialog.destroy, style="Main.TButton").grid(row=0, column=1, padx=4)
-        # The Search button is the Research dialog's default action.  Binding
-        # Return to the Toplevel makes Enter run the search whenever focus is
-        # anywhere inside this Research window, not only while the entry owns
-        # keyboard focus.
+
+        def keep_search_live(_event=None):
+            # Keep Search visually and behaviorally designated as the dialog's
+            # default action whenever this Research window is active, even if a
+            # different child widget currently owns keyboard focus.
+            try:
+                search_button.configure(default="active")
+            except tk.TclError:
+                pass
+
+        # Return/Keypad-Enter at the Toplevel makes Search the live default
+        # action for the entire Research dialog, not just for the entry widget.
         dialog.bind("<Return>", run_query)
+        dialog.bind("<KP_Enter>", run_query)
+        dialog.bind("<FocusIn>", keep_search_live, add="+")
+        keep_search_live()
         try:
             entry.focus_set()
         except tk.TclError:
@@ -1289,11 +1300,141 @@ class App:
         vscroll.grid(row=0, column=1, sticky="ns")
         hscroll.grid(row=1, column=0, sticky="ew")
         output.insert("1.0", result_text)
-        output.configure(state="disabled")
-        ttk.Button(frame, text="Close", command=window.destroy, style="Main.TButton").grid(
-            row=2, column=0, sticky="e", pady=(8, 0)
+        output.mark_set("insert", "1.0")
+        output.configure(state="disabled", exportselection=False)
+
+        def select_all(_event=None):
+            output.tag_remove("sel", "1.0", "end")
+            output.tag_add("sel", "1.0", "end-1c")
+            output.mark_set("insert", "1.0")
+            output.see("1.0")
+            return "break"
+
+        def open_find(_event=None):
+            existing = getattr(window, "_tlo_find_dialog", None)
+            if existing is not None:
+                try:
+                    if existing.winfo_exists():
+                        existing.deiconify()
+                        existing.lift()
+                        existing.focus_force()
+                        return "break"
+                except tk.TclError:
+                    pass
+
+            find_dialog = tk.Toplevel(window)
+            window._tlo_find_dialog = find_dialog
+            find_dialog.title(versioned_title("TLO Research Results Search"))
+            find_dialog.transient(window)
+            find_dialog.resizable(False, False)
+            find_frame = ttk.Frame(find_dialog, padding=10)
+            find_frame.grid(sticky="nsew")
+            find_frame.columnconfigure(1, weight=1)
+
+            search_var = tk.StringVar(value="")
+            direction_var = tk.StringVar(value="forward")
+            ttk.Label(find_frame, text="Search for:", style="Main.TLabel").grid(
+                row=0, column=0, sticky="w", padx=(0, 8), pady=(0, 8)
+            )
+            search_entry = ttk.Entry(find_frame, textvariable=search_var, width=44, style="Main.TEntry")
+            search_entry.grid(row=0, column=1, columnspan=2, sticky="ew", pady=(0, 8))
+            ttk.Radiobutton(
+                find_frame, text="Forward", variable=direction_var, value="forward"
+            ).grid(row=1, column=1, sticky="w")
+            ttk.Radiobutton(
+                find_frame, text="Backwards", variable=direction_var, value="backward"
+            ).grid(row=1, column=2, sticky="w")
+            status_var = tk.StringVar(value="")
+            ttk.Label(find_frame, textvariable=status_var).grid(
+                row=2, column=0, columnspan=3, sticky="w", pady=(6, 0)
+            )
+            find_buttons = ttk.Frame(find_frame)
+            find_buttons.grid(row=3, column=0, columnspan=3, sticky="e", pady=(10, 0))
+
+            def perform_find(_find_event=None):
+                needle = search_var.get()
+                if not needle:
+                    status_var.set("Enter text to search for.")
+                    try:
+                        search_entry.focus_set()
+                    except tk.TclError:
+                        pass
+                    return "break"
+
+                direction = direction_var.get()
+                try:
+                    if output.tag_ranges("sel"):
+                        anchor = output.index("sel.last" if direction == "forward" else "sel.first")
+                    else:
+                        anchor = output.index("insert")
+                except tk.TclError:
+                    anchor = "1.0" if direction == "forward" else "end-1c"
+
+                count = tk.IntVar(master=find_dialog, value=0)
+                if direction == "backward":
+                    match = output.search(
+                        needle, anchor, stopindex="1.0", backwards=True, nocase=True, count=count
+                    )
+                    if not match:
+                        match = output.search(
+                            needle, "end-1c", stopindex=anchor, backwards=True, nocase=True, count=count
+                        )
+                else:
+                    match = output.search(
+                        needle, anchor, stopindex="end-1c", nocase=True, count=count
+                    )
+                    if not match:
+                        match = output.search(
+                            needle, "1.0", stopindex=anchor, nocase=True, count=count
+                        )
+
+                if not match:
+                    status_var.set("Not found.")
+                    try:
+                        find_dialog.bell()
+                    except tk.TclError:
+                        pass
+                    return "break"
+
+                match_len = max(1, int(count.get() or len(needle)))
+                end_index = output.index(f"{match}+{match_len}c")
+                output.tag_remove("sel", "1.0", "end")
+                output.tag_add("sel", match, end_index)
+                output.mark_set("insert", end_index if direction == "forward" else match)
+                output.see(match)
+                status_var.set("")
+                return "break"
+
+            find_search_button = ttk.Button(
+                find_buttons, text="Search", command=perform_find, style="Main.TButton", default="active"
+            )
+            find_search_button.grid(row=0, column=0, padx=4)
+            ttk.Button(
+                find_buttons, text="Close", command=find_dialog.destroy, style="Main.TButton"
+            ).grid(row=0, column=1, padx=4)
+            find_dialog.bind("<Return>", perform_find)
+            find_dialog.bind("<KP_Enter>", perform_find)
+            find_dialog.protocol("WM_DELETE_WINDOW", find_dialog.destroy)
+            try:
+                search_entry.focus_set()
+            except tk.TclError:
+                pass
+            return "break"
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=2, column=0, sticky="e", pady=(8, 0))
+        ttk.Button(buttons, text="Search", command=open_find, style="Main.TButton").grid(
+            row=0, column=0, padx=4
         )
+        ttk.Button(buttons, text="Close", command=window.destroy, style="Main.TButton").grid(
+            row=0, column=1, padx=4
+        )
+        window.bind("<Control-a>", select_all)
+        window.bind("<Control-A>", select_all)
+        window.bind("<Control-f>", open_find)
+        window.bind("<Control-F>", open_find)
         try:
+            output.focus_set()
             window.focus_force()
         except tk.TclError:
             pass

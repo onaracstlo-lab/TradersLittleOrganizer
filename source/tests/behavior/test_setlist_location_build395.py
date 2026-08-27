@@ -1,5 +1,5 @@
 """Build 395 setlist venue/location regressions migrated from the legacy suite."""
-__version__ = "v406"
+__version__ = "v407"
 
 import pytest
 import tlo_phase23_v2 as P

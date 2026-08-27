@@ -1,6 +1,6 @@
 """Build 376 regressions for century-known partial dates."""
 
-__version__ = "v406"
+__version__ = "v407"
 
 import os
 from types import SimpleNamespace
