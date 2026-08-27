@@ -1,6 +1,6 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v411"
+__version__ = "v413"
 
 from tlo_diagnostics import debug_suppressed_exception
 import os
@@ -13,6 +13,7 @@ import sys
 import traceback
 import html
 import uuid
+from datetime import date
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from mutagen import File as MutagenFile
@@ -207,7 +208,14 @@ AUDIO_FILENAME_EXT_RE = re.compile(
 SAMPLE_AUDIO_STEM_RE = re.compile(r"(?i)(?:^|[ _.-])sample(?:[ _.-]*\d*)?$")
 
 PRUNE_DIR_NAMES = {"$recycle.bin", "system volume information", "__pycache__"}
-TRACK_SECTION_RE = re.compile(r"(?i)^\s*(?:the\s+)?(?:(?:tracks?|songs?|contents?)\s*:?|track\s*list\s*:?|set\s*list\s*:?)\s*$")
+TRACK_SECTION_RE = re.compile(
+    r"(?ix)^\s*(?:the\s+)?(?:"
+    r"(?:tracks?|songs?|contents?)(?:\s+0*\d{1,2})?\s*:?"
+    r"|track\s*list(?:\s+(?:0*\d{1,2}|[ivx]{1,5}|one|two|three|four|five|six|seven|eight|nine|ten))?\s*:?"
+    r"|set\s*list(?:\s+(?:0*\d{1,2}|[ivx]{1,5}|one|two|three|four|five|six|seven|eight|nine|ten))?\s*:?"
+    r")\s*$"
+)
+
 DISC_OR_SET_RE = re.compile(
     r"(?ix)^\s*"
     r"[-–—_=*~#\[\]{}()<>/\\| .:]*"
@@ -247,11 +255,119 @@ def _is_disc_or_set_heading(line: str) -> bool:
 
 SHOW_SECTION_RE = re.compile(r"(?i)^\s*(?:early|late|first|second|third|matinee|evening|afternoon|night)\s+show\b.*$")
 
+# Build 412: date-labelled filler/continuation dividers sometimes appear inside
+# an explicitly delimited Set/CD/Disc/Disk song region.  They separate source
+# material but are not titles and must not end the list when the audio count
+# shows that following titles belong to the same tagging sequence.
+TRACK_SUBSECTION_DATE_HEADING_RE = re.compile(
+    r"(?ix)^\s*(?:on\s+)?(?:"
+    r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+    r"\s+\d{1,2}(?:st|nd|rd|th)?(?:,|\s)\s*(?:19|20)\d{2}"
+    r"|\d{1,2}(?:st|nd|rd|th)?\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(?:19|20)\d{2}"
+    r"|\d{1,2}[-./]\d{1,2}[-./](?:\d{2}|(?:19|20)\d{2})"
+    r")\s*:?\s*$"
+)
+
+# Build 413: dated broadcast/show subsection headings may carry venue/source
+# text after the date, e.g. ``30.10.1948 - Royal Roost, NY - WMCA Radio
+# broadcast``.  These are section dividers, never numbered track 30.  Require a
+# four-digit modern year and validate the calendar date before treating a
+# numeric prefix as a boundary.
+TRACK_DATE_PREFIX_RE = re.compile(
+    r"(?x)^\s*(?:"
+    r"(?P<year_first>(?:19|20)\d{2})(?P<sep_first>[-./])(?P<month_first>\d{1,2})(?P=sep_first)(?P<day_first>\d{1,2})"
+    r"|(?P<first>\d{1,2})(?P<sep_last>[-./])(?P<second>\d{1,2})(?P=sep_last)(?P<year_last>(?:19|20)\d{2})"
+    r")(?P<tail>\s*(?:(?:[-–—:|]\s*)|(?:\s+))\S.*)?\s*$"
+)
+
+# A few old text files lose a newline between a duration and the next dated
+# broadcast heading when copied/normalized, e.g. ``... 5'1923.10.1948 - ...``.
+# Keep the track row and discard only the accidentally attached date-heading
+# tail.  This deliberately requires an apostrophe-style duration immediately
+# before a valid-looking four-digit-year date token.
+EMBEDDED_DATE_AFTER_APOSTROPHE_DURATION_RE = re.compile(
+    r"(?ix)^(?P<keep>.*?\b\d{1,3}'\d{2})(?P<date>\d{1,2}[-./]\d{1,2}[-./](?:19|20)\d{2})(?P<tail>\s*(?:[-–—:|]\s*|\s+)\S.*)$"
+)
+
+
+def _is_track_list_boundary(line: str) -> bool:
+    """Return True for explicit or continuation song-list boundaries."""
+    raw = str(line or "").strip()
+    return bool(TRACK_SECTION_RE.match(raw) or _is_disc_or_set_heading(raw))
+
+
+def _is_track_region_start_boundary(line: str) -> bool:
+    """Return True for a boundary strong enough to discard preceding headers.
+
+    Bare Encore headings are continuation markers, not start-of-list evidence:
+    an unnumbered list may legitimately contain songs before and after Encore.
+    """
+    raw = str(line or "").strip()
+    if re.fullmatch(r"(?i)\s*encores?\s*[-–—:>.]*\s*", raw):
+        return False
+    return bool(TRACK_SECTION_RE.match(raw) or _is_disc_or_set_heading(raw))
+
+
+def _numeric_track_date_prefix_is_valid(raw: str) -> bool:
+    """Return True when *raw* begins with a valid numeric calendar date.
+
+    Dot-separated forms are interpreted day.month.year. Slash/dash forms are
+    accepted when either day/month or month/day is a valid calendar date, since
+    bootleg setlists use both conventions.
+    """
+    match = TRACK_DATE_PREFIX_RE.match(str(raw or "").strip())
+    if not match:
+        return False
+    try:
+        if match.group("year_first"):
+            year = int(match.group("year_first"))
+            month = int(match.group("month_first"))
+            day = int(match.group("day_first"))
+            date(year, month, day)
+            return True
+        year = int(match.group("year_last"))
+        first = int(match.group("first"))
+        second = int(match.group("second"))
+        sep = match.group("sep_last")
+    except (TypeError, ValueError):
+        return False
+
+    candidates = [(second, first)] if sep == "." else [(second, first), (first, second)]
+    for month, day in candidates:
+        try:
+            date(year, month, day)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def _is_track_subsection_date_heading(line: str) -> bool:
+    raw = str(line or "").strip()
+    if not raw:
+        return False
+    if TRACK_SUBSECTION_DATE_HEADING_RE.match(raw):
+        return True
+    return _numeric_track_date_prefix_is_valid(raw)
+
+
+def _strip_embedded_date_boundary_tail_from_track_line(line: str) -> str:
+    """Repair a lost newline between a track duration and dated subsection."""
+    raw = str(line or "").strip()
+    match = EMBEDDED_DATE_AFTER_APOSTROPHE_DURATION_RE.match(raw)
+    if not match:
+        return raw
+    date_and_tail = f"{match.group('date')}{match.group('tail')}"
+    if not _numeric_track_date_prefix_is_valid(date_and_tail):
+        return raw
+    return match.group("keep").rstrip()
+
 TRACK_LIST_TERMINATOR_RE = re.compile(
-    r"(?i)^\s*(?:note(?:s)?\b|note\s+to\b|comments?\b|collectors?\b|"
+    r"(?i)^\s*[*#>]*\s*(?:note(?:s)?\b|note\s+to\b|comments?\b|collectors?\b|"
     r"lineage\b|source\b|transfer\b|taper\b|recording\s+info\b|"
     r"technical\s+notes?\b|editing\s+by\b|(?:thanks?\s+to\b|thank\s+you\b)|checksum\b|patch\b)"
 )
+DECORATED_THANKS_TERMINATOR_RE = re.compile(r"(?i)^\s*\*+\s*thanks?\b")
 FILE_HASH_LINE_RE = re.compile(
     r"(?i)^\s*"
     r"[\w .,'+()\[\]{}-]+\.(?:flac|mp3|wav|m4a|aac|ogg|oga|opus|aiff?|ape|wv|alac|shn|shnf)"
@@ -775,6 +891,7 @@ def _parse_track_line(line: str) -> Optional[Tuple[int, str]]:
     raw = str(line or "").strip()
     if not raw:
         return None
+    raw = _strip_embedded_date_boundary_tail_from_track_line(raw)
     if _is_non_song_technical_track_line(raw):
         return None
     if (
@@ -1425,6 +1542,16 @@ def parse_setlist_tracks(setlist_file: str) -> List[Dict[str, object]]:
             if tracks:
                 section_boundary_since_track = True
             continue
+        if _is_track_subsection_date_heading(line):
+            # Build 413: valid dated broadcast/show dividers are boundaries, not
+            # numbered tracks.  This specifically prevents ``30.10.1948 - ...``
+            # from becoming normalized track 8 after a 01..07 run.
+            pending_high_start = None
+            pending_implicit_reset = None
+            pending_forward_gap = None
+            if tracks:
+                section_boundary_since_track = True
+            continue
         parsed = _parse_track_line(line)
         if parsed is None:
             bare_number = _parse_bare_track_number_line(line)
@@ -1457,7 +1584,14 @@ def parse_setlist_tracks(setlist_file: str) -> List[Dict[str, object]]:
                 append_track(missing_number, gap_title, gap_line)
                 append_track(original_number, title, line)
                 continue
-            append_track(gap_number, gap_title, gap_line)
+            if original_number == missing_number:
+                # Build 413: a high numbered-looking row followed by the exact
+                # number we were waiting for is a false positive, not a giant
+                # forward gap.  Discard the provisional high row and let the
+                # resumed sequence continue normally.
+                pass
+            else:
+                append_track(gap_number, gap_title, gap_line)
 
         if not tracks:
             # A real numbered song list normally starts at 0 or 1.  Ignore a
@@ -1673,61 +1807,99 @@ def _looks_like_unnumbered_song_title(line: str) -> bool:
 
 
 def parse_unnumbered_section_tracks(setlist_file: str, expected_count: int = 0) -> Tuple[List[Dict[str, object]], str]:
-    """Parse unnumbered song lists that follow CD/Disc/Set delimiters.
+    """Parse unnumbered song lists inside explicit Set/CD/Disc/Disk regions.
 
-    Many old info files contain blocks such as ``CD1:`` or ``Set 1`` followed
-    by one song title per line without leading track numbers.  This parser is
-    intentionally conservative: it only trusts lines inside such a delimited
-    section, and when ``expected_count`` is supplied the count must match.
+    Build 412 treats an explicit song-list boundary as stronger evidence than
+    header prose before it.  Once a boundary such as ``Set 1``, ``Disc 1``,
+    ``Disk 1``, ``CD 1``, ``Setlist 1``, ``Tracks:``, or ``Songs:`` is seen,
+    only plausible titles after that boundary can enter this candidate.
+
+    Blank lines may separate title blocks inside the explicit region.  A
+    date-labelled subsection such as ``on July 7, 1967:`` is treated as a
+    divider rather than a title, allowing filler/continuation songs to remain
+    aligned with the audio count.  A real notes/source/checksum/technical
+    terminator or a decorative separator ends the region.
     """
     if not setlist_file or not os.path.isfile(setlist_file):
         return [], ""
     text = _read_text(setlist_file)
     if setlist_text_requests_generated_from_music_files(text):
         return [], ""
+
     titles: List[Tuple[str, str]] = []
     active = False
-    had_title_in_section = False
+    saw_boundary = False
+    had_title_in_region = False
+
     for raw_line in text.splitlines():
         line = str(raw_line or "").strip()
+
         if EAC_TECHNICAL_SECTION_START_RE.match(line):
-            break
+            if saw_boundary:
+                break
+            continue
+
+        if _is_track_list_boundary(line):
+            active = True
+            saw_boundary = True
+            continue
+
         if not line:
-            if active and had_title_in_section:
-                active = False
-                had_title_in_section = False
+            # Blank lines are common between sets, encores, and filler blocks.
+            # Keep an explicitly delimited region alive; stronger structural
+            # markers below decide when it really ends.
             continue
-        if CHECKSUM_SECTION_RE.match(line) or _is_non_song_technical_track_line(line):
-            if active or titles:
-                active = False
-            continue
-        if TRACK_LIST_TERMINATOR_RE.match(line):
-            if titles:
+
+        if re.match(r"^[\-_=*~#]{5,}$", line):
+            if saw_boundary and had_title_in_region:
                 break
             active = False
             continue
-        if _is_disc_or_set_heading(line):
-            active = True
-            had_title_in_section = False
+
+        if (
+            TRACK_LIST_TERMINATOR_RE.match(line)
+            or DECORATED_THANKS_TERMINATOR_RE.match(line)
+            or CHECKSUM_SECTION_RE.match(line)
+            or HASH_LINE_RE.match(line)
+            or _is_file_hash_run([line], 0)
+            or _is_non_song_technical_track_line(line)
+        ):
+            if saw_boundary and had_title_in_region:
+                break
+            active = False
             continue
-        # If true numbered tracks exist, let the primary numbered parser handle
-        # the file instead of mixing numbered and unnumbered interpretations.
-        if _parse_track_line(line) is not None:
-            return [], ""
+
         if not active:
             continue
-        if not _looks_like_unnumbered_song_title(line):
-            if had_title_in_section:
-                active = False
-                had_title_in_section = False
+
+        if _is_track_subsection_date_heading(line):
+            # A date-labelled filler/continuation divider is not a title and
+            # does not close an explicit song region.
             continue
+
+        # If true numbered tracks exist inside the explicit region, let the
+        # primary numbered parser handle the file rather than mixing numbered
+        # and unnumbered interpretations.
+        if _parse_track_line(line) is not None:
+            return [], ""
+
+        if not _looks_like_unnumbered_song_title(line) or _looks_like_personnel_or_credit_line(line):
+            # Once titles have begun, an unrecognized non-title line is safer
+            # as the end of the explicit region unless it matched one of the
+            # continuation/boundary forms above.
+            if had_title_in_region:
+                break
+            continue
+
         title = _clean_unstructured_title_line(line)
         if title:
             titles.append((title, line))
-            had_title_in_section = True
+            had_title_in_region = True
+
     expected = int(expected_count or 0)
     if expected > 0 and len(titles) != expected:
         return [], ""
+
     tracks: List[Dict[str, object]] = []
     for idx, (title, source_line) in enumerate(titles, start=1):
         tracks.append({
@@ -1789,6 +1961,7 @@ def parse_unstructured_unnumbered_tracks(setlist_file: str, expected_count: int 
 
     blocks: List[List[Tuple[str, str]]] = []
     current: List[Tuple[str, str]] = []
+    explicit_boundary_seen = False
 
     def flush() -> None:
         nonlocal current
@@ -1801,11 +1974,36 @@ def parse_unstructured_unnumbered_tracks(setlist_file: str, expected_count: int 
         if EAC_TECHNICAL_SECTION_START_RE.match(line):
             flush()
             break
-        if not line or re.match(r"^[\-_=]{5,}$", line):
+
+        if _is_track_list_boundary(line):
             flush()
+            if _is_track_region_start_boundary(line):
+                if not explicit_boundary_seen:
+                    # Build 412: an explicit Set/CD/Disc/Disk/Setlist boundary
+                    # invalidates header-shaped unnumbered blocks collected above
+                    # it.  Only post-boundary material can compete as song titles.
+                    blocks = []
+                explicit_boundary_seen = True
+            # Encore is a continuation boundary: it separates blocks without
+            # invalidating titles that appeared before it.
+            continue
+
+        if _is_track_subsection_date_heading(line) and explicit_boundary_seen:
+            flush()
+            continue
+
+        if not line:
+            flush()
+            continue
+
+        if re.match(r"^[\-_=*~#]{5,}$", line):
+            flush()
+            if explicit_boundary_seen and blocks:
+                break
             continue
         if (
             TRACK_LIST_TERMINATOR_RE.match(line)
+            or DECORATED_THANKS_TERMINATOR_RE.match(line)
             or CHECKSUM_SECTION_RE.match(line)
             or HASH_LINE_RE.match(line)
             or _is_file_hash_run([line], 0)
@@ -1920,6 +2118,7 @@ def _explicit_unnumbered_track_section_candidate(setlist_file: str) -> List[Dict
             continue
         if (
             TRACK_LIST_TERMINATOR_RE.match(line)
+            or DECORATED_THANKS_TERMINATOR_RE.match(line)
             or CHECKSUM_SECTION_RE.match(line)
             or HASH_LINE_RE.match(line)
             or _is_non_song_technical_track_line(line)

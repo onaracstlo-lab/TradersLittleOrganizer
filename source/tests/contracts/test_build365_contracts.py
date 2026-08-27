@@ -1,6 +1,6 @@
 """Build 375 FAQ and delete-duplicate contracts."""
 
-__version__ = "v411"
+__version__ = "v413"
 
 from pathlib import Path
 
@@ -43,7 +43,7 @@ def _docx_text(name: str) -> str:
 
 
 def test_build365_requirements_document_same_artist_date_and_folder_level_move():
-    text = _docx_text("TLO_Inventory_Requirements_Working_v411.docx")
+    text = _docx_text("TLO_Inventory_Requirements_Working_v413.docx")
     assert "same-parent sibling directories" in text
     assert "normalized artist and date" in text
     assert "Candidate discovery alone shall never establish that two folders are duplicates" in text
@@ -52,7 +52,7 @@ def test_build365_requirements_document_same_artist_date_and_folder_level_move()
 
 
 def test_build365_manual_documents_same_artist_date_and_folder_level_move():
-    text = (ROOT / "TLO_Inventory_User_Manual_v411.rtf").read_text(encoding="utf-8", errors="ignore")
+    text = (ROOT / "TLO_Inventory_User_Manual_v413.rtf").read_text(encoding="utf-8", errors="ignore")
     assert "normalized artist and date match" in text
     assert "A matching artist and date is only a way to select folders for comparison" in text
     assert "moved as a complete folder tree" in text
