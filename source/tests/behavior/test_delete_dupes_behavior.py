@@ -1,6 +1,6 @@
 """Behavior tests for the tlo-deleteDupes main."""
 
-__version__ = "v407"
+__version__ = "v411"
 
 import importlib.util
 from pathlib import Path

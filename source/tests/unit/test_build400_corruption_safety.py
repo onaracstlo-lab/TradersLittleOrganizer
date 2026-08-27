@@ -1,5 +1,5 @@
 """Build 400 corruption classification and fail-closed mutation safeguards."""
-__version__ = "v407"
+__version__ = "v411"
 
 import builtins
 from types import SimpleNamespace

@@ -14,7 +14,7 @@ Tkinter GUI that:
 
 from __future__ import annotations
 
-__version__ = "v407"
+__version__ = "v411"
 
 import csv
 import os

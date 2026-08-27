@@ -1,6 +1,6 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v407"
+__version__ = "v411"
 
 from tlo_diagnostics import debug_suppressed_exception
 import os
@@ -250,7 +250,7 @@ SHOW_SECTION_RE = re.compile(r"(?i)^\s*(?:early|late|first|second|third|matinee|
 TRACK_LIST_TERMINATOR_RE = re.compile(
     r"(?i)^\s*(?:note(?:s)?\b|note\s+to\b|comments?\b|collectors?\b|"
     r"lineage\b|source\b|transfer\b|taper\b|recording\s+info\b|"
-    r"technical\s+notes?\b|editing\s+by\b|thanks?\b|checksum\b|patch\b)"
+    r"technical\s+notes?\b|editing\s+by\b|(?:thanks?\s+to\b|thank\s+you\b)|checksum\b|patch\b)"
 )
 FILE_HASH_LINE_RE = re.compile(
     r"(?i)^\s*"
@@ -649,6 +649,28 @@ def _clean_track_title(title: str) -> str:
     return value
 
 
+BUILD408_GENERIC_TITLE_WORDS = frozenset({"title", "titled", "titles"})
+
+
+def _is_build408_generic_title_word(value: str) -> bool:
+    """Return True for complete generic title words that are never song names.
+
+    Build 408 treats Title, Titled, and Titles (case-insensitively) as generic
+    placeholders when they are supplied by a setlist or an existing audio
+    title tag. Longer legitimate names that merely contain one of those words
+    are not affected.
+    """
+    return compact_ws(value).casefold() in BUILD408_GENERIC_TITLE_WORDS
+
+
+def _clean_setlist_track_title(title: str) -> str:
+    """Clean one setlist-supplied title and apply Build 408 placeholders."""
+    value = _clean_track_title(title)
+    if _is_build408_generic_title_word(value):
+        return "Unknown"
+    return value
+
+
 def _raw_title_part_is_unknown_placeholder(raw_title_part: str) -> bool:
     """Return True when a numbered setlist row supplies only a placeholder.
 
@@ -770,7 +792,7 @@ def _parse_track_line(line: str) -> Optional[Tuple[int, str]]:
     extinf_match = EXTINF_TRACK_RE.match(raw)
     if extinf_match:
         number = int(extinf_match.group("num") or 0)
-        title = _clean_track_title(extinf_match.group("title"))
+        title = _clean_setlist_track_title(extinf_match.group("title"))
         title = re.sub(r"^\[\d{1,3}\]\s*", "", title).strip()
         if title and _is_plausible_numbered_song_title(title, raw):
             return number, title
@@ -778,7 +800,7 @@ def _parse_track_line(line: str) -> Optional[Tuple[int, str]]:
     bracketed_match = BRACKETED_TRACK_RE.match(raw)
     if bracketed_match and not AUDIO_FILENAME_EXT_RE.search(raw):
         number = int(bracketed_match.group("num") or 0)
-        title = _clean_track_title(bracketed_match.group("title"))
+        title = _clean_setlist_track_title(bracketed_match.group("title"))
         if title and _is_plausible_numbered_song_title(title, raw):
             return number, title
 
@@ -795,7 +817,7 @@ def _parse_track_line(line: str) -> Optional[Tuple[int, str]]:
             disc = 0
             track = 0
         if 1 <= disc <= 9 and 0 <= track <= 99:
-            title = _clean_track_title(disc_dash_match.group("title"))
+            title = _clean_setlist_track_title(disc_dash_match.group("title"))
             if title and _is_plausible_numbered_song_title(title, raw):
                 return disc * 100 + track, title
 
@@ -806,7 +828,7 @@ def _parse_track_line(line: str) -> Optional[Tuple[int, str]]:
         except Exception:
             number = 0
         if 0 <= number <= 999:
-            title = _clean_track_title(side_letter_match.group("title"))
+            title = _clean_setlist_track_title(side_letter_match.group("title"))
             if title and _is_plausible_numbered_song_title(title, raw):
                 return number, title
 
@@ -827,7 +849,7 @@ def _parse_track_line(line: str) -> Optional[Tuple[int, str]]:
             continue
         if _raw_title_part_is_unknown_placeholder(raw_title_part):
             return number, "unknown"
-        title = _clean_track_title(raw_title_part)
+        title = _clean_setlist_track_title(raw_title_part)
         if not title:
             # A numbered placeholder such as "17 ??" is still a supplied
             # track-title value, not a parser failure.  Tag it as unknown but
@@ -847,8 +869,8 @@ def _parse_track_line(line: str) -> Optional[Tuple[int, str]]:
 
 
 FILENAME_TRACK_PATTERNS = [
-    re.compile(r"(?i)^\s*(?:d|cd|disc|disk)\d{1,2}\s*t\s*\d{1,3}\s*(?:[.)\-_:]+\s*|\s+)(?P<title>\S.*)$"),
-    re.compile(r"(?i)^\s*(?:d|cd|disc|disk)\d{1,2}\s*t\s*\d{1,3}(?P<title>[A-Za-z][^\r\n]*)$"),
+    re.compile(r"(?i)^\s*(?:d|cd|disc|disk)\d{1,2}[\s,._-]*(?:t|track)\s*\d{1,3}\s*(?:[.)\-_:]+\s*|\s+)(?P<title>\S.*)$"),
+    re.compile(r"(?i)^\s*(?:d|cd|disc|disk)\d{1,2}[\s,._-]*(?:t|track)\s*\d{1,3}(?P<title>[A-Za-z][^\r\n]*)$"),
     re.compile(r"(?i)^\s*(?:track\s*)?\d{1,3}\s*(?:[.)\-_:]+\s*|\s+)(?P<title>\S.*)$"),
     re.compile(r"(?i)^\s*\d{1,3}(?P<title>[A-Za-z][^\r\n]*)$"),
 ]
@@ -866,14 +888,15 @@ def _filename_stem_for_track_title(path_name: str) -> str:
     return stem
 
 
-FILENAME_DISC_TRACK_RE = re.compile(r"(?i)^\s*(?:d|cd|disc|disk)(?P<disc>\d{1,2})\s*(?:t|track)\s*(?P<track>\d{1,3})")
-FILENAME_DISC_TRACK_ANYWHERE_RE = re.compile(r"(?i)(?<![A-Za-z])(?:d|cd|disc|disk)(?P<disc>\d{1,2})\s*(?:t|track)\s*(?P<track>\d{1,3})(?=\D|$)")
-FILENAME_SET_TRACK_ANYWHERE_RE = re.compile(r"(?i)(?<![A-Za-z])s(?P<set>\d{1,2})\s*(?:t|track)\s*(?P<track>\d{1,3})(?=\D|$)")
+DISC_TRACK_TOKEN_SEPARATOR_RE = r"[\s,._-]*"
+FILENAME_DISC_TRACK_RE = re.compile(rf"(?i)^\s*(?:d|cd|disc|disk)(?P<disc>\d{{1,2}}){DISC_TRACK_TOKEN_SEPARATOR_RE}(?:t|track)\s*(?P<track>\d{{1,3}})")
+FILENAME_DISC_TRACK_ANYWHERE_RE = re.compile(rf"(?i)(?<![A-Za-z])(?:d|cd|disc|disk)(?P<disc>\d{{1,2}}){DISC_TRACK_TOKEN_SEPARATOR_RE}(?:t|track)\s*(?P<track>\d{{1,3}})(?=\D|$)")
+FILENAME_SET_TRACK_ANYWHERE_RE = re.compile(rf"(?i)(?<![A-Za-z])s(?P<set>\d{{1,2}}){DISC_TRACK_TOKEN_SEPARATOR_RE}(?:t|track)\s*(?P<track>\d{{1,3}})(?=\D|$)")
 FILENAME_TRACK_ANYWHERE_RE = re.compile(r"(?i)(?:t|track)\s*(?P<track>\d{1,3})(?=\D|$)")
 FILENAME_LEADING_TRACK_RE = re.compile(r"(?i)^\s*(?:track\s*)?(?P<track>\d{1,3})(?=\D|$)")
 FILENAME_EMBEDDED_TRACK_TITLE_PATTERNS = [
     re.compile(r"(?i)^.*?(?:^|[^A-Za-z0-9])s\d{1,2}\s*t\s*\d{1,3}\s*(?:[.)\-_:]+\s*|\s+)(?P<title>\S.*)$"),
-    re.compile(r"(?i)^.*?(?:^|[^A-Za-z0-9])(?:d|cd|disc|disk)\d{1,2}\s*t\s*\d{1,3}\s*(?:[.)\-_:]+\s*|\s+)(?P<title>\S.*)$"),
+    re.compile(r"(?i)^.*?(?:^|[^A-Za-z0-9])(?:d|cd|disc|disk)\d{1,2}[\s,._-]*(?:t|track)\s*\d{1,3}\s*(?:[.)\-_:]+\s*|\s+)(?P<title>\S.*)$"),
     re.compile(r"(?i)^.*?t\s*\d{1,3}\s*(?:[.)\-_:]+\s*|\s+)(?P<title>\S.*)$"),
 ]
 
@@ -1077,7 +1100,7 @@ def _usable_title_from_audio_title_tag(raw_title: str) -> Tuple[str, bool]:
     numbered = TITLE_TAG_NUMBER_PREFIX_RE.match(candidate)
     if numbered:
         candidate = _clean_track_title(numbered.group("title"))
-    if _is_generic_audio_title_tag(candidate):
+    if _is_generic_audio_title_tag(candidate) or _is_build408_generic_title_word(candidate):
         return "Unknown", False
     if not re.search(r"[A-Za-z]", candidate):
         return "Unknown", False
@@ -1257,6 +1280,57 @@ def _has_later_valid_numbered_continuation(
         return number == _next_expected_track_number(first_number)
     return False
 
+BARE_TRACK_NUMBER_RE = re.compile(r"(?i)^\s*(?:track\s*)?(?P<num>\d{1,3})\s*(?:[.)\-:]+\s*[-–—]*|)$")
+
+
+def _parse_bare_track_number_line(line: str) -> Optional[int]:
+    """Return the number from a bare track-number row, if present."""
+    match = BARE_TRACK_NUMBER_RE.match(str(line or ""))
+    if not match:
+        return None
+    try:
+        return int(match.group("num"))
+    except Exception:
+        return None
+
+
+def _leading_bare_track_is_confirmed(lines: Sequence[str], index: int, number: int) -> bool:
+    """Confirm a leading bare 0/1 row from the next numbered song row.
+
+    A bare ``01`` is ambiguous before a song list has started.  Accept it as an
+    Unknown track only when the next meaningful numbered song row continues the
+    sequence (for example ``01`` followed by ``02 Day Waves``).  This preserves
+    standalone numeric notes while allowing explicitly blank first tracks.
+    """
+    if not _numbered_track_start_allowed(number):
+        return False
+    expected = _next_expected_track_number(number)
+    for future_line in lines[index + 1:]:
+        line = str(future_line or "").strip()
+        if not line:
+            continue
+        if (
+            CHECKSUM_SECTION_RE.match(line)
+            or HASH_LINE_RE.match(line)
+            or _is_non_song_technical_track_line(line)
+            or TRACK_LIST_TERMINATOR_RE.match(line)
+        ):
+            return False
+        if TRACK_SECTION_RE.match(line) or _is_disc_or_set_heading(line) or SHOW_SECTION_RE.match(line):
+            continue
+        parsed = _parse_track_line(line)
+        if parsed is not None:
+            return int(parsed[0]) == expected
+        # Another bare number is only useful if it is exactly the expected row,
+        # but without a title it still does not prove that this is a song list.
+        if _parse_bare_track_number_line(line) is not None:
+            return False
+        # Header/prose between the blank track and the next numbered row makes
+        # the interpretation too uncertain; do not manufacture an Unknown row.
+        return False
+    return False
+
+
 def _numbered_track_start_allowed(number: int) -> bool:
     try:
         value = int(number)
@@ -1312,6 +1386,11 @@ def parse_setlist_tracks(setlist_file: str) -> List[Dict[str, object]]:
         # any human setlist text.  Nothing after this marker is a song list.
         if EAC_TECHNICAL_SECTION_START_RE.match(line):
             break
+        if TRACK_LIST_TERMINATOR_RE.match(line) and seen_track_section and not tracks:
+            # An explicit Setlist/Songs/Tracks section can be entirely
+            # unnumbered.  Once its terminator (for example Notes:) is reached,
+            # do not scan later numbered prose such as 1), 2), 3) as songs.
+            break
         if tracks and TRACK_LIST_TERMINATOR_RE.match(line):
             if (
                 len(tracks) == 1
@@ -1347,10 +1426,14 @@ def parse_setlist_tracks(setlist_file: str) -> List[Dict[str, object]]:
                 section_boundary_since_track = True
             continue
         parsed = _parse_track_line(line)
-        if parsed is None and (seen_track_section or tracks):
-            blank_match = re.match(r"^\s*(?:track\s*)?(?P<num>\d{1,3})\s*(?:[.)\-:]+\s*[-–—]*|)$", line, re.I)
-            if blank_match:
-                parsed = (int(blank_match.group("num")), "Unknown")
+        if parsed is None:
+            bare_number = _parse_bare_track_number_line(line)
+            if bare_number is not None and (
+                seen_track_section
+                or tracks
+                or _leading_bare_track_is_confirmed(lines, idx, bare_number)
+            ):
+                parsed = (bare_number, "Unknown")
         if parsed is None:
             continue
         original_number, title = parsed
@@ -1473,7 +1556,7 @@ def _split_comma_track_items(line: str, min_items: int = 5) -> List[str]:
         return []
     if HASH_LINE_RE.match(raw) or CHECKSUM_SECTION_RE.match(raw) or DATE_LIKE_RE.match(raw):
         return []
-    pieces = [_clean_track_title(part) for part in raw.split(",")]
+    pieces = [_clean_setlist_track_title(part) for part in raw.split(",")]
     pieces = [part for part in pieces if part]
     minimum = max(2, int(min_items or 5))
     if len(pieces) < minimum:
@@ -1524,9 +1607,12 @@ def parse_setlist_text_tracks(text: str) -> List[Dict[str, object]]:
 
 UNNUMBERED_PROSE_PREFIX_RE = re.compile(
     r"(?i)^\s*(?:source|transfer|lineage|master|taper|recorded|recording|notes?|comments?|"
-    r"thanks?|enjoy|total\s+time|personnel|musicians?|with|http|www\.|venue|location|date|artist|"
+    r"enjoy|total\s+time|personnel|musicians?|with|http|www\.|venue|location|date|artist|"
     r"style|city|country|sound\s+quality|quality|promoted\s+album)\b"
 )
+UNNUMBERED_THANKS_PROSE_RE = re.compile(r"(?i)^\s*(?:thanks?\s+to\b|thank\s+you\b)")
+
+
 UNNUMBERED_CONTEXT_PROSE_RE = re.compile(
     r"(?ix)^\s*(?:"
     r"filler\s*:|songs?\s*\#|w/|wxrt\b|nak\b|samplitude\b|deck\s+with\b|"
@@ -1538,6 +1624,18 @@ UNNUMBERED_CONTEXT_PROSE_RE = re.compile(
 )
 
 
+UNNUMBERED_DURATION_SUMMARY_RE = re.compile(
+    r"(?ix)^\s*(?:total\s+)?(?:time\s*[:=-]?\s*)?"
+    r"(?:(?:min(?:ute)?s?\.?|mins?\.?)\s*)?"
+    r"\d{1,3}:\d{2}(?::\d{2})?"
+    r"(?:\s*(?:min(?:ute)?s?\.?|mins?\.?))?\s*$"
+)
+
+
+def _looks_like_duration_summary_line(line: str) -> bool:
+    return bool(UNNUMBERED_DURATION_SUMMARY_RE.match(compact_ws(line)))
+
+
 def _looks_like_unnumbered_song_title(line: str) -> bool:
     raw = compact_ws(line)
     if not raw:
@@ -1546,11 +1644,13 @@ def _looks_like_unnumbered_song_title(line: str) -> bool:
         return False
     if DATE_LIKE_RE.match(raw) or HASH_LINE_RE.match(raw) or _is_non_song_technical_track_line(raw):
         return False
+    if _looks_like_duration_summary_line(raw):
+        return False
     if TRACK_SECTION_RE.match(raw) or _is_disc_or_set_heading(raw):
         return False
     if re.match(r"^[A-Za-z .'-]+,\s*[A-Z]{2}$", raw):
         return False
-    if UNNUMBERED_PROSE_PREFIX_RE.match(raw):
+    if UNNUMBERED_PROSE_PREFIX_RE.match(raw) or UNNUMBERED_THANKS_PROSE_RE.match(raw):
         return False
     if UNNUMBERED_CONTEXT_PROSE_RE.match(raw):
         return False
@@ -1561,6 +1661,9 @@ def _looks_like_unnumbered_song_title(line: str) -> bool:
     if len(raw) > 120:
         return False
     if not re.search(r"[A-Za-z]", raw):
+        # Numeric song names do exist (for example "69" and "1999").  The
+        # unstructured fallback applies the context-sensitive bare-track guard
+        # when a short numeric row would otherwise start a candidate block.
         if not re.fullmatch(r"\d{1,4}", raw):
             return False
     words = [w for w in re.split(r"\s+", raw) if w]
@@ -1639,22 +1742,33 @@ def parse_unnumbered_section_tracks(setlist_file: str, expected_count: int = 0) 
 
 def _clean_unstructured_title_line(line: str) -> str:
     value = compact_ws(line)
-    value = re.sub(r"(?i)^e(?:ncore)?\s*[:.\-–—>]+\s*", "", value).strip()
+    value = re.sub(r"(?i)^(?:e|enc|encore)\s*[:.\-–—>]+\s*", "", value).strip()
     value = re.sub(r"\s*[-–—>]+\s*$", "", value).strip()
     value = re.sub(r"\*+$", "", value).strip()
-    return _clean_track_title(value)
+    return _clean_setlist_track_title(value)
 
 
 def _looks_like_personnel_or_credit_line(line: str) -> bool:
     raw = compact_ws(line).casefold()
     if not raw:
         return False
-    credit_words = r"(?:guitar|vocals?|bass|drums?|keyboards?|sax(?:ophone)?|trombone|trumpet|flute|percussion|taper|recorded|transferred|mastered|lineage|source|transfer)"
+    credit_words = r"(?:guitar|vocals?|bass|drums?|keyboards?|sax(?:ophone)?|trombone|trumpet|flute|percussion|vibraphone|vibes?|piano|organ|taper|recorded|transferred|mastered|lineage|source|transfer)"
     if re.match(rf"^(?:source|transfer|lineage|recorded|taped|transferred|mastered)\b", raw):
         return True
-    # Personnel lines usually look like "Name - guitar" or "Name: vocals".
-    # Do not reject legitimate song titles such as "I Play Guitar".
+    # Personnel lines commonly look like "Name - guitar" or "Name: vocals".
+    # Collector info files also use compact trailing role abbreviations such as
+    # "Gary Burton(vib)" and "Chick Corea (p)".  Restrict parenthetical
+    # matching to a controlled role vocabulary so ordinary song parentheticals
+    # such as "Song Name (Live)" remain valid titles.
     if re.search(rf"\s[-–—:]\s*.*\b{credit_words}\b", raw):
+        return True
+    role_abbrev = (
+        r"(?:p|pno|piano|g|gtr|guitar|b|bs|bass|dr|dms|drums?|perc|percussion|"
+        r"vib|vibes?|vibraphone|sax|tenor\s+sax|alto\s+sax|ss|ts|as|"
+        r"tpt|trumpet|tb|tbn|trombone|fl|flute|keys?|keyboards?|org|organ|"
+        r"vox|voc|vocals?)"
+    )
+    if re.match(rf"^.+?\s*\(\s*{role_abbrev}\s*\)\s*$", raw):
         return True
     return False
 
@@ -1709,8 +1823,19 @@ def parse_unstructured_unnumbered_tracks(setlist_file: str, expected_count: int 
         if line.count(",") >= 4:
             flush()
             continue
+        if _looks_like_duration_summary_line(line):
+            flush()
+            continue
         title = _clean_unstructured_title_line(line)
         if not title or not _looks_like_unnumbered_song_title(title) or _looks_like_personnel_or_credit_line(line):
+            flush()
+            continue
+        # A short numeric row that starts an unstructured block is much more
+        # likely to be a bare track number than a song title (the reported
+        # failure began with an isolated "01").  Numeric song names remain
+        # valid when they are embedded inside an already-established multi-line
+        # song block, preserving known titles such as "69".
+        if re.fullmatch(r"\d{1,3}", title) and not current:
             flush()
             continue
         current.append((title, line))
@@ -3297,6 +3422,254 @@ def _has_strong_numbered_track_run(tracks: Sequence[Dict[str, object]]) -> bool:
     return consecutive_pairs >= max(2, len(nums) - 2)
 
 
+def _has_convincing_numbered_setlist_evidence(setlist_file: str) -> bool:
+    """Return True when local text contains a clear numbered song sequence.
+
+    This is a safety gate for unnumbered fallbacks.  Even if the primary
+    numbered parser rejects a damaged/incomplete list, three consecutive
+    numbered song rows are strong evidence that later short prose should not be
+    scavenged merely because its line count happens to equal the audio count.
+    """
+    if not setlist_file or not os.path.isfile(setlist_file):
+        return False
+    text = _read_text(setlist_file)
+    lines = [str(raw or "").strip() for raw in text.splitlines()]
+    run: List[int] = []
+    seen_track_section = False
+    for idx, line in enumerate(lines):
+        if not line:
+            continue
+        if TRACK_SECTION_RE.match(line) or _is_disc_or_set_heading(line) or SHOW_SECTION_RE.match(line):
+            seen_track_section = True
+            run = []
+            continue
+        if TRACK_LIST_TERMINATOR_RE.match(line) and seen_track_section:
+            break
+        bare = _parse_bare_track_number_line(line)
+        parsed = _parse_track_line(line)
+        if bare is not None and parsed is None and _leading_bare_track_is_confirmed(lines, idx, bare):
+            number = bare
+        elif parsed is not None:
+            number = int(parsed[0])
+        else:
+            # Metadata/prose may appear before or after a list.  Once a run has
+            # two rows, unrelated prose ends that candidate rather than joining
+            # later numbers across arbitrary sections.
+            if len(run) >= 2:
+                run = []
+            continue
+        if not run:
+            run = [number]
+        elif number == _next_expected_track_number(run[-1]) or _is_next_disc_or_set_prefixed_start(run[-1], number):
+            run.append(number)
+        elif _numbered_track_start_allowed(number):
+            run = [number]
+        else:
+            run = [number]
+        if len(run) >= 3:
+            return True
+    return False
+
+
+def _exact_count_unnumbered_candidates(
+    setlist_file: str,
+    expected_count: int,
+) -> List[Tuple[List[Dict[str, object]], str]]:
+    """Return exact-count local unnumbered candidates without numbered gating.
+
+    Build 411 compares these candidates with a numbered parse *before* a short
+    numbered run can be padded with Unknown rows.  This is intentionally a
+    candidate collector only; choosing a winner is handled separately.
+    """
+    expected = int(expected_count or 0)
+    if expected <= 0:
+        return []
+    candidates: List[Tuple[List[Dict[str, object]], str]] = []
+    seen: set = set()
+
+    def add(rows: Sequence[Dict[str, object]], source: str) -> None:
+        items = list(rows or [])
+        if len(items) != expected:
+            return
+        key = tuple(_normalize_title_for_confirmation(str(row.get("title", ""))) for row in items)
+        if not key or key in seen:
+            return
+        seen.add(key)
+        candidates.append((items, source))
+
+    explicit = _explicit_unnumbered_track_section_candidate(setlist_file)
+    add(explicit, "explicit-unnumbered-section")
+    rows, source = parse_unnumbered_section_tracks(setlist_file, expected)
+    add(rows, source)
+    rows, source = parse_unstructured_unnumbered_tracks(setlist_file, expected)
+    add(rows, source)
+    rows, source = parse_unnumbered_comma_tracks(setlist_file, expected)
+    add(rows, source)
+    return candidates
+
+
+def _candidate_title_reinforcement(
+    tracks: Sequence[Dict[str, object]],
+    audio_files: Sequence[str],
+) -> Tuple[int, int, List[int]]:
+    """Return positive filename/tag corroboration for a candidate list.
+
+    A non-match is deliberately neutral.  Only a positive match contributes to
+    the score, as requested for Build 411.  A candidate title can be reinforced
+    when its normalized text appears in the corresponding filename, when the
+    filename parser extracts the same title, or when the existing audio TITLE
+    tag matches it.
+    """
+    rows = list(tracks or [])
+    files = sorted([path for path in audio_files if _is_audio_file(path)], key=_audio_track_order)
+    if not rows or len(rows) != len(files):
+        return 0, 0, []
+    filename_hits = 0
+    tag_hits = 0
+    hit_positions: List[int] = []
+    for idx, (row, audio_path) in enumerate(zip(rows, files), start=1):
+        candidate = _normalize_title_for_confirmation(str(row.get("title", "")))
+        if not candidate or candidate in {"unknown", "untitled", "no title"}:
+            continue
+        row_hit = False
+
+        filename_title = track_title_from_audio_filename(audio_path)
+        parsed_filename = _normalize_title_for_confirmation(filename_title)
+        filename_stem = _normalize_title_for_confirmation(_filename_stem_for_track_title(audio_path))
+        if (
+            parsed_filename
+            and parsed_filename not in {"unknown", "untitled", "no title"}
+            and parsed_filename == candidate
+        ) or (candidate and filename_stem and candidate in filename_stem):
+            filename_hits += 1
+            row_hit = True
+
+        raw_tag = read_existing_audio_title_tag(audio_path)
+        tag_title, tag_usable = _usable_title_from_audio_title_tag(raw_tag)
+        normalized_tag = _normalize_title_for_confirmation(tag_title)
+        if tag_usable and normalized_tag == candidate:
+            tag_hits += 1
+            row_hit = True
+
+        if row_hit:
+            hit_positions.append(idx)
+    return filename_hits, tag_hits, hit_positions
+
+
+def _short_numbered_candidate_is_embedded_notes(
+    setlist_file: str,
+    tracks: Sequence[Dict[str, object]],
+) -> bool:
+    """Return True for a short numbered run embedded in prose/collector notes.
+
+    This structural signal is independent of filename/tag corroboration.  It is
+    used only when an exact-count unnumbered candidate also exists, preventing a
+    three-item collector checklist such as ``1) Boost the volume`` from beating
+    a real song block merely because both happen to contain three rows.
+    """
+    rows = list(tracks or [])
+    if not setlist_file or not os.path.isfile(setlist_file) or not (2 <= len(rows) <= 5):
+        return False
+    try:
+        lines = [str(raw or "").strip() for raw in _read_text(setlist_file).splitlines()]
+    except Exception:
+        return False
+    source_lines = [compact_ws(str(row.get("source_line", ""))) for row in rows]
+    if not all(source_lines):
+        return False
+
+    start = -1
+    for idx in range(0, max(0, len(lines) - len(source_lines) + 1)):
+        if [compact_ws(line) for line in lines[idx:idx + len(source_lines)]] == source_lines:
+            start = idx
+            break
+    if start < 0:
+        return False
+    end = start + len(source_lines) - 1
+
+    def nearest_nonblank(index: int, step: int) -> str:
+        while 0 <= index < len(lines):
+            value = compact_ws(lines[index])
+            if value:
+                return value
+            index += step
+        return ""
+
+    before = nearest_nonblank(start - 1, -1)
+    after = nearest_nonblank(end + 1, 1)
+    before_words = len(before.split())
+    after_words = len(after.split())
+    prose_before = bool(before and (len(before) >= 90 or before_words >= 12 or (before.endswith(":") and before_words >= 6)))
+    prose_after = bool(after and (len(after) >= 90 or after_words >= 12))
+    explicit_track_context = bool(before and (TRACK_SECTION_RE.match(before) or _is_disc_or_set_heading(before)))
+    return (prose_before or prose_after) and not explicit_track_context
+
+
+def _choose_between_exact_local_candidates(
+    numbered_tracks: Sequence[Dict[str, object]],
+    unnumbered_candidates: Sequence[Tuple[List[Dict[str, object]], str]],
+    audio_files: Sequence[str],
+    setlist_file: str,
+    folder: str,
+    emit: Optional[Callable[[str], None]] = None,
+) -> Optional[Tuple[List[Dict[str, object]], str]]:
+    """Choose between exact-count numbered and unnumbered local lists.
+
+    Positive filename/title-tag matches can reinforce either candidate but
+    absent matches never subtract confidence.  Ties retain numbered precedence
+    unless the short numbered run is structurally embedded in prose/notes.
+    """
+    numbered = list(numbered_tracks or [])
+    candidates = list(unnumbered_candidates or [])
+    expected = len(audio_files)
+    if not candidates:
+        return None
+
+    # Pick the strongest unnumbered candidate by positive corroboration; source
+    # order is a deterministic tie-break only, not a negative score.
+    ranked_unnumbered = []
+    for ordinal, (rows, source) in enumerate(candidates):
+        f_hits, t_hits, positions = _candidate_title_reinforcement(rows, audio_files)
+        ranked_unnumbered.append((f_hits + t_hits, f_hits, t_hits, -ordinal, rows, source, positions))
+    ranked_unnumbered.sort(key=lambda item: item[:4], reverse=True)
+    u_total, u_file, u_tag, _neg_ord, u_rows, u_source, u_positions = ranked_unnumbered[0]
+
+    if len(numbered) != expected:
+        _emit(
+            emit,
+            f"INFO: {folder} | exact-count unnumbered setlist candidate has {expected} title(s) while numbered candidate has {len(numbered)}; using exact-count list",
+        )
+        if u_total:
+            _emit(emit, f"INFO: {folder} | unnumbered candidate additionally reinforced by filename/title-tag matches at track(s) {', '.join(str(n) for n in u_positions)}")
+        return u_rows, u_source
+
+    n_file, n_tag, n_positions = _candidate_title_reinforcement(numbered, audio_files)
+    n_total = n_file + n_tag
+    if u_total > n_total:
+        _emit(
+            emit,
+            f"INFO: {folder} | exact-count unnumbered candidate selected over numbered candidate by positive filename/title-tag reinforcement ({u_total} vs {n_total})",
+        )
+        return u_rows, u_source
+    if n_total > u_total:
+        _emit(
+            emit,
+            f"INFO: {folder} | exact-count numbered candidate retained by positive filename/title-tag reinforcement ({n_total} vs {u_total})",
+        )
+        return numbered, "setlist"
+
+    if _short_numbered_candidate_is_embedded_notes(setlist_file, numbered):
+        _emit(
+            emit,
+            f"INFO: {folder} | equally sized short numbered candidate is embedded in prose/notes; using exact-count unnumbered song block",
+        )
+        return u_rows, u_source
+
+    # No corroboration is not negative evidence.  Preserve the normal numbered
+    # precedence when structural evidence does not distinguish the candidates.
+    return numbered, "setlist"
+
+
 def _local_setlist_fallback_tracks(
     setlist_file: str,
     expected_count: int,
@@ -3307,23 +3680,26 @@ def _local_setlist_fallback_tracks(
 
     These fallbacks are count-gated and are also useful when a stray numbered
     venue/header line caused the primary parser to produce the wrong count.
+    They are not allowed to scavenge prose when the file already contains a
+    convincing consecutive numbered-song sequence *unless* Build 411's
+    candidate comparison has already identified an exact-count alternative.
     """
-    section_tracks, section_source = parse_unnumbered_section_tracks(setlist_file, expected_count)
-    if section_tracks:
+    if _has_convincing_numbered_setlist_evidence(setlist_file):
+        _emit(emit, f"WARN: {folder} | numbered song-sequence evidence found; not using unnumbered prose fallback")
+        return [], ""
+    candidates = _exact_count_unnumbered_candidates(setlist_file, expected_count)
+    if not candidates:
+        return [], ""
+    tracks, source = candidates[0]
+    if source == "unnumbered-sections":
         _emit(emit, f"INFO: {folder} | using unnumbered CD/Set section lines as track titles")
-        return section_tracks, section_source
-    line_tracks, line_source = parse_unstructured_unnumbered_tracks(setlist_file, expected_count)
-    if line_tracks:
+    elif source in {"unnumbered-lines", "unnumbered-line-blocks", "explicit-unnumbered-section"}:
         _emit(emit, f"INFO: {folder} | using unnumbered one-title-per-line block as track titles")
-        return line_tracks, line_source
-    comma_tracks, comma_source = parse_unnumbered_comma_tracks(setlist_file, expected_count)
-    if comma_tracks:
-        if comma_source == "comma-items":
-            _emit(emit, f"INFO: {folder} | using comma-separated items as track titles")
-        else:
-            _emit(emit, f"INFO: {folder} | using comma-separated lines as track titles")
-        return comma_tracks, comma_source
-    return [], ""
+    elif source == "comma-items":
+        _emit(emit, f"INFO: {folder} | using comma-separated items as track titles")
+    else:
+        _emit(emit, f"INFO: {folder} | using comma-separated lines as track titles")
+    return tracks, source
 
 
 def _best_local_setlist_candidate_by_position(setlist_file: str) -> List[Dict[str, object]]:
@@ -3508,6 +3884,21 @@ def _select_tracks_for_tagging(
             tracks = _fill_missing_numbered_track_rows_from_filenames(tracks, audio_files, len(audio_files), folder, emit=emit)
         if tracks and len(tracks) != len(audio_files):
             tracks = _fill_missing_numbered_track_rows(tracks, len(audio_files), folder, emit=emit)
+
+        # Build 411: compare any exact-count unnumbered song-list candidate
+        # before a short numbered run can be padded with Unknown rows.  Count
+        # agreement is primary evidence; filename/title-tag agreement is
+        # positive-only reinforcement when candidates have the same count.
+        if tracks:
+            exact_unnumbered = _exact_count_unnumbered_candidates(setlist_file, len(audio_files))
+            choice = _choose_between_exact_local_candidates(
+                tracks, exact_unnumbered, audio_files, setlist_file, folder, emit=emit
+            )
+            if choice is not None:
+                chosen_tracks, chosen_source = choice
+                if len(chosen_tracks) == len(audio_files):
+                    return chosen_tracks, chosen_source, None
+
         if tracks and len(tracks) != len(audio_files):
             tracks = _strong_numbered_partial_tracks_to_expected_count(tracks, len(audio_files), folder, emit=emit)
         if tracks and len(tracks) == len(audio_files):
