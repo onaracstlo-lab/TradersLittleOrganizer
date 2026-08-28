@@ -1,6 +1,6 @@
 """Postprocess metadata logs into setlist files, bootlist.csv, duplicate/group outputs, and summary/unidentified-show files."""
 
-__version__ = "v414"
+__version__ = "v415"
 import csv
 import json
 import os
@@ -1360,14 +1360,56 @@ def _row_matches_reinventory_scope(row: Dict[str, str], scope: Dict[str, str]) -
     scope_path = scope.get("path") or ""
     if not scope_path:
         return True
+    if scope.get("exact_only"):
+        return normalize_path_for_compare(path) == normalize_path_for_compare(scope_path)
     return path_is_same_or_under(path, scope_path)
 
 
-def _existing_rows_for_postprocess(config) -> tuple[List[Dict[str, str]], List[Dict[str, str]]]:
+def _copy_delete_exact_replacement_scopes(config, records) -> List[Dict[str, str]]:
+    """Return exact destination rows attributable to this Copy/Delete run.
+
+    A Copy/Delete destination parent is a container, never a subtree replacement
+    scope.  Exact paths produced by the current run are safe to replace if a
+    stale bootlist row already names that same destination path.
+    """
+    decisions = [
+        item for item in list(getattr(config, "inventory_path_actions", []) or [])
+        if str(item.get("copy_mode") or "").strip().lower() == "copy-delete"
+    ]
+    if not decisions or not records:
+        return []
+
+    scopes: List[Dict[str, str]] = []
+    seen = set()
+    for item in decisions:
+        destination = str(item.get("copy_destination") or item.get("path") or "").strip()
+        destination_key = normalize_path_for_compare(destination) if destination else ""
+        vkey = volume_key(item.get("volume", ""))
+        for record in records:
+            record_path = str(getattr(record, "main_dir_path", "") or "").strip()
+            if not record_path:
+                continue
+            if destination_key and not path_is_same_or_under(record_path, destination):
+                continue
+            key = (vkey, normalize_path_for_compare(record_path))
+            if key in seen:
+                continue
+            seen.add(key)
+            scopes.append({
+                "volume_key": vkey,
+                "path": record_path,
+                "path_key": key[1],
+                "exact_only": True,
+            })
+    return scopes
+
+
+def _existing_rows_for_postprocess(config, records=None) -> tuple[List[Dict[str, str]], List[Dict[str, str]]]:
     existing_rows = read_bootlist_rows(config.TLOHome)
     if not existing_rows:
         return [], []
     scopes = _overwrite_path_scopes(config)
+    scopes.extend(_copy_delete_exact_replacement_scopes(config, records))
     if not scopes and not (getattr(config, "inventory_volume_actions", {}) or getattr(config, "inventory_path_actions", None)):
         # Legacy/full-refresh behavior: if no policy was established, do not keep
         # previous bootlist rows.
@@ -1408,7 +1450,7 @@ def postprocess_metadata_outputs(config) -> Dict[str, int | str]:
 
     _postprocess_status(config, "resolving existing bootlist and volume policy...")
     stage_started = time.monotonic()
-    existing_rows_to_keep, existing_rows_to_replace = _existing_rows_for_postprocess(config)
+    existing_rows_to_keep, existing_rows_to_replace = _existing_rows_for_postprocess(config, records=records)
     elapsed = _record_postprocess_timing(timing_entries, "resolve existing bootlist and volume policy", stage_started)
     _postprocess_status(config, f"existing bootlist/volume policy complete: keep {len(existing_rows_to_keep)}, replace {len(existing_rows_to_replace)} ({_format_elapsed_seconds(elapsed)})")
 

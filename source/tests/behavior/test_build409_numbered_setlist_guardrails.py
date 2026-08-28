@@ -8,7 +8,7 @@ pytestmark = pytest.mark.behavior
 
 import tlo_tag_lib as T
 
-__version__ = "v414"
+__version__ = "v415"
 
 
 CHICK_COREA_INFO = """Chick Corea & Gary Burton
@@ -158,16 +158,16 @@ def test_build409_requirements_and_manual_document_numbered_setlist_safety_rule(
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v414.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v415.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v414.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v415.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v414 (v1.4 Build 414)." in req_text
+    assert "Current document version: v415 (v1.4 Build 415)." in req_text
     assert "Build 409 numbered-setlist safety rule" in req_text
     assert "short number is more likely to be a bare track number" in req_text
     assert "titles such as 69 and 1999 must remain valid" in req_text
     assert "Gary Burton(vib) and Chick Corea (p)" in req_text
     assert "convincing run of at least three consecutive numbered song rows" in req_text
-    assert "Version v1.4 Build 414" in manual_text
+    assert "Version v1.4 Build 415" in manual_text
     assert "Build 409 - Numbered setlist safety and blank tracks" in manual_text
     assert "Gary Burton(vib) or Chick Corea (p)" in manual_text

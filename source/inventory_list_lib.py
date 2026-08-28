@@ -1,4 +1,4 @@
-__version__ = "v414"
+__version__ = "v415"
 from tlo_diagnostics import debug_suppressed_exception
 import os
 import re
@@ -718,6 +718,20 @@ def _resolve_existing_volume_actions(config, accessible_items):
             )
         elif not same_volume_rows:
             action = "new"
+        elif related_rows and scope.get("copy_mode") == "copy-delete":
+            # Copy/Delete Original inventories the transferred shows under the
+            # destination parent, but that parent is only a container.  Treating
+            # the whole destination (for example /mnt/d/boots) as the
+            # re-inventory scope would delete every prior bootlist/setlist entry
+            # beneath it when only a small source tree is being transferred.
+            # Append here; postprocess may replace only exact destination rows
+            # attributable to records produced by this copy/delete run.
+            action = "new"
+            console_print(
+                config,
+                f"Existing inventory decision: [{volume_label}] {path_name} is a Copy/Delete destination container; "
+                f"preserving existing destination inventory and appending transferred shows.",
+            )
         elif related_rows:
             # Deterministic volume/path policy: same labeled volume + overlapping
             # path always re-inventories the affected subtree.  No prompt is shown.

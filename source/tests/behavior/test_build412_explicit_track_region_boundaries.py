@@ -9,7 +9,7 @@ pytestmark = pytest.mark.behavior
 from inventory_parser_lib import Config
 import tlo_tag_lib as T
 
-__version__ = "v414"
+__version__ = "v415"
 
 
 GARY_DAVIS_INFO = """Reverend Gary Davis
@@ -158,15 +158,15 @@ def test_build412_requirements_and_manual_document_explicit_track_region_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v414.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v415.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v414.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v415.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v414 (v1.4 Build 414)." in req_text
+    assert "Current document version: v415 (v1.4 Build 415)." in req_text
     assert "Build 412 explicit track-region boundary rule" in req_text
     assert "Reverend Gary Davis 1967-07-08" in req_text
     assert "Setlist 1" in req_text and "Track List 1" in req_text
-    assert "Version v1.4 Build 414" in manual_text
+    assert "Version v1.4 Build 415" in manual_text
     assert "Build 412 - Explicit Set/CD/Disc/Disk track regions" in manual_text
     assert "Reverend Gary Davis 1967-07-08" in manual_text
     assert "on July 7, 1967:" in manual_text
