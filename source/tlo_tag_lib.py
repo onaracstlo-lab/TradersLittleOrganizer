@@ -1,6 +1,6 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v413"
+__version__ = "v414"
 
 from tlo_diagnostics import debug_suppressed_exception
 import os
@@ -4062,6 +4062,64 @@ def _strong_numbered_partial_tracks_to_expected_count(
     return padded
 
 
+def _exact_count_bare_number_track_candidate(
+    setlist_file: str, expected_count: int
+) -> List[Dict[str, object]]:
+    """Return Unknown-title rows for one exact-count bare-number block.
+
+    Bare numeric lines are track positions, never song names.  Promote them
+    only when there is exactly one contiguous consecutive block beginning at
+    0/1 whose length exactly matches the audio-file count.  Count mismatches or
+    multiple competing blocks remain neutral and produce no candidate.
+    """
+    expected = int(expected_count or 0)
+    if expected <= 0 or not setlist_file or not os.path.isfile(setlist_file):
+        return []
+    lines = _read_text(setlist_file).splitlines()
+    blocks: List[List[Tuple[int, str]]] = []
+    current: List[Tuple[int, str]] = []
+
+    def finish() -> None:
+        nonlocal current
+        if current:
+            blocks.append(current)
+            current = []
+
+    for raw_line in lines:
+        stripped = str(raw_line or "").strip()
+        number = _parse_bare_track_number_line(stripped) if stripped else None
+        if number is None:
+            finish()
+            continue
+        if not current:
+            if _numbered_track_start_allowed(number):
+                current = [(number, stripped)]
+            continue
+        expected_next = _next_expected_track_number(current[-1][0])
+        if number == expected_next:
+            current.append((number, stripped))
+        else:
+            finish()
+            if _numbered_track_start_allowed(number):
+                current = [(number, stripped)]
+    finish()
+
+    matches = [block for block in blocks if len(block) == expected]
+    if len(matches) != 1:
+        return []
+    rows: List[Dict[str, object]] = []
+    for idx, (number, source_line) in enumerate(matches[0], start=1):
+        rows.append({
+            "original_number": number,
+            "normalized_number": idx,
+            "title": "Unknown",
+            "source_line": source_line,
+            "source": "bare-number-positions",
+            "title_unknown_fallback": True,
+        })
+    return rows
+
+
 def _select_tracks_for_tagging(
     config: Config,
     group: dict,
@@ -4075,6 +4133,8 @@ def _select_tracks_for_tagging(
     setlist_file = group.get("setlist_file", "") or ""
     if setlist_file:
         tracks = parse_setlist_tracks(setlist_file)
+        if not tracks:
+            tracks = _exact_count_bare_number_track_candidate(setlist_file, len(audio_files))
         if tracks and len(tracks) != len(audio_files):
             tracks = _coerce_tracks_to_expected_count(tracks, len(audio_files), folder, emit=emit)
         if tracks and len(tracks) != len(audio_files):

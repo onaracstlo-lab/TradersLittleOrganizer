@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v413"
+__version__ = "v414"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
@@ -44,6 +44,7 @@ from tlo_tree_compare import has_exact_tree_match_in_family, split_collision_suf
 
 FOUR_DIGIT_WRAPPER_RE = re.compile(r"^\d{4}$")
 INTEGER_RE = re.compile(r"^\d+$")
+COLLABORATIVE_ARTIST_CONNECTOR_RE = re.compile(r"(\s+(?:and|with|&|\+)\s+)", re.IGNORECASE)
 MULTI_EXT_RE = re.compile(
     r"(?i)(?:\.(?:txt|docx?|rtf|nfo|md5|ffp|fpt|sfv|log|cue|m3u8?|pls|shn|shnf|flac|flac16|flac24|wav|mp3|m4a|aac|ogg|oga|opus|aiff?|ape|wv|alac|aucdtect))+$"
 )
@@ -3483,6 +3484,27 @@ def _reverse_last_first_artist_component(text: str) -> str:
     return compact_ws(f"{first} {last}")
 
 
+def _path_artist_hit_is_location_tail(part: str, matched_text: str) -> bool:
+    """Return True when a partial DB artist hit is only the parsed city tail.
+
+    Build 414 prevents generic path artist scanning from turning location text
+    such as ``Washington, DC`` into artist ``Washington``.  Exact whole-path
+    artist matches are handled before this helper is consulted and therefore
+    remain eligible.
+    """
+    raw = compact_ws(part)
+    phrase = compact_ws(matched_text)
+    if not raw or not phrase or normalized_compare_value(raw) == normalized_compare_value(phrase):
+        return False
+    try:
+        _venue, city, region, country, _parenthetical = _parse_string2(raw)
+    except Exception:
+        return False
+    if not city or not (region or country):
+        return False
+    return normalized_compare_value(city) == normalized_compare_value(phrase)
+
+
 def _db_backed_artist_hits_for_path_part(
     part: str, matcher: Optional[ArtistMatcher]
 ) -> Tuple[List[Tuple[str, str]], List[str]]:
@@ -3521,10 +3543,13 @@ def _db_backed_artist_hits_for_path_part(
         return hits, collisions
 
     for master, phrase in match_line_to_artists(part, matcher):
-        key = (master.casefold(), compact_ws(phrase).casefold())
+        cleaned_phrase = compact_ws(phrase)
+        if _path_artist_hit_is_location_tail(part, cleaned_phrase):
+            continue
+        key = (master.casefold(), cleaned_phrase.casefold())
         if key not in seen:
             seen.add(key)
-            hits.append((master, compact_ws(phrase)))
+            hits.append((master, cleaned_phrase))
     return hits, _unique_preserve(collisions)
 
 
@@ -4119,6 +4144,44 @@ def _apply_string2_to_record(record: ShowMetadata, match: Optional[Dict[str, str
         evidence.setdefault("country", []).append(Candidate(record.country, f"path_part:{match['part']}", 35))
 
 
+def _resolve_collaborative_artist_header(
+    raw_artist: str, matcher: Optional[ArtistMatcher], config=None
+) -> Tuple[str, List[str]]:
+    """Resolve a conservative multi-artist structured header.
+
+    Every component separated by a standalone ``and``, ``with``, ``&`` or ``+``
+    must resolve uniquely in the Artist DB.  Failure or ambiguity contributes no
+    artist candidate.  In Master mode the resolved master names are rebuilt with
+    the original connector text; As-Is mode preserves the raw combined header.
+    """
+    raw = compact_ws(raw_artist)
+    if not raw or matcher is None:
+        return "", []
+    pieces = COLLABORATIVE_ARTIST_CONNECTOR_RE.split(raw)
+    if len(pieces) < 3:
+        return "", []
+    components = [compact_ws(pieces[idx]) for idx in range(0, len(pieces), 2)]
+    if not 2 <= len(components) <= 4 or any(not component for component in components):
+        return "", []
+    masters: List[str] = []
+    for component in components:
+        detail = _lookup_artist_detail(component, matcher)
+        if detail["status"] != "matched" or len(detail["masters"]) != 1:
+            return "", []
+        masters.append(detail["masters"][0])
+    if _as_is_artist_name(config):
+        return raw, masters
+    rebuilt: List[str] = []
+    master_index = 0
+    for idx, piece in enumerate(pieces):
+        if idx % 2 == 0:
+            rebuilt.append(masters[master_index])
+            master_index += 1
+        else:
+            rebuilt.append(piece)
+    return compact_ws("".join(rebuilt)), masters
+
+
 def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata, evidence: Dict[str, List[Candidate]], observations: List[str], artist_matcher: Optional[ArtistMatcher] = None, conflicts: Optional[List[str]] = None) -> bool:
     """Apply selected-setlist artist/venue/location metadata.
 
@@ -4153,10 +4216,18 @@ def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata,
         detail = _lookup_artist_detail(raw_setlist_artist, artist_matcher)
 
         # An unlabeled first line is only promoted to artist metadata when the
-        # surrounding header is structurally strong *and* the Artist DB resolves
-        # that line uniquely.  Explicit Artist: keys preserve their historical
-        # raw fallback when the DB does not contain the value.
+        # surrounding header is structurally strong *and* either the complete
+        # line resolves uniquely or every component of a conservative
+        # collaboration header resolves uniquely.  Explicit Artist: keys keep
+        # their historical raw fallback when the DB does not contain the value.
+        collaborative_artist = ""
+        collaborative_masters: List[str] = []
         if structured_unlabeled and detail["status"] != "matched":
+            collaborative_artist, collaborative_masters = _resolve_collaborative_artist_header(
+                raw_setlist_artist, artist_matcher, config
+            )
+
+        if structured_unlabeled and detail["status"] != "matched" and not collaborative_artist:
             if detail["status"] == "collision":
                 observations.append(
                     _collision_note(
@@ -4170,7 +4241,12 @@ def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata,
                 )
         else:
             master = detail["masters"][0] if detail["status"] == "matched" and detail["masters"] else ""
-            candidate_artist = _artist_output_name(config, raw_setlist_artist, master)
+            candidate_artist = collaborative_artist or _artist_output_name(config, raw_setlist_artist, master)
+            if collaborative_artist:
+                observations.append(
+                    "structured setlist collaboration resolved from unique Artist DB components: "
+                    + " + ".join(collaborative_masters)
+                )
             if not record.artist:
                 record.artist = candidate_artist
                 evidence.setdefault("artist", []).append(Candidate(record.artist, artist_source, artist_confidence))

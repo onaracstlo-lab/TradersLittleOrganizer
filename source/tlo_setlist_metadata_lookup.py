@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v413"
+__version__ = "v414"
 
 import csv
 import os
@@ -1402,6 +1402,30 @@ def _extract_structured_unlabeled_header_block(lines: List[str], support: _Suppo
                 if prev_is_artist_or_event or next_is_date:
                     structured_artist = items[pos - 1][1] if _looks_like_unlabeled_artist_header_line(items[pos - 1][1], support) else ""
                     return structured_artist, split_venue, split_city, split_region, split_country, split_raw or line, split_pattern or "LOCATION_STRUCTURED_UNLABELED_HEADER", max(split_conf, 84)
+
+        # Build 414: tolerate one extra room/hall line between Artist and
+        # the named Venue.  A common header shape is:
+        #   Artist / room-or-hall / named Venue / Location / Date
+        # Both intermediate lines must remain short venue-like header lines,
+        # the fourth line must parse as a location, and the fifth as a date.
+        # Prefer the deeper named venue so ``Concert Hall`` does not shift into
+        # the artist slot and does not replace ``Kennedy Center`` as Venue.
+        if pos + 4 < len(items) and _looks_like_unlabeled_artist_header_line(line, support):
+            room_line = items[pos + 1][1]
+            venue_line = items[pos + 2][1]
+            location_line = items[pos + 3][1]
+            date_line = items[pos + 4][1]
+            if (
+                _looks_like_unlabeled_venue_line(room_line)
+                and _looks_like_unlabeled_venue_line(venue_line)
+                and _looks_like_date_header_line(date_line)
+            ):
+                city, region, country, raw, pattern_id, conf = _parse_unlabeled_location_header_line(location_line, support)
+                if city and (region or country):
+                    return (
+                        line, venue_line, city, region, country, raw or location_line,
+                        pattern_id or "LOCATION_STRUCTURED_UNLABELED_HEADER", max(conf, 90),
+                    )
 
         if not _looks_like_unlabeled_artist_header_line(line, support):
             continue

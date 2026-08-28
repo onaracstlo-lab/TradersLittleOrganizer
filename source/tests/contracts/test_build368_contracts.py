@@ -1,6 +1,6 @@
 """Build 375 simple deleteDupes mismatch logging contracts."""
 
-__version__ = "v413"
+__version__ = "v414"
 
 from pathlib import Path
 from zipfile import ZipFile
@@ -33,7 +33,7 @@ def test_build368_source_records_simple_mismatch_reasons_separately():
 
 
 def test_build368_requirements_document_simple_mismatch_log():
-    text = _docx_text("TLO_Inventory_Requirements_Working_v413.docx")
+    text = _docx_text("TLO_Inventory_Requirements_Working_v414.docx")
     assert "deleteDupesMismatches.txt" in text
     assert "folder name, folder name, simple reason" in text
     assert "different number of files" in text
@@ -42,7 +42,7 @@ def test_build368_requirements_document_simple_mismatch_log():
 
 
 def test_build368_manual_documents_simple_mismatch_log():
-    text = (ROOT / "TLO_Inventory_User_Manual_v413.rtf").read_text(encoding="utf-8", errors="ignore")
+    text = (ROOT / "TLO_Inventory_User_Manual_v414.rtf").read_text(encoding="utf-8", errors="ignore")
     assert "deleteDupesMismatches.txt" in text
     assert "different number of files" in text
     assert "different sub-structure" in text
