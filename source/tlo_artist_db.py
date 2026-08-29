@@ -1,4 +1,4 @@
-__version__ = "v415"
+__version__ = "v418"
 import re
 import sqlite3
 from dataclasses import dataclass, field
@@ -11,7 +11,12 @@ from tlo_text_utils import compact_ws
 THE_PREFIX_RE = re.compile(r"^(?:the|a)\s+", re.IGNORECASE)
 THE_SUFFIX_RE = re.compile(r",\s*(?:the|a)$", re.IGNORECASE)
 TERMINAL_ARTIST_SUFFIX_RE = re.compile(
-    r"(?:\s+band|(?:\s+|-\s*)all(?:\s*\-\s*|\s*)stars?)$",
+    r"(?:"
+    r"(?:\s+|-\s*)all(?:\s*-\s*|\s+)stars?\s+band"
+    r"|\s+group"
+    r"|\s+band"
+    r"|(?:\s+|-\s*)all(?:\s*-\s*|\s*)stars?"
+    r")$",
     re.IGNORECASE,
 )
 
@@ -29,21 +34,52 @@ def _letters_only(text: str) -> str:
     return "".join(ch for ch in (text or "").lower() if ch.isalpha())
 
 
-def _strip_terminal_artist_suffix(text: str) -> str:
-    """Return *text* without one recognized terminal artist-group suffix.
+def _split_terminal_artist_suffix(text: str) -> Tuple[str, str]:
+    """Return ``(base_artist, stripped_suffix)`` for one supported terminal suffix.
 
-    ``Band`` and the common ``All Star``/``All Stars`` spellings are secondary
-    Artist DB lookup forms only.  The unmodified candidate is always tried
-    first, so an exact database artist such as ``Example All-Stars`` wins over
-    a shorter alias/master match.  Accepted All-Star spellings include spaces,
-    dashes, or no separator between ``All`` and ``Star``, in singular/plural
-    form and case-insensitively.
+    The suffix is retained so a successful *base* Artist DB lookup can identify
+    the performance without discarding the performance-specific wording.  A
+    leading dash is preserved (for example ``Example-AllStar`` ->
+    ``("Example", "-AllStar")``); whitespace-separated forms are returned
+    without their leading whitespace.
     """
     cleaned = compact_ws(text)
-    if not cleaned or not TERMINAL_ARTIST_SUFFIX_RE.search(cleaned):
-        return ""
-    stripped = compact_ws(TERMINAL_ARTIST_SUFFIX_RE.sub("", cleaned))
-    return stripped if stripped and stripped.casefold() != cleaned.casefold() else ""
+    if not cleaned:
+        return "", ""
+    match = TERMINAL_ARTIST_SUFFIX_RE.search(cleaned)
+    if not match:
+        return "", ""
+    base = compact_ws(cleaned[:match.start()])
+    raw_suffix = cleaned[match.start():]
+    if not base or base.casefold() == cleaned.casefold():
+        return "", ""
+    suffix = raw_suffix.strip()
+    return base, suffix
+
+
+def _strip_terminal_artist_suffix(text: str) -> str:
+    """Return *text* without one recognized terminal artist-group suffix."""
+    base, _suffix = _split_terminal_artist_suffix(text)
+    return base
+
+
+def _restore_terminal_artist_suffix(master: str, suffix: str) -> str:
+    """Reapply a fallback-only suffix to the DB-resolved base artist.
+
+    If the resolved DB master already ends in a supported grouping suffix, do
+    not append another one.  This preserves established masters such as
+    ``The Marshall Tucker Band`` instead of producing ``... Band Band``.
+    """
+    base_master = compact_ws(master)
+    raw_suffix = compact_ws(suffix) if not str(suffix or "").lstrip().startswith("-") else str(suffix or "").strip()
+    if not base_master or not raw_suffix:
+        return base_master
+    _existing_base, existing_suffix = _split_terminal_artist_suffix(base_master)
+    if existing_suffix:
+        return base_master
+    if raw_suffix.startswith("-"):
+        return compact_ws(base_master + raw_suffix)
+    return compact_ws(f"{base_master} {raw_suffix}")
 
 
 def artist_search_variants(text: str) -> List[str]:
@@ -69,6 +105,10 @@ class ArtistMatcher:
     query_cache: "OrderedDict[str, Tuple[str, Tuple[str, ...]]]" = field(default_factory=OrderedDict)
     query_cache_max_entries: int = 4096
     recent_masters: Deque[str] = field(default_factory=lambda: deque(maxlen=5))
+    # Build 418: maps original/restored suffix-fallback names to the DB base
+    # used to identify them.  These names are performance artists, not full
+    # Artist DB entries, and are persisted for later database review.
+    terminal_suffix_fallback_info: Dict[str, Dict[str, str]] = field(default_factory=dict)
 
 
 def load_artist_matcher(config) -> ArtistMatcher:
@@ -191,20 +231,47 @@ def lookup_artist_masters(
     for variant in variants:
         found.update(matcher.exact_map.get(variant.casefold(), set()))
 
-    # Secondary fallback for potential artist names ending in ``Band`` or a
-    # supported ``All Star(s)`` spelling.  Never mix the stripped form into the
+    # Secondary fallback for potential artist names ending in ``Band``,
+    # ``Group``, a supported ``All Star(s)`` spelling, or a terminal
+    # ``All Star Band``/``All-Star Band`` form.  Never mix the stripped form into the
     # primary variant set: if the full artist name exists in the DB, that
     # exact/full result must win.  Only a unique stripped-form result is
     # accepted; ambiguous stripped matches leave the original candidate
     # unresolved.
     if not found and _allow_terminal_artist_suffix_fallback:
-        stripped_artist = _strip_terminal_artist_suffix(text)
-        if stripped_artist:
+        stripped_artist, stripped_suffix = _split_terminal_artist_suffix(text)
+        if stripped_artist and stripped_suffix:
             stripped_masters = lookup_artist_masters(
                 stripped_artist, matcher, _allow_terminal_artist_suffix_fallback=False
             )
             if len(stripped_masters) == 1:
-                found.add(stripped_masters[0])
+                db_master = stripped_masters[0]
+                performance_artist = _restore_terminal_artist_suffix(db_master, stripped_suffix)
+                if performance_artist:
+                    found.add(performance_artist)
+                    info = {
+                        "candidate": compact_ws(text),
+                        "base_query": stripped_artist,
+                        "db_master": db_master,
+                        "suffix": stripped_suffix,
+                        "performance_artist": performance_artist,
+                    }
+                    for key_text in (text, performance_artist):
+                        key = compact_ws(key_text).casefold()
+                        if key:
+                            matcher.terminal_suffix_fallback_info[key] = dict(info)
+                    # Returned fallback values intentionally represent the
+                    # performance artist rather than a literal DB master.
+                    # Seed alias/norm data so repeated queries and downstream
+                    # alias helpers continue to work normally.
+                    aliases = [performance_artist]
+                    for alias in matcher.master_aliases.get(db_master, [db_master]):
+                        if alias.casefold() not in {item.casefold() for item in aliases}:
+                            aliases.append(alias)
+                    matcher.master_aliases.setdefault(performance_artist, aliases)
+                    matcher.master_norms.setdefault(
+                        performance_artist, set(matcher.master_norms.get(db_master, set()))
+                    )
 
     masters = tuple(sorted(found, key=lambda item: item.casefold()))
     status = "matched" if len(masters) == 1 else ("collision" if len(masters) > 1 else "no_match")
@@ -234,6 +301,19 @@ def lookup_artist_master_with_status(text: str, matcher: Optional[ArtistMatcher]
     if len(masters) == 1:
         return "matched", masters
     return "collision", masters
+
+
+def terminal_suffix_fallback_info_for_artist(
+    artist: str, matcher: Optional[ArtistMatcher]
+) -> Optional[Dict[str, str]]:
+    """Return Build 418 suffix-fallback metadata for *artist*, if applicable."""
+    if matcher is None:
+        return None
+    key = compact_ws(artist).casefold()
+    if not key:
+        return None
+    info = matcher.terminal_suffix_fallback_info.get(key)
+    return dict(info) if info else None
 
 
 def aliases_for_artist(artist: str, matcher: ArtistMatcher) -> List[str]:

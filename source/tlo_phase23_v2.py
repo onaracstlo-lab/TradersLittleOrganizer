@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v415"
+__version__ = "v418"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
@@ -20,7 +20,12 @@ from tlo_wrapper_rules import (
 )
 from tlo_complete_path_log import load_complete_path_lines
 from tlo_setlist_file_selection import find_setlist_file_for_music_dir, find_setlist_files_for_music_dir
-from tlo_artist_db import ArtistMatcher, lookup_artist_master_with_status, match_line_to_artists
+from tlo_artist_db import (
+    ArtistMatcher,
+    lookup_artist_master_with_status,
+    match_line_to_artists,
+    terminal_suffix_fallback_info_for_artist,
+)
 from tlo_audio_tags import collect_group_flac_tag_info
 from tlo_constants import (
     BIT24_PATTERNS,
@@ -1835,6 +1840,35 @@ def _artist_output_name(config, raw_name: str, master_name: str) -> str:
     return raw if _as_is_artist_name(config) and raw else (master or raw)
 
 
+def _mark_terminal_suffix_fallback_artist_not_in_database(
+    record: ShowMetadata, matcher: Optional[ArtistMatcher], observations: List[str]
+) -> None:
+    """Mark a restored Build 418 suffix-fallback performance artist for review.
+
+    The base Artist DB record is used only as positive identification evidence.
+    When the performance name is the DB master plus a restored Band/Group/All-Star
+    suffix that is not itself the DB master, preserve that performance name and
+    expose it to postprocess for ``artistsNotInDatabase.txt``.
+    """
+    artist = compact_ws(record.artist)
+    if not artist or matcher is None:
+        return
+    info = terminal_suffix_fallback_info_for_artist(artist, matcher)
+    if not info:
+        return
+    db_master = compact_ws(info.get("db_master", ""))
+    performance_artist = compact_ws(info.get("performance_artist", ""))
+    if not performance_artist or performance_artist.casefold() == db_master.casefold():
+        return
+    # Use the actual performance artist chosen for this record (important for
+    # As-Is Artist Name mode), while still requiring the suffix fallback map.
+    record.artist_not_in_database = artist
+    observations.append(
+        "terminal artist suffix fallback identified base Artist DB master "
+        f"{db_master}; using restored performance artist not present as a full DB match: {artist}"
+    )
+
+
 def _set_compliant_artist_from_string1(
     config,
     candidate_artist: str,
@@ -3036,6 +3070,8 @@ def _format_show_metadata_log_lines(record: ShowMetadata, date_matches: List[Dic
     lines.append(f"MUSIC_FILE_COUNT: {record.music_file_count}")
     lines.append(f"VOLUME_LABEL: {record.volume_label}")
     lines.append(f"ARTIST: {record.artist}")
+    if compact_ws(getattr(record, "artist_not_in_database", "")):
+        lines.append(f"ARTIST_NOT_IN_DATABASE: {record.artist_not_in_database}")
     lines.append(f"DATE: {record.date}")
     for match in date_matches:
         lines.append(
@@ -4528,6 +4564,7 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
     if not record.show_name:
         unresolved_reasons.append("unable to create show name")
 
+    _mark_terminal_suffix_fallback_artist_not_in_database(record, artist_matcher, observations)
     record.evidence = evidence
     record.conflicts = _unique_preserve(conflicts)
     record.observations = _unique_preserve(observations)
@@ -4959,6 +4996,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
     if not record.show_name:
         unresolved_reasons.append("unable to create show name")
 
+    _mark_terminal_suffix_fallback_artist_not_in_database(record, artist_matcher, observations)
     record.evidence = evidence
     record.conflicts = _unique_preserve(conflicts)
     record.observations = _unique_preserve(observations)

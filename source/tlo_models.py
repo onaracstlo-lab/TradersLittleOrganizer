@@ -1,4 +1,4 @@
-__version__ = "v415"
+__version__ = "v418"
 from dataclasses import dataclass, field
 from typing import Dict, List
 
@@ -21,6 +21,7 @@ class ShowMetadata:
     music_dirs: List[str] = field(default_factory=list)
     volume_label: str = ""
     artist: str = ""
+    artist_not_in_database: str = ""
     date: str = ""
     venue: str = ""
     city: str = ""

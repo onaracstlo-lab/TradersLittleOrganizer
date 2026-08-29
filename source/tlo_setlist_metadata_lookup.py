@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v415"
+__version__ = "v418"
 
 import csv
 import os
@@ -392,6 +392,29 @@ _FALSE_HEADER_KEYWORDS_RE = re.compile(
 
 def _word_tokens(line: str) -> List[str]:
     return re.findall(r"[A-Za-z0-9&.'-]+", str(line or ""))
+
+
+_DUPLICATE_TERMINAL_ARTIST_GROUP_RE = re.compile(
+    r"(?i)\b(?P<word>group|band)\s+(?P=word)\s*$"
+)
+
+
+def _normalize_artist_header_text(value: str) -> str:
+    """Normalize conservative obvious duplication in structured artist headers.
+
+    Traded setlists sometimes carry a copied header such as ``AL DiMeola Group
+    GROUP`` on one logical line.  Collapse only a repeated terminal ``Group``
+    or ``Band`` word; a single legitimate suffix remains untouched.
+    """
+    cleaned = _clean_spaces(str(value or "").strip(" *-_=#~"))
+    if not cleaned:
+        return ""
+    previous = None
+    while cleaned != previous:
+        previous = cleaned
+        cleaned = _DUPLICATE_TERMINAL_ARTIST_GROUP_RE.sub(lambda m: m.group("word"), cleaned)
+        cleaned = _clean_spaces(cleaned)
+    return cleaned
 
 
 _EXPLICIT_METADATA_LABEL_RE = re.compile(
@@ -1360,6 +1383,39 @@ def _short_one_word_venue_match_allowed(venue: str, line: str) -> bool:
     return False
 
 
+_LIVE_AT_HEADER_RE = re.compile(r"(?i)^\s*live\s+at\s+(?P<body>\S.*)$")
+
+
+def _split_live_at_venue_location_date_line(
+    line: str, support: _SupportData
+) -> Tuple[str, str, str, str, str, str, int]:
+    """Split ``Live at Venue, City, Country, Date`` style header lines.
+
+    The trailing performance date is metadata, not part of Venue/Location.
+    Require a real parsed location so ordinary prose beginning with ``live at``
+    cannot become authoritative show metadata.
+    """
+    raw = _clean_spaces(str(line or "").strip(" *-_=#~"))
+    match = _LIVE_AT_HEADER_RE.match(raw)
+    if not match:
+        return "", "", "", "", "", "", 0
+    body = _strip_trailing_performance_date_from_metadata_value(match.group("body"))
+    if not body:
+        return "", "", "", "", "", "", 0
+
+    for splitter in (
+        _split_unlabeled_combined_venue_location_line,
+        _split_unlabeled_space_combined_venue_location_line,
+    ):
+        venue, city, region, country, loc_raw, pattern_id, confidence = splitter(body, support)
+        if venue and city and (region or country):
+            return (
+                venue, city, region, country, loc_raw or body,
+                "LOCATION_LIVE_AT_VENUE_LOCATION", max(94, int(confidence or 0)),
+            )
+    return "", "", "", "", "", "", 0
+
+
 def _extract_structured_unlabeled_header_block(lines: List[str], support: _SupportData) -> Tuple[str, str, str, str, str, str, str, int]:
     """Extract strict unlabeled Artist/Venue/Location/Date style headers.
 
@@ -1375,6 +1431,26 @@ def _extract_structured_unlabeled_header_block(lines: List[str], support: _Suppo
     items = _structured_scan_items(lines)
     if len(items) < 3:
         return "", "", "", "", "", "", "", 0
+
+    # Build 416: prefer the strong traded-setlist shape
+    #   Artist / Live at Venue, City, Country, Date
+    # before the looser Artist/Venue/Location patterns below.  This prevents
+    # introductory prose immediately above the real artist from shifting every
+    # header field down one slot.
+    for pos in range(1, len(items)):
+        line = items[pos][1]
+        venue, city, region, country, loc_raw, pattern_id, confidence = (
+            _split_live_at_venue_location_date_line(line, support)
+        )
+        if not (venue and city and (region or country)):
+            continue
+        artist_line = _normalize_artist_header_text(items[pos - 1][1])
+        if not _looks_like_unlabeled_artist_header_line(artist_line, support):
+            continue
+        return (
+            artist_line, venue, city, region, country, loc_raw or line,
+            pattern_id or "LOCATION_LIVE_AT_VENUE_LOCATION", max(94, confidence),
+        )
 
     for pos, (_idx, line) in enumerate(items):
         # One-line location/venue or venue/location may sit below an artist/event
@@ -1532,8 +1608,8 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
         structured_conf = max(structured_conf, inline_conf)
     fields = _extract_explicit_fields(metadata_lines)
 
-    explicit_artist = safe_title(_clean_spaces(fields.get("artist", "")))
-    structured_artist = safe_title(_clean_spaces(structured_artist))
+    explicit_artist = safe_title(_normalize_artist_header_text(fields.get("artist", "")))
+    structured_artist = safe_title(_normalize_artist_header_text(structured_artist))
     artist = explicit_artist or structured_artist
     artist_source = "setlist_metadata:EXPLICIT_ARTIST_KEY" if explicit_artist else ("setlist_metadata:STRUCTURED_UNLABELED_ARTIST_HEADER" if structured_artist else "")
     artist_confidence = 95 if explicit_artist else (max(88, structured_conf) if structured_artist else 0)

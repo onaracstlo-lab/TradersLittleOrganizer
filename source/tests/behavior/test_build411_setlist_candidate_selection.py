@@ -9,7 +9,7 @@ pytestmark = pytest.mark.behavior
 from inventory_parser_lib import Config
 import tlo_tag_lib as T
 
-__version__ = "v415"
+__version__ = "v418"
 
 
 CRAMPS_INFO = """The Cramps
@@ -196,15 +196,15 @@ def test_build411_requirements_and_manual_document_candidate_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v415.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v418.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v415.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v418.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v415 (v1.4 Build 415)." in req_text
+    assert "Current document version: v418 (v1.4 Build 418)." in req_text
     assert "Build 411 competing-track-list candidate rule" in req_text
     assert "positive corroboration" in req_text
     assert "missing, generic, unreadable, or unrelated filename/tag value contributes zero" in req_text
     assert "Cramps 1984-06-25" in req_text
-    assert "Version v1.4 Build 415" in manual_text
+    assert "Version v1.4 Build 418" in manual_text
     assert "Build 411 - Track-list candidate selection and corroboration" in manual_text
     assert "Missing, generic, unreadable, or unrelated filename/tag values are neutral" in manual_text

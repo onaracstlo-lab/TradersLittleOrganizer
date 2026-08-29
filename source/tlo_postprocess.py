@@ -1,6 +1,6 @@
 """Postprocess metadata logs into setlist files, bootlist.csv, duplicate/group outputs, and summary/unidentified-show files."""
 
-__version__ = "v415"
+__version__ = "v418"
 import csv
 import json
 import os
@@ -113,7 +113,7 @@ def _metadata_record_to_postprocess_dict(record) -> Dict[str, str]:
         data = asdict(record)
     else:
         fields = (
-            "show_name", "setlist_file", "volume_label", "artist", "date",
+            "show_name", "setlist_file", "volume_label", "artist", "artist_not_in_database", "date",
             "venue", "location", "parentheticals", "album_name",
             "show_in_conflict", "main_dir_path", "setlist_files", "music_dirs",
         )
@@ -135,6 +135,7 @@ def _metadata_record_to_postprocess_dict(record) -> Dict[str, str]:
         "setlist_file": str(data.get("setlist_file") or ""),
         "volume_label": str(data.get("volume_label") or ""),
         "artist": str(data.get("artist") or ""),
+        "artist_not_in_database": str(data.get("artist_not_in_database") or ""),
         "date": str(data.get("date") or ""),
         "venue": str(data.get("venue") or ""),
         "location": str(data.get("location") or ""),
@@ -164,6 +165,7 @@ def _normalize_metadata_records_for_postprocess(records) -> List[Dict[str, str]]
                 "setlist_file": "",
                 "volume_label": "",
                 "artist": "",
+                "artist_not_in_database": "",
                 "date": "",
                 "venue": "",
                 "location": "",
@@ -185,6 +187,7 @@ def _parse_show_metadata_logs(tlo_home: str, tokens: Sequence[str] | None = None
             "setlist_file": "",
             "volume_label": "",
             "artist": "",
+            "artist_not_in_database": "",
             "date": "",
             "venue": "",
             "location": "",
@@ -208,6 +211,7 @@ def _parse_show_metadata_logs(tlo_home: str, tokens: Sequence[str] | None = None
                         "setlist_file": "",
                         "volume_label": "",
                         "artist": "",
+                        "artist_not_in_database": "",
                         "date": "",
                         "venue": "",
                         "location": "",
@@ -234,6 +238,8 @@ def _parse_show_metadata_logs(tlo_home: str, tokens: Sequence[str] | None = None
                     current["volume_label"] = value.strip()
                 elif key == "ARTIST":
                     current["artist"] = value.strip()
+                elif key == "ARTIST_NOT_IN_DATABASE":
+                    current["artist_not_in_database"] = value.strip()
                 elif key == "DATE":
                     current["date"] = value.strip()
                 elif key == "VENUE":
@@ -1195,6 +1201,38 @@ def _write_unidentified_shows(tlo_home: str, paths: List[str]) -> str:
     return target
 
 
+def _write_artists_not_in_database(tlo_home: str, artists: List[str]) -> str:
+    """Merge restored suffix-fallback performance artists into a persistent review list."""
+    target = os.path.join(tlo_home, "artistsNotInDatabase.txt")
+    by_key: Dict[str, str] = {}
+
+    if os.path.isfile(target):
+        with open(target, "r", encoding="utf-8", errors="ignore") as infile:
+            for raw_line in infile:
+                clean = compact_ws(raw_line)
+                if clean:
+                    by_key.setdefault(clean.casefold(), clean)
+
+    for artist in artists:
+        clean = compact_ws(artist)
+        if clean:
+            by_key.setdefault(clean.casefold(), clean)
+
+    ordered = sorted(by_key.values(), key=lambda value: value.casefold())
+    with open(target, "w", encoding="utf-8", newline="\n") as outfile:
+        for artist in ordered:
+            outfile.write(artist + "\n")
+    return target
+
+
+def _collect_artists_not_in_database(records: List[Dict[str, str]]) -> List[str]:
+    return [
+        compact_ws(record.get("artist_not_in_database", ""))
+        for record in records
+        if compact_ws(record.get("artist_not_in_database", ""))
+    ]
+
+
 def _conflict_log_paths(tlo_home: str) -> List[str]:
     logs_dir = logs_dir_for_home(tlo_home)
     return scandir_matching_files(logs_dir, "conf*.log")
@@ -1484,6 +1522,16 @@ def postprocess_metadata_outputs(config) -> Dict[str, int | str]:
     elapsed = _record_postprocess_timing(timing_entries, "write unidentifiedShows.txt", stage_started)
     _postprocess_status(config, f"writing unidentifiedShows.txt complete: {len(unidentified_paths)} unresolved path(s) ({_format_elapsed_seconds(elapsed)})")
 
+    _postprocess_status(config, "writing artistsNotInDatabase.txt...")
+    stage_started = time.monotonic()
+    artists_not_in_database = _collect_artists_not_in_database(records)
+    artists_not_in_database_path = _write_artists_not_in_database(config.TLOHome, artists_not_in_database)
+    elapsed = _record_postprocess_timing(timing_entries, "write artistsNotInDatabase.txt", stage_started)
+    _postprocess_status(
+        config,
+        f"writing artistsNotInDatabase.txt complete: {len(set(a.casefold() for a in artists_not_in_database))} current-run artist(s) ({_format_elapsed_seconds(elapsed)})",
+    )
+
     _postprocess_status(config, "writing summary.log...")
     stage_started = time.monotonic()
     summary_log_path = _write_conflict_summary_log(config.TLOHome, records=records)
@@ -1505,5 +1553,6 @@ def postprocess_metadata_outputs(config) -> Dict[str, int | str]:
         "setlists_dir": setlists_dir,
         "bootlist_csv": csv_path,
         "unidentified_shows": unidentified_path,
+        "artists_not_in_database": artists_not_in_database_path,
         "summary_log": summary_log_path,
     }

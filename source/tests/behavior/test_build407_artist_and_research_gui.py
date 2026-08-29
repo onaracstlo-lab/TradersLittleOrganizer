@@ -1,6 +1,6 @@
 """Build 407 artist-suffix and Research-results GUI behavior."""
 
-__version__ = "v415"
+__version__ = "v418"
 
 import importlib.util
 from pathlib import Path
@@ -50,7 +50,12 @@ def test_all_star_terminal_permutations_use_same_unique_db_fallback_as_band(cand
     from tlo_artist_db import lookup_artist_master_with_status
 
     matcher = _matcher({"Example": "Example Master"})
-    assert lookup_artist_master_with_status(candidate, matcher) == ("matched", ["Example Master"])
+    suffix = candidate[len("Example"):].strip()
+    if candidate.startswith("Example-"):
+        expected = "Example Master-" + candidate[len("Example-"):]
+    else:
+        expected = f"Example Master {suffix}"
+    assert lookup_artist_master_with_status(candidate, matcher) == ("matched", [expected])
 
 
 def test_all_star_full_db_match_wins_before_stripped_fallback():
