@@ -1,4 +1,4 @@
-__version__ = "v418"
+__version__ = "v421"
 import argparse
 import sys
 import os
@@ -60,6 +60,7 @@ class Config:
     etree_lookup: bool = False
     setlistfm_lookup: bool = False
     setlistfm_upgrade: bool = False
+    thorough_setlist_matching: bool = False
     acceptable_corruption_percent: int = 100
     setlistfm_min_interval_seconds: float = 0.600
     setlistfm_max_calls: int = 1400
@@ -185,6 +186,7 @@ def build_inventory_parser() -> argparse.ArgumentParser:
         "etree_lookup",
         "setlistfm_lookup",
         "setlistfm_upgrade",
+        "thorough_setlist_matching",
         "acceptable_corruption_percent",
         "performance_mode",
         "max_workers",
@@ -263,6 +265,7 @@ def build_config():
         etree_lookup=bool(values.get("etree_lookup", False)),
         setlistfm_lookup=bool(values.get("setlistfm_lookup", False)),
         setlistfm_upgrade=bool(values.get("setlistfm_upgrade", False)),
+        thorough_setlist_matching=bool(values.get("thorough_setlist_matching", False)),
         acceptable_corruption_percent=int(values.get("acceptable_corruption_percent", 100) or 0),
         performance_mode=values.get("performance_mode", "balanced") or "balanced",
         max_workers=int(values.get("max_workers", 0) or 0),

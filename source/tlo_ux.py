@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v418"
+__version__ = "v421"
 
 
 import copy
@@ -211,6 +211,7 @@ MAIN_WINDOW_CHECKBOX_SPECS = (
     ("artist_in_album", "Artist in Album Tag"),
     ("setlistfm_lookup", "setlist.fm"),
     ("setlistfm_upgrade", "setlist.fm upgrade"),
+    ("thorough_setlist_matching", "Thorough Setlist Matching"),
     ("rename_compliantly", "Rename Compliantly"),
     ("tag_copy_during_inventory", "Tag Copy"),
     ("convert_shn", "Convert shn"),
@@ -239,6 +240,7 @@ def main_window_checkbox_values(source, *, dry_run=None) -> dict[str, bool]:
         "artist_in_album": bool(read("artist_in_album", True)),
         "setlistfm_lookup": bool(read("setlistfm_lookup", False)),
         "setlistfm_upgrade": bool(read("setlistfm_upgrade", False)),
+        "thorough_setlist_matching": bool(read("thorough_setlist_matching", False)),
         "rename_compliantly": bool(read("rename_compliantly", False)),
         "tag_copy_during_inventory": bool(tag_copy),
         "convert_shn": bool(read("convert_shn", False)),
@@ -277,6 +279,15 @@ def operation_review_lines(
         lines.append(f"Search Paths: {os.path.join(getattr(config, 'TLOHome', ''), 'toBeInventoried.txt')}")
 
     lines.extend(main_window_checkbox_review_lines(main_checkbox_source or config, dry_run=dry_run))
+    checkbox_values = main_window_checkbox_values(main_checkbox_source or config, dry_run=dry_run)
+    if checkbox_values.get("thorough_setlist_matching"):
+        if checkbox_values.get("setlistfm_lookup") and not checkbox_values.get("setlistfm_upgrade"):
+            lines.append(
+                "Thorough Setlist Matching note: setlist.fm coverage remains subject to the normal 600-ms / 1,400-call limits; "
+                "setlist.fm upgrade provides broader/faster setlist.fm coverage."
+            )
+        elif checkbox_values.get("setlistfm_lookup") and checkbox_values.get("setlistfm_upgrade"):
+            lines.append("Thorough Setlist Matching note: upgraded setlist.fm access is available for proactive corroboration/deconfliction.")
 
     operation_folded = operation_name.casefold()
     if operation_folded.startswith("tag"):

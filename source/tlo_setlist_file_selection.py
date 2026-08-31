@@ -1,8 +1,8 @@
-__version__ = "v418"
+__version__ = "v421"
 import os
 import re
 
-from tlo_wrapper_rules import is_common_music_folder_name, is_wrapper_part_folder_name, split_wrapper_part_suffix
+from tlo_wrapper_rules import is_common_music_folder_name, is_wrapper_part_folder_name, split_wrapper_part_suffix, split_parenthesized_numeric_part_suffix
 from tlo_constants import MONTH_NAME_CASED_PATTERN
 
 SETLIST_NAME_PATTERNS = [
@@ -467,6 +467,29 @@ def _wrapper_relationship_key(dir_name):
 def _all_child_dirs_related_release_parts(child_dirs):
     if not child_dirs:
         return False
+
+    # Build 419: a bare (N) suffix is related only for the same narrow
+    # parent-matching consecutive multipart shape used by inventory grouping.
+    numeric_rows = []
+    for child_dir in child_dirs:
+        base, suffix, number = split_parenthesized_numeric_part_suffix(os.path.basename(child_dir))
+        if not suffix:
+            numeric_rows = []
+            break
+        numeric_rows.append((base, number, os.path.dirname(os.path.normpath(child_dir))))
+    if numeric_rows and len(numeric_rows) >= 2:
+        parent_dirs = {os.path.normcase(os.path.normpath(row[2])) for row in numeric_rows}
+        bases = {row[0].casefold(): row[0] for row in numeric_rows}
+        numbers = sorted(row[1] for row in numeric_rows)
+        parent_name = os.path.basename(numeric_rows[0][2])
+        if (
+            len(parent_dirs) == 1
+            and len(bases) == 1
+            and numbers == list(range(1, len(numeric_rows) + 1))
+            and next(iter(bases)).casefold() == parent_name.casefold()
+        ):
+            return True
+
     keys = []
     for child_dir in child_dirs:
         key = _wrapper_relationship_key(os.path.basename(child_dir))

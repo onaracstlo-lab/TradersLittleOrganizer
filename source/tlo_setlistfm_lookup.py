@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-__version__ = "v418"
+__version__ = "v421"
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 MIN_REQUEST_INTERVAL_SECONDS = 0.600
@@ -501,27 +501,59 @@ def search_setlists(
     run_id: str = "",
     tlo_home: str = "",
     lock_timeout_seconds: float = RATE_LIMIT_LOCK_TIMEOUT_SECONDS,
+    thorough: bool = False,
+    max_pages: int = 25,
 ) -> List[SetlistFMResult]:
+    """Search exact-date setlists, optionally following additional result pages.
+
+    Normal mode preserves the historical single-page request. Thorough mode is
+    intentionally broader: it follows additional pages so competing same-date
+    performances can participate in deconfliction. The same rate/call limiter
+    applies, so normal setlist.fm access can still make thorough mode slow or
+    stop it before every page is collected.
+    """
     api_key = api_key or get_api_key()
     api_date = convert_date_for_api(date_yyyy_mm_dd)
-    payload = api_get(
-        "/search/setlists",
-        {
-            "artistName": artist,
-            "date": api_date,
-            "p": "1",
-        },
-        api_key,
-        min_interval_seconds=min_interval_seconds,
-        max_calls=max_calls,
-        max_calls_per_day=max_calls_per_day,
-        run_id=run_id,
-        tlo_home=tlo_home,
-        lock_timeout_seconds=lock_timeout_seconds,
-    )
-
-    raw_setlists = ensure_list(payload.get("setlist"))
-    results = [parse_result(item) for item in raw_setlists if isinstance(item, dict)]
+    results: List[SetlistFMResult] = []
+    page = 1
+    total = None
+    while True:
+        payload = api_get(
+            "/search/setlists",
+            {
+                "artistName": artist,
+                "date": api_date,
+                "p": str(page),
+            },
+            api_key,
+            min_interval_seconds=min_interval_seconds,
+            max_calls=max_calls,
+            max_calls_per_day=max_calls_per_day,
+            run_id=run_id,
+            tlo_home=tlo_home,
+            lock_timeout_seconds=lock_timeout_seconds,
+        )
+        raw_setlists = ensure_list(payload.get("setlist"))
+        results.extend(parse_result(item) for item in raw_setlists if isinstance(item, dict))
+        if not thorough:
+            break
+        try:
+            total = int(payload.get("total", 0) or 0)
+        except Exception:
+            total = 0
+        try:
+            items_per_page = int(payload.get("itemsPerPage", 0) or 0)
+        except Exception:
+            items_per_page = 0
+        if not raw_setlists:
+            break
+        if total and len(results) >= total:
+            break
+        if items_per_page and len(raw_setlists) < items_per_page:
+            break
+        page += 1
+        if page > max(1, int(max_pages or 25)):
+            break
 
     wanted = normalize_name(artist)
     exact_artist_results = [result for result in results if normalize_name(result.artist) == wanted]
@@ -539,6 +571,7 @@ def lookup_venue_and_location(
     run_id: str = "",
     tlo_home: str = "",
     lock_timeout_seconds: float = RATE_LIMIT_LOCK_TIMEOUT_SECONDS,
+    thorough: bool = False,
 ) -> List[SetlistFMResult]:
     if not artist or not date_yyyy_mm_dd:
         return []
@@ -551,6 +584,7 @@ def lookup_venue_and_location(
         run_id=run_id,
         tlo_home=tlo_home,
         lock_timeout_seconds=lock_timeout_seconds,
+        thorough=thorough,
     )
 
 

@@ -1,4 +1,4 @@
-__version__ = "v418"
+__version__ = "v421"
 
 import argparse
 from dataclasses import dataclass
@@ -161,6 +161,16 @@ OPTIONS = [
         "setlistfm_upgrade", "--setlistfm-upgrade", "flag",
         gui="checkbox", gui_label="setlist.fm upgrade", gui_row=2, gui_col=0,
         help="When setlist.fm lookup is enabled, use upgraded access limits of 14 requests/second and 48,000 requests/day.",
+    ),
+    Option(
+        "thorough_setlist_matching", "--thorough-setlist-matching", "flag",
+        gui="checkbox", gui_label="Thorough Setlist Matching", gui_row=3, gui_col=0,
+        help=(
+            "Collect and compare additional local, eTreeDB, and enabled setlist.fm setlist candidates for better "
+            "track-title accuracy. This can substantially increase processing time and online lookups. When setlist.fm "
+            "is enabled without setlist.fm upgrade, thorough coverage remains constrained by the normal setlist.fm "
+            "rate/call limits; enable setlist.fm upgrade for broader/faster setlist.fm evidence collection."
+        ),
     ),
     Option(
         "acceptable_corruption_percent", "--acceptable-corruption-percent", "int",

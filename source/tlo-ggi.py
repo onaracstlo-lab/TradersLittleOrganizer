@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v418"
+__version__ = "v421"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -961,6 +961,23 @@ class App:
             option_messages.append("Verified SHN conversions remove the original SHN source.")
         if bool(self.bool_vars.get("rename_compliantly", tk.BooleanVar(value=False)).get()):
             option_messages.append("Rename Compliantly may rename original folders.")
+        thorough = bool(self.bool_vars.get("thorough_setlist_matching", tk.BooleanVar(value=False)).get())
+        setlistfm_enabled = bool(self.bool_vars.get("setlistfm_lookup", tk.BooleanVar(value=False)).get())
+        setlistfm_upgrade = bool(self.bool_vars.get("setlistfm_upgrade", tk.BooleanVar(value=False)).get())
+        if thorough:
+            if setlistfm_enabled and not setlistfm_upgrade:
+                option_messages.append(
+                    "Thorough Setlist Matching may take substantially longer; setlist.fm evidence remains constrained "
+                    "by the normal 600-ms / 1,400-call limits unless setlist.fm upgrade is enabled."
+                )
+            elif setlistfm_enabled and setlistfm_upgrade:
+                option_messages.append(
+                    "Thorough Setlist Matching will proactively compare local, eTreeDB, and setlist.fm candidates using upgraded setlist.fm access."
+                )
+            else:
+                option_messages.append(
+                    "Thorough Setlist Matching will compare additional local/eTreeDB candidates; setlist.fm evidence is unavailable unless setlist.fm is enabled."
+                )
         if not option_messages:
             option_messages.append("Option combination is ready.")
         if not max_workers_valid:
@@ -2285,6 +2302,7 @@ class App:
             etree_lookup=self.bool_vars["etree_lookup"].get(),
             setlistfm_lookup=self.bool_vars["setlistfm_lookup"].get(),
             setlistfm_upgrade=bool(getattr(self.bool_vars.get("setlistfm_upgrade"), "get", lambda: False)()),
+            thorough_setlist_matching=bool(getattr(self.bool_vars.get("thorough_setlist_matching"), "get", lambda: False)()),
             acceptable_corruption_percent=int((getattr(self.vars.get("acceptable_corruption_percent"), "get", lambda: "100")() or "0").strip()),
             performance_mode=performance_mode,
             max_workers=max_workers,
@@ -2710,6 +2728,7 @@ class TaggerWindow:
             etree_lookup=values["etree_lookup"],
             setlistfm_lookup=values["setlistfm_lookup"],
             setlistfm_upgrade=bool(values.get("setlistfm_upgrade", False)),
+            thorough_setlist_matching=bool(values.get("thorough_setlist_matching", False)),
             rename_compliantly=values["rename_compliantly"],
             convert_shn=values["convert_shn"],
             artist_in_album=values["artist_in_album"],
@@ -2801,6 +2820,7 @@ class TaggerWindow:
                     etree_lookup=bool(config.etree_lookup),
                     setlistfm_lookup=bool(config.setlistfm_lookup),
                     setlistfm_upgrade=bool(getattr(config, "setlistfm_upgrade", False)),
+                    thorough_setlist_matching=bool(getattr(config, "thorough_setlist_matching", False)),
                     debug=self.debug,
                     rename_compliantly=bool(config.rename_compliantly),
                     convert_shn=bool(config.convert_shn),
@@ -3036,6 +3056,7 @@ class AddToInventoryWindow:
         self.config.etree_lookup = values["etree_lookup"]
         self.config.setlistfm_lookup = values["setlistfm_lookup"]
         self.config.setlistfm_upgrade = bool(values.get("setlistfm_upgrade", False))
+        self.config.thorough_setlist_matching = bool(values.get("thorough_setlist_matching", False))
         if self.config.setlistfm_lookup and self.config.setlistfm_upgrade:
             self.config.setlistfm_min_interval_seconds = 1.0 / 14.0
             self.config.setlistfm_max_calls = 0

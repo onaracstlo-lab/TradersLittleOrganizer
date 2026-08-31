@@ -1,6 +1,6 @@
 """Command-line inventory orchestration: startup checks, scan execution, postprocess, cleanup, and timing output."""
 
-__version__ = "v418"
+__version__ = "v421"
 
 import sys
 import time
@@ -24,8 +24,12 @@ def _check_online_lookup_startup(config) -> None:
     if etree_enabled or setlistfm_enabled:
         console_print(
             config,
-            "Online lookup enabled: etreeLookup=%s | setlist.fm=%s"
-            % ("yes" if etree_enabled else "no", "yes" if setlistfm_enabled else "no"),
+            "Online lookup enabled: etreeLookup=%s | setlist.fm=%s | thoroughSetlistMatching=%s"
+            % (
+                "yes" if etree_enabled else "no",
+                "yes" if setlistfm_enabled else "no",
+                "yes" if bool(getattr(config, "thorough_setlist_matching", False)) else "no",
+            ),
         )
 
 

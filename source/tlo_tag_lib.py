@@ -1,6 +1,6 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v418"
+__version__ = "v421"
 
 from tlo_diagnostics import debug_suppressed_exception
 import os
@@ -13,6 +13,7 @@ import sys
 import traceback
 import html
 import uuid
+import difflib
 from datetime import date
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -53,7 +54,7 @@ from initial_dir_walk_lib import initial_dir_walk
 from tlo_setlist_file_selection import find_setlist_files_for_music_dir
 from tlo_text_utils import compact_ws, setlist_text_requests_generated_from_music_files, standard_ascii_text
 from tlo_postprocess import _adjust_show_name_for_output, _candidate_setlist_name, _setlist_base_from_record
-from tlo_wrapper_rules import is_wrapper_part_folder_name
+from tlo_wrapper_rules import is_wrapper_part_folder_name, split_parenthesized_numeric_part_suffix
 from tlo_tree_compare import has_exact_tree_match_in_family
 
 
@@ -1045,12 +1046,24 @@ def _parent_wrapper_disc_index(path_name: str) -> int:
     """
     parent = os.path.basename(os.path.dirname(os.path.normpath(path_name or "")))
     match = re.search(r"(?i)(?:^|[\s._-]+)(?:cd|disc|disk|set|part|side|tape|d)[\s._-]*(?P<num>\d{1,2})(?:\b|$)", parent)
-    if not match:
-        return 0
-    try:
-        return max(0, int(match.group("num")) - 1)
-    except (TypeError, ValueError):
-        return 0
+    if match:
+        try:
+            return max(0, int(match.group("num")) - 1)
+        except (TypeError, ValueError):
+            return 0
+
+    # Validated multipart releases may use a bare terminal ``(N)`` suffix
+    # instead of an explicit CD/Disc token, e.g. ``Release (1)`` through
+    # ``Release (9)``.  Discovery already applies the strict sibling/parent
+    # safety rules before those folders are aggregated.  At tagging time the
+    # path sorter must still recover the part number from the immediate parent
+    # so all tracks from part 1 precede part 2, etc.; otherwise every ``01``
+    # file sorts together, then every ``02`` file, producing striped Track
+    # Number tags across the multipart release.
+    _base, _suffix, numeric_part = split_parenthesized_numeric_part_suffix(parent)
+    if numeric_part > 0:
+        return numeric_part - 1
+    return 0
 
 
 def _audio_track_order(path_name: str) -> Tuple[int, int, str]:
@@ -2408,11 +2421,18 @@ def _base_album_for_record(config: Config, record) -> str:
         else:
             base = album_piece
     else:
-        base = compact_ws(" ".join(part for part in [
-            getattr(record, "date", ""),
-            getattr(record, "venue", ""),
-            getattr(record, "location", ""),
-        ] if compact_ws(part)))
+        # Artist - Album / commercial-release extraction deliberately stores the
+        # release title in album_name and leaves date/venue/location blank.
+        # Build 418 discarded that value here and therefore wrote Unknown.
+        album_piece = compact_ws(getattr(record, "album_name", ""))
+        if album_piece:
+            base = album_piece
+        else:
+            base = compact_ws(" ".join(part for part in [
+                getattr(record, "date", ""),
+                getattr(record, "venue", ""),
+                getattr(record, "location", ""),
+            ] if compact_ws(part)))
     if base and parentheticals and not base.endswith(parentheticals):
         return compact_ws(f"{base} {parentheticals}")
     return base
@@ -4120,6 +4140,467 @@ def _exact_count_bare_number_track_candidate(
     return rows
 
 
+
+
+def _track_candidate_source_family(source: str) -> str:
+    value = str(source or "").casefold()
+    if value == "etreedb":
+        return "etreedb"
+    if value == "setlist.fm":
+        return "setlist.fm"
+    return "local"
+
+
+def _track_candidate_key(tracks: Sequence[Dict[str, object]]) -> Tuple[str, ...]:
+    return tuple(_normalize_title_for_confirmation(str(row.get("title", ""))) for row in (tracks or []))
+
+
+def _title_similarity(left: str, right: str) -> float:
+    a = _normalize_title_for_confirmation(left)
+    b = _normalize_title_for_confirmation(right)
+    if not a or not b:
+        return 0.0
+    if a == b:
+        return 1.0
+    if len(a) >= 5 and len(b) >= 5 and (a in b or b in a):
+        return 0.92
+    return difflib.SequenceMatcher(None, a, b).ratio()
+
+
+def _candidate_sequence_similarity(left: Sequence[Dict[str, object]], right: Sequence[Dict[str, object]]) -> float:
+    a = list(_track_candidate_key(left))
+    b = list(_track_candidate_key(right))
+    if not a or not b:
+        return 0.0
+    return difflib.SequenceMatcher(None, a, b).ratio()
+
+
+def _audio_evidence_titles(audio_files: Sequence[str]) -> List[List[str]]:
+    evidence: List[List[str]] = []
+    for audio_path in sorted([path for path in audio_files if _is_audio_file(path)], key=_audio_track_order):
+        values: List[str] = []
+        filename_title = track_title_from_audio_filename(audio_path)
+        if not _is_generic_audio_title_tag(filename_title):
+            values.append(filename_title)
+        raw_tag = read_existing_audio_title_tag(audio_path)
+        tag_title, usable = _usable_title_from_audio_title_tag(raw_tag)
+        if usable and tag_title and all(_normalize_title_for_confirmation(tag_title) != _normalize_title_for_confirmation(item) for item in values):
+            values.append(tag_title)
+        evidence.append(values)
+    return evidence
+
+
+def _candidate_audio_alignment(
+    tracks: Sequence[Dict[str, object]],
+    audio_files: Sequence[str],
+) -> Tuple[List[Optional[Dict[str, object]]], int, float, int]:
+    """Align candidate songs to audio positions using filename/TITLE evidence.
+
+    Returns ``(mapping, corroborated_positions, evidence_coverage, gap_count)``.
+    ``mapping`` has one item per audio file; ``None`` means the recording has an
+    audio-only position such as Intro/Tuning/Crowd that is absent from the
+    candidate setlist. Candidate-only rows are dropped by the alignment.
+    """
+    rows = list(tracks or [])
+    evidence = _audio_evidence_titles(audio_files)
+    n, m = len(evidence), len(rows)
+    if n <= 0:
+        return [], 0, 0.0, 0
+
+    # Dynamic-programming alignment. Matching evidence earns positive weight;
+    # neutral positions do not force a mismatch. Gaps are inexpensive enough to
+    # permit Intro/Tuning/Encore skew, but not so cheap that arbitrary shifting
+    # beats a well-correlated positional mapping.
+    neg = -10**9
+    dp = [[neg] * (m + 1) for _ in range(n + 1)]
+    back: List[List[Optional[Tuple[int, int, str]]]] = [[None] * (m + 1) for _ in range(n + 1)]
+    dp[0][0] = 0.0
+    for i in range(1, n + 1):
+        dp[i][0] = dp[i - 1][0] - 1.35
+        back[i][0] = (i - 1, 0, "audio-gap")
+    for j in range(1, m + 1):
+        dp[0][j] = dp[0][j - 1] - 1.35
+        back[0][j] = (0, j - 1, "candidate-gap")
+
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            title = str(rows[j - 1].get("title", ""))
+            sims = [_title_similarity(value, title) for value in evidence[i - 1]]
+            best_sim = max(sims) if sims else 0.0
+            if sims:
+                match_delta = (best_sim * 5.0) - (1.15 if best_sim < 0.50 else 0.0)
+            else:
+                match_delta = 0.15
+            options = [
+                (dp[i - 1][j - 1] + match_delta, i - 1, j - 1, "match"),
+                (dp[i - 1][j] - 1.35, i - 1, j, "audio-gap"),
+                (dp[i][j - 1] - 1.35, i, j - 1, "candidate-gap"),
+            ]
+            score, pi, pj, op = max(options, key=lambda item: item[0])
+            dp[i][j] = score
+            back[i][j] = (pi, pj, op)
+
+    mapping: List[Optional[Dict[str, object]]] = [None] * n
+    corroborated = 0
+    gaps = 0
+    i, j = n, m
+    while i or j:
+        step = back[i][j]
+        if step is None:
+            break
+        pi, pj, op = step
+        if op == "match":
+            row = rows[j - 1]
+            mapping[i - 1] = row
+            if evidence[i - 1]:
+                sim = max(_title_similarity(value, str(row.get("title", ""))) for value in evidence[i - 1])
+                if sim >= 0.72:
+                    corroborated += 1
+        else:
+            gaps += 1
+        i, j = pi, pj
+
+    evidence_positions = sum(1 for values in evidence if values)
+    coverage = (corroborated / evidence_positions) if evidence_positions else 0.0
+    return mapping, corroborated, coverage, gaps
+
+
+def _materialize_aligned_candidate_tracks(
+    mapping: Sequence[Optional[Dict[str, object]]],
+    audio_files: Sequence[str],
+    source: str,
+) -> List[Dict[str, object]]:
+    files = sorted([path for path in audio_files if _is_audio_file(path)], key=_audio_track_order)
+    if len(mapping) != len(files):
+        return []
+    output: List[Dict[str, object]] = []
+    for idx, (row, audio_path) in enumerate(zip(mapping, files), start=1):
+        if row is not None:
+            title = normalize_tag_title_printable(str(row.get("title", ""))) or "Unknown"
+            source_line = str(row.get("source_line", "") or "")
+        else:
+            title = track_title_from_audio_filename(audio_path)
+            if _is_generic_audio_title_tag(title):
+                raw_tag = read_existing_audio_title_tag(audio_path)
+                tag_title, usable = _usable_title_from_audio_title_tag(raw_tag)
+                title = tag_title if usable else "Unknown"
+            source_line = os.path.basename(audio_path)
+        output.append({
+            "original_number": idx,
+            "normalized_number": idx,
+            "title": title or "Unknown",
+            "source_line": source_line,
+            "source": source,
+            "title_unknown_fallback": (str(title or "").casefold() == "unknown"),
+        })
+    return output
+
+
+def _add_track_candidate(
+    candidates: List[Dict[str, object]],
+    seen: set,
+    *,
+    source: str,
+    label: str,
+    tracks: Sequence[Dict[str, object]],
+    expected_count: int,
+    venue: str = "",
+    location: str = "",
+    identifier: str = "",
+) -> None:
+    rows = list(tracks or [])
+    if not rows:
+        return
+    distance = abs(len(rows) - int(expected_count or 0))
+    if distance > 2:
+        return
+    key = (source, _track_candidate_key(rows), compact_ws(venue), compact_ws(location))
+    if key in seen:
+        return
+    seen.add(key)
+    candidates.append({
+        "source": source,
+        "family": _track_candidate_source_family(source),
+        "label": label,
+        "tracks": rows,
+        "venue": compact_ws(venue),
+        "location": compact_ws(location),
+        "identifier": compact_ws(identifier),
+        "distance": distance,
+    })
+
+
+def _collect_local_track_candidates_for_thorough(
+    setlist_file: str,
+    audio_files: Sequence[str],
+    folder: str,
+    emit: Optional[Callable[[str], None]] = None,
+) -> List[Dict[str, object]]:
+    expected = len(audio_files)
+    candidates: List[Dict[str, object]] = []
+    seen: set = set()
+    if not setlist_file or not os.path.isfile(setlist_file):
+        return candidates
+
+    tracks = parse_setlist_tracks(setlist_file)
+    if not tracks:
+        tracks = _exact_count_bare_number_track_candidate(setlist_file, expected)
+    if tracks:
+        repaired = list(tracks)
+        if len(repaired) != expected:
+            repaired = _coerce_tracks_to_expected_count(repaired, expected, folder, emit=emit)
+        if repaired and len(repaired) != expected:
+            repaired = _trim_probable_trailing_nontracks(repaired, expected, folder, emit=emit)
+        if repaired and len(repaired) != expected:
+            repaired = _fill_missing_numbered_track_rows_from_filenames(repaired, audio_files, expected, folder, emit=emit)
+        if repaired and len(repaired) != expected:
+            repaired = _fill_missing_numbered_track_rows(repaired, expected, folder, emit=emit)
+        if repaired and len(repaired) != expected:
+            padded = _strong_numbered_partial_tracks_to_expected_count(repaired, expected, folder, emit=emit)
+            if padded:
+                repaired = padded
+        _add_track_candidate(
+            candidates, seen, source="setlist", label="local-numbered", tracks=repaired or tracks,
+            expected_count=expected,
+        )
+
+    for rows, source_label in _exact_count_unnumbered_candidates(setlist_file, expected):
+        _add_track_candidate(
+            candidates, seen, source="setlist", label=source_label or "local-unnumbered",
+            tracks=rows, expected_count=expected,
+        )
+
+    explicit = _explicit_unnumbered_track_section_candidate(setlist_file)
+    if explicit:
+        _add_track_candidate(
+            candidates, seen, source="setlist", label="explicit-unnumbered-section",
+            tracks=explicit, expected_count=expected,
+        )
+
+    fallback_rows, fallback_source = _local_setlist_fallback_tracks(setlist_file, expected, folder, emit=emit)
+    if fallback_rows:
+        _add_track_candidate(
+            candidates, seen, source="setlist", label=fallback_source or "local-fallback",
+            tracks=fallback_rows, expected_count=expected,
+        )
+    return candidates
+
+
+def _collect_etreedb_track_candidates_for_thorough(
+    config: Config,
+    record,
+    expected_count: int,
+    folder: str,
+    emit: Optional[Callable[[str], None]] = None,
+) -> List[Dict[str, object]]:
+    if not bool(getattr(config, "etree_lookup", False)):
+        return []
+    artist, date_text = _record_artist_and_date(record)
+    if not artist or not date_text:
+        return []
+    try:
+        performances = lookup_setlists_by_performance(
+            artist=artist,
+            date_yyyy_mm_dd=date_text,
+            debug=bool(getattr(config, "debug", False)),
+        )
+    except Exception as exc:
+        _emit(emit, f"WARN: {folder} | Thorough Setlist Matching eTreeDB collection failed: {exc}")
+        return []
+    candidates: List[Dict[str, object]] = []
+    seen: set = set()
+    for performance, normalized_setlists in performances:
+        tracks = parse_setlist_text_tracks("\n".join(normalized_setlists))
+        location = compact_ws(", ".join(part for part in (getattr(performance, "city", ""), getattr(performance, "state", "")) if str(part or "").strip()))
+        _add_track_candidate(
+            candidates, seen, source="etreedb", label="eTreeDB",
+            tracks=tracks, expected_count=expected_count,
+            venue=str(getattr(performance, "venue", "") or ""), location=location,
+            identifier=str(getattr(performance, "performance_id", "") or ""),
+        )
+    return candidates
+
+
+def _collect_setlistfm_track_candidates_for_thorough(
+    record,
+    expected_count: int,
+) -> List[Dict[str, object]]:
+    raw_candidates = getattr(record, "setlistfm_setlist_candidates", None) if record is not None else None
+    if not raw_candidates:
+        return []
+    candidates: List[Dict[str, object]] = []
+    seen: set = set()
+    for candidate in raw_candidates:
+        if not isinstance(candidate, dict):
+            continue
+        setlists = [str(text or "").strip() for text in (candidate.get("setlists") or []) if str(text or "").strip()]
+        tracks = parse_setlist_text_tracks("\n".join(setlists)) if setlists else []
+        location = compact_ws(", ".join(part for part in (candidate.get("city", ""), candidate.get("state_code", "") or candidate.get("country", "")) if str(part or "").strip()))
+        _add_track_candidate(
+            candidates, seen, source="setlist.fm", label="setlist.fm",
+            tracks=tracks, expected_count=expected_count,
+            venue=str(candidate.get("venue") or ""), location=location,
+            identifier=str(candidate.get("url") or ""),
+        )
+    return candidates
+
+
+def _candidate_structure_prior(candidate: Dict[str, object]) -> float:
+    source = str(candidate.get("source") or "")
+    label = str(candidate.get("label") or "").casefold()
+    if source == "etreedb" or source == "setlist.fm":
+        return 22.0
+    if "numbered" in label:
+        return 30.0
+    if "explicit" in label or "comma" in label:
+        return 26.0
+    return 20.0
+
+
+def _metadata_candidate_match_score(candidate: Dict[str, object], record) -> float:
+    score = 0.0
+    record_venue = _normalize_title_for_confirmation(str(getattr(record, "venue", "") or ""))
+    record_location = _normalize_title_for_confirmation(str(getattr(record, "location", "") or ""))
+    candidate_venue = _normalize_title_for_confirmation(str(candidate.get("venue") or ""))
+    candidate_location = _normalize_title_for_confirmation(str(candidate.get("location") or ""))
+    if record_venue and candidate_venue and (record_venue == candidate_venue or record_venue in candidate_venue or candidate_venue in record_venue):
+        score += 8.0
+    if record_location and candidate_location and (record_location == candidate_location or record_location in candidate_location or candidate_location in record_location):
+        score += 6.0
+    return score
+
+
+def _score_thorough_track_candidates(
+    candidates: List[Dict[str, object]],
+    audio_files: Sequence[str],
+    record,
+) -> None:
+    expected = len(audio_files)
+    for candidate in candidates:
+        tracks = list(candidate.get("tracks") or [])
+        distance = abs(len(tracks) - expected)
+        score = _candidate_structure_prior(candidate)
+        score += {0: 45.0, 1: 25.0, 2: 12.0}.get(distance, -100.0)
+        unknown_count = sum(1 for row in tracks if _normalize_title_for_confirmation(str(row.get("title", ""))) in {"", "unknown", "untitled", "no title"})
+        score -= unknown_count * 7.0
+        filename_hits, tag_hits, _positions = _candidate_title_reinforcement(tracks, audio_files)
+        score += filename_hits * 5.0 + tag_hits * 6.0
+        mapping, corroborated, coverage, gaps = _candidate_audio_alignment(tracks, audio_files)
+        candidate["alignment"] = mapping
+        candidate["alignment_corroborated"] = corroborated
+        candidate["alignment_coverage"] = coverage
+        candidate["alignment_gaps"] = gaps
+        if corroborated:
+            score += corroborated * 5.0 + coverage * 10.0
+        score += _metadata_candidate_match_score(candidate, record)
+        candidate["score"] = score
+
+    # Independent-source agreement is strong corroboration. Alternatives from
+    # the same source do not vote for each other.
+    for index, candidate in enumerate(candidates):
+        score = float(candidate.get("score", 0.0))
+        family = str(candidate.get("family") or "")
+        for other_index, other in enumerate(candidates):
+            if index == other_index or family == str(other.get("family") or ""):
+                continue
+            similarity = _candidate_sequence_similarity(candidate.get("tracks") or [], other.get("tracks") or [])
+            if similarity >= 0.96:
+                score += 24.0
+            elif similarity >= 0.80:
+                score += 12.0
+        candidate["score"] = score
+
+
+def _select_tracks_for_tagging_thorough(
+    config: Config,
+    group: dict,
+    audio_files: Sequence[str],
+    emit: Optional[Callable[[str], None]],
+    record,
+) -> Tuple[List[Dict[str, object]], str, Optional[str]]:
+    folder = _folder_label(group)
+    expected = len(audio_files)
+    candidates: List[Dict[str, object]] = []
+    setlist_file = group.get("setlist_file", "") or ""
+    candidates.extend(_collect_local_track_candidates_for_thorough(setlist_file, audio_files, folder, emit=emit))
+    candidates.extend(_collect_etreedb_track_candidates_for_thorough(config, record, expected, folder, emit=emit))
+    candidates.extend(_collect_setlistfm_track_candidates_for_thorough(record, expected))
+    if not candidates:
+        return [], "", None
+
+    _score_thorough_track_candidates(candidates, audio_files, record)
+    candidates.sort(key=lambda item: (-float(item.get("score", 0.0)), int(item.get("distance", 99)), str(item.get("family", ""))))
+    for candidate in candidates:
+        source = str(candidate.get("source") or "")
+        label = str(candidate.get("label") or source)
+        identifier = str(candidate.get("identifier") or "")
+        _emit(
+            emit,
+            f"INFO: {folder} | Thorough Setlist Matching candidate source={label} tracks={len(candidate.get('tracks') or [])} "
+            f"distance={candidate.get('distance')} score={float(candidate.get('score', 0.0)):.1f} "
+            f"audio_matches={candidate.get('alignment_corroborated', 0)}{(' id=' + identifier) if identifier else ''}",
+        )
+
+    winner = candidates[0]
+    if len(candidates) > 1:
+        runner_up = candidates[1]
+        score_gap = float(winner.get("score", 0.0)) - float(runner_up.get("score", 0.0))
+        similarity = _candidate_sequence_similarity(winner.get("tracks") or [], runner_up.get("tracks") or [])
+        if (
+            str(winner.get("family") or "") != str(runner_up.get("family") or "")
+            and score_gap <= 4.0
+            and similarity < 0.65
+        ):
+            message = (
+                f"Thorough Setlist Matching ambiguity: top candidates disagree materially "
+                f"({winner.get('label')} score={float(winner.get('score', 0.0)):.1f}; "
+                f"{runner_up.get('label')} score={float(runner_up.get('score', 0.0)):.1f})"
+            )
+            _emit(emit, f"WARN: {folder} | {message}")
+            return [], "", message
+
+    winner_tracks = list(winner.get("tracks") or [])
+    source = str(winner.get("source") or "")
+    if len(winner_tracks) == expected:
+        # Equal counts can still be skewed by one recording-only Intro plus one
+        # performance-only Encore. Use alignment only when actual audio evidence
+        # supports a gapped mapping; otherwise preserve the candidate sequence.
+        mapping = list(winner.get("alignment") or [])
+        corroborated = int(winner.get("alignment_corroborated", 0) or 0)
+        coverage = float(winner.get("alignment_coverage", 0.0) or 0.0)
+        gaps = int(winner.get("alignment_gaps", 0) or 0)
+        if mapping and gaps >= 2 and corroborated >= 2 and coverage >= 0.50:
+            materialized = _materialize_aligned_candidate_tracks(mapping, audio_files, source)
+            if materialized:
+                _emit(emit, f"INFO: {folder} | Thorough Setlist Matching corrected equal-count sequence skew using audio evidence")
+                winner_tracks = materialized
+    else:
+        mapping = list(winner.get("alignment") or [])
+        corroborated = int(winner.get("alignment_corroborated", 0) or 0)
+        coverage = float(winner.get("alignment_coverage", 0.0) or 0.0)
+        if mapping and corroborated >= 2 and coverage >= 0.50:
+            materialized = _materialize_aligned_candidate_tracks(mapping, audio_files, source)
+            if materialized:
+                _emit(
+                    emit,
+                    f"INFO: {folder} | Thorough Setlist Matching aligned {len(winner_tracks)} setlist title(s) to {expected} audio file(s) "
+                    f"with {corroborated} corroborated position(s)",
+                )
+                winner_tracks = materialized
+        if len(winner_tracks) != expected:
+            _emit(
+                emit,
+                f"WARN: {folder} | Thorough Setlist Matching best candidate was near-count but could not be safely aligned; falling back to normal selection",
+            )
+            return [], "", None
+
+    _emit(
+        emit,
+        f"INFO: {folder} | Thorough Setlist Matching selected {winner.get('label') or source} with score={float(winner.get('score', 0.0)):.1f}",
+    )
+    return winner_tracks, source, None
+
+
 def _select_tracks_for_tagging(
     config: Config,
     group: dict,
@@ -4131,6 +4612,14 @@ def _select_tracks_for_tagging(
 ) -> Tuple[List[Dict[str, object]], str, Optional[str]]:
     folder = _folder_label(group)
     setlist_file = group.get("setlist_file", "") or ""
+    if bool(getattr(config, "thorough_setlist_matching", False)):
+        thorough_tracks, thorough_source, thorough_error = _select_tracks_for_tagging_thorough(
+            config, group, audio_files, emit, record
+        )
+        if thorough_tracks:
+            return thorough_tracks, thorough_source, thorough_error
+        if thorough_error:
+            return [], thorough_source, thorough_error
     if setlist_file:
         tracks = parse_setlist_tracks(setlist_file)
         if not tracks:

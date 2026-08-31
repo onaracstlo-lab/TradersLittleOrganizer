@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v418"
+__version__ = "v421"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
@@ -17,6 +17,7 @@ from tlo_wrapper_rules import (
     looks_like_non_main_dir,
     split_volume_part_suffix,
     split_wrapper_part_suffix,
+    split_parenthesized_numeric_part_suffix,
 )
 from tlo_complete_path_log import load_complete_path_lines
 from tlo_setlist_file_selection import find_setlist_file_for_music_dir, find_setlist_files_for_music_dir
@@ -587,6 +588,12 @@ def _wrapper_part_parent_info(music_dir_entries: Sequence[dict]) -> Dict[Tuple[s
     """
     all_rows_by_parent: Dict[str, List[Tuple[str, str]]] = {}
     wrapper_rows: Dict[str, Dict[str, List[Tuple[str, str, str]]]] = {}
+    music_dir_keys = set()
+    for entry in music_dir_entries or []:
+        music_dir = _entry_music_dir(entry) if isinstance(entry, dict) else os.path.normpath(str(entry or ""))
+        if music_dir:
+            music_dir_keys.add(os.path.normcase(os.path.normpath(music_dir)))
+
     for entry in music_dir_entries or []:
         music_dir = _entry_music_dir(entry) if isinstance(entry, dict) else os.path.normpath(str(entry or ""))
         if not music_dir:
@@ -599,10 +606,23 @@ def _wrapper_part_parent_info(music_dir_entries: Sequence[dict]) -> Dict[Tuple[s
         parent_key = os.path.normcase(parent_dir)
         all_rows_by_parent.setdefault(parent_key, []).append((parent_dir, folder_name))
         base_name, suffix = split_wrapper_part_suffix(folder_name)
-        if not suffix:
+        if suffix:
+            relation_key = compact_ws(base_name).casefold() if compact_ws(base_name) else "__exact_wrapper_part__"
+            wrapper_rows.setdefault(parent_key, {}).setdefault(relation_key, []).append((parent_dir, base_name, suffix))
             continue
-        relation_key = compact_ws(base_name).casefold() if compact_ws(base_name) else "__exact_wrapper_part__"
-        wrapper_rows.setdefault(parent_key, {}).setdefault(relation_key, []).append((parent_dir, base_name, suffix))
+
+        numeric_base, numeric_suffix, numeric_part = split_parenthesized_numeric_part_suffix(folder_name)
+        if not numeric_suffix:
+            continue
+        # Build 419: bare (N) folders are multipart only for the strong
+        # Parent/Parent (1)..Parent (N) shape. The parent itself must not be
+        # music-bearing or grouping would overlap the parent's own show.
+        if normalized_compare_value(numeric_base) != normalized_compare_value(os.path.basename(parent_dir)):
+            continue
+        if os.path.normcase(os.path.normpath(parent_dir)) in music_dir_keys:
+            continue
+        relation_key = f"__parenthesized_numeric__::{compact_ws(numeric_base).casefold()}"
+        wrapper_rows.setdefault(parent_key, {}).setdefault(relation_key, []).append((parent_dir, numeric_base, numeric_suffix))
 
     info: Dict[Tuple[str, str], dict] = {}
     for parent_key, relations in wrapper_rows.items():
@@ -614,6 +634,17 @@ def _wrapper_part_parent_info(music_dir_entries: Sequence[dict]) -> Dict[Tuple[s
             continue
         if relation_key != "__exact_wrapper_part__" and len(rows) < 2:
             continue
+        if relation_key.startswith("__parenthesized_numeric__::"):
+            part_numbers = []
+            valid = True
+            for _parent, _base, suffix in rows:
+                try:
+                    part_numbers.append(int(suffix.strip()[1:-1]))
+                except (TypeError, ValueError):
+                    valid = False
+                    break
+            if not valid or sorted(part_numbers) != list(range(1, len(rows) + 1)):
+                continue
         parent_dir = rows[0][0]
         base_name = compact_ws(rows[0][1])
         info[(parent_key, relation_key)] = {
@@ -637,7 +668,9 @@ def _wrapper_release_aggregation_info(
     suffixes such as (Volume 1), (Vol. 2), and (v.3) aggregate under their
     parent only when at least two sibling music directories use volume suffixes
     with different stripped base names. Same-base volume siblings remain
-    separate inventory entries.
+    separate inventory entries. Build 419 also aggregates the narrow
+    ``Parent/Parent (1)`` through ``Parent (N)`` shape when the parts are
+    consecutive and every direct music-bearing child belongs to that set.
     """
     normalized = os.path.normpath(music_dir)
     folder_name = os.path.basename(normalized)
@@ -660,20 +693,32 @@ def _wrapper_release_aggregation_info(
         }
 
     base_name, suffix = split_wrapper_part_suffix(folder_name)
-    if suffix:
+    numeric_part = 0
+    if not suffix:
+        numeric_base, numeric_suffix, numeric_part = split_parenthesized_numeric_part_suffix(folder_name)
+        if numeric_suffix and normalized_compare_value(numeric_base) == normalized_compare_value(os.path.basename(parent_dir)):
+            base_name, suffix = numeric_base, numeric_suffix
+            relation_key = f"__parenthesized_numeric__::{compact_ws(base_name).casefold()}"
+        else:
+            relation_key = ""
+    else:
         relation_key = compact_ws(base_name).casefold() if compact_ws(base_name) else "__exact_wrapper_part__"
+
+    if suffix:
         parent_info = (wrapper_parent_info or {}).get((parent_key, relation_key))
         if not parent_info:
             return None
         if base_name:
-            key = f"suffix::{parent_key}::{relation_key}"
+            key_prefix = "parenthesized_numeric" if numeric_part else "suffix"
+            reason_prefix = "parenthesized_numeric_part" if numeric_part else "wrapper_suffix"
+            key = f"{key_prefix}::{parent_key}::{relation_key}"
             return {
                 "aggregation_key": key,
                 "main_dir_path": parent_dir,
                 "main_dir_name": os.path.basename(parent_dir),
                 "aggregate_album_name": base_name,
                 "aggregate_release_base": base_name,
-                "aggregation_reason": f"wrapper_suffix:{suffix}",
+                "aggregation_reason": f"{reason_prefix}:{suffix}",
             }
         key = f"exact::{parent_key}"
         return {
@@ -2791,17 +2836,18 @@ def _apply_setlistfm_lookup_to_record(config, record: ShowMetadata, evidence: Di
         observations.append(f"setlist.fm lookup skipped: date is not yyyy-mm-dd: {record.date}")
         return False
     try:
-        results = lookup_setlistfm_venue_and_location(
-            record.artist,
-            record.date,
-            debug=bool(getattr(config, "debug", False)),
-            min_interval_seconds=float(getattr(config, "setlistfm_min_interval_seconds", 0.600) or 0.600),
-            max_calls=int(getattr(config, "setlistfm_max_calls", 1400) or 0),
-            max_calls_per_day=int(getattr(config, "setlistfm_max_calls_per_day", 0) or 0),
-            run_id=str(getattr(config, "setlistfm_run_id", "") or ""),
-            tlo_home=str(getattr(config, "TLOHome", "") or ""),
-            lock_timeout_seconds=float(getattr(config, "setlistfm_lock_timeout_seconds", 20.0) or 20.0),
-        )
+        lookup_kwargs = {
+            "debug": bool(getattr(config, "debug", False)),
+            "min_interval_seconds": float(getattr(config, "setlistfm_min_interval_seconds", 0.600) or 0.600),
+            "max_calls": int(getattr(config, "setlistfm_max_calls", 1400) or 0),
+            "max_calls_per_day": int(getattr(config, "setlistfm_max_calls_per_day", 0) or 0),
+            "run_id": str(getattr(config, "setlistfm_run_id", "") or ""),
+            "tlo_home": str(getattr(config, "TLOHome", "") or ""),
+            "lock_timeout_seconds": float(getattr(config, "setlistfm_lock_timeout_seconds", 20.0) or 20.0),
+        }
+        if bool(getattr(config, "thorough_setlist_matching", False)):
+            lookup_kwargs["thorough"] = True
+        results = lookup_setlistfm_venue_and_location(record.artist, record.date, **lookup_kwargs)
     except Exception as exc:
         observations.append(f"setlist.fm lookup failed: {exc}")
         return False
@@ -2846,9 +2892,10 @@ def _apply_online_lookup_to_record(config, record: ShowMetadata, evidence: Dict[
     for the current artist/date lookup key.
     """
     etree_success = _apply_etree_lookup_to_record(config, record, evidence, observations)
-    if etree_success:
+    if etree_success and not bool(getattr(config, "thorough_setlist_matching", False)):
         return True
-    return _apply_setlistfm_lookup_to_record(config, record, evidence, observations)
+    setlistfm_success = _apply_setlistfm_lookup_to_record(config, record, evidence, observations)
+    return bool(etree_success or setlistfm_success)
 
 
 def _online_lookup_key(record: ShowMetadata) -> Tuple[str, str]:
@@ -2877,7 +2924,8 @@ def _apply_setlistfm_only_after_etree_fallback(
     since the earlier eTreeDB opportunity, retry eTreeDB first and call
     setlist.fm only if that retry still does not produce usable data.
     """
-    if etree_success:
+    thorough = bool(getattr(config, "thorough_setlist_matching", False))
+    if etree_success and not thorough:
         return etree_success, etree_lookup_key
     if not getattr(config, "setlistfm_lookup", False):
         return etree_success, etree_lookup_key
@@ -2888,9 +2936,11 @@ def _apply_setlistfm_only_after_etree_fallback(
     if getattr(config, "etree_lookup", False) and current_key != etree_lookup_key:
         etree_lookup_key = current_key
         etree_success = _apply_etree_lookup_to_record(config, record, evidence, observations)
-        if etree_success:
+        if etree_success and not thorough:
             return etree_success, etree_lookup_key
 
+    if thorough and etree_success:
+        observations.append("Thorough Setlist Matching: querying setlist.fm for corroboration even though eTreeDB returned usable data")
     _apply_setlistfm_lookup_to_record(config, record, evidence, observations)
     return etree_success, etree_lookup_key
 
@@ -3046,6 +3096,7 @@ def _format_switches_log_line(config, action: str = "Full Inventory") -> str:
         f"etreeDB: {_yes_no(getattr(config, 'etree_lookup', False))}",
         f"setlist.fm: {_yes_no(getattr(config, 'setlistfm_lookup', False))}",
         f"setlist.fm upgrade: {_yes_no(getattr(config, 'setlistfm_upgrade', False))}",
+        f"Thorough Setlist Matching: {_yes_no(getattr(config, 'thorough_setlist_matching', False))}",
     ]
     if bool(getattr(config, "compliant", False)):
         parts.append(f"Compliant Artist Mode: {'as-is' if _as_is_artist_name(config) else 'master'}")

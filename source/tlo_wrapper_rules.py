@@ -1,4 +1,4 @@
-__version__ = "v418"
+__version__ = "v421"
 import re
 
 NON_MAIN_DIR_PATTERNS = [
@@ -97,6 +97,11 @@ VOLUME_PART_SUFFIX_RE = re.compile(
     r"(?i)(?:^|[\s._-]+|[\[(])(?:volume|vol\.?|v\.?)[\s._-]*(?:\d{1,3}|[ivx]{1,6}|one|two|three|four|five|six|seven|eight|nine|ten)\s*[\])]?\s*$"
 )
 
+# Bare parenthesized integers are intentionally *not* generic wrapper names.
+# Build 419 uses them only when parent-level sibling analysis proves a complete
+# multipart release such as ``Release/Release (1)`` through ``Release (9)``.
+PARENTHESIZED_NUMERIC_PART_SUFFIX_RE = re.compile(r"^(?P<base>.+?)\s+\((?P<number>\d{1,3})\)\s*$")
+
 
 def _split_suffix_with_regex(dir_name: str, pattern: re.Pattern) -> tuple[str, str]:
     name = str(dir_name or "").strip()
@@ -151,6 +156,23 @@ def split_volume_part_suffix(dir_name: str) -> tuple[str, str]:
             return "", ""
     return _split_suffix_with_regex(name, VOLUME_PART_SUFFIX_RE)
 
+
+
+def split_parenthesized_numeric_part_suffix(dir_name: str) -> tuple[str, str, int]:
+    """Return ``(base, suffix, number)`` for a terminal bare ``(N)`` suffix.
+
+    This splitter does not itself classify the folder as a wrapper.  Callers
+    must apply the Build 419 parent/sibling safety rules before aggregation.
+    """
+    name = str(dir_name or "").strip()
+    match = PARENTHESIZED_NUMERIC_PART_SUFFIX_RE.fullmatch(name)
+    if not match:
+        return "", "", 0
+    base = match.group("base").strip(" ._-")
+    number = int(match.group("number"))
+    if not base or number <= 0:
+        return "", "", 0
+    return base, f"({number})", number
 
 def is_wrapper_part_folder_name(dir_name: str) -> bool:
     """Return True when a folder is, or ends with, a release-part suffix."""

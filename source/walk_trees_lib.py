@@ -1,4 +1,4 @@
-__version__ = "v418"
+__version__ = "v421"
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
 import os
@@ -56,6 +56,7 @@ def _config_snapshot(config, force_silent=False):
         "etree_lookup": config.etree_lookup,
         "setlistfm_lookup": getattr(config, "setlistfm_lookup", False),
         "setlistfm_upgrade": getattr(config, "setlistfm_upgrade", False),
+        "thorough_setlist_matching": getattr(config, "thorough_setlist_matching", False),
         "setlistfm_min_interval_seconds": getattr(config, "setlistfm_min_interval_seconds", 0.600),
         "setlistfm_max_calls": getattr(config, "setlistfm_max_calls", 1400),
         "setlistfm_max_calls_per_day": getattr(config, "setlistfm_max_calls_per_day", 0),

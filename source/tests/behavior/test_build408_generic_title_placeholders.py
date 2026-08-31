@@ -8,7 +8,7 @@ pytestmark = pytest.mark.behavior
 
 import tlo_tag_lib as T
 
-__version__ = "v418"
+__version__ = "v421"
 
 
 @pytest.mark.parametrize(
@@ -92,14 +92,13 @@ def test_build408_requirements_and_manual_document_generic_title_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v418.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v421.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v418.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v421.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v418 (v1.4 Build 418)." in req_text
+    assert "Current document version: v421 (v1.4 Build 421)." in req_text
     assert "complete cleaned candidate song title" in req_text
     assert "exactly Title, Titled, or Titles" in req_text
     assert "keep the track row/position but write the Title value as Unknown" in req_text
-    assert "Version v1.4 Build 418" in manual_text
-    assert "Build 408 - Generic song-title placeholders" in manual_text
-    assert "exactly Title, Titled, or Titles after normal cleanup" in manual_text
+    assert "Version v1.4 Build 421" in manual_text
+    assert "Exact placeholder titles Title, Titled, or Titles become Unknown after normal cleanup" in manual_text
