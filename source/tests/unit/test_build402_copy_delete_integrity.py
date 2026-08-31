@@ -1,5 +1,5 @@
 """Build 402 irreversible copy/delete verification regressions."""
-__version__ = "v421"
+__version__ = "v423"
 
 import inspect
 from pathlib import Path

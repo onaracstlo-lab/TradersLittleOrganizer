@@ -6,7 +6,7 @@ metacharacters and silently changing which directory is searched.
 """
 from __future__ import annotations
 
-__version__ = "v421"
+__version__ = "v423"
 
 import fnmatch
 import os
