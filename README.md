@@ -8,6 +8,6 @@ An excellent replacement for LiveShowTagger - works in bulk, more discriminating
 
 Relies on python packages mutagen, tkinter, tkinterdnd2 and imageio_ffmpeg.
 
-Visit my web site at traderslittleorganizer.com.
+Visit my web site at [traderslittleorganizer.com](url).
 
 This is not intended to be a traditional repository and I'm not a seasoned GitHub user, so please excuse any percieved lack of responsiveness.
