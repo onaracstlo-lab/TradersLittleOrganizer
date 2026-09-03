@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v423"
+__version__ = "v426"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
@@ -23,6 +23,7 @@ from tlo_complete_path_log import load_complete_path_lines
 from tlo_setlist_file_selection import find_setlist_file_for_music_dir, find_setlist_files_for_music_dir
 from tlo_artist_db import (
     ArtistMatcher,
+    artist_search_variants,
     lookup_artist_master_with_status,
     match_line_to_artists,
     terminal_suffix_fallback_info_for_artist,
@@ -51,6 +52,21 @@ from tlo_tree_compare import has_exact_tree_match_in_family, split_collision_suf
 FOUR_DIGIT_WRAPPER_RE = re.compile(r"^\d{4}$")
 INTEGER_RE = re.compile(r"^\d+$")
 COLLABORATIVE_ARTIST_CONNECTOR_RE = re.compile(r"(\s+(?:and|with|&|\+)\s+)", re.IGNORECASE)
+TERMINAL_PERFORMANCE_QUALIFIER_TEXT = (
+    r"(?:early|late|afternoon|evening)(?:\s+show)?"
+    r"|matinee|soundcheck|rehearsal"
+    r"|(?:acoustic|electric)(?:\s+set)?"
+    r"|set\s*(?:1|2|3|one|two|three)"
+    r"|(?:1st|2nd|3rd)\s+set"
+)
+TERMINAL_DASH_PERFORMANCE_QUALIFIER_RE = re.compile(
+    rf"^(?P<artist>.+?)\s+[\-\u2013\u2014]\s+(?P<qualifier>{TERMINAL_PERFORMANCE_QUALIFIER_TEXT})\s*$",
+    re.IGNORECASE,
+)
+TERMINAL_PAREN_PERFORMANCE_QUALIFIER_RE = re.compile(
+    rf"^(?P<artist>.+?)\s*\(\s*(?P<qualifier>{TERMINAL_PERFORMANCE_QUALIFIER_TEXT})\s*\)\s*$",
+    re.IGNORECASE,
+)
 MULTI_EXT_RE = re.compile(
     r"(?i)(?:\.(?:txt|docx?|rtf|nfo|md5|ffp|fpt|sfv|log|cue|m3u8?|pls|shn|shnf|flac|flac16|flac24|wav|mp3|m4a|aac|ogg|oga|opus|aiff?|ape|wv|alac|aucdtect))+$"
 )
@@ -1553,6 +1569,76 @@ def _match_date_string3(text: str) -> Optional[Dict[str, str]]:
     return None
 
 
+def _match_date_artist_venue_location(
+    text: str, matcher: Optional[ArtistMatcher]
+) -> Tuple[Optional[Dict[str, object]], List[str]]:
+    """Match a conservative ``Date Artist Venue Location`` path component.
+
+    The artist must be a unique Artist DB match anchored immediately after a
+    leading date. Removing that artist must leave a String2 value that parses
+    into Venue, City, and Region/Country. Requiring a remaining venue keeps a
+    date-first location such as ``1990-07-10 Palace Melbourne Australia`` from
+    turning venue ``Palace`` into the artist.
+    """
+    if matcher is None:
+        return None, []
+    cleaned = _clean_piece(text)
+    if not cleaned:
+        return None, []
+
+    leading_date = next(
+        (
+            item
+            for item in _find_date_matches(cleaned)
+            if not _clean_piece(cleaned[: int(item.get("start", 0) or 0)])
+        ),
+        None,
+    )
+    if not leading_date:
+        return None, []
+
+    tail = _clean_piece(cleaned[int(leading_date.get("end", 0) or 0):])
+    token_matches = list(re.finditer(r"[A-Za-z][A-Za-z'&.+-]*", tail))
+    if len(token_matches) < 2:
+        return None, []
+
+    # Try the longest possible artist prefix first. A shorter prefix is
+    # considered only when the longer text is not a DB artist or does not
+    # leave a complete venue/location remainder.
+    for token in reversed(token_matches[:-1]):
+        raw_artist = _clean_piece(tail[: token.end()])
+        string2 = _clean_piece(tail[token.end():])
+        if not raw_artist or not string2:
+            continue
+
+        venue, city, region, country, extra_parenthetical = _parse_string2(string2)
+        if not (venue and city and (region or country)):
+            continue
+
+        detail, apostrophe_fallback = _lookup_artist_detail_with_apostrophe_fallback(
+            raw_artist, matcher
+        )
+        if detail["status"] == "collision":
+            return None, list(detail["masters"])
+        if detail["status"] != "matched" or len(detail["masters"]) != 1:
+            continue
+
+        return {
+            "artist_raw": raw_artist,
+            "artist_master": detail["masters"][0],
+            "date_raw": leading_date["raw"],
+            "date_norm": leading_date["normalized"],
+            "string2": string2,
+            "venue": venue,
+            "city": city,
+            "region": region,
+            "country": country,
+            "extra_parenthetical": extra_parenthetical,
+            "apostrophe_fallback": apostrophe_fallback,
+        }, []
+    return None, []
+
+
 _STRING_DASH_STRING_RE = re.compile(r"^(?P<string1>.+?)\s+-\s+(?P<string2>.+)$")
 _COMMERCIAL_RELEASE_YEAR_RE = re.compile(r"^(?:\((?P<paren_year>(?:19|20)\d{2})\)|(?P<bare_year>(?:19|20)\d{2}))$")
 
@@ -1866,6 +1952,78 @@ def _lookup_artist_detail(term: str, matcher: Optional[ArtistMatcher]) -> Dict[s
         "masters": list(masters),
         "aliases": aliases,
     }
+
+
+def _split_terminal_performance_qualifier_from_artist(text: str) -> Tuple[str, str]:
+    """Return an artist candidate and a separately recognized show qualifier.
+
+    Only an explicit terminal dash-delimited or parenthesized qualifier is
+    removed.  A bare word such as ``Early`` remains part of an artist name.
+    """
+    raw = compact_ws(text)
+    if not raw:
+        return "", ""
+    for pattern in (
+        TERMINAL_DASH_PERFORMANCE_QUALIFIER_RE,
+        TERMINAL_PAREN_PERFORMANCE_QUALIFIER_RE,
+    ):
+        match = pattern.fullmatch(raw)
+        if not match:
+            continue
+        artist = compact_ws(match.group("artist")).strip(" -")
+        qualifier = _detect_qualifier([match.group("qualifier")])
+        if artist and qualifier:
+            return artist, qualifier
+    return raw, ""
+
+
+def _apostrophe_fold_artist(text: str) -> str:
+    """Normalize apostrophe glyphs away for one conservative artist retry."""
+    return compact_ws(text).casefold().replace("'", "").replace("\u2018", "").replace("\u2019", "")
+
+
+def _lookup_artist_detail_with_apostrophe_fallback(
+    term: str, matcher: Optional[ArtistMatcher]
+) -> Tuple[Dict[str, object], bool]:
+    """Retry an exact artist lookup without apostrophes, accepting uniqueness only.
+
+    This is deliberately narrower than fuzzy matching.  It handles spelling
+    variants such as ``McCoury's`` versus ``McCourys`` while preserving an
+    ambiguous result as a collision rather than guessing.
+    """
+    detail = _lookup_artist_detail(term, matcher)
+    if detail["status"] != "no_match" or matcher is None:
+        return detail, False
+
+    query_norms = {
+        _apostrophe_fold_artist(variant)
+        for variant in artist_search_variants(term)
+        if _apostrophe_fold_artist(variant)
+    }
+    if not query_norms:
+        return detail, False
+
+    matched: Dict[str, List[str]] = {}
+    for master, aliases in matcher.master_aliases.items():
+        for alias in aliases or [master]:
+            alias_norms = {
+                _apostrophe_fold_artist(variant)
+                for variant in artist_search_variants(alias)
+                if _apostrophe_fold_artist(variant)
+            }
+            if query_norms & alias_norms:
+                matched.setdefault(master, list(aliases or [master]))
+                break
+
+    masters = sorted(matched, key=lambda item: item.casefold())
+    if not masters:
+        return detail, False
+    return {
+        "term": term,
+        "status": "matched" if len(masters) == 1 else "collision",
+        "masters": masters,
+        "aliases": matched,
+    }, True
 
 
 def _as_is_artist_name(config) -> bool:
@@ -2291,8 +2449,11 @@ def _analyze_dash_string2_before_album(string2: str) -> Dict[str, str]:
     """Return conservative performance metadata found inside dash String2.
 
     A complete date and/or a state/country-anchored venue/location is stronger
-    evidence than the generic commercial-release fallback. Bare/ambiguous text
-    still falls through unchanged to Artist - Album handling.
+    evidence than the generic commercial-release fallback. A supported partial
+    date is also performance evidence when it occurs at the beginning or end of
+    String2; the edge requirement prevents a partial date embedded in an album
+    title from reclassifying the release. Bare/ambiguous text still falls
+    through unchanged to Artist - Album handling.
     """
     raw = compact_ws(string2 or "").strip(" ,")
     if not raw:
@@ -2301,8 +2462,18 @@ def _analyze_dash_string2_before_album(string2: str) -> Dict[str, str]:
     remainder = raw
     matches = _find_date_matches(raw, allow_slash=True)
     complete = [m for m in matches if _is_exact_yyyy_mm_dd_date(m.get("normalized", ""))]
-    if complete:
-        chosen = complete[0]
+    partial_at_edge = []
+    for match in matches:
+        normalized = match.get("normalized", "")
+        parts = normalized.split("-")
+        if len(parts) != 3 or "x" not in normalized.casefold():
+            continue
+        before = _clean_piece(raw[: match.get("start", 0)])
+        after = _clean_piece(raw[match.get("end", 0) :])
+        if not before or not after:
+            partial_at_edge.append(match)
+    chosen = complete[0] if complete else (partial_at_edge[0] if partial_at_edge else None)
+    if chosen:
         date_value = chosen.get("normalized", "")
         remainder = compact_ws((raw[:chosen.get("start", 0)] + " " + raw[chosen.get("end", 0):]).strip(" ,-"))
     venue = city = region = country = extra = ""
@@ -2314,7 +2485,7 @@ def _analyze_dash_string2_before_album(string2: str) -> Dict[str, str]:
     if not strong_location:
         venue = city = region = country = extra = ""
     return {
-        "date": date_value, "venue": compact_ws(venue), "city": compact_ws(city),
+        "date": date_value, "venue": _clean_piece(venue), "city": compact_ws(city),
         "region": compact_ws(region), "country": compact_ws(country),
         "extra": compact_ws(extra), "raw": raw, "remainder": remainder,
     }
@@ -2957,7 +3128,11 @@ def _build_show_name(record: ShowMetadata) -> str:
     if not record.artist or not record.date:
         return ""
     parts = [part for part in [record.artist, record.date, record.venue, record.location] if part]
-    return _append_parentheticals_to_show_name(" ".join(parts), record.parentheticals)
+    show_name = " ".join(parts)
+    qualifier = compact_ws(record.qualifier)
+    if qualifier and qualifier.casefold() not in show_name.casefold() and qualifier.casefold() not in compact_ws(record.parentheticals).casefold():
+        show_name = compact_ws(f"{show_name} ({qualifier})")
+    return _append_parentheticals_to_show_name(show_name, record.parentheticals)
 
 
 def _normalize_record_ascii_for_output(record: ShowMetadata) -> ShowMetadata:
@@ -3356,11 +3531,25 @@ def _resolve_artist_from_tags(record: ShowMetadata, matcher: Optional[ArtistMatc
         if observations is not None:
             observations.append(f"tag ARTIST and ALBUMARTIST differ; considering usable ALBUMARTIST tags before ARTIST: {albumartist_tag}")
 
-    detail = _lookup_artist_detail(term, matcher)
+    lookup_term, stripped_qualifier = _split_terminal_performance_qualifier_from_artist(term)
+    detail, apostrophe_fallback = _lookup_artist_detail_with_apostrophe_fallback(lookup_term, matcher)
     if detail["status"] == "matched":
         master = detail["masters"][0]
-        artist_name = _artist_output_name(config, term, master)
+        artist_name = _artist_output_name(config, lookup_term, master)
         evidence.setdefault("artist", []).append(Candidate(artist_name, f"{tag_source}:{term}", 95))
+        if stripped_qualifier and not record.qualifier:
+            record.qualifier = stripped_qualifier
+            evidence.setdefault("qualifier", []).append(
+                Candidate(stripped_qualifier, f"{tag_source}_terminal_qualifier:{term}", 70)
+            )
+        if observations is not None and stripped_qualifier:
+            observations.append(
+                f"terminal performance qualifier removed from tag artist before Artist DB lookup: {term} -> {lookup_term}"
+            )
+        if observations is not None and apostrophe_fallback:
+            observations.append(
+                f"unique apostrophe-insensitive Artist DB match accepted for tag artist: {lookup_term} -> {master}"
+            )
         return artist_name
 
     if not allow_unmatched:
@@ -3572,24 +3761,42 @@ def _reverse_last_first_artist_component(text: str) -> str:
 
 
 def _path_artist_hit_is_location_tail(part: str, matched_text: str) -> bool:
-    """Return True when a partial DB artist hit is only the parsed city tail.
+    """Return True when a partial DB artist hit is parsed venue/location text.
 
     Build 414 prevents generic path artist scanning from turning location text
-    such as ``Washington, DC`` into artist ``Washington``.  Exact whole-path
-    artist matches are handled before this helper is consulted and therefore
-    remain eligible.
+    such as ``Washington, DC`` into artist ``Washington``.  Build 425 extends
+    the same protection to the parsed String2 tail of a date-bearing folder, so
+    artist ``Attic`` inside venue ``Eddie's Attic`` is not selected.  Exact
+    whole-path artist matches remain eligible.
     """
     raw = compact_ws(part)
     phrase = compact_ws(matched_text)
     if not raw or not phrase or normalized_compare_value(raw) == normalized_compare_value(phrase):
         return False
-    try:
-        _venue, city, region, country, _parenthetical = _parse_string2(raw)
-    except Exception:
+
+    candidate_tails: List[str] = []
+    date_matches = _find_date_matches(raw, allow_slash=True)
+    if date_matches:
+        for date_match in date_matches:
+            tail = _clean_piece(raw[int(date_match.get("end", 0) or 0):])
+            if tail:
+                candidate_tails.append(tail)
+    else:
+        candidate_tails.append(raw)
+
+    phrase_norm = _letters_only_compare(phrase)
+    if not phrase_norm:
         return False
-    if not city or not (region or country):
-        return False
-    return normalized_compare_value(city) == normalized_compare_value(phrase)
+    for tail in candidate_tails:
+        try:
+            venue, city, region, country, _parenthetical = _parse_string2(tail)
+        except Exception:
+            continue
+        for metadata_value in (venue, city, region, country):
+            value_norm = _letters_only_compare(metadata_value)
+            if value_norm and phrase_norm in value_norm:
+                return True
+    return False
 
 
 def _db_backed_artist_hits_for_path_part(
@@ -4231,6 +4438,81 @@ def _apply_string2_to_record(record: ShowMetadata, match: Optional[Dict[str, str
         evidence.setdefault("country", []).append(Candidate(record.country, f"path_part:{match['part']}", 35))
 
 
+def _apply_date_artist_venue_location_path(
+    config,
+    group: dict,
+    record: ShowMetadata,
+    evidence: Dict[str, List[Candidate]],
+    conflicts: List[str],
+    observations: List[str],
+    matcher: Optional[ArtistMatcher],
+) -> Optional[Dict[str, object]]:
+    """Apply the first unambiguous date-first artist/show path component."""
+    for part, part_path in _candidate_path_parts(group.get("main_dir_path", "")):
+        match, collision_masters = _match_date_artist_venue_location(part, matcher)
+        if collision_masters:
+            conflicts.append(
+                _collision_note(
+                    f"artist query collision for Date Artist Venue Location: {part}",
+                    collision_masters,
+                )
+            )
+            return None
+        if not match:
+            continue
+
+        raw_artist = str(match["artist_raw"])
+        master_artist = str(match["artist_master"])
+        candidate_artist = _artist_output_name(config, raw_artist, master_artist)
+        if record.artist and not _metadata_values_equivalent(record.artist, candidate_artist):
+            conflicts.append(
+                _collision_note(
+                    "artist conflict between existing evidence and Date Artist Venue Location path",
+                    [record.artist, candidate_artist],
+                )
+            )
+            return None
+        if not record.artist:
+            record.artist = candidate_artist
+        record.date = str(match["date_norm"])
+        record.venue = str(match["venue"])
+        record.city = str(match["city"])
+        record.region = str(match["region"])
+        record.country = str(match["country"])
+        record.location = _join_location(record.city, record.region, record.country)
+        extra_parenthetical = compact_ws(str(match.get("extra_parenthetical", "")))
+        if extra_parenthetical:
+            record.parentheticals = _merge_parenthetical_items(
+                record.parentheticals, f"({extra_parenthetical})"
+            )
+
+        evidence.setdefault("artist", []).append(
+            Candidate(record.artist, f"date_artist_venue_location:{part_path}", 76)
+        )
+        evidence.setdefault("date", []).append(
+            Candidate(record.date, f"date_artist_venue_location:{part_path}", 68)
+        )
+        for field, confidence in (("venue", 40), ("city", 35), ("region", 35), ("country", 35)):
+            value = compact_ws(getattr(record, field, ""))
+            if value:
+                evidence.setdefault(field, []).append(
+                    Candidate(value, f"path_part:{part}", confidence)
+                )
+        observations.append(
+            "Date Artist Venue Location path pattern matched: "
+            f"{record.date} | {record.artist} | {record.venue} | {record.location}"
+        )
+        if bool(match.get("apostrophe_fallback")):
+            observations.append(
+                "unique apostrophe-insensitive Artist DB match accepted for "
+                f"Date Artist Venue Location: {raw_artist} -> {master_artist}"
+            )
+        match["part"] = part
+        match["part_path"] = part_path
+        return match
+    return None
+
+
 def _resolve_collaborative_artist_header(
     raw_artist: str, matcher: Optional[ArtistMatcher], config=None
 ) -> Tuple[str, List[str]]:
@@ -4297,10 +4579,25 @@ def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata,
 
     if getattr(result, "artist", ""):
         raw_setlist_artist = compact_ws(result.artist)
+        lookup_setlist_artist, stripped_qualifier = _split_terminal_performance_qualifier_from_artist(
+            raw_setlist_artist
+        )
         artist_source = getattr(result, "artist_source", "") or "setlist_metadata:EXPLICIT_ARTIST_KEY"
         artist_confidence = int(getattr(result, "artist_confidence", 0) or max(confidence, 80))
         structured_unlabeled = artist_source == "setlist_metadata:STRUCTURED_UNLABELED_ARTIST_HEADER"
-        detail = _lookup_artist_detail(raw_setlist_artist, artist_matcher)
+        detail, apostrophe_fallback = _lookup_artist_detail_with_apostrophe_fallback(
+            lookup_setlist_artist, artist_matcher
+        )
+        if stripped_qualifier:
+            observations.append(
+                "terminal performance qualifier removed from setlist artist before Artist DB lookup: "
+                f"{raw_setlist_artist} -> {lookup_setlist_artist}"
+            )
+        if apostrophe_fallback and detail["status"] == "matched":
+            observations.append(
+                "unique apostrophe-insensitive Artist DB match accepted for setlist artist: "
+                f"{lookup_setlist_artist} -> {detail['masters'][0]}"
+            )
 
         # An unlabeled first line is only promoted to artist metadata when the
         # surrounding header is structurally strong *and* either the complete
@@ -4311,7 +4608,7 @@ def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata,
         collaborative_masters: List[str] = []
         if structured_unlabeled and detail["status"] != "matched":
             collaborative_artist, collaborative_masters = _resolve_collaborative_artist_header(
-                raw_setlist_artist, artist_matcher, config
+                lookup_setlist_artist, artist_matcher, config
             )
 
         if structured_unlabeled and detail["status"] != "matched" and not collaborative_artist:
@@ -4328,7 +4625,16 @@ def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata,
                 )
         else:
             master = detail["masters"][0] if detail["status"] == "matched" and detail["masters"] else ""
-            candidate_artist = collaborative_artist or _artist_output_name(config, raw_setlist_artist, master)
+            candidate_artist = collaborative_artist or _artist_output_name(
+                config,
+                lookup_setlist_artist if master else raw_setlist_artist,
+                master,
+            )
+            if stripped_qualifier and (master or collaborative_artist) and not record.qualifier:
+                record.qualifier = stripped_qualifier
+                evidence.setdefault("qualifier", []).append(
+                    Candidate(stripped_qualifier, f"{artist_source}_terminal_qualifier", artist_confidence)
+                )
             if collaborative_artist:
                 observations.append(
                     "structured setlist collaboration resolved from unique Artist DB components: "
@@ -4583,9 +4889,14 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
         _set_compliant_string2_raw(record, stripped_string2, parentheticals, evidence, "compliant:string2_raw")
         observations.append("compliant String1 Date String2 matched: String2 used as found without venue/location parsing")
 
-    record.qualifier = _detect_qualifier([record.main_dir_name, record.main_dir_path])
-    if record.qualifier:
-        evidence.setdefault("qualifier", []).append(Candidate(record.qualifier, "path", 15))
+    path_qualifier = _detect_qualifier([record.main_dir_name, record.main_dir_path])
+    if path_qualifier:
+        record.qualifier = path_qualifier
+        if not any(
+            normalized_compare_value(candidate.value) == normalized_compare_value(path_qualifier)
+            for candidate in evidence.get("qualifier", [])
+        ):
+            evidence.setdefault("qualifier", []).append(Candidate(record.qualifier, "path", 15))
     record.is_24_bit = _detect_24_bit([record.main_dir_name, record.main_dir_path] + list(_iter_group_media_files(group)))
 
     lookup_success = _apply_online_lookup_to_record(config, record, evidence, observations)
@@ -4799,6 +5110,26 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                     strong_pattern_matches, artist_matcher, evidence, conflicts, config=config
                 )
                 record.artist = pattern_artist
+        date_artist_venue_location_match: Optional[Dict[str, object]] = None
+        if not dash_album_match and len(conflicts) == 0:
+            date_artist_venue_location_match = _apply_date_artist_venue_location_path(
+                config,
+                group,
+                record,
+                evidence,
+                conflicts,
+                observations,
+                artist_matcher,
+            )
+            if date_artist_venue_location_match:
+                date_matches.append({
+                    "raw": str(date_artist_venue_location_match["date_raw"]),
+                    "normalized": record.date,
+                    "part": str(date_artist_venue_location_match["part"]),
+                    "part_path": str(date_artist_venue_location_match["part_path"]),
+                    "source": "date_artist_venue_location",
+                })
+
         if not record.artist and not dash_album_match and len(conflicts) == 0:
             if not string_date_string_found and string_date_found:
                 observations.append("String1 Date retry match found in path")
@@ -5023,9 +5354,14 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             config, record, evidence, observations, etree_success, etree_lookup_key
         )
 
-    record.qualifier = _detect_qualifier([record.main_dir_name, record.main_dir_path])
-    if record.qualifier:
-        evidence.setdefault("qualifier", []).append(Candidate(record.qualifier, "path", 15))
+    path_qualifier = _detect_qualifier([record.main_dir_name, record.main_dir_path])
+    if path_qualifier:
+        record.qualifier = path_qualifier
+        if not any(
+            normalized_compare_value(candidate.value) == normalized_compare_value(path_qualifier)
+            for candidate in evidence.get("qualifier", [])
+        ):
+            evidence.setdefault("qualifier", []).append(Candidate(record.qualifier, "path", 15))
     record.is_24_bit = _detect_24_bit([record.main_dir_name, record.main_dir_path] + list(_iter_group_media_files(group)))
 
     lookup_success = False

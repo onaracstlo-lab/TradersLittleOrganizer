@@ -1,4 +1,4 @@
-__version__ = "v423"
+__version__ = "v426"
 import os
 
 from tlo_media_rules import MEDIA_EXTENSIONS, parse_music_dir_marker

@@ -1,6 +1,6 @@
 """Filesystem and workflow integration scenarios promoted from the legacy suite."""
 
-__version__ = "v423"
+__version__ = "v426"
 
 import pytest
 from tests import _legacy_suite as legacy

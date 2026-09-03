@@ -1,24 +1,27 @@
-TLO Source and Utilities Bundle v423
+TLO Source and Utilities Bundle v426
 
-Public application version: v1.5 Build 423
-Source bundle label: v423
+Public application version: v1.5 Build 426
+Source bundle label: v426
 
-Build 423 summary
-- Keeps the public application version at v1.5 and advances the application build from 422 to 423.
-- Removes the complete TLO GitHub Build Process ZIP from the TLO source bundle.
-- Adds the current Run-TLO-GitHub-Build.ps1 directly to the TLO source bundle root.
-- Adds the matching TLO_GitHub_Build_Process_Requirements_v075.docx directly to the TLO source bundle root.
+Build 426 summary
+- Starts from the verified v1.5 Build 425 source baseline.
+- Adds a non-compliant Date Artist Venue Location path pattern for date-first show folders.
+- Requires the Artist to be the longest unique Artist DB match anchored immediately after the leading date.
+- Requires a complete Venue plus City and Region/Country after removing the Artist; date-first Artist-plus-location-only text is rejected.
+- Resolves 1997-04-05 Genesis Old Pub London England as Genesis 1997-04-05 Old Pub London, England.
+- Rejects 1990-07-10 Palace Melbourne Australia under the new pattern because no venue remains after Palace is removed.
+- Keeps public application version v1.5 and advances the application build from 425 to 426.
+- Retains the current Run-TLO-GitHub-Build.ps1 and matching TLO_GitHub_Build_Process_Requirements_v075.docx directly at the source-bundle root.
 - The GitHub Build Process remains independently versioned; its complete current package is TLO_GitHub_Build_Process_v075.zip and remains a separate ZIP.
-- GitHub Build Process v075 renames the primary runner from 03-Run-TLO-GitHub-Build.ps1 to Run-TLO-GitHub-Build.ps1 and revises its requirements baseline to treat one-time setup outcomes as assumptions.
-- Build 422 change notes are archived in old-change-logs.zip.
+- Build 425 change notes are archived in old-change-logs.zip.
 
 Current documentation files:
-- TLO_Inventory_User_Manual_v423.rtf: current end-user manual.
-- TLO_Inventory_Requirements_Working_v423.docx: current TLO requirements/development document.
+- TLO_Inventory_User_Manual_v426.rtf: current end-user manual.
+- TLO_Inventory_Requirements_Working_v426.docx: current TLO requirements/development document.
 - TLO_GitHub_Build_Process_Requirements_v075.docx: current GitHub build-process requirements baseline.
 - TLO-FAQ.txt: current frequently asked questions.
-- CHANGES_v423.txt: changes introduced by this build.
-- old-change-logs.zip: archived historical TLO change notes through Build 422.
+- CHANGES_v426.txt: changes introduced by this build.
+- old-change-logs.zip: archived historical TLO change notes through Build 425.
 
 Included GitHub build artifacts:
 - Run-TLO-GitHub-Build.ps1: current primary GitHub build/release orchestration script.

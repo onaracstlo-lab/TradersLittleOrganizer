@@ -1,6 +1,6 @@
 """Build 382 regressions for structured unlabeled setlist artist evidence."""
 
-__version__ = "v423"
+__version__ = "v426"
 
 from types import SimpleNamespace
 
@@ -194,4 +194,7 @@ def test_build382_structured_setlist_resolves_generic_path_artist_conflict(tmp_p
     assert record.show_name == "Kinky Friedman xxxx-xx-xx Lone Star Cafe New York, NY"
     assert not any("artist conflict across subdirectory matches" in item for item in record.conflicts)
     assert not any("artist conflict across subdirectory matches" in item for item in unresolved)
-    assert any("resolved weaker path artist conflict" in item for item in record.observations)
+    assert any(
+        candidate.source == "setlist_metadata:STRUCTURED_UNLABELED_ARTIST_HEADER"
+        for candidate in record.evidence["artist"]
+    )

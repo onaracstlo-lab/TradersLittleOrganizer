@@ -1,7 +1,7 @@
 """Low-noise diagnostics for intentionally suppressed best-effort exceptions."""
 from __future__ import annotations
 
-__version__ = "v423"
+__version__ = "v426"
 
 import logging
 

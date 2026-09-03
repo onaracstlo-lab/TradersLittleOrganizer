@@ -7,7 +7,7 @@ from docx import Document
 import pytest
 
 pytestmark = pytest.mark.behavior
-__version__ = "v423"
+__version__ = "v426"
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "Run-TLO-GitHub-Build.ps1"
@@ -26,12 +26,12 @@ def _doc_text(path: Path) -> str:
 def test_build423_public_version_and_current_documents():
     import tlo_version as V
 
-    assert V.VERSION == "v423"
+    assert V.VERSION == "v426"
     assert V.PUBLIC_VERSION == "1.5"
-    assert V.BUNDLE_BUILD == 423
-    assert V.DISPLAY_VERSION == "v1.5 Build 423"
-    assert (ROOT / "TLO_Inventory_Requirements_Working_v423.docx").is_file()
-    assert (ROOT / "TLO_Inventory_User_Manual_v423.rtf").is_file()
+    assert V.BUNDLE_BUILD == 426
+    assert V.DISPLAY_VERSION == "v1.5 Build 426"
+    assert (ROOT / "TLO_Inventory_Requirements_Working_v426.docx").is_file()
+    assert (ROOT / "TLO_Inventory_User_Manual_v426.rtf").is_file()
 
 
 def test_build423_source_bundle_carries_runner_and_matching_requirements_not_process_zip():
@@ -54,9 +54,9 @@ def test_build423_build_requirements_focus_on_runner_and_setup_assumptions():
 
 
 def test_build423_tlo_requirements_record_direct_artifact_rule():
-    req = ROOT / "TLO_Inventory_Requirements_Working_v423.docx"
+    req = ROOT / "TLO_Inventory_Requirements_Working_v426.docx"
     text = _doc_text(req)
-    assert "Current document version: v423 (v1.5 Build 423)." in text
+    assert "Current document version: v426 (v1.5 Build 426)." in text
     assert "Beginning with Build 423" in text
     assert "Run-TLO-GitHub-Build.ps1" in text
     assert "TLO_GitHub_Build_Process_Requirements_v<PROCESS>.docx" in text

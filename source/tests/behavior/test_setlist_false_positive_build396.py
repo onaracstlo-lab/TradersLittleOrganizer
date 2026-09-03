@@ -1,6 +1,6 @@
 """Build 396 regressions for setlist filename artist and location false positives."""
 
-__version__ = "v423"
+__version__ = "v426"
 
 from pathlib import Path
 

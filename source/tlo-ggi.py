@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v423"
+__version__ = "v426"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
