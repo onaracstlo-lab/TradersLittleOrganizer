@@ -4,7 +4,7 @@ The categorized suite lives under tests/. Importing the tests here preserves the
 existing CI command: python -m pytest -q test_tlo_requirements.py.
 """
 
-__version__ = "v426"
+__version__ = "v433"
 
 from tests.contracts.test_legacy_contracts import *  # noqa: F401,F403
 from tests.contracts.test_build364_contracts import *  # noqa: F401,F403
@@ -99,3 +99,16 @@ from tests.behavior.test_build424_partial_dash_date_repair import *  # noqa: F40
 from tests.behavior.test_build425_artist_qualifier_and_venue_guard import *  # noqa: F401,F403
 
 from tests.behavior.test_build426_date_artist_venue_location import *  # noqa: F401,F403
+
+from tests.behavior.test_build427_nested_wrapper_container import *  # noqa: F401,F403
+
+from tests.behavior.test_build428_sibling_collection_consolidation import *  # noqa: F401,F403
+from tests.behavior.test_build429_reinventory_grouping_noop_writes import *  # noqa: F401,F403
+from tests.behavior.test_build430_reinventory_unknown_date_ctrl_a import *  # noqa: F401,F403
+
+from tests.unit.test_build431_destructive_path_safety import *  # noqa: F401,F403
+
+from tests.unit.test_build432_bounded_traversal_and_io import *  # noqa: F401,F403
+
+from tests.unit.test_build433_corruption_architecture import *  # noqa: F401,F403
+from tests.contracts.test_build433_process_signing_contracts import *  # noqa: F401,F403

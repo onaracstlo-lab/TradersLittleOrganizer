@@ -1,4 +1,4 @@
-__version__ = "v426"
+__version__ = "v433"
 import os
 import re
 
@@ -643,9 +643,26 @@ def find_setlist_files_for_music_dir(all_logged_paths, music_dir, main_dir_path)
         search_dirs.append(os.path.normpath(parent_dir))
         search_dirs.extend(_special_setlist_child_dirs(parent_dir, music_dir, child_dirs))
 
-    # main_dir_path may be the parent for aggregated wrapper-part groups. Keep
-    # it only when it is the same allowed immediate parent; do not walk upward
-    # into unrelated ancestors for setlist candidates.
+    # A validated nested-wrapper group can have one more structural layer:
+    # ``Show/FLAC/Set 1``.  In that case main_dir_path is the actual show root,
+    # while the immediate parent is a non-numbered media container.  Inspect
+    # only the show root itself; never enumerate or recurse through its sibling
+    # directories.  Grouping applies the matching date/overlap safeguards
+    # before supplying this main_dir_path.
+    nested_show_root_allowed = (
+        parent_allowed
+        and _all_child_dirs_related_release_parts(child_dirs)
+        and os.path.dirname(parent_dir) == main_dir_path
+        and is_common_music_folder_name(os.path.basename(parent_dir))
+        and not is_wrapper_part_folder_name(os.path.basename(parent_dir))
+        and is_wrapper_part_folder_name(os.path.basename(music_dir))
+    )
+    if nested_show_root_allowed and main_dir_path not in search_dirs:
+        search_dirs.append(os.path.normpath(main_dir_path))
+
+    # main_dir_path may be the parent for ordinary aggregated wrapper-part
+    # groups. Keep it only when it is the same allowed immediate parent; the
+    # single guarded grandparent case was handled explicitly above.
     if main_dir_path not in search_dirs and main_dir_path != music_dir:
         if os.path.normpath(main_dir_path) == os.path.normpath(parent_dir) and parent_allowed:
             search_dirs.append(os.path.normpath(main_dir_path))

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 artist_db_search_gui.py
-Version: v1.5 Build 426
+Version: v1.5 Build 430
 
 Simple Tkinter GUI for searching TLOHome/TLO_DBs/artists.sqlite using the
 newer artists / aliases / terms schema. TLOHome is resolved from --TLOHome,
@@ -31,7 +31,7 @@ Notes for the new schema:
 
 from __future__ import annotations
 
-__version__ = "v426"
+__version__ = "v433"
 
 import argparse
 import os
@@ -42,6 +42,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from tkinter import messagebox
 from tkinter import scrolledtext
+
+from tlo_gui_shortcuts import install_global_ctrl_a
 
 try:
     from tlo_version import DISPLAY_VERSION
@@ -71,6 +73,7 @@ class MatchRecord:
 class ArtistSearchApp:
     def __init__(self, root: tk.Tk, db_path: Path) -> None:
         self.root = root
+        install_global_ctrl_a(self.root)
         self.db_path = db_path
         self.root.title(WINDOW_TITLE)
         self.root.geometry("820x320")

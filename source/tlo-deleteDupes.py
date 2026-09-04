@@ -1,6 +1,6 @@
 """Repair corrupt FLACs from duplicate copies, then move duplicates to a partition holding folder."""
 
-__version__ = "v426"
+__version__ = "v433"
 
 import argparse
 import hashlib
@@ -656,8 +656,14 @@ def flac_file_is_healthy(
 ) -> Optional[bool]:
     """Return True/False for healthy/corrupt, or None when validation times out."""
     normalized = os.path.normpath(str(path_name or ""))
-    if os.path.splitext(normalized)[1].lower() != ".flac" or not os.path.isfile(normalized):
+    if os.path.splitext(normalized)[1].lower() != ".flac":
         return False
+    try:
+        if not os.path.isfile(normalized):
+            return None
+        os.stat(normalized)
+    except (OSError, MemoryError):
+        return None
     executable = ffmpeg_executable or _bundled_ffmpeg_executable()
     command = [
         executable,

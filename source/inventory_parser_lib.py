@@ -1,4 +1,4 @@
-__version__ = "v426"
+__version__ = "v433"
 import argparse
 import sys
 import os
@@ -74,6 +74,9 @@ class Config:
     current_log_mode: str = "w"
     current_run_log_tokens: list[str] = field(default_factory=list)
     current_metadata_records: list = field(default_factory=list)
+    current_show_groups_prepared: int = 0
+    current_corruption_groups_removed: int = 0
+    current_corruption_removed_paths: list[str] = field(default_factory=list)
     newly_allocated_log_tokens: list[str] = field(default_factory=list)
     cancel_requested: bool = False
     performance_mode: str = "balanced"
@@ -266,7 +269,7 @@ def build_config():
         setlistfm_lookup=bool(values.get("setlistfm_lookup", False)),
         setlistfm_upgrade=bool(values.get("setlistfm_upgrade", False)),
         thorough_setlist_matching=bool(values.get("thorough_setlist_matching", False)),
-        acceptable_corruption_percent=int(values.get("acceptable_corruption_percent", 100) or 0),
+        acceptable_corruption_percent=parse_percent_0_100(values.get("acceptable_corruption_percent", 100)),
         performance_mode=values.get("performance_mode", "balanced") or "balanced",
         max_workers=int(values.get("max_workers", 0) or 0),
         current_volume_label=resolve_current_storage_volume(values.get("current_storage_volume")),

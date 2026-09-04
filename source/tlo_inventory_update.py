@@ -1,4 +1,4 @@
-__version__ = "v426"
+__version__ = "v433"
 
 import csv
 import json
@@ -651,6 +651,16 @@ def _rewrite_record_dict_paths(record_dict: Dict[str, str], old_root: str, new_r
     return record_dict
 
 
+
+
+def _folder_name_write_needed(source_root: str, target_leaf: str) -> bool:
+    source = os.path.normpath(str(source_root or ""))
+    target = str(target_leaf or "").strip()
+    if not source or not target:
+        return False
+    intended = os.path.normpath(os.path.join(os.path.dirname(source), target))
+    return os.path.normcase(intended) != os.path.normcase(source)
+
 def _rename_add_shows_folder_compliantly(config, folder_path: str, record_dict: Dict[str, str]) -> str:
     """Rename an Add Shows source folder in place when Rename Compliantly is enabled."""
     if not bool(getattr(config, "rename_compliantly", False)):
@@ -665,7 +675,7 @@ def _rename_add_shows_folder_compliantly(config, folder_path: str, record_dict: 
     target_leaf = _safe_compliant_folder_name(show_name, fallback=original_leaf)
     parent_dir = os.path.dirname(source_root)
     direct_target = os.path.normpath(os.path.join(parent_dir, target_leaf))
-    if os.path.normcase(direct_target) == os.path.normcase(source_root):
+    if not _folder_name_write_needed(source_root, target_leaf):
         return source_root
     destination = direct_target if not os.path.exists(direct_target) else _unique_destination_path(parent_dir, target_leaf)
     try:

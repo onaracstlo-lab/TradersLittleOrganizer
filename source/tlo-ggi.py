@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v426"
+__version__ = "v433"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -32,6 +32,7 @@ from tlo_options import (
     add_options_to_parser,
     apply_lookup_dependency,
     parse_bool,
+    parse_percent_0_100,
     validate_compliant_rename_exclusivity,
 )
 from tlo_path_inputs import normalize_platform_input_path, resolve_current_storage_volume, resolve_tlo_home as resolve_inventory_tlo_home
@@ -42,6 +43,7 @@ from tlo_tag_lib import TAGGER_TITLE, default_tagging_path, resolve_tlo_home, ru
 from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION, PUBLIC_VERSION, versioned_title
 from tlo_research_lib import research_logs
 from tlo_reverse_copy_delete import prepare_reverse_selection, reverse_copy_delete_and_rename
+from tlo_gui_shortcuts import install_global_ctrl_a
 from tlo_github_updates import (
     check_for_updates,
     is_auto_update_enabled,
@@ -57,6 +59,7 @@ TAGGER_PATH_ENTRY_WIDTH = 41
 TAGGER_OUTPUT_TEXT_WIDTH = 55
 TAGGER_MODE_WRAP_PIXELS = 520
 TAGGER_DISPLAY_VERSION = versioned_title("TLO Tagger GUI")
+GUI_THREAD_CALLBACK_TIMEOUT_SECONDS = 30.0
 
 
 def _start_activity_indicator(progress_bar) -> bool:
@@ -540,6 +543,7 @@ def _parse_gui_command_line(argv=None):
 class App:
     def __init__(self, root, cli_args=None):
         self.root = root
+        install_global_ctrl_a(self.root)
         self.cli_args = cli_args or _parse_gui_command_line([])
         self.root.title(WINDOW_TITLE)
         self.queue = queue.Queue()
@@ -661,7 +665,7 @@ class App:
             "search_path_slam_override": (getattr(self.cli_args, "search_path_slam_override", "") or "").strip(),
             "performance_mode": performance_mode_default,
             "max_workers": str(initial_max_workers),
-            "acceptable_corruption_percent": str(int(getattr(self.cli_args, "acceptable_corruption_percent", 100) or 0)),
+            "acceptable_corruption_percent": str(parse_percent_0_100(getattr(self.cli_args, "acceptable_corruption_percent", 100))),
         }
         self.vars = {key: tk.StringVar(value=value) for key, value in defaults.items()}
         self.option_status_var = tk.StringVar(value="Checking option combination...")
@@ -943,9 +947,7 @@ class App:
 
         corruption_percent_valid = True
         try:
-            corruption_percent = int((self.vars["acceptable_corruption_percent"].get() or "0").strip())
-            if corruption_percent < 0 or corruption_percent > 100:
-                raise ValueError
+            corruption_percent = parse_percent_0_100(self.vars["acceptable_corruption_percent"].get())
         except Exception:
             corruption_percent_valid = False
 
@@ -2040,7 +2042,8 @@ class App:
         except tk.TclError as exc:
             raise RuntimeError("GUI closed before the inventory prompt could be shown.") from exc
 
-        done.wait()
+        if not done.wait(timeout=GUI_THREAD_CALLBACK_TIMEOUT_SECONDS):
+            raise RuntimeError("GUI closed before the inventory prompt could be shown.")
         if "error" in result:
             raise result["error"]
         return result.get("value")
@@ -2303,7 +2306,7 @@ class App:
             setlistfm_lookup=self.bool_vars["setlistfm_lookup"].get(),
             setlistfm_upgrade=bool(getattr(self.bool_vars.get("setlistfm_upgrade"), "get", lambda: False)()),
             thorough_setlist_matching=bool(getattr(self.bool_vars.get("thorough_setlist_matching"), "get", lambda: False)()),
-            acceptable_corruption_percent=int((getattr(self.vars.get("acceptable_corruption_percent"), "get", lambda: "100")() or "0").strip()),
+            acceptable_corruption_percent=parse_percent_0_100(getattr(self.vars.get("acceptable_corruption_percent"), "get", lambda: "100")()),
             performance_mode=performance_mode,
             max_workers=max_workers,
         )

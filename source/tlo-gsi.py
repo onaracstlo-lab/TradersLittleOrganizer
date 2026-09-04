@@ -14,7 +14,7 @@ Tkinter GUI that:
 
 from __future__ import annotations
 
-__version__ = "v426"
+__version__ = "v433"
 
 import csv
 import os
@@ -33,6 +33,8 @@ try:
     from tlo_version import DISPLAY_VERSION
 except ImportError:
     DISPLAY_VERSION = "version unavailable"
+from tlo_gui_shortcuts import install_global_ctrl_a
+
 try:
     from tlo_github_updates import (
         check_for_updates,
@@ -251,6 +253,7 @@ class AppConfigError(ValueError):
 class BootlistSearchApp:
     def __init__(self, root: tk.Tk, paths: AppPaths, initial_find: str | None) -> None:
         self.root = root
+        install_global_ctrl_a(self.root)
         self.paths = paths
         self.initial_find = initial_find
 

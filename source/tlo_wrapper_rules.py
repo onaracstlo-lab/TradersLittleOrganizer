@@ -1,4 +1,4 @@
-__version__ = "v426"
+__version__ = "v433"
 import re
 
 NON_MAIN_DIR_PATTERNS = [
@@ -80,6 +80,21 @@ _COMPILED_NON_MAIN_DIR_PATTERNS = [re.compile(pattern, re.IGNORECASE) for patter
 _COMPILED_STANDARD_VIDEO_FOLDER_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in STANDARD_VIDEO_FOLDER_PATTERNS]
 _COMPILED_EXACT_WRAPPER_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in EXACT_WRAPPER_PATTERNS]
 _COMPILED_CONTAINS_WRAPPER_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in CONTAINS_WRAPPER_PATTERNS]
+
+
+SUPPLEMENTAL_SHOW_CHILD_PATTERNS = [
+    r"^(?:extras?|bonus(?:[\s._-]+tracks?)?|outtakes?|samples?)$",
+    r"^(?:source|src)[\s._-]*\d{0,3}(?:[\s._-]+extras?)?$",
+    r"^(?:left|right)[\s._-]+channel(?:[\s._-]+.*)?$",
+    r"^(?:open|room|stage|ambient)[\s._-]+mic(?:[\s._-]+.*)?$",
+    r"^(?:soundboard|audience|matrix|fm)[\s._-]+(?:feed|source)(?:[\s._-]+.*)?$",
+    r"^(?:art|artwork|art-docs?|docs?|documentation|photos?|pictures?|concert[\s._-]+pictures?)(?:[\s._-]+.*)?$",
+    r"^(?:disc|disk|cd|set|part|side|tape)[\s._-]*(?:end|ending|bonus|extra)[\s._-]+tracks?$",
+]
+
+_COMPILED_SUPPLEMENTAL_SHOW_CHILD_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE) for pattern in SUPPLEMENTAL_SHOW_CHILD_PATTERNS
+]
 
 # Wrapper suffixes used for release-part aggregation. These match either a
 # whole media-only folder name (CD1, Disc 1, Disk3, etc.) or a release folder
@@ -215,3 +230,20 @@ def is_common_music_folder_name(dir_name: str) -> bool:
     if not name:
         return False
     return looks_like_non_main_dir(name) or is_exact_wrapper_name(name) or contains_wrapper_term(name)
+
+
+def is_supplemental_show_child_name(dir_name: str) -> bool:
+    """Return True for a media/source/supplemental child that is normally part of a dated show.
+
+    This is deliberately narrower than generic metadata parsing.  It covers
+    wrapper/media containers and descriptive source/supplement folders such as
+    EXTRAS, Source 2, Right Channel (Soundboard Feed), art-docs, and
+    Concert Pictures/Video.  A normal artist-named child is not classified here,
+    so nested opening acts remain eligible for independent inventory.
+    """
+    name = str(dir_name or "").strip()
+    if not name:
+        return False
+    if is_common_music_folder_name(name):
+        return True
+    return any(pattern.match(name) for pattern in _COMPILED_SUPPLEMENTAL_SHOW_CHILD_PATTERNS)

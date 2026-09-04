@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from tlo_diagnostics import debug_suppressed_exception
 
-__version__ = "v426"
+__version__ = "v433"
 
 import datetime as _dt
 import hashlib
@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION, OFFICIAL_GITHUB_OWNER, OFFICIAL_GITHUB_REPO, PUBLIC_VERSION
+from tlo_network_io import MAX_METADATA_RESPONSE_BYTES, read_bounded_text
 
 DEFAULT_REPO_OWNER = OFFICIAL_GITHUB_OWNER
 DEFAULT_REPO_NAME = OFFICIAL_GITHUB_REPO
@@ -144,7 +145,7 @@ def _fetch_latest_release(owner: str, repo: str) -> dict[str, Any]:
         },
     )
     with urllib.request.urlopen(request, timeout=20) as response:
-        return json.loads(response.read().decode("utf-8"))
+        return json.loads(read_bounded_text(response, MAX_METADATA_RESPONSE_BYTES, label="GitHub release metadata"))
 
 
 def _extract_build_number(*values: Any) -> int | None:

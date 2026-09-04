@@ -1,4 +1,4 @@
-__version__ = "v426"
+__version__ = "v433"
 import logging
 import os
 import re
@@ -152,6 +152,19 @@ def allocate_log_tokens(tlo_home, count):
     return available[:requested]
 
 
+def _validated_log_tokens(tokens):
+    """Return normalized alphanumeric log tokens or fail before path construction."""
+    token_texts = []
+    for token in tokens or []:
+        token_text = str(token or "").strip()
+        if not token_text:
+            continue
+        if re.fullmatch(r"[A-Za-z0-9]+", token_text) is None:
+            raise ValueError(f"Invalid log token: {token_text!r}")
+        token_texts.append(token_text)
+    return token_texts
+
+
 def delete_logs_for_tokens(tlo_home, tokens):
     """Delete token-scoped logs after validating every token.
 
@@ -160,14 +173,7 @@ def delete_logs_for_tokens(tlo_home, tokens):
     punctuation here would turn this cleanup helper into an unsafe deletion
     primitive if a future caller passed untrusted state.
     """
-    token_texts = []
-    for token in tokens or []:
-        token_text = str(token or "").strip()
-        if not token_text:
-            continue
-        if re.fullmatch(r"[A-Za-z0-9]+", token_text) is None:
-            raise ValueError(f"Invalid log token for deletion: {token_text!r}")
-        token_texts.append(token_text)
+    token_texts = _validated_log_tokens(tokens)
 
     deleted = []
     logs_dir = logs_dir_for_home(tlo_home)
@@ -192,10 +198,7 @@ def truncate_logs_for_tokens(tlo_home, tokens):
     """
     truncated = []
     logs_dir = ensure_logs_dir(tlo_home)
-    for token in tokens or []:
-        token_text = str(token or "").strip()
-        if not token_text:
-            continue
+    for token_text in _validated_log_tokens(tokens):
         for prefix in LOG_FILE_PREFIXES.values():
             log_file = _log_path_for_prefix(logs_dir, prefix, token_text)
             try:
@@ -318,10 +321,7 @@ def prune_logs_for_tokens_and_paths(tlo_home, tokens, root_paths):
     if not roots:
         return pruned
     logs_dir = ensure_logs_dir(tlo_home)
-    for token in tokens or []:
-        token_text = str(token or "").strip()
-        if not token_text:
-            continue
+    for token_text in _validated_log_tokens(tokens):
         group_path = os.path.join(logs_dir, f"groups{token_text}.log")
         if _prune_structured_log(group_path, roots, "END_GROUP"):
             pruned.append(group_path)

@@ -1,4 +1,4 @@
-__version__ = "v426"
+__version__ = "v433"
 from console_output_lib import console_print
 from initial_dir_walk_lib import initial_dir_walk
 from tlo_complete_path_log import compact_complete_path_log
@@ -7,6 +7,11 @@ from logging_lib import setup_logging
 from tlo_artist_db import load_artist_matcher
 from tlo_phase23_v2 import process_groups_for_search_path_v2
 from tlo_runtime_control import throttle_point, wait_if_paused, apply_process_priority
+from tlo_sibling_collections import (
+    assert_no_interrupted_sibling_consolidations,
+    consolidate_sibling_collections,
+    recover_interrupted_sibling_consolidations,
+)
 
 
 
@@ -27,8 +32,24 @@ def run_search_path(config, path_name, slam_value, search_index, volume_label=""
     config.current_inventory_path = inventory_path or path_name
     config.logs.start_search_path(config.current_inventory_path, search_index, log_token=config.current_log_token, volume_label=config.current_volume_label, log_mode=config.current_log_mode)
 
+    dry_run = bool(getattr(config, "dry_run", False))
+    if dry_run:
+        assert_no_interrupted_sibling_consolidations(path_name)
+    else:
+        recover_interrupted_sibling_consolidations(
+            path_name,
+            lambda message: config.logs.conflicts("%s", message),
+        )
+
     directory_count = initial_dir_walk(config, path_name)
     compact_complete_path_log(config.logs.paths.complete_paths)
+    consolidated = [] if dry_run else consolidate_sibling_collections(
+        path_name,
+        config.logs.paths.complete_paths,
+        lambda message: config.logs.conflicts("%s", message),
+    )
+    if consolidated:
+        console_print(config, f"Sibling collections consolidated = {len(consolidated)}")
     console_print(
         config,
         f"Stage 1 complete: directories identified = {directory_count}",
@@ -64,6 +85,9 @@ def run_search_path(config, path_name, slam_value, search_index, volume_label=""
         "group_count": len(groups),
         "show_group_count": show_group_count,
         "metadata_records": metadata_records,
+        "groups_prepared": int(getattr(config, "current_search_groups_prepared", len(metadata_records)) or 0),
+        "corruption_groups_removed": int(getattr(config, "current_search_corruption_groups_removed", 0) or 0),
+        "corruption_removed_paths": list(getattr(config, "current_search_corruption_removed_paths", []) or []),
         "log_token": config.current_log_token,
     }
 

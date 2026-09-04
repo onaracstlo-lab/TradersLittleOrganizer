@@ -27,7 +27,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-__version__ = "v426"
+from tlo_network_io import MAX_ERROR_RESPONSE_BYTES, MAX_METADATA_RESPONSE_BYTES, ResponseTooLargeError, read_bounded_text
+
+__version__ = "v433"
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 MIN_REQUEST_INTERVAL_SECONDS = 0.600
@@ -391,10 +393,12 @@ def api_get(
 
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            body = response.read().decode("utf-8", errors="replace")
+            body = read_bounded_text(response, MAX_METADATA_RESPONSE_BYTES, label="setlist.fm response")
     except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
+        detail = read_bounded_text(exc, MAX_ERROR_RESPONSE_BYTES, label="setlist.fm HTTP error response")
         raise SetlistFMError(f"setlist.fm API request failed: HTTP {exc.code} {exc.reason}: {detail[:500]}") from exc
+    except ResponseTooLargeError as exc:
+        raise SetlistFMError(str(exc)) from exc
     except urllib.error.URLError as exc:
         raise SetlistFMError(f"setlist.fm API request failed: {exc.reason}") from exc
 

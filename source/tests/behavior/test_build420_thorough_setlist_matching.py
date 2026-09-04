@@ -1,6 +1,6 @@
 """Build 420 regressions for Thorough Setlist Matching."""
 
-__version__ = "v426"
+__version__ = "v433"
 
 from types import SimpleNamespace
 
@@ -259,9 +259,9 @@ def test_build420_documents_lock_thorough_coverage_vs_authority_contract():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v426.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v433.docx")
     req_text = "\n".join(paragraph.text for paragraph in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v426.rtf").read_text(encoding="utf-8", errors="replace")
+    manual_text = (root / "TLO_Inventory_User_Manual_v433.rtf").read_text(encoding="utf-8", errors="replace")
 
     assert "Build 420 Thorough Setlist Matching rule" in req_text
     assert "normal 600-millisecond / 1,400-call limits" in req_text

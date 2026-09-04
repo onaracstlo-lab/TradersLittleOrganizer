@@ -1,6 +1,6 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v426"
+__version__ = "v433"
 
 from tlo_diagnostics import debug_suppressed_exception
 import os
@@ -52,9 +52,13 @@ from tlo_runtime_control import clear_cancel_request, is_cancel_requested, throt
 from tlo_etree_lookup import ETreeDBError, lookup_setlists_by_performance, lookup_setlists_for_performance
 from initial_dir_walk_lib import initial_dir_walk
 from tlo_setlist_file_selection import find_setlist_files_for_music_dir
-from tlo_text_utils import compact_ws, setlist_text_requests_generated_from_music_files, standard_ascii_text
+from tlo_text_utils import compact_ws, normalized_compare_value, setlist_text_requests_generated_from_music_files, standard_ascii_text
 from tlo_postprocess import _adjust_show_name_for_output, _candidate_setlist_name, _setlist_base_from_record
-from tlo_wrapper_rules import is_wrapper_part_folder_name, split_parenthesized_numeric_part_suffix
+from tlo_wrapper_rules import (
+    is_wrapper_part_folder_name,
+    split_parenthesized_numeric_part_suffix,
+    split_wrapper_part_suffix,
+)
 from tlo_tree_compare import has_exact_tree_match_in_family
 
 
@@ -1036,33 +1040,69 @@ def _is_generic_filename_title(title: str) -> bool:
     return any(pattern.match(value) for pattern in GENERIC_FILENAME_TITLE_RE_LIST)
 
 
+def _wrapper_suffix_number(suffix: str) -> int:
+    token = re.sub(
+        r"(?i)^(?:cd|disc|disk|pt\.?|part|set|side|tape|d)[\s._-]*", "", str(suffix or "")
+    ).strip().casefold()
+    if token.isdigit():
+        return int(token)
+    words = {
+        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+        "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+        "a": 1, "b": 2,
+    }
+    if token in words:
+        return words[token]
+    if token and re.fullmatch(r"[ivx]{1,6}", token):
+        values = {"i": 1, "v": 5, "x": 10}
+        total = previous = 0
+        for character in reversed(token):
+            value = values[character]
+            total += -value if value < previous else value
+            previous = max(previous, value)
+        return total
+    return 0
+
+
 def _parent_wrapper_disc_index(path_name: str) -> int:
-    """Return a zero-based disc/set index from the immediate parent folder.
+    """Return a zero-based part index from at most four direct ancestors.
 
     Multi-disc releases sometimes use generic filenames such as Track01.flac in
     each Disc/CD folder.  In that case the filename alone cannot distinguish
     Disc 1 Track 01 from Disc 2 Track 01, so use the wrapper folder name as the
-    first sort key.
+    first sort key. The bounded walk permits Release D2/FLAC without looking at
+    sibling folders or leaving the file's own ancestor chain.
     """
-    parent = os.path.basename(os.path.dirname(os.path.normpath(path_name or "")))
-    match = re.search(r"(?i)(?:^|[\s._-]+)(?:cd|disc|disk|set|part|side|tape|d)[\s._-]*(?P<num>\d{1,2})(?:\b|$)", parent)
-    if match:
-        try:
-            return max(0, int(match.group("num")) - 1)
-        except (TypeError, ValueError):
-            return 0
-
-    # Validated multipart releases may use a bare terminal ``(N)`` suffix
-    # instead of an explicit CD/Disc token, e.g. ``Release (1)`` through
-    # ``Release (9)``.  Discovery already applies the strict sibling/parent
-    # safety rules before those folders are aggregated.  At tagging time the
-    # path sorter must still recover the part number from the immediate parent
-    # so all tracks from part 1 precede part 2, etc.; otherwise every ``01``
-    # file sorts together, then every ``02`` file, producing striped Track
-    # Number tags across the multipart release.
-    _base, _suffix, numeric_part = split_parenthesized_numeric_part_suffix(parent)
-    if numeric_part > 0:
-        return numeric_part - 1
+    current = os.path.dirname(os.path.normpath(path_name or ""))
+    for depth in range(4):
+        parent = os.path.basename(current)
+        containing_name = os.path.basename(os.path.dirname(current))
+        match = re.search(
+            r"(?i)(?:^|[\s._-]+)(?:cd|disc|disk|set|part|side|tape|d)[\s._-]*(?P<num>\d{1,2})(?:\b|$)",
+            parent,
+        )
+        if match:
+            if depth == 0:
+                return max(0, int(match.group("num")) - 1)
+            part_base, part_suffix = split_wrapper_part_suffix(parent)
+            if part_suffix and normalized_compare_value(part_base) == normalized_compare_value(containing_name):
+                number = _wrapper_suffix_number(part_suffix)
+                if number > 0:
+                    return number - 1
+        base, _suffix, numeric_part = split_parenthesized_numeric_part_suffix(parent)
+        if numeric_part > 0 and (
+            depth == 0 or normalized_compare_value(base) == normalized_compare_value(containing_name)
+        ):
+            return numeric_part - 1
+        alt_match = re.fullmatch(
+            r"(?i)(?P<base>.+?)\s*\(\s*alt[\s._-]*(?P<num>\d{1,3})\s*\)", parent
+        )
+        if alt_match and normalized_compare_value(alt_match.group("base")) == normalized_compare_value(containing_name):
+            return max(0, int(alt_match.group("num")))
+        next_current = os.path.dirname(current)
+        if not next_current or next_current == current:
+            break
+        current = next_current
     return 0
 
 
@@ -2569,6 +2609,108 @@ def _tag_output_line_is_error(line: str) -> bool:
     return False
 
 
+
+
+def _mapping_values(mapping, key_name: str) -> List[str]:
+    """Return all values for one case-insensitive mapping key as strings."""
+    target = str(key_name or "").casefold()
+    for key in getattr(mapping, "keys", lambda: [])():
+        if str(key).casefold() != target:
+            continue
+        values = mapping.get(key)
+        if values is None:
+            return []
+        if not isinstance(values, (list, tuple)):
+            values = [values]
+        return [str(value) for value in values]
+    return []
+
+
+def _mapping_has_any_key(mapping, names: Sequence[str]) -> bool:
+    wanted = {str(name).casefold() for name in names}
+    return any(str(key).casefold() in wanted for key in getattr(mapping, "keys", lambda: [])())
+
+
+def _easy_audio_tags_match_target(audio, artist: str, album: str, track_number: object, title: str) -> bool:
+    if audio is None or getattr(audio, "tags", None) is None:
+        return False
+    if _mapping_has_any_key(audio, UNWANTED_TOTAL_DISC_TAG_KEYS):
+        return False
+    return (
+        _mapping_values(audio, "artist") == [artist]
+        and _mapping_values(audio, "album") == [album]
+        and _mapping_values(audio, "title") == [title]
+        and _mapping_values(audio, "tracknumber") == [str(track_number)]
+    )
+
+
+def _id3_tags_match_target(path_name: str, artist: str, album: str, track_number: object, title: str) -> bool:
+    if ID3 is None:
+        return False
+    try:
+        tags = ID3(path_name)
+    except Exception:
+        return False
+    if tags.getall("TPOS"):
+        return False
+    for frame in tags.values():
+        if str(getattr(frame, "FrameID", "")).upper() == "TXXX" and str(getattr(frame, "desc", "")).upper() in UNWANTED_TOTAL_DISC_ID3_TXXX_DESCS:
+            return False
+    def exact_text(frame_id: str, expected: str) -> bool:
+        frames = tags.getall(frame_id)
+        if len(frames) != 1:
+            return False
+        text = getattr(frames[0], "text", [])
+        if not isinstance(text, (list, tuple)):
+            text = [text]
+        return [str(value) for value in text] == [expected]
+    return (
+        exact_text("TPE1", artist)
+        and exact_text("TALB", album)
+        and exact_text("TIT2", title)
+        and exact_text("TRCK", str(track_number))
+    )
+
+
+def _mp4_tags_match_target(path_name: str, artist: str, album: str, track_number: object, title: str) -> bool:
+    if MP4 is None:
+        return False
+    try:
+        audio = MP4(path_name)
+    except Exception:
+        return False
+    if any(key in audio for key in ("disk", "----:com.apple.iTunes:TRACKTOTAL", "----:com.apple.iTunes:DISCNUMBER", "----:com.apple.iTunes:DISCTOTAL")):
+        return False
+    try:
+        expected_track = int(str(track_number).lstrip("0") or "0")
+        actual_track = int((audio.get("trkn") or [(0, 0)])[0][0])
+        actual_total = int((audio.get("trkn") or [(0, 0)])[0][1])
+    except Exception:
+        return False
+    return (
+        list(audio.get("\xa9ART") or []) == [artist]
+        and list(audio.get("\xa9alb") or []) == [album]
+        and list(audio.get("\xa9nam") or []) == [title]
+        and actual_track == expected_track
+        and actual_total == 0
+    )
+
+
+def _audio_tags_already_match(path_name: str, artist: str, album: str, track_number: object, title: str) -> bool:
+    """Return True only when a tag write would make no requested metadata change."""
+    ext = os.path.splitext(path_name)[1].lower()
+    if ext in {".m4a", ".mp4", ".aac", ".alac"}:
+        return _mp4_tags_match_target(path_name, artist, album, track_number, title)
+    try:
+        audio = MutagenFile(path_name, easy=True)
+        if _easy_audio_tags_match_target(audio, artist, album, track_number, title):
+            return True
+    except Exception as exc:  # noqa: BLE001 - read-only optimization boundary
+        debug_suppressed_exception(__name__, exc)
+    if ext == ".mp3":
+        return _id3_tags_match_target(path_name, artist, album, track_number, title)
+    return False
+
 def _write_easy_tags(path_name: str, artist: str, album: str, track_number: object, title: str) -> None:
     audio = MutagenFile(path_name, easy=True)
     if audio is None:
@@ -2626,28 +2768,36 @@ def _write_mp4_tags(path_name: str, artist: str, album: str, track_number: objec
     audio.save()
 
 
-def write_audio_tags(path_name: str, artist: str, album: str, track_number: object, title: str, total_tracks: int = 0) -> None:
+def write_audio_tags(path_name: str, artist: str, album: str, track_number: object, title: str, total_tracks: int = 0) -> bool:
+    """Write requested tags only when the file would actually change.
+
+    Returns True when a save occurred and False when the existing requested
+    metadata already matched exactly (including absence of obsolete total/disc
+    tags).
+    """
     ext = os.path.splitext(path_name)[1].lower()
     if not _is_taggable_audio_file(path_name):
         raise TaggerError(f"unsupported or non-taggable audio extension: {ext or '(none)'}")
     artist = standard_ascii_text(artist, fallback="Unknown") or "Unknown"
     album = standard_ascii_text(album, fallback="Unknown") or "Unknown"
     title = normalize_tag_title_printable(title) or "unknown"
+    if _audio_tags_already_match(path_name, artist, album, track_number, title):
+        return False
     try:
         _write_easy_tags(path_name, artist, album, track_number, title)
-        return
+        return True
     except Exception as first_exc:
         fallback_exc = first_exc
     try:
         if ext == ".mp3":
             _write_id3_tags(path_name, artist, album, track_number, title)
-            return
+            return True
         if ext == ".flac":
             _write_flac_tags(path_name, artist, album, track_number, title)
-            return
+            return True
         if ext in {".m4a", ".mp4", ".aac", ".alac"}:
             _write_mp4_tags(path_name, artist, album, track_number, title, int(total_tracks or 0))
-            return
+            return True
     except Exception as second_exc:
         fallback_exc = second_exc
     raise TaggerError(_normalize_tag_write_error(path_name, fallback_exc))
@@ -2730,6 +2880,17 @@ def _compliant_rename_show_name_from_record(record) -> str:
     return _show_name_with_parentheticals(getattr(record, "show_name", ""), getattr(record, "parentheticals", ""))
 
 
+
+
+def _folder_name_write_needed(source_root: str, target_name: str) -> bool:
+    """Return True only when Rename Compliantly would write a different folder name."""
+    source = os.path.normpath(str(source_root or ""))
+    target = str(target_name or "").strip()
+    if not source or not target:
+        return False
+    intended = os.path.normpath(os.path.join(os.path.dirname(source), target))
+    return os.path.normcase(intended) != os.path.normcase(source)
+
 def _unique_destination_path(parent_dir: str, folder_name: str, source_root: str = "") -> str:
     """Allocate a collision-safe destination classified as copy or alt.
 
@@ -2783,6 +2944,11 @@ def _rewrite_group_paths(group: dict, old_root: str, new_root: str, *, mutate: b
 
 def _rewrite_record_paths(record, old_root: str, new_root: str, *, mutate: bool = False):
     target = record if mutate else copy.copy(record)
+    # Re-inventory reconciliation needs to distinguish a real disappearance from
+    # a folder that this run renamed or transferred. Preserve the first physical
+    # MAIN_DIR_PATH before any rewrite; later rewrites keep that original source.
+    if hasattr(target, "original_main_dir_path") and not getattr(target, "original_main_dir_path", ""):
+        setattr(target, "original_main_dir_path", os.path.normpath(str(old_root or "")))
     for attr in ("main_dir_path", "setlist_file"):
         value = getattr(target, attr, "")
         if value:
@@ -3020,8 +3186,8 @@ def prepare_inventory_tagging_target(
 
     if bool(getattr(config, "rename_compliantly", False)) and show_name:
         parent_dir = os.path.dirname(source_root)
-        intended_root = os.path.normpath(os.path.join(parent_dir, target_name))
-        if os.path.normcase(intended_root) == os.path.normcase(os.path.normpath(source_root)):
+        if not _folder_name_write_needed(source_root, target_name):
+            _emit(emit, f"RENAME_COMPLIANTLY_UNCHANGED: {source_root}")
             return group, record
         destination_root = _unique_destination_path(parent_dir, target_name, source_root)
         try:
@@ -4750,7 +4916,7 @@ def tag_group_with_record(
     filename titles when setlist titles cannot be used.
     """
     folder = _folder_label(group)
-    stats = {"groups": 1, "tagged": 0, "skipped": 0, "errors": 0, "comma_item_folders": [], "comma_line_folders": [], "etreedb_folders": [], "title_tag_folders": [], "setlistfm_folders": []}
+    stats = {"groups": 1, "tagged": 0, "unchanged": 0, "skipped": 0, "errors": 0, "comma_item_folders": [], "comma_line_folders": [], "etreedb_folders": [], "title_tag_folders": [], "setlistfm_folders": []}
     if is_cancel_requested():
         stats["skipped"] += 1
         _problem(folder, "cancel requested", emit)
@@ -4869,8 +5035,11 @@ def tag_group_with_record(
             _emit(emit, _format_tag_file_error_line(audio_path, error_text))
             continue
         try:
-            write_audio_tags(audio_path, artist, album, tag_track_number, title, total_tracks=len(tracks))
+            changed = write_audio_tags(audio_path, artist, album, tag_track_number, title, total_tracks=len(tracks))
             stats["tagged"] += 1
+            if changed is False:
+                stats["unchanged"] += 1
+                _emit(emit, f"  TAG UNCHANGED: {os.path.basename(audio_path)}")
         except Exception as exc:
             stats["errors"] += 1
             error_text = _normalize_tag_write_error(audio_path, exc)
@@ -4886,7 +5055,7 @@ def process_tagging_group(
     emit: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, int]:
     folder = _folder_label(group)
-    stats = {"groups": 1, "tagged": 0, "skipped": 0, "errors": 0, "comma_item_folders": [], "comma_line_folders": [], "etreedb_folders": [], "title_tag_folders": [], "setlistfm_folders": []}
+    stats = {"groups": 1, "tagged": 0, "unchanged": 0, "skipped": 0, "errors": 0, "comma_item_folders": [], "comma_line_folders": [], "etreedb_folders": [], "title_tag_folders": [], "setlistfm_folders": []}
     if is_cancel_requested():
         stats["skipped"] += 1
         _problem(folder, "cancel requested", emit)
@@ -5121,12 +5290,12 @@ def build_dry_run_group_plan(
     return plan
 
 
-TAG_STATS_NUMERIC_KEYS = ("groups", "tagged", "skipped", "errors")
+TAG_STATS_NUMERIC_KEYS = ("groups", "tagged", "unchanged", "skipped", "errors")
 TAG_STATS_LIST_KEYS = ("comma_item_folders", "comma_line_folders", "etreedb_folders", "setlistfm_folders", "title_tag_folders")
 
 
 def empty_tag_stats() -> Dict[str, object]:
-    return {"groups": 0, "tagged": 0, "skipped": 0, "errors": 0, "comma_item_folders": [], "comma_line_folders": [], "etreedb_folders": [], "title_tag_folders": [], "setlistfm_folders": []}
+    return {"groups": 0, "tagged": 0, "unchanged": 0, "skipped": 0, "errors": 0, "comma_item_folders": [], "comma_line_folders": [], "etreedb_folders": [], "title_tag_folders": [], "setlistfm_folders": []}
 
 
 def merge_tag_stats(totals: Dict[str, object], subtotal: Dict[str, object]) -> Dict[str, object]:

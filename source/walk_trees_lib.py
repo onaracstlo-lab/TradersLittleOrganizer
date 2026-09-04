@@ -1,4 +1,4 @@
-__version__ = "v426"
+__version__ = "v433"
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
 import os
@@ -118,8 +118,11 @@ def _path_worker_count(config, search_path_count):
 
 def _run_serial(config, inventory_items):
     all_metadata_records = []
+    corruption_removed_paths = []
     total_directories_identified = 0
     total_show_groups_processed = 0
+    total_show_groups_prepared = 0
+    total_corruption_groups_removed = 0
     shared_artist_matcher = None
     for search_index, item in enumerate(inventory_items, start=1):
         path_name, slam_value, volume_label, volume_key, log_token, log_mode, copy_mode, copy_destination, inventory_path = _unpack_inventory_item(item)
@@ -149,6 +152,9 @@ def _run_serial(config, inventory_items):
         )
         total_directories_identified += result["directory_count"]
         total_show_groups_processed += result["show_group_count"]
+        total_show_groups_prepared += int(result.get("groups_prepared", result["show_group_count"]) or 0)
+        total_corruption_groups_removed += int(result.get("corruption_groups_removed", 0) or 0)
+        corruption_removed_paths.extend(result.get("corruption_removed_paths", []) or [])
         all_metadata_records.extend(result["metadata_records"])
 
         console_print(
@@ -156,7 +162,8 @@ def _run_serial(config, inventory_items):
             f"Search path complete: {path_name} | directories identified: {result['directory_count']} | show groups processed: {result['show_group_count']}",
         )
 
-    return all_metadata_records, total_directories_identified, total_show_groups_processed
+    config.current_corruption_removed_paths = list(getattr(config, "current_corruption_removed_paths", []) or []) + corruption_removed_paths
+    return all_metadata_records, total_directories_identified, total_show_groups_processed, total_show_groups_prepared, total_corruption_groups_removed
 
 
 def _inventory_item_drive_sort_key(item):
@@ -331,16 +338,24 @@ def _run_parallel_paths(config, volume_groups, worker_count):
     all_metadata_records = []
     total_directories_identified = 0
     total_show_groups_processed = 0
+    total_show_groups_prepared = 0
+    total_corruption_groups_removed = 0
+    corruption_removed_paths = []
     for search_index in sorted(completed):
         result = completed[search_index]
         total_directories_identified += result["directory_count"]
         total_show_groups_processed += result["show_group_count"]
+        total_show_groups_prepared += int(result.get("groups_prepared", result["show_group_count"]) or 0)
+        total_corruption_groups_removed += int(result.get("corruption_groups_removed", 0) or 0)
+        corruption_removed_paths.extend(result.get("corruption_removed_paths", []) or [])
         all_metadata_records.extend(result["metadata_records"])
 
-    return all_metadata_records, total_directories_identified, total_show_groups_processed
+    config.current_corruption_removed_paths = list(getattr(config, "current_corruption_removed_paths", []) or []) + corruption_removed_paths
+    return all_metadata_records, total_directories_identified, total_show_groups_processed, total_show_groups_prepared, total_corruption_groups_removed
 
 
 def walk_trees(config):
+    config.current_corruption_removed_paths = []
     if is_cancel_requested() or getattr(config, "cancel_requested", False):
         raise KeyboardInterrupt
     inventory_items = prepare_inventory_items(config)
@@ -419,12 +434,14 @@ def walk_trees(config):
     all_metadata_records = []
     total_directories_identified = 0
     total_show_groups_processed = 0
+    total_show_groups_prepared = 0
+    total_corruption_groups_removed = 0
 
     if named_volume_groups:
         ordered_named_items = [item for group in named_volume_groups for item in group]
         if named_worker_count > 1:
             try:
-                work_records, work_dirs, work_groups = _run_parallel_paths(
+                work_records, work_dirs, work_groups, work_prepared, work_corrupt_removed = _run_parallel_paths(
                     config,
                     named_volume_groups,
                     named_worker_count,
@@ -435,35 +452,41 @@ def walk_trees(config):
                     f"Parallel worker pool failed; retrying labeled search paths serially: {exc}",
                     error=True,
                 )
-                work_records, work_dirs, work_groups = _run_serial(
+                work_records, work_dirs, work_groups, work_prepared, work_corrupt_removed = _run_serial(
                     config,
                     ordered_named_items,
                 )
         else:
-            work_records, work_dirs, work_groups = _run_serial(
+            work_records, work_dirs, work_groups, work_prepared, work_corrupt_removed = _run_serial(
                 config,
                 ordered_named_items,
             )
         all_metadata_records.extend(work_records)
         total_directories_identified += work_dirs
         total_show_groups_processed += work_groups
+        total_show_groups_prepared += work_prepared
+        total_corruption_groups_removed += work_corrupt_removed
 
     if empty_volume_groups:
         # Blank-label roots are deliberately held until all labeled-volume
         # workers finish.  This prevents a labeled and unlabeled partition on
         # the same physical disk from being scanned at the same time.
-        empty_records, empty_dirs, empty_groups = _run_serial(
+        empty_records, empty_dirs, empty_groups, empty_prepared, empty_corrupt_removed = _run_serial(
             config,
             [item for group in empty_volume_groups for item in group],
         )
         all_metadata_records.extend(empty_records)
         total_directories_identified += empty_dirs
         total_show_groups_processed += empty_groups
+        total_show_groups_prepared += empty_prepared
+        total_corruption_groups_removed += empty_corrupt_removed
 
     # Postprocess should use the records from this run directly.  Reading the
     # reused log token can include unrelated historical records when a child path
     # is re-inventoried under a broader prior group log.
     config.current_metadata_records = list(all_metadata_records)
+    config.current_show_groups_prepared = int(total_show_groups_prepared)
+    config.current_corruption_groups_removed = int(total_corruption_groups_removed)
 
     console_print(
         config,

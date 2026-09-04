@@ -1,4 +1,4 @@
-__version__ = "v426"
+__version__ = "v433"
 import os
 import re
 
@@ -52,7 +52,11 @@ SETLIST_HOUSEKEEPING_PATTERNS_PHASE1 = [
 def _phase1_should_prune_dir(dirname):
     """Return True when phase 1 must not record or descend into dirname."""
     name = str(dirname or "").strip().lower()
-    return name.endswith("-ignoredir") or name in SYSTEM_DIR_NAMES_TO_PRUNE
+    return (
+        name.endswith("-ignoredir")
+        or name in SYSTEM_DIR_NAMES_TO_PRUNE
+        or name.startswith(".tlo-collection-")
+    )
 
 
 def _phase1_is_real_music_file(path):
@@ -99,41 +103,42 @@ def _phase1_list_entries(config, current_path):
     return sorted(entry_list, key=lambda e: e.name.lower())
 
 def _walk_and_log_recursive(config, current_path, dir_counter):
-    # Safety guard: this function must never scan inside a directory that phase 1
-    # is supposed to prune.
-    if _phase1_should_prune_dir(os.path.basename(os.path.normpath(current_path))):
-        return dir_counter
+    """Iteratively walk one tree using the legacy depth-first ordering.
 
-    throttle_point(config)
-    try:
-        sorted_entries = _phase1_list_entries(config, current_path)
-    except (OSError, PermissionError) as exc:
-        config.logs.dead_end("INACCESSIBLE %s | %s", current_path, exc)
-        return dir_counter
+    The name is retained for compatibility, but no Python call-stack recursion is
+    used; deeply nested collection trees therefore cannot raise RecursionError.
+    """
+    stack = [current_path]
+    while stack:
+        path_now = stack.pop()
+        if _phase1_should_prune_dir(os.path.basename(os.path.normpath(path_now))):
+            continue
 
-    sample_media_file = _phase1_first_real_music_file(current_path, sorted_entries)
-    if sample_media_file:
-        # Record this complete show, but continue into child directories. A
-        # nested child can be a distinct opening act and must not disappear
-        # merely because the parent already contains music. Wrapper/grouping
-        # logic later prevents ordinary CD/Disc/Set children from becoming
-        # unrelated shows.
-        config.logs.complete_paths(sample_media_file)
-
-    for entry in sorted_entries:
-        child_path = entry.path
-
+        throttle_point(config)
         try:
-            # Pruned path components are never recorded and never descended into.
-            if _phase1_should_prune_dir(entry.name):
-                continue
-
-            if entry.is_dir(follow_symlinks=False):
-                dir_counter += 1
-                dir_counter = _walk_and_log_recursive(config, child_path, dir_counter)
-
+            sorted_entries = _phase1_list_entries(config, path_now)
         except (OSError, PermissionError) as exc:
-            config.logs.dead_end("INACCESSIBLE %s | %s", child_path, exc)
+            config.logs.dead_end("INACCESSIBLE %s | %s", path_now, exc)
+            continue
+
+        sample_media_file = _phase1_first_real_music_file(path_now, sorted_entries)
+        if sample_media_file:
+            config.logs.complete_paths(sample_media_file)
+
+        child_dirs = []
+        for entry in sorted_entries:
+            child_path = entry.path
+            try:
+                if _phase1_should_prune_dir(entry.name):
+                    continue
+                if entry.is_dir(follow_symlinks=False):
+                    dir_counter += 1
+                    child_dirs.append(child_path)
+            except (OSError, PermissionError) as exc:
+                config.logs.dead_end("INACCESSIBLE %s | %s", child_path, exc)
+
+        # LIFO stack + reverse preserves the previous recursive visit order.
+        stack.extend(reversed(child_dirs))
 
     return dir_counter
 

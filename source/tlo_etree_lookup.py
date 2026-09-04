@@ -24,7 +24,7 @@ Important:
 
 from __future__ import annotations
 
-__version__ = "v426"
+__version__ = "v433"
 
 
 import argparse
@@ -38,6 +38,7 @@ from datetime import datetime
 from typing import Any
 
 from console_output_lib import console_emit
+from tlo_network_io import MAX_ERROR_RESPONSE_BYTES, MAX_METADATA_RESPONSE_BYTES, ResponseTooLargeError, read_bounded_text
 
 
 GRAPHQL_URL = "https://graphql.etreedb.org"
@@ -254,10 +255,12 @@ def graphql_request(
 
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            response_body = response.read().decode("utf-8", errors="replace")
+            response_body = read_bounded_text(response, MAX_METADATA_RESPONSE_BYTES, label="eTreeDB response")
     except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        raise ETreeDBError(f"HTTP {e.code} from eTreeDB GraphQL: {body}") from e
+        body = read_bounded_text(e, MAX_ERROR_RESPONSE_BYTES, label="eTreeDB HTTP error response")
+        raise ETreeDBError(f"HTTP {e.code} from eTreeDB GraphQL: {body[:500]}") from e
+    except ResponseTooLargeError as e:
+        raise ETreeDBError(str(e)) from e
     except urllib.error.URLError as e:
         raise ETreeDBError(f"Could not reach eTreeDB GraphQL: {e}") from e
 

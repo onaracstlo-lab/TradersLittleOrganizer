@@ -1,6 +1,6 @@
 """Postprocess metadata logs into setlist files, bootlist.csv, duplicate/group outputs, and summary/unidentified-show files."""
 
-__version__ = "v426"
+__version__ = "v433"
 import csv
 import json
 import os
@@ -115,7 +115,7 @@ def _metadata_record_to_postprocess_dict(record) -> Dict[str, str]:
         fields = (
             "show_name", "setlist_file", "volume_label", "artist", "artist_not_in_database", "date",
             "venue", "location", "parentheticals", "album_name",
-            "show_in_conflict", "main_dir_path", "setlist_files", "music_dirs",
+            "show_in_conflict", "main_dir_path", "original_main_dir_path", "setlist_files", "music_dirs",
         )
         data = {field: getattr(record, field, "") for field in fields}
 
@@ -143,6 +143,7 @@ def _metadata_record_to_postprocess_dict(record) -> Dict[str, str]:
         "album_name": str(data.get("album_name") or ""),
         "show_in_conflict": str(show_in_conflict or "no"),
         "main_dir_path": str(data.get("main_dir_path") or ""),
+        "original_main_dir_path": str(data.get("original_main_dir_path") or ""),
         "setlist_files_json": str(data.get("setlist_files_json") or _json_list(data.get("setlist_files")) or ""),
         "music_dirs_json": str(data.get("music_dirs_json") or _json_list(data.get("music_dirs")) or ""),
     }
@@ -173,6 +174,7 @@ def _normalize_metadata_records_for_postprocess(records) -> List[Dict[str, str]]
                 "album_name": "",
                 "show_in_conflict": "yes",
                 "main_dir_path": str(record),
+                "original_main_dir_path": "",
                 "setlist_files_json": "",
                 "music_dirs_json": "",
             })
@@ -195,6 +197,7 @@ def _parse_show_metadata_logs(tlo_home: str, tokens: Sequence[str] | None = None
             "album_name": "",
             "show_in_conflict": "no",
             "main_dir_path": "",
+            "original_main_dir_path": "",
             "setlist_files_json": "",
             "music_dirs_json": "",
         }
@@ -219,6 +222,7 @@ def _parse_show_metadata_logs(tlo_home: str, tokens: Sequence[str] | None = None
                         "album_name": "",
                         "show_in_conflict": "no",
                         "main_dir_path": "",
+                        "original_main_dir_path": "",
                         "setlist_files_json": "",
                         "music_dirs_json": "",
                     }
@@ -256,6 +260,8 @@ def _parse_show_metadata_logs(tlo_home: str, tokens: Sequence[str] | None = None
                     current["show_in_conflict"] = "yes"
                 elif key == "MAIN_DIR_PATH":
                     current["main_dir_path"] = value.strip()
+                elif key == "ORIGINAL_MAIN_DIR_PATH":
+                    current["original_main_dir_path"] = value.strip()
     return records
 
 
@@ -1462,6 +1468,329 @@ def _existing_rows_for_postprocess(config, records=None) -> tuple[List[Dict[str,
     return kept_rows, replaced_rows
 
 
+
+
+def _reinventory_scope_descriptions(config) -> List[str]:
+    descriptions: List[str] = []
+    for scope in _overwrite_path_scopes(config):
+        volume = str(scope.get("volume_key") or "").strip()
+        path = str(scope.get("path") or "").strip()
+        descriptions.append(f"[{volume}] {path}".strip())
+    return descriptions
+
+
+def _bootlist_row_parts(row: Dict[str, str]) -> Dict[str, str]:
+    volume = str(row.get("Volume") or "").strip()
+    path = str(row.get("Path") or "").strip()
+    if row.get("VolumePath") and (not volume or not path):
+        parsed_volume, parsed_path = parse_volume_path_value(str(row.get("VolumePath") or ""))
+        volume = volume or parsed_volume
+        path = path or parsed_path
+    return {
+        "show": str(row.get("Show") or "").strip(),
+        "volume": volume,
+        "volume_key": volume_key(volume),
+        "path": path,
+        "path_key": normalize_path_for_compare(path),
+        "volume_path": format_volume_path(volume, path),
+    }
+
+
+def _record_reconciliation_paths(records: Sequence[Dict[str, str]]) -> Dict[tuple[str, str], List[tuple[str, str]]]:
+    """Map original row identity to current paths/shows after this run's mutations."""
+    result: Dict[tuple[str, str], List[tuple[str, str]]] = defaultdict(list)
+    for record in records or []:
+        volume = str(record.get("volume_label") or "").strip()
+        current_path = str(record.get("main_dir_path") or "").strip()
+        original_path = str(record.get("original_main_dir_path") or "").strip()
+        if not original_path or not current_path:
+            continue
+        original_key = normalize_path_for_compare(original_path)
+        current_key = normalize_path_for_compare(current_path)
+        if not original_key or original_key == current_key:
+            continue
+        key = (volume_key(volume), original_key)
+        value = (current_key, str(record.get("show_name") or "").strip())
+        if value not in result[key]:
+            result[key].append(value)
+    return result
+
+
+def _path_matches_any(path_name: str, candidates: Sequence[str]) -> bool:
+    key = normalize_path_for_compare(path_name)
+    if not key:
+        return False
+    for candidate in candidates or []:
+        candidate_key = normalize_path_for_compare(candidate)
+        if candidate_key and candidate_key == key:
+            return True
+    return False
+
+
+def _build_reinventory_entry_dispositions(
+    replaced_rows: Sequence[Dict[str, str]],
+    records: Sequence[Dict[str, str]],
+    new_rows: Sequence[Dict[str, str]],
+    unidentified_paths: Sequence[str],
+    corruption_removed_paths: Sequence[str],
+) -> tuple[List[Dict[str, object]], List[Dict[str, object]], Dict[str, int]]:
+    """Account for previous rows individually and identify unexplained new rows.
+
+    This is deliberately evidence-based.  A row is called renamed only when a
+    current metadata record preserved its original path.  Split/merge/regrouped
+    labels use same-volume path ancestry.  Anything without one of those
+    explanations is explicitly MISSING rather than being silently inferred.
+    """
+    old_parts = [_bootlist_row_parts(row) for row in replaced_rows]
+    new_parts = [_bootlist_row_parts(row) for row in new_rows]
+    old_counts: Dict[tuple[str, str], int] = defaultdict(int)
+    new_counts: Dict[tuple[str, str], int] = defaultdict(int)
+    for item in old_parts:
+        old_counts[(item["volume_key"], item["path_key"])] += 1
+    for item in new_parts:
+        new_counts[(item["volume_key"], item["path_key"])] += 1
+
+    rename_map = _record_reconciliation_paths(records)
+    referenced_current: set[int] = set()
+    details: List[Dict[str, object]] = []
+    counts: Dict[str, int] = defaultdict(int)
+
+    for old in old_parts:
+        old_key = (old["volume_key"], old["path_key"])
+        status = "MISSING"
+        reason = "no current bootlist row or recorded terminal disposition matched this previous row"
+        current_indexes: List[int] = []
+
+        exact = [
+            index for index, current in enumerate(new_parts)
+            if current["volume_key"] == old["volume_key"] and current["path_key"] == old["path_key"]
+        ]
+        if exact:
+            current_indexes = exact
+            if old_counts[old_key] > new_counts[old_key]:
+                status = "MERGED"
+                reason = "multiple previous rows now resolve to fewer current rows at the same path"
+            elif new_counts[old_key] > old_counts[old_key]:
+                status = "SPLIT"
+                reason = "the same physical path now produces more current rows than the previous inventory"
+            else:
+                same_show = next(
+                    (index for index in exact if new_parts[index]["show"].casefold() == old["show"].casefold()),
+                    None,
+                )
+                if same_show is not None:
+                    current_indexes = [same_show]
+                    status = "UNCHANGED"
+                    reason = "same volume/path and same Show value"
+                else:
+                    current_indexes = [exact[0]]
+                    status = "METADATA_CHANGED"
+                    reason = "same volume/path but the Show value changed"
+        else:
+            renamed_targets = rename_map.get(old_key, [])
+            if renamed_targets:
+                target_keys = {target_key for target_key, _show in renamed_targets}
+                mapped = [
+                    index for index, current in enumerate(new_parts)
+                    if current["volume_key"] == old["volume_key"] and current["path_key"] in target_keys
+                ]
+                if mapped:
+                    current_indexes = mapped
+                    same_show = any(new_parts[index]["show"].casefold() == old["show"].casefold() for index in mapped)
+                    status = "RENAMED" if same_show else "RENAMED_METADATA_CHANGED"
+                    reason = "current metadata preserved this previous path as ORIGINAL_MAIN_DIR_PATH"
+
+            if not current_indexes:
+                descendants = [
+                    index for index, current in enumerate(new_parts)
+                    if current["volume_key"] == old["volume_key"]
+                    and current["path_key"] != old["path_key"]
+                    and path_is_same_or_under(current["path"], old["path"])
+                ]
+                ancestors = [
+                    index for index, current in enumerate(new_parts)
+                    if current["volume_key"] == old["volume_key"]
+                    and current["path_key"] != old["path_key"]
+                    and path_is_same_or_under(old["path"], current["path"])
+                ]
+                if len(descendants) >= 2:
+                    current_indexes = descendants
+                    status = "SPLIT"
+                    reason = "one previous path now contains multiple current inventory rows"
+                elif len(descendants) == 1:
+                    current_indexes = descendants
+                    status = "REGROUPED"
+                    reason = "the previous show root is now represented by a descendant current row"
+                elif ancestors:
+                    # Prefer the nearest containing current root for display.
+                    ancestors.sort(key=lambda index: len(new_parts[index]["path_key"]), reverse=True)
+                    current_indexes = [ancestors[0]]
+                    status = "MERGED"
+                    reason = "the previous path is now contained by a broader current inventory row"
+
+            if not current_indexes and _path_matches_any(old["path"], corruption_removed_paths):
+                status = "CORRUPTION_REMOVED"
+                reason = "this run recorded the show root as removed for corruption before metadata output"
+            elif not current_indexes and _path_matches_any(old["path"], unidentified_paths):
+                status = "UNRESOLVED"
+                reason = "this run recorded the path as unresolved and omitted it from bootlist.csv"
+
+        referenced_current.update(current_indexes)
+        current_rows = [new_parts[index] for index in current_indexes]
+        counts[status] += 1
+        details.append({
+            "status": status,
+            "old_show": old["show"],
+            "old_volume_path": old["volume_path"],
+            "current": current_rows,
+            "reason": reason,
+        })
+
+    new_only: List[Dict[str, object]] = []
+    for index, current in enumerate(new_parts):
+        if index in referenced_current:
+            continue
+        new_only.append({
+            "status": "NEW",
+            "show": current["show"],
+            "volume_path": current["volume_path"],
+            "reason": "current bootlist row has no previous-row disposition in this re-inventory scope",
+        })
+    counts["NEW"] = len(new_only)
+    return details, new_only, dict(counts)
+
+
+def _build_reinventory_reconciliation(
+    config,
+    replaced_rows: Sequence[Dict[str, str]],
+    records: Sequence[Dict[str, str]],
+    new_rows: Sequence[Dict[str, str]],
+    unidentified_paths: Sequence[str],
+) -> Dict[str, object]:
+    scopes = _reinventory_scope_descriptions(config)
+    if not scopes:
+        return {}
+    previous = len(replaced_rows)
+    prepared = int(getattr(config, "current_show_groups_prepared", len(records)) or 0)
+    processed = len(records)
+    corruption_removed = int(getattr(config, "current_corruption_groups_removed", 0) or 0)
+    corruption_removed_paths = list(_dedupe_paths(list(getattr(config, "current_corruption_removed_paths", []) or [])))
+    stage3_omitted = max(0, prepared - processed)
+    current_rows = len(new_rows)
+    unresolved_omitted = max(0, processed - current_rows)
+    details, new_only, disposition_counts = _build_reinventory_entry_dispositions(
+        replaced_rows,
+        records,
+        new_rows,
+        unidentified_paths,
+        corruption_removed_paths,
+    )
+    return {
+        "scopes": scopes,
+        "previous_rows_replaced": previous,
+        "groups_prepared": prepared,
+        "prepared_vs_previous_delta": prepared - previous,
+        "stage3_records": processed,
+        "stage3_groups_omitted": stage3_omitted,
+        "corruption_groups_removed": corruption_removed,
+        "corruption_removed_paths": corruption_removed_paths,
+        "final_new_rows": current_rows,
+        "unresolved_rows_omitted": unresolved_omitted,
+        "unidentified_paths": list(_dedupe_paths(list(unidentified_paths or []))),
+        "net_replacement_row_change": current_rows - previous,
+        "entry_dispositions": details,
+        "new_only_rows": new_only,
+        "disposition_counts": disposition_counts,
+    }
+
+
+def _format_reinventory_reconciliation_lines(data: Dict[str, object], *, include_details: bool = False) -> List[str]:
+    if not data:
+        return []
+    lines = [
+        "Re-inventory reconciliation",
+        "---------------------------",
+    ]
+    for scope in data.get("scopes", []) or []:
+        lines.append(f"Scope: {scope}")
+    lines.extend([
+        f"Previous bootlist rows replaced: {data.get('previous_rows_replaced', 0)}",
+        f"Stage 2 groups prepared: {data.get('groups_prepared', 0)}",
+        f"Prepared-vs-previous delta: {int(data.get('prepared_vs_previous_delta', 0)):+d}",
+        f"Stage 3 metadata records: {data.get('stage3_records', 0)}",
+        f"Stage 3 groups omitted before metadata output: {data.get('stage3_groups_omitted', 0)}",
+        f"Groups removed for corruption: {data.get('corruption_groups_removed', 0)}",
+        f"Final new bootlist rows: {data.get('final_new_rows', 0)}",
+        f"Unresolved records omitted from bootlist: {data.get('unresolved_rows_omitted', 0)}",
+        f"Net replacement-row change: {int(data.get('net_replacement_row_change', 0)):+d}",
+    ])
+    disposition_counts = dict(data.get("disposition_counts", {}) or {})
+    if disposition_counts:
+        lines.append("Previous-row disposition counts:")
+        for status in (
+            "UNCHANGED", "METADATA_CHANGED", "RENAMED", "RENAMED_METADATA_CHANGED",
+            "SPLIT", "MERGED", "REGROUPED", "CORRUPTION_REMOVED", "UNRESOLVED", "MISSING", "NEW",
+        ):
+            if disposition_counts.get(status, 0):
+                label = "Current rows with no previous-row match" if status == "NEW" else status
+                lines.append(f"  {label}: {disposition_counts[status]}")
+    unidentified = list(data.get("unidentified_paths", []) or [])
+    if unidentified:
+        lines.append("Current unresolved paths:")
+        lines.extend(f"  {path}" for path in unidentified)
+    corrupt_paths = list(data.get("corruption_removed_paths", []) or [])
+    if corrupt_paths:
+        lines.append("Current corruption-removed paths:")
+        lines.extend(f"  {path}" for path in corrupt_paths)
+
+    if not include_details:
+        return lines
+
+    details = list(data.get("entry_dispositions", []) or [])
+    if details:
+        lines.extend(["", "Previous-row dispositions", "-------------------------"])
+        for index, item in enumerate(details, start=1):
+            lines.append(f"[{index}] STATUS: {item.get('status', 'MISSING')}")
+            lines.append(f"  OLD SHOW: {item.get('old_show', '')}")
+            lines.append(f"  OLD PATH: {item.get('old_volume_path', '')}")
+            for current in item.get("current", []) or []:
+                lines.append(f"  CURRENT SHOW: {current.get('show', '')}")
+                lines.append(f"  CURRENT PATH: {current.get('volume_path', '')}")
+            lines.append(f"  REASON: {item.get('reason', '')}")
+
+    new_only = list(data.get("new_only_rows", []) or [])
+    if new_only:
+        lines.extend(["", "Current rows with no previous-row disposition", "-----------------------------------------"])
+        for index, item in enumerate(new_only, start=1):
+            lines.append(f"[{index}] STATUS: NEW")
+            lines.append(f"  CURRENT SHOW: {item.get('show', '')}")
+            lines.append(f"  CURRENT PATH: {item.get('volume_path', '')}")
+            lines.append(f"  REASON: {item.get('reason', '')}")
+    return lines
+
+
+def _write_reinventory_delta_log(tlo_home: str, data: Dict[str, object]) -> str:
+    if not data:
+        return ""
+    logs_dir = os.path.join(tlo_home, "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    target = os.path.join(logs_dir, "reinventoryDelta.log")
+    with open(target, "a", encoding="utf-8", newline="\n") as outfile:
+        outfile.write(f"=== {datetime.now().isoformat(timespec='seconds')} ===\n")
+        for line in _format_reinventory_reconciliation_lines(data, include_details=True):
+            outfile.write(line + "\n")
+        outfile.write("\n")
+    return target
+
+
+def _append_reinventory_reconciliation_to_summary(summary_path: str, data: Dict[str, object]) -> None:
+    if not summary_path or not data:
+        return
+    with open(summary_path, "a", encoding="utf-8", newline="\n") as outfile:
+        outfile.write("\n")
+        for line in _format_reinventory_reconciliation_lines(data):
+            outfile.write(line + "\n")
+
 def postprocess_metadata_outputs(config) -> Dict[str, int | str]:
     timing_entries: List[tuple[str, float]] = []
     overall_started = time.monotonic()
@@ -1508,6 +1837,24 @@ def postprocess_metadata_outputs(config) -> Dict[str, int | str]:
     elapsed = _record_postprocess_timing(timing_entries, "export setlists and build bootlist rows", stage_started)
     _postprocess_status(config, f"exporting setlists and building bootlist rows complete: wrote/reused {len(rows)} row(s) ({_format_elapsed_seconds(elapsed)})")
 
+    current_unidentified_paths = _dedupe_paths(metadata_unidentified_paths + row_unidentified_paths)
+    reinventory_reconciliation = _build_reinventory_reconciliation(
+        config, existing_rows_to_replace, records, rows, current_unidentified_paths
+    )
+    reinventory_delta_log = _write_reinventory_delta_log(config.TLOHome, reinventory_reconciliation)
+    if reinventory_reconciliation:
+        _postprocess_status(
+            config,
+            "re-inventory reconciliation: "
+            f"previous {reinventory_reconciliation['previous_rows_replaced']} | "
+            f"prepared {reinventory_reconciliation['groups_prepared']} | "
+            f"stage3 {reinventory_reconciliation['stage3_records']} | "
+            f"corruption removed {reinventory_reconciliation['corruption_groups_removed']} | "
+            f"unresolved omitted {reinventory_reconciliation['unresolved_rows_omitted']} | "
+            f"new rows {reinventory_reconciliation['final_new_rows']} | "
+            f"net {int(reinventory_reconciliation['net_replacement_row_change']):+d}",
+        )
+
     _postprocess_status(config, "writing bootlist.csv...")
     stage_started = time.monotonic()
     final_rows = list(existing_rows_to_keep) + rows
@@ -1517,7 +1864,7 @@ def postprocess_metadata_outputs(config) -> Dict[str, int | str]:
 
     _postprocess_status(config, "writing unidentifiedShows.txt...")
     stage_started = time.monotonic()
-    unidentified_paths = _dedupe_paths(metadata_unidentified_paths + row_unidentified_paths)
+    unidentified_paths = current_unidentified_paths
     unidentified_path = _write_unidentified_shows(config.TLOHome, unidentified_paths)
     elapsed = _record_postprocess_timing(timing_entries, "write unidentifiedShows.txt", stage_started)
     _postprocess_status(config, f"writing unidentifiedShows.txt complete: {len(unidentified_paths)} unresolved path(s) ({_format_elapsed_seconds(elapsed)})")
@@ -1535,6 +1882,7 @@ def postprocess_metadata_outputs(config) -> Dict[str, int | str]:
     _postprocess_status(config, "writing summary.log...")
     stage_started = time.monotonic()
     summary_log_path = _write_conflict_summary_log(config.TLOHome, records=records)
+    _append_reinventory_reconciliation_to_summary(summary_log_path, reinventory_reconciliation)
     elapsed = _record_postprocess_timing(timing_entries, "write summary.log", stage_started)
     # Overall time includes the instrumentation overhead as well as all measured stages.
     timing_entries.append(("postprocess overhead", max(0.0, time.monotonic() - overall_started - sum(seconds for _label, seconds in timing_entries))))
@@ -1555,4 +1903,5 @@ def postprocess_metadata_outputs(config) -> Dict[str, int | str]:
         "unidentified_shows": unidentified_path,
         "artists_not_in_database": artists_not_in_database_path,
         "summary_log": summary_log_path,
+        "reinventory_delta_log": reinventory_delta_log,
     }

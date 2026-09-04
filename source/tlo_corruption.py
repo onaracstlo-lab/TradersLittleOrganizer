@@ -1,13 +1,14 @@
 """Pre-mutation audio corruption threshold handling for TLO."""
 from __future__ import annotations
 
-__version__ = "v426"
+__version__ = "v433"
 
 import ctypes
 import os
 import subprocess
 import sys
 import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from mutagen import File as MutagenFile, MutagenError
@@ -16,6 +17,8 @@ try:
     from mutagen.flac import FLAC
 except Exception:
     FLAC = None
+
+TRASH_SUBPROCESS_TIMEOUT_SECONDS = 60.0
 
 MEDIA_EXTENSIONS = {
     ".flac", ".mp3", ".m4a", ".mp4", ".ogg", ".oga", ".opus", ".wav",
@@ -70,17 +73,43 @@ def group_audio_files(group):
     return group_audio_snapshot(group)[0]
 
 
+def _exception_chain(exc):
+    """Yield one exception and its chained causes/contexts without looping."""
+    seen = set()
+    current = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        yield current
+        current = current.__cause__ or current.__context__
+
+
+def _unverifiable_underlying_error(exc):
+    """Return the filesystem/resource cause that makes validation unreliable."""
+    for chained in _exception_chain(exc):
+        if isinstance(chained, (PermissionError, OSError, MemoryError)):
+            return chained
+    return None
+
+
+def _preflight_audio_read(path):
+    """Prove that the path is presently stattable and readable before validation."""
+    os.stat(path)
+    with open(path, "rb") as handle:
+        handle.read(1)
+
+
 def classify_audio_paths(paths):
     """Return (proven_corrupt_paths, unverifiable_errors).
 
-    Parse/format failures are corruption.  Filesystem/resource/infrastructure
-    failures are unverifiable and must never be promoted to corruption merely
-    because the validator could not read the file.
+    Only a validator/format failure with no filesystem/resource cause is proof of
+    corruption. Missing, locked, unreadable, disconnected, or resource-failed
+    paths are unverifiable and therefore suppress all corruption-driven mutation.
     """
     bad = []
     unverifiable = []
     for path in list(paths or []):
         try:
+            _preflight_audio_read(path)
             if str(path).lower().endswith(".flac") and FLAC is not None:
                 FLAC(path)
             else:
@@ -90,7 +119,11 @@ def classify_audio_paths(paths):
         except (PermissionError, OSError, MemoryError) as exc:
             unverifiable.append((path, f"{type(exc).__name__}: {exc}"))
         except (MutagenError, ValueError) as exc:
-            bad.append(path)
+            cause = _unverifiable_underlying_error(exc)
+            if cause is not None:
+                unverifiable.append((path, f"{type(cause).__name__}: {cause}"))
+            else:
+                bad.append(path)
         except Exception as exc:
             # Unexpected validator failures are infrastructure/implementation
             # failures, not proof that the user's audio bytes are corrupt.
@@ -290,18 +323,242 @@ def move_to_trash(path):
             'tell application "Finder" to delete POSIX file (item 1 of argv)\n'
             'end run'
         )
+        try:
+            subprocess.run(
+                ["osascript", "-e", script, path],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=TRASH_SUBPROCESS_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise OSError(f"Trash operation timed out for {path}") from exc
+        if os.path.exists(path):
+            raise OSError("Trash operation reported success but the source still exists")
+        return
+    try:
         subprocess.run(
-            ["osascript", "-e", script, path],
+            ["gio", "trash", "--", path],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,
+            timeout=TRASH_SUBPROCESS_TIMEOUT_SECONDS,
         )
-        return
-    subprocess.run(
-        ["gio", "trash", path],
-        check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        text=True,
+    except subprocess.TimeoutExpired as exc:
+        raise OSError(f"Trash operation timed out for {path}") from exc
+    if os.path.exists(path):
+        raise OSError("Trash operation reported success but the source still exists")
+
+@dataclass
+class CorruptionAssessment:
+    """Read-only corruption decision for one logical show before mutation."""
+    audio_files: list[str] = field(default_factory=list)
+    corrupt_files: list[str] = field(default_factory=list)
+    unverifiable_details: list[tuple[str, str]] = field(default_factory=list)
+    action: str = "none"
+    corruption_percent: float = 0.0
+    acceptable_percent: int = 100
+    fully_corrupt_dirs: list[str] = field(default_factory=list)
+
+    @property
+    def unverifiable(self):
+        return bool(self.unverifiable_details)
+
+
+@dataclass
+class CorruptionOutcome:
+    """Mutation result returned to the inventory orchestrator."""
+    assessment: CorruptionAssessment
+    show_removed: bool = False
+    whole_folder_trash_failed: bool = False
+    trashed_dirs: list[str] = field(default_factory=list)
+    trashed_files: list[str] = field(default_factory=list)
+    unexpected_error: str = ""
+
+    @property
+    def unverifiable(self):
+        return self.assessment.unverifiable
+
+
+def assess_group_corruption(group, acceptable_percent):
+    """Return a deterministic pre-mutation corruption assessment.
+
+    This helper has no Trash/Recycle side effect.  Any directory, filesystem,
+    validator, memory/resource, or unexpected inspection failure makes the
+    logical show unverifiable and therefore forces ``action='none'``.
+    """
+    acceptable_percent = int(acceptable_percent)
+    audio_files, snapshot_errors = group_audio_snapshot(group)
+    corrupt_files, validator_errors = classify_audio_paths(audio_files)
+    unverifiable_details = list(snapshot_errors) + list(validator_errors)
+    action = "none"
+    if not unverifiable_details:
+        action = corruption_action(len(audio_files), len(corrupt_files), acceptable_percent)
+    percent = (100.0 * len(corrupt_files) / len(audio_files)) if audio_files else 0.0
+    fully_bad_dirs = []
+    if corrupt_files and not unverifiable_details:
+        fully_bad_dirs = fully_corrupt_music_dirs(group, audio_files, corrupt_files)
+    return CorruptionAssessment(
+        audio_files=list(audio_files),
+        corrupt_files=list(corrupt_files),
+        unverifiable_details=list(unverifiable_details),
+        action=action,
+        corruption_percent=percent,
+        acceptable_percent=acceptable_percent,
+        fully_corrupt_dirs=list(fully_bad_dirs),
     )
+
+
+def _path_is_under(path_name, directory):
+    try:
+        return os.path.commonpath([os.path.abspath(path_name), os.path.abspath(directory)]) == os.path.abspath(directory)
+    except (OSError, ValueError):
+        return False
+
+
+def _prune_group_after_corruption_trash(group, record, trashed_dirs, trashed_files):
+    """Keep carried group/record paths consistent with successful Trash moves."""
+    if not trashed_dirs and not trashed_files:
+        return
+    trashed_file_keys = {_norm(path) for path in trashed_files}
+
+    def keep_path(path_name):
+        normalized = os.path.normpath(str(path_name or ""))
+        if not normalized or _norm(normalized) in trashed_file_keys:
+            return False
+        return not any(_path_is_under(normalized, directory) for directory in trashed_dirs)
+
+    group["music_dirs"] = [path for path in (group.get("music_dirs", []) or []) if keep_path(path)]
+    for key in ("music_files", "music_sample_files", "setlist_files", "txt_files"):
+        group[key] = [path for path in (group.get(key, []) or []) if keep_path(path)]
+    if group.get("setlist_file") and not keep_path(group.get("setlist_file")):
+        group["setlist_file"] = next((path for path in group.get("setlist_files", []) if os.path.isfile(path)), "")
+
+    remaining_audio = group_audio_files(group)
+    group["music_file_count"] = len(remaining_audio)
+    record.music_dirs = list(group.get("music_dirs", []) or [])
+    record.music_file_count = len(remaining_audio)
+    record.setlist_files = list(group.get("setlist_files", []) or [])
+    if record.setlist_file and not keep_path(record.setlist_file):
+        record.setlist_file = group.get("setlist_file", "")
+
+
+def apply_corruption_assessment(config, group, record, assessment):
+    """Apply one already-computed assessment and return a structured outcome.
+
+    The assessment stage is intentionally separated from mutation so every
+    destructive decision can be tested without invoking the whole inventory
+    pipeline.  This function performs only the Trash/Recycle actions authorized
+    by the supplied assessment and updates the carried group/record afterward.
+    """
+    outcome = CorruptionOutcome(assessment=assessment)
+    acceptable = assessment.acceptable_percent
+    audio_files = list(assessment.audio_files)
+    bad_files = list(assessment.corrupt_files)
+    percent = assessment.corruption_percent
+
+    if assessment.unverifiable:
+        detail_text = "; ".join(f"{path}: {detail}" for path, detail in assessment.unverifiable_details[:8])
+        if len(assessment.unverifiable_details) > 8:
+            detail_text += f"; ... {len(assessment.unverifiable_details) - 8} more"
+        config.logs.conflicts(
+            "CORRUPTION_UNVERIFIABLE: %s | proven_corrupt=%s files_seen=%s | no corruption-driven Trash action; mutation steps skipped | %s",
+            record.main_dir_path, len(bad_files), len(audio_files), detail_text,
+        )
+        config.logs.tag(
+            "CORRUPTION_UNVERIFIABLE: %s | no Trash/rename/tag/copy-delete/SHN mutation | %s",
+            record.main_dir_path, detail_text,
+        )
+        return outcome
+
+    if assessment.action in ("trash_folder_all_corrupt", "trash_folder_threshold"):
+        reason = (
+            "all audio files are corrupt; acceptable setting ignored"
+            if assessment.action == "trash_folder_all_corrupt"
+            else "corruption exceeds acceptable setting"
+        )
+        try:
+            move_to_trash(record.main_dir_path)
+        except Exception as exc:
+            outcome.whole_folder_trash_failed = True
+            config.logs.conflicts(
+                "CORRUPTION_REMOVAL_FAILED: %s | files=%s corrupt=%s percent=%.2f acceptable=%s reason=%s | %s",
+                record.main_dir_path, len(audio_files), len(bad_files), percent, acceptable, reason, exc,
+            )
+        else:
+            config.logs.conflicts(
+                "REMOVED_CORRUPTION: %s | files=%s corrupt=%s corruption_percent=%.2f acceptable_corruption_percent=%s | %s | moved to Trash/Recycle Bin and omitted from inventory",
+                record.main_dir_path, len(audio_files), len(bad_files), percent, acceptable, reason,
+            )
+            config.logs.tag(
+                "REMOVED_CORRUPTION: %s | files=%s corrupt=%s corruption_percent=%.2f acceptable=%s | %s",
+                record.main_dir_path, len(audio_files), len(bad_files), percent, acceptable, reason,
+            )
+            config.current_search_corruption_groups_removed = int(getattr(config, "current_search_corruption_groups_removed", 0) or 0) + 1
+            config.current_search_corruption_removed_paths = list(getattr(config, "current_search_corruption_removed_paths", []) or []) + [os.path.normpath(record.main_dir_path)]
+            outcome.show_removed = True
+            return outcome
+
+    if bad_files and (assessment.action == "trash_corrupt_files" or outcome.whole_folder_trash_failed):
+        main_key = _norm(record.main_dir_path)
+        music_dirs = [os.path.normpath(path) for path in (group.get("music_dirs", []) or []) if path]
+
+        for bad_dir in assessment.fully_corrupt_dirs:
+            bad_dir_key = _norm(bad_dir)
+            if outcome.whole_folder_trash_failed and bad_dir_key == main_key:
+                continue
+            contains_other_music_dir = any(
+                _norm(other_dir) != bad_dir_key and _path_is_under(other_dir, bad_dir)
+                for other_dir in music_dirs
+            )
+            if contains_other_music_dir:
+                continue
+            try:
+                move_to_trash(bad_dir)
+            except Exception as exc:
+                config.logs.conflicts("CORRUPT_FOLDER_TRASH_FAILED: %s | logical_show=%s | %s", bad_dir, record.main_dir_path, exc)
+                config.logs.tag("CORRUPT_FOLDER_TRASH_FAILED: %s | %s", bad_dir, exc)
+            else:
+                outcome.trashed_dirs.append(os.path.normpath(bad_dir))
+                config.logs.conflicts("TRASHED_ALL_CORRUPT_FOLDER: %s | logical_show=%s | acceptable_corruption_percent=%s", bad_dir, record.main_dir_path, acceptable)
+                config.logs.tag("TRASHED_ALL_CORRUPT_FOLDER: %s", bad_dir)
+
+        for bad_path in bad_files:
+            if any(_path_is_under(bad_path, directory) for directory in outcome.trashed_dirs):
+                continue
+            try:
+                move_to_trash(bad_path)
+            except Exception as exc:
+                config.logs.conflicts("CORRUPT_FILE_TRASH_FAILED: %s | %s", bad_path, exc)
+                config.logs.tag("CORRUPT_FILE_TRASH_FAILED: %s | %s", bad_path, exc)
+            else:
+                outcome.trashed_files.append(os.path.normpath(bad_path))
+                config.logs.conflicts("TRASHED_CORRUPT_FILE: %s | logical_show=%s | corruption_percent=%.2f acceptable_corruption_percent=%s", bad_path, record.main_dir_path, percent, acceptable)
+                config.logs.tag("TRASHED_CORRUPT_FILE: %s", bad_path)
+
+        _prune_group_after_corruption_trash(group, record, outcome.trashed_dirs, outcome.trashed_files)
+
+    return outcome
+
+
+def handle_group_corruption(config, group, record, acceptable_percent):
+    """Fail-closed assessment + mutation wrapper for inventory orchestration."""
+    try:
+        assessment = assess_group_corruption(group, acceptable_percent)
+        return apply_corruption_assessment(config, group, record, assessment)
+    except Exception as exc:
+        detail = f"{type(exc).__name__}: {exc}"
+        assessment = CorruptionAssessment(
+            audio_files=[], corrupt_files=[],
+            unverifiable_details=[(record.main_dir_path, detail)],
+            action="none", corruption_percent=0.0,
+            acceptable_percent=int(acceptable_percent), fully_corrupt_dirs=[],
+        )
+        config.logs.conflicts(
+            "CORRUPTION_CHECK_FAILED_UNVERIFIABLE: %s | no corruption-driven Trash action; mutation steps skipped | %s",
+            record.main_dir_path, exc,
+        )
+        return CorruptionOutcome(assessment=assessment, unexpected_error=detail)
+

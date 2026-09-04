@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v426"
+__version__ = "v433"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
@@ -15,6 +15,7 @@ from tlo_wrapper_rules import (
     is_exact_wrapper_name,
     is_standard_video_folder_name,
     looks_like_non_main_dir,
+    is_supplemental_show_child_name,
     split_volume_part_suffix,
     split_wrapper_part_suffix,
     split_parenthesized_numeric_part_suffix,
@@ -443,29 +444,26 @@ def _entry_from_media_files(music_dir: str, media_files: Sequence[str]) -> dict:
 
 
 def _discover_music_dirs(config, start_path: str) -> List[dict]:
+    """Discover music directories with iterative depth-first traversal."""
     discovered: List[dict] = []
+    stack = [start_path]
 
-    def walk(current_path: str):
-        # Phase 2/3 performs its own music-directory discovery from the search
-        # root, so it must enforce the same hard-prune rules as phase 1.
-        # Any directory whose visible name ends in -ignoreDir is disregarded: it
-        # is not scanned, not recorded, and no further descent takes place.
+    while stack:
+        current_path = stack.pop()
         if _phase23_should_prune_dir(os.path.basename(os.path.normpath(current_path))):
-            return
+            continue
 
         try:
             with os.scandir(current_path) as entries:
                 children = sorted(list(entries), key=lambda entry: entry.name.lower())
         except (OSError, PermissionError) as exc:
             config.logs.dead_end("INACCESSIBLE %s | %s", current_path, exc)
-            return
+            continue
 
         media_files: List[str] = []
         child_dirs: List[str] = []
         for entry in children:
             try:
-                # Check the visible entry name before file/dir type checks so
-                # protected or symlinked pruned directories are never touched.
                 if _phase23_should_prune_dir(entry.name):
                     continue
                 if entry.is_file(follow_symlinks=False) and _is_music_file(entry.path):
@@ -478,15 +476,9 @@ def _discover_music_dirs(config, start_path: str) -> List[dict]:
         if media_files:
             discovered.append(_entry_from_media_files(current_path, media_files))
 
-        # A parent may be a complete main-act show while a nested child is a
-        # separate opening act. Continue discovery; wrapper aggregation later
-        # keeps ordinary CD/Disc/Set structures together where appropriate.
-        for child_dir in child_dirs:
-            walk(child_dir)
+        stack.extend(reversed(child_dirs))
 
-    walk(start_path)
     return discovered
-
 
 def _discover_music_dirs_from_logged_paths(config, logged_paths: List[str], start_path: str) -> List[dict]:
     """Build music directory entries from the Phase 1 complete-path log.
@@ -749,6 +741,177 @@ def _wrapper_release_aggregation_info(
     return None
 
 
+def _is_path_below(parent_path: str, child_path: str) -> bool:
+    """Return True when child_path is a proper descendant of parent_path."""
+    parent = os.path.normpath(parent_path or "")
+    child = os.path.normpath(child_path or "")
+    if not parent or not child or os.path.normcase(parent) == os.path.normcase(child):
+        return False
+    try:
+        return os.path.normcase(os.path.commonpath([parent, child])) == os.path.normcase(parent)
+    except ValueError:
+        return False
+
+
+def _nested_wrapper_container_aggregation_info(
+    music_dir_entries: Sequence[dict],
+    volume_parent_info: Optional[Dict[str, dict]] = None,
+    wrapper_parent_info: Optional[Dict[Tuple[str, str], dict]] = None,
+) -> Dict[str, Dict[str, str]]:
+    """Return guarded show-root promotions for ``Show/FLAC/Set 1`` layouts.
+
+    The ordinary wrapper rule first proves that the immediate children are one
+    related multipart release.  This second rule may then cross exactly one
+    non-numbered media-container directory, such as ``FLAC`` or ``Audio``.
+    Promotion is deliberately narrow:
+
+    * the proposed show folder must contain a recognizable date;
+    * every music-bearing descendant of that show folder must be a direct child
+      of the same media container; and
+    * the intermediate container cannot itself be a numbered disc/set part.
+
+    These constraints prevent a collection root or an opening-act sibling from
+    being absorbed into the multipart show.
+    """
+    music_dirs = [
+        _entry_music_dir(entry) if isinstance(entry, dict) else os.path.normpath(str(entry or ""))
+        for entry in music_dir_entries or []
+    ]
+    music_dirs = [path_name for path_name in music_dirs if path_name]
+    promoted: Dict[str, Dict[str, str]] = {}
+
+    for music_dir in music_dirs:
+        immediate = _wrapper_release_aggregation_info(
+            music_dir,
+            volume_parent_info=volume_parent_info,
+            wrapper_parent_info=wrapper_parent_info,
+        )
+        if not immediate:
+            continue
+        container_dir = os.path.normpath(immediate.get("main_dir_path", ""))
+        if not container_dir or os.path.dirname(os.path.normpath(music_dir)) != container_dir:
+            continue
+
+        container_name = os.path.basename(container_dir)
+        _container_base, container_part_suffix = split_wrapper_part_suffix(container_name)
+        _volume_base, container_volume_suffix = split_volume_part_suffix(container_name)
+        if (
+            not is_exact_wrapper_name(container_name)
+            or is_standard_video_folder_name(container_name)
+            or container_part_suffix
+            or container_volume_suffix
+        ):
+            continue
+
+        show_root = os.path.dirname(container_dir)
+        if not show_root or not _find_date_matches(os.path.basename(show_root)):
+            continue
+
+        show_music_dirs = [candidate for candidate in music_dirs if _is_path_below(show_root, candidate)]
+        if not show_music_dirs or any(os.path.dirname(candidate) != container_dir for candidate in show_music_dirs):
+            continue
+
+        normalized_show = os.path.normcase(os.path.normpath(show_root))
+        normalized_container = os.path.normcase(container_dir)
+        promoted[os.path.normcase(os.path.normpath(music_dir))] = {
+            "aggregation_key": f"nested_wrapper::{normalized_show}::{normalized_container}",
+            "main_dir_path": show_root,
+            "main_dir_name": os.path.basename(show_root),
+            "aggregate_album_name": "",
+            "aggregate_release_base": "",
+            "aggregation_reason": f"nested_wrapper_container:{container_name}/{os.path.basename(music_dir)}",
+        }
+
+    return promoted
+
+
+_CONSOLIDATED_ALT_CHILD_RE = re.compile(
+    r"(?i)^(?P<base>.+?)\s*\(\s*alt[\s._-]*(?P<number>\d{1,3})\s*\)\s*$"
+)
+
+
+def _consolidated_part_number(suffix: str) -> int:
+    token = re.sub(
+        r"(?i)^(?:cd|disc|disk|pt\.?|part|set|side|tape|d)[\s._-]*", "", str(suffix or "")
+    ).strip().casefold()
+    if token.isdigit():
+        return int(token)
+    words = {
+        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+        "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+        "a": 1, "b": 2,
+    }
+    if token in words:
+        return words[token]
+    if token and re.fullmatch(r"[ivx]{1,6}", token):
+        values = {"i": 1, "v": 5, "x": 10}
+        total = previous = 0
+        for character in reversed(token):
+            value = values[character]
+            total += -value if value < previous else value
+            previous = max(previous, value)
+        return total
+    return 0
+
+
+def _consolidated_sibling_collection_info(music_dir_entries: Sequence[dict]) -> Dict[str, Dict[str, str]]:
+    """Recognize only a journal-produced common parent and its related children."""
+    music_dirs = [
+        _entry_music_dir(entry) if isinstance(entry, dict) else os.path.normpath(str(entry or ""))
+        for entry in music_dir_entries or []
+    ]
+    music_dirs = [path_name for path_name in music_dirs if path_name]
+    candidates: Dict[str, List[Tuple[str, str, int]]] = {}
+    for music_dir in music_dirs:
+        current = os.path.normpath(music_dir)
+        while True:
+            parent = os.path.dirname(current)
+            if not parent or parent == current:
+                break
+            parent_name = os.path.basename(parent)
+            child_name = os.path.basename(current)
+            index = -1
+            if normalized_compare_value(child_name) == normalized_compare_value(parent_name):
+                index = 0
+            else:
+                match = _CONSOLIDATED_ALT_CHILD_RE.fullmatch(child_name)
+                if match and normalized_compare_value(match.group("base")) == normalized_compare_value(parent_name):
+                    index = int(match.group("number"))
+                else:
+                    part_base, part_suffix = split_wrapper_part_suffix(child_name)
+                    if part_suffix and normalized_compare_value(part_base) == normalized_compare_value(parent_name):
+                        index = _consolidated_part_number(part_suffix)
+            if index >= 0 and os.path.isfile(os.path.join(parent, "info.txt")):
+                candidates.setdefault(os.path.normcase(parent), []).append((music_dir, current, index))
+                break
+            current = parent
+
+    promoted: Dict[str, Dict[str, str]] = {}
+    for parent_key, rows in candidates.items():
+        parent_dir = os.path.dirname(rows[0][1])
+        child_roots = {os.path.normcase(child): (child, index) for _music, child, index in rows}
+        if len(child_roots) < 2:
+            continue
+        indices = [row[1] for row in child_roots.values()]
+        if len(set(indices)) != len(indices):
+            continue
+        below_parent = [path for path in music_dirs if _is_path_below(parent_dir, path)]
+        row_music = {os.path.normcase(row[0]) for row in rows}
+        if any(os.path.normcase(path) not in row_music for path in below_parent):
+            continue
+        base_name = os.path.basename(parent_dir)
+        for music_dir, _child, _index in rows:
+            promoted[os.path.normcase(os.path.normpath(music_dir))] = {
+                "aggregation_key": f"consolidated_sibling::{parent_key}",
+                "main_dir_path": parent_dir,
+                "main_dir_name": base_name,
+                "aggregate_album_name": base_name,
+                "aggregate_release_base": base_name,
+                "aggregation_reason": "consolidated_sibling_collection",
+            }
+    return promoted
+
+
 def _unique_paths_preserve_order(paths: Sequence[str]) -> List[str]:
     seen = set()
     ordered: List[str] = []
@@ -805,6 +968,147 @@ def _add_entry_to_bucket(bucket: dict, entry: dict) -> None:
     bucket["music_file_count"] += int(entry.get("music_file_count") or len(entry.get("music_files", [])) or 0)
 
 
+
+
+def _complete_date_match(text: str) -> Optional[Dict[str, str]]:
+    """Return the first fully specified performance-date match in text."""
+    for match in _find_date_matches(str(text or "")):
+        normalized = str(match.get("normalized") or "")
+        if re.fullmatch(r"(?:19|20)\d{2}-\d{2}-\d{2}", normalized):
+            return match
+    return None
+
+
+def _root_artist_hint_from_dated_name(name: str) -> str:
+    match = _complete_date_match(name)
+    if not match:
+        return ""
+    return compact_ws(str(name or "")[: int(match.get("start") or 0)].strip(" ._-"))
+
+
+def _artist_tag_matches_root_hint(value: str, root_hint: str) -> bool:
+    left = normalized_compare_value(value)
+    right = normalized_compare_value(root_hint)
+    if not left or not right:
+        return True
+    if left == right:
+        return True
+    # Preserve normal master/as-is punctuation and common suffix differences
+    # while still treating a genuinely different tagged act as independent.
+    if min(len(left), len(right)) >= 5 and (left in right or right in left):
+        return True
+    return False
+
+
+def _supplemental_entry_has_independent_artist(entry: dict, dated_root_name: str) -> bool:
+    root_hint = _root_artist_hint_from_dated_name(dated_root_name)
+    if not root_hint:
+        return False
+    tag_info = collect_group_flac_tag_info(list(entry.get("music_sample_files", []) or []), max_files=2)
+    values = list(tag_info.get("flac_tag_albumartist_values", []) or []) or list(tag_info.get("flac_tag_artist_values", []) or [])
+    values = [compact_ws(value) for value in values if compact_ws(value)]
+    return bool(values) and all(not _artist_tag_matches_root_hint(value, root_hint) for value in values)
+
+
+def _dated_supplemental_descendant_info(music_dir_entries: Sequence[dict], start_path: str) -> Dict[str, Dict[str, str]]:
+    """Promote only clearly supplemental descendants into their dated show root.
+
+    Phase 1 intentionally continues below a show so opening acts can remain
+    independent.  Build 429 adds the complementary guard: a descendant path
+    made entirely of recognized media/source/supplement components does not
+    become another show merely because it contains audio.  A nested component
+    with its own full date or conflicting FLAC artist evidence remains separate.
+    """
+    start_abs = os.path.normpath(os.path.abspath(start_path))
+    promoted: Dict[str, Dict[str, str]] = {}
+    all_music_dirs = [_entry_music_dir(item) for item in (music_dir_entries or []) if _entry_music_dir(item)]
+    for entry in music_dir_entries or []:
+        music_dir = _entry_music_dir(entry)
+        if not music_dir:
+            continue
+        current = os.path.dirname(os.path.normpath(music_dir))
+        while current and current != os.path.dirname(current):
+            try:
+                if os.path.commonpath([start_abs, os.path.abspath(current)]) != start_abs:
+                    break
+            except ValueError:
+                break
+            root_name = os.path.basename(current)
+            date_match = _complete_date_match(root_name)
+            if date_match:
+                relative = os.path.relpath(music_dir, current)
+                parts = [part for part in relative.split(os.sep) if part not in {"", "."}]
+                if not parts:
+                    break
+                # A fully dated descendant is a strong independent-show signal.
+                if any(_complete_date_match(part) for part in parts):
+                    break
+                if not all(is_supplemental_show_child_name(part) for part in parts):
+                    break
+                # Do not promote one supplemental branch when the same dated
+                # root also contains a non-supplemental music-bearing branch
+                # (for example an opening act). Root-level audio itself is safe.
+                unrelated_branch = False
+                for other_dir in all_music_dirs:
+                    if not _is_path_below(current, other_dir):
+                        continue
+                    other_rel = os.path.relpath(other_dir, current)
+                    other_parts = [part for part in other_rel.split(os.sep) if part not in {"", "."}]
+                    if any(_complete_date_match(part) for part in other_parts):
+                        unrelated_branch = True
+                        break
+                    if other_parts and not all(is_supplemental_show_child_name(part) for part in other_parts):
+                        unrelated_branch = True
+                        break
+                if unrelated_branch:
+                    break
+                if _supplemental_entry_has_independent_artist(entry, root_name):
+                    break
+                root_key = os.path.normcase(os.path.normpath(current))
+                promoted[os.path.normcase(os.path.normpath(music_dir))] = {
+                    "aggregation_key": f"dated_supplemental::{root_key}",
+                    "main_dir_path": current,
+                    "main_dir_name": root_name,
+                    "aggregate_album_name": "",
+                    "aggregate_release_base": "",
+                    "aggregation_reason": "dated_show_supplemental_descendant",
+                }
+                break
+            if os.path.normcase(os.path.normpath(current)) == os.path.normcase(start_abs):
+                break
+            current = os.path.dirname(current)
+    return promoted
+
+
+def _collapse_buckets_by_show_root(buckets: Dict[str, dict]) -> Dict[str, dict]:
+    """Merge overlapping buckets that resolve to one physical logical-show root.
+
+    This prevents root audio and wrapper children from becoming independent
+    Stage-3 jobs that can both rename/tag the same show directory.
+    """
+    collapsed: Dict[str, dict] = {}
+    for bucket in buckets.values():
+        root = os.path.normpath(bucket.get("main_dir_path", ""))
+        root_key = os.path.normcase(root)
+        if root_key not in collapsed:
+            collapsed[root_key] = bucket
+            continue
+        target = collapsed[root_key]
+        for key in ("music_dirs", "music_files", "music_sample_files", "music_media_extensions"):
+            _extend_unique(target.setdefault(key, []), bucket.get(key, []) or [])
+        target["music_file_count"] = int(target.get("music_file_count") or 0) + int(bucket.get("music_file_count") or 0)
+        for key in ("aggregate_album_name", "aggregate_release_base"):
+            if not target.get(key) and bucket.get(key):
+                target[key] = bucket.get(key)
+        reasons = [value for value in (target.get("aggregation_reason"), bucket.get("aggregation_reason")) if value]
+        if len(set(reasons)) > 1:
+            target["aggregation_reason"] = "shared_show_root:" + "+".join(dict.fromkeys(reasons))
+        elif reasons:
+            target["aggregation_reason"] = reasons[0]
+        else:
+            target["aggregation_reason"] = "shared_show_root"
+    return {f"root::{key}": value for key, value in collapsed.items()}
+
 def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
     logged_paths = load_complete_path_lines(config)
     music_dir_entries = _discover_music_dirs_from_logged_paths(config, logged_paths, start_path)
@@ -815,6 +1119,13 @@ def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
     buckets: Dict[str, dict] = {}
     volume_parent_info = _volume_part_parent_info(music_dir_entries)
     wrapper_parent_info = _wrapper_part_parent_info(music_dir_entries)
+    nested_wrapper_info = _nested_wrapper_container_aggregation_info(
+        music_dir_entries,
+        volume_parent_info=volume_parent_info,
+        wrapper_parent_info=wrapper_parent_info,
+    )
+    consolidated_sibling_info = _consolidated_sibling_collection_info(music_dir_entries)
+    dated_supplemental_info = _dated_supplemental_descendant_info(music_dir_entries, start_path)
     if getattr(config, "compliant", False):
         for entry in music_dir_entries:
             music_dir = _entry_music_dir(entry)
@@ -826,7 +1137,14 @@ def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
         for entry in sorted(music_dir_entries, key=lambda item: _entry_music_dir(item).lower()):
             throttle_point(config)
             music_dir = _entry_music_dir(entry)
-            info = _wrapper_release_aggregation_info(music_dir, volume_parent_info, wrapper_parent_info)
+            music_key = os.path.normcase(os.path.normpath(music_dir))
+            info = consolidated_sibling_info.get(music_key)
+            if info is None:
+                info = nested_wrapper_info.get(music_key)
+            if info is None:
+                info = dated_supplemental_info.get(music_key)
+            if info is None:
+                info = _wrapper_release_aggregation_info(music_dir, volume_parent_info, wrapper_parent_info)
             if info:
                 key = info["aggregation_key"]
                 bucket = buckets.setdefault(key, _new_group_bucket(
@@ -841,6 +1159,9 @@ def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
                 bucket = buckets.setdefault(key, _new_group_bucket(music_dir, os.path.basename(music_dir)))
             _add_entry_to_bucket(bucket, entry)
 
+    if not getattr(config, "compliant", False):
+        buckets = _collapse_buckets_by_show_root(buckets)
+
     groups: List[dict] = []
     for _key, bucket in sorted(buckets.items(), key=lambda item: (item[1]["main_dir_path"].lower(), item[0].lower())):
         throttle_point(config)
@@ -850,6 +1171,9 @@ def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
         music_media_extensions = sorted({str(ext or "").lower() for ext in bucket.get("music_media_extensions", []) if str(ext or "").strip()})
         main_dir_path = os.path.normpath(bucket["main_dir_path"])
         setlist_files: List[str] = []
+        generated_info = os.path.join(main_dir_path, "info.txt")
+        if bucket.get("aggregation_reason") == "consolidated_sibling_collection" and os.path.isfile(generated_info):
+            setlist_files.append(generated_info)
         for music_dir in music_dirs:
             setlist_files.extend(find_setlist_files_for_music_dir(logged_paths, music_dir, main_dir_path))
         setlist_files = _unique_paths_preserve_order(setlist_files)
@@ -3286,6 +3610,9 @@ def _format_show_metadata_log_lines(record: ShowMetadata, date_matches: List[Dic
     if switches_line:
         lines.append(compact_ws(switches_line))
     lines.append(f"MAIN_DIR_PATH: {record.main_dir_path}")
+    original_main_dir_path = str(getattr(record, "original_main_dir_path", "") or "").strip()
+    if original_main_dir_path and os.path.normcase(os.path.normpath(original_main_dir_path)) != os.path.normcase(os.path.normpath(record.main_dir_path)):
+        lines.append(f"ORIGINAL_MAIN_DIR_PATH: {original_main_dir_path}")
     lines.append(f"GROUP_NUMBER: {record.group_number}")
     lines.append(f"MAIN_DIR_NAME: {record.main_dir_name}")
     lines.append(f"SETLIST_FILE: {record.setlist_file}")
@@ -5502,6 +5829,9 @@ def _record_is_unidentified_for_mutation(record, unresolved_reasons: Sequence[st
 
 def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMatcher]) -> List[ShowMetadata]:
     groups = _build_groups_from_search_path(config, config.current_search_path)
+    config.current_search_groups_prepared = len(groups)
+    config.current_search_corruption_groups_removed = 0
+    config.current_search_corruption_removed_paths = []
     console_print(config, f"Stage 2 complete: {config.current_search_path} | show groups prepared: {len(groups)}")
     console_print(config, f"Stage 3 starting: {config.current_search_path}")
 
@@ -5577,140 +5907,14 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
         tag_group_ready = True
 
         acceptable_corruption = int(getattr(config, "acceptable_corruption_percent", 100) or 0)
-        corruption_unverifiable = False
-        corruption_unverifiable_details = []
-        try:
-            from tlo_corruption import (
-                classify_audio_paths,
-                corruption_action,
-                fully_corrupt_music_dirs,
-                group_audio_files,
-                group_audio_snapshot,
-                move_to_trash,
-            )
-            _audio_files, _snapshot_errors = group_audio_snapshot(group)
-            _bad_files, _unverifiable_files = classify_audio_paths(_audio_files)
-            corruption_unverifiable_details = list(_snapshot_errors) + list(_unverifiable_files)
-            corruption_unverifiable = bool(corruption_unverifiable_details)
-            _corruption_action = "none" if corruption_unverifiable else corruption_action(len(_audio_files), len(_bad_files), acceptable_corruption)
-            _percent = (100.0 * len(_bad_files) / len(_audio_files)) if _audio_files else 0.0
-            _whole_folder_trash_failed = False
-            _trashed_dirs = []
-            _trashed_files = []
-
-            if corruption_unverifiable:
-                _detail_text = "; ".join(f"{path}: {detail}" for path, detail in corruption_unverifiable_details[:8])
-                if len(corruption_unverifiable_details) > 8:
-                    _detail_text += f"; ... {len(corruption_unverifiable_details) - 8} more"
-                config.logs.conflicts(
-                    "CORRUPTION_UNVERIFIABLE: %s | proven_corrupt=%s files_seen=%s | no corruption-driven Trash action; mutation steps skipped | %s",
-                    record.main_dir_path, len(_bad_files), len(_audio_files), _detail_text,
-                )
-                config.logs.tag(
-                    "CORRUPTION_UNVERIFIABLE: %s | no Trash/rename/tag/copy-delete/SHN mutation | %s",
-                    record.main_dir_path, _detail_text,
-                )
-
-            if _corruption_action in ("trash_folder_all_corrupt", "trash_folder_threshold"):
-                _reason = "all audio files are corrupt; acceptable setting ignored" if _corruption_action == "trash_folder_all_corrupt" else "corruption exceeds acceptable setting"
-                try:
-                    move_to_trash(record.main_dir_path)
-                except Exception as exc:
-                    _whole_folder_trash_failed = True
-                    config.logs.conflicts("CORRUPTION_REMOVAL_FAILED: %s | files=%s corrupt=%s percent=%.2f acceptable=%s reason=%s | %s", record.main_dir_path, len(_audio_files), len(_bad_files), _percent, acceptable_corruption, _reason, exc)
-                else:
-                    config.logs.conflicts("REMOVED_CORRUPTION: %s | files=%s corrupt=%s corruption_percent=%.2f acceptable_corruption_percent=%s | %s | moved to Trash/Recycle Bin and omitted from inventory", record.main_dir_path, len(_audio_files), len(_bad_files), _percent, acceptable_corruption, _reason)
-                    config.logs.tag("REMOVED_CORRUPTION: %s | files=%s corrupt=%s corruption_percent=%.2f acceptable=%s | %s", record.main_dir_path, len(_audio_files), len(_bad_files), _percent, acceptable_corruption, _reason)
-                    continue
-
-            # Even when the logical-show percentage is acceptable, a physical music
-            # directory whose direct audio files are all corrupt is itself discarded.
-            # If a required whole-show Trash operation failed, still make the best
-            # effort required by policy to Trash every corrupt file individually.
-            if _bad_files and (_corruption_action == "trash_corrupt_files" or _whole_folder_trash_failed):
-                _fully_bad_dirs = fully_corrupt_music_dirs(group, _audio_files, _bad_files)
-                _main_key = os.path.normcase(os.path.normpath(record.main_dir_path or ""))
-                _music_dirs = [os.path.normpath(path) for path in (group.get("music_dirs", []) or []) if path]
-
-                for _bad_dir in _fully_bad_dirs:
-                    _bad_dir_key = os.path.normcase(os.path.normpath(_bad_dir))
-                    # Do not retry the exact logical-show folder after a failed whole
-                    # folder move. Also avoid trashing an ancestor of another known
-                    # music directory, which could contain healthy sibling audio.
-                    if _whole_folder_trash_failed and _bad_dir_key == _main_key:
-                        continue
-                    _contains_other_music_dir = False
-                    for _other_dir in _music_dirs:
-                        _other_key = os.path.normcase(os.path.normpath(_other_dir))
-                        if _other_key == _bad_dir_key:
-                            continue
-                        try:
-                            if os.path.commonpath([os.path.abspath(_other_dir), os.path.abspath(_bad_dir)]) == os.path.abspath(_bad_dir):
-                                _contains_other_music_dir = True
-                                break
-                        except (OSError, ValueError):
-                            continue
-                    if _contains_other_music_dir:
-                        continue
-                    try:
-                        move_to_trash(_bad_dir)
-                    except Exception as exc:
-                        config.logs.conflicts("CORRUPT_FOLDER_TRASH_FAILED: %s | logical_show=%s | %s", _bad_dir, record.main_dir_path, exc)
-                        config.logs.tag("CORRUPT_FOLDER_TRASH_FAILED: %s | %s", _bad_dir, exc)
-                    else:
-                        _trashed_dirs.append(os.path.normpath(_bad_dir))
-                        config.logs.conflicts("TRASHED_ALL_CORRUPT_FOLDER: %s | logical_show=%s | acceptable_corruption_percent=%s", _bad_dir, record.main_dir_path, acceptable_corruption)
-                        config.logs.tag("TRASHED_ALL_CORRUPT_FOLDER: %s", _bad_dir)
-
-                def _under_trashed_dir(path_name):
-                    for _trashed_dir in _trashed_dirs:
-                        try:
-                            if os.path.commonpath([os.path.abspath(path_name), os.path.abspath(_trashed_dir)]) == os.path.abspath(_trashed_dir):
-                                return True
-                        except (OSError, ValueError):
-                            continue
-                    return False
-
-                for _bad_path in _bad_files:
-                    if _under_trashed_dir(_bad_path):
-                        continue
-                    try:
-                        move_to_trash(_bad_path)
-                    except Exception as exc:
-                        config.logs.conflicts("CORRUPT_FILE_TRASH_FAILED: %s | %s", _bad_path, exc)
-                        config.logs.tag("CORRUPT_FILE_TRASH_FAILED: %s | %s", _bad_path, exc)
-                    else:
-                        _trashed_files.append(os.path.normpath(_bad_path))
-                        config.logs.conflicts("TRASHED_CORRUPT_FILE: %s | logical_show=%s | corruption_percent=%.2f acceptable_corruption_percent=%s", _bad_path, record.main_dir_path, _percent, acceptable_corruption)
-                        config.logs.tag("TRASHED_CORRUPT_FILE: %s", _bad_path)
-
-                # Keep carried group/record paths consistent with the filesystem so
-                # later tag/copy/rename stages cannot fall back to a trashed path.
-                if _trashed_dirs or _trashed_files:
-                    _trashed_file_keys = {os.path.normcase(os.path.normpath(path)) for path in _trashed_files}
-
-                    def _keep_path(path_name):
-                        _norm = os.path.normpath(str(path_name or ""))
-                        if not _norm or os.path.normcase(_norm) in _trashed_file_keys:
-                            return False
-                        return not _under_trashed_dir(_norm)
-
-                    group["music_dirs"] = [path for path in (group.get("music_dirs", []) or []) if _keep_path(path)]
-                    for _key in ("music_files", "music_sample_files", "setlist_files", "txt_files"):
-                        group[_key] = [path for path in (group.get(_key, []) or []) if _keep_path(path)]
-                    if group.get("setlist_file") and not _keep_path(group.get("setlist_file")):
-                        group["setlist_file"] = next((path for path in group.get("setlist_files", []) if os.path.isfile(path)), "")
-                    _remaining_audio = group_audio_files(group)
-                    group["music_file_count"] = len(_remaining_audio)
-                    record.music_dirs = list(group.get("music_dirs", []) or [])
-                    record.music_file_count = len(_remaining_audio)
-                    record.setlist_files = list(group.get("setlist_files", []) or [])
-                    if record.setlist_file and not _keep_path(record.setlist_file):
-                        record.setlist_file = group.get("setlist_file", "")
-        except Exception as exc:
-            corruption_unverifiable = True
-            corruption_unverifiable_details = [(record.main_dir_path, f"{type(exc).__name__}: {exc}")]
-            config.logs.conflicts("CORRUPTION_CHECK_FAILED_UNVERIFIABLE: %s | no corruption-driven Trash action; mutation steps skipped | %s", record.main_dir_path, exc)
+        from tlo_corruption import handle_group_corruption
+        corruption_outcome = handle_group_corruption(
+            config, group, record, acceptable_corruption
+        )
+        corruption_unverifiable = corruption_outcome.unverifiable
+        corruption_unverifiable_details = list(corruption_outcome.assessment.unverifiable_details)
+        if corruption_outcome.show_removed:
+            continue
         unidentified_for_mutation = _record_is_unidentified_for_mutation(record, unresolved_reasons)
         if corruption_unverifiable:
             if tag_during_inventory:
@@ -5838,9 +6042,10 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
         emit_tag_fallback_summary(tag_totals, _tag_summary_emit)
         emit_tag_problem_summary(config, _tag_summary_emit)
         config.logs.tag(
-            "TAG_SUMMARY: folders=%s tagged_files=%s skipped_folders=%s file_errors=%s",
+            "TAG_SUMMARY: folders=%s tagged_files=%s unchanged_files=%s skipped_folders=%s file_errors=%s",
             tag_totals["groups"],
             tag_totals["tagged"],
+            int(tag_totals.get("unchanged", 0) or 0),
             tag_totals["skipped"],
             tag_totals["errors"],
         )
