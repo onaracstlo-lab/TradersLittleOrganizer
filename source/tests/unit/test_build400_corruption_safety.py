@@ -1,5 +1,5 @@
 """Build 400/431 corruption classification and fail-closed mutation safeguards."""
-__version__ = "v433"
+__version__ = "v440"
 
 from pathlib import Path
 

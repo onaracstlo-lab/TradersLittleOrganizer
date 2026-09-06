@@ -1,6 +1,6 @@
 """Build 427 regressions for show/format/part directory layouts."""
 
-__version__ = "v433"
+__version__ = "v440"
 
 import os
 from pathlib import Path
@@ -150,13 +150,13 @@ def test_build427_documentation_contract():
 
     root = Path(__file__).resolve().parents[2]
     requirements = "\n".join(
-        paragraph.text for paragraph in Document(root / "TLO_Inventory_Requirements_Working_v433.docx").paragraphs
+        paragraph.text for paragraph in Document(root / "TLO_Inventory_Requirements_Working_v440.docx").paragraphs
     )
-    manual = (root / "TLO_Inventory_User_Manual_v433.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual = (root / "TLO_Inventory_User_Manual_v440.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v433 (v1.5 Build 433)." in requirements
+    assert "Current document version: v440 (v1.5 Build 440)." in requirements
     assert "Show/FLAC/Set 1 and Show/FLAC/Set 2" in requirements
     assert "must not enumerate or recursively revisit Show's sibling directories" in requirements
-    assert "Version v1.5 Build 433" in manual
+    assert "Version v1.5 Build 440" in manual
     assert "Show/FLAC/Set 1 and Show/FLAC/Set 2" in manual
     assert "It does not rescan sibling show folders" in manual

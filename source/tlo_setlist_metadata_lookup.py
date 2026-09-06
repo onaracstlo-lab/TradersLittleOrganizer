@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v433"
+__version__ = "v440"
 
 import csv
 import os
@@ -802,6 +802,25 @@ def _parse_comma_state_code_location(line: str, support: _SupportData) -> Tuple[
     return city, info.get("region", code), info.get("country", "USA"), match.group(0), "LOCATION_COMMA_STATE_CODE", 92
 
 
+def _parse_comma_dotted_state_code_location(line: str, support: _SupportData) -> Tuple[str, str, str, str, str, int]:
+    """Parse legacy dotted US state abbreviations such as ``Charleston, W.V.``."""
+    match = re.match(
+        r"^\s*([A-Za-z][A-Za-z.'-]*(?:\s+[A-Za-z][A-Za-z.'-]*){0,4})\s*,\s*"
+        r"([A-Za-z])\s*\.\s*([A-Za-z])\s*\.?\s*$",
+        line,
+    )
+    if not match:
+        return "", "", "", "", "", 0
+    code = (match.group(2) + match.group(3)).upper()
+    if code not in US_STATE_CODES or code not in support.regions:
+        return "", "", "", "", "", 0
+    info = support.regions[code]
+    city = _clean_spaces(match.group(1))
+    if not city or _looks_like_sentence_prose_line(city):
+        return "", "", "", "", "", 0
+    return city, info.get("region", code), info.get("country", "USA"), match.group(0), "LOCATION_COMMA_DOTTED_STATE_CODE", 94
+
+
 def _city_fragment_has_title_like_trailing_connective(city: str) -> bool:
     words = re.findall(r"[A-Za-z]+", _clean_spaces(city or ""))
     return bool(words and words[-1].casefold() in LOCATION_CONNECTIVE_WORDS)
@@ -910,6 +929,10 @@ def _parse_location_from_text(raw: str, support: _SupportData) -> Tuple[str, str
         return parsed_city, parsed_region, parsed_country, parsed_raw, parsed_pattern, parsed_conf
 
     parsed_city, parsed_region, parsed_country, parsed_raw, parsed_pattern, parsed_conf = _parse_comma_state_code_location(line, support)
+    if parsed_city and parsed_region:
+        return parsed_city, parsed_region, parsed_country, parsed_raw, parsed_pattern, parsed_conf
+
+    parsed_city, parsed_region, parsed_country, parsed_raw, parsed_pattern, parsed_conf = _parse_comma_dotted_state_code_location(line, support)
     if parsed_city and parsed_region:
         return parsed_city, parsed_region, parsed_country, parsed_raw, parsed_pattern, parsed_conf
 

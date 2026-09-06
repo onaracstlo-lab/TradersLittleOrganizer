@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v433"
+__version__ = "v440"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
@@ -96,16 +96,16 @@ SLASH_END_FIRST_RE = re.compile(
     re.IGNORECASE,
 )
 MONTH_DAY_YEAR_RE = re.compile(
-    rf"(?<![A-Za-z0-9])(?P<month_name>{MONTH_NAME_CASED_PATTERN}){TEXT_DATE_SEP_OPT}(?P<day>\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?){TEXT_DATE_SEP_OPT}(?P<year>{YEAR_TOKEN_RE_TEXT})(?![A-Za-z0-9])"
+    rf"(?<![A-Za-z0-9])(?P<month_name>{MONTH_NAME_CASED_PATTERN})\.?{TEXT_DATE_SEP_OPT}(?P<day>\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?){TEXT_DATE_SEP_OPT}(?P<year>{YEAR_TOKEN_RE_TEXT})(?![A-Za-z0-9])"
 )
 DAY_MONTH_YEAR_RE = re.compile(
-    rf"(?<![A-Za-z0-9])(?P<day>\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?){TEXT_DATE_SEP_OPT}(?P<month_name>{MONTH_NAME_CASED_PATTERN}){TEXT_DATE_SEP_OPT}(?P<year>{YEAR_TOKEN_RE_TEXT})(?![A-Za-z0-9])"
+    rf"(?<![A-Za-z0-9])(?P<day>\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?){TEXT_DATE_SEP_OPT}(?P<month_name>{MONTH_NAME_CASED_PATTERN})\.?{TEXT_DATE_SEP_OPT}(?P<year>{YEAR_TOKEN_RE_TEXT})(?![A-Za-z0-9])"
 )
 YEAR_MONTHNAME_DAY_RE = re.compile(
-    rf"(?<![A-Za-z0-9])(?P<year>{YEAR4_TOKEN_RE_TEXT}){TEXT_DATE_SEP_OPT}(?P<month_name>{MONTH_NAME_CASED_PATTERN}){TEXT_DATE_SEP_OPT}(?P<day>\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?)(?![A-Za-z0-9])"
+    rf"(?<![A-Za-z0-9])(?P<year>{YEAR4_TOKEN_RE_TEXT}){TEXT_DATE_SEP_OPT}(?P<month_name>{MONTH_NAME_CASED_PATTERN})\.?{TEXT_DATE_SEP_OPT}(?P<day>\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?)(?![A-Za-z0-9])"
 )
 MONTH_YEAR_RE = re.compile(
-    rf"(?<![A-Za-z0-9])(?P<month_name>{MONTH_NAME_CASED_PATTERN}){TEXT_DATE_SEP_OPT}(?P<year>{YEAR4_TOKEN_RE_TEXT})(?![A-Za-z0-9])"
+    rf"(?<![A-Za-z0-9])(?P<month_name>{MONTH_NAME_CASED_PATTERN})\.?{TEXT_DATE_SEP_OPT}(?P<year>{YEAR4_TOKEN_RE_TEXT})(?![A-Za-z0-9])"
 )
 FOUR_PLUS_FOUR_RE = re.compile(rf"(?<![0-9xX])(?P<year>{YEAR4_TOKEN_RE_TEXT})(?P<four_sep>[ -])(?P<monthday>\d{{4}})(?![0-9xX])", re.IGNORECASE)
 DASHED_YEAR_RANGE_RE = re.compile(rf"(?<![\d._/-])(?P<range>(?:{YEAR4_FULL_RE_TEXT}|\d{{2}})(?:[-_](?:{YEAR4_FULL_RE_TEXT}|\d{{2}})){{1,3}})(?![\d._/-])")
@@ -1633,7 +1633,16 @@ def _date_raw_has_mixed_component_separators(raw: str, allow_year_space_month_da
 def _append_date_result(results: List[Dict[str, str]], seen: set, raw: str, normalized: str, start: int, end: int, allow_year_space_month_day_exception: bool = False, **extra: str) -> None:
     if not normalized:
         return
-    if _is_audio_rate_depth_reference(raw) or _date_raw_has_mixed_component_separators(raw, allow_year_space_month_day_exception=allow_year_space_month_day_exception):
+    # Separator-consistency checks apply to all-numeric triples. Textual month
+    # forms legitimately use punctuation such as ``Jan. 28, 1990`` and are
+    # already constrained by the textual-date regexes themselves.
+    textual_month_date = bool(re.search(r"[A-Za-z]", str(raw or "")))
+    if _is_audio_rate_depth_reference(raw) or (
+        not textual_month_date
+        and _date_raw_has_mixed_component_separators(
+            raw, allow_year_space_month_day_exception=allow_year_space_month_day_exception
+        )
+    ):
         return
     key = (start, end, normalized, extra.get("date_order", ""), extra.get("date_source_kind", ""))
     if key in seen:
@@ -4744,6 +4753,65 @@ def _resolve_date_from_candidates_with_setlist_validation(
     return chosen_date, matches + setlist_matches
 
 
+def _resolve_date_with_structural_precedence(
+    group: dict,
+    structural_candidates: Sequence[Dict[str, str]],
+    tag_candidates: Sequence[Dict[str, str]],
+    evidence: Dict[str, List[Candidate]],
+    conflicts: List[str],
+    observations: List[str],
+    structural_conflict_label: str,
+) -> Tuple[str, List[Dict[str, str]]]:
+    """Resolve path/pattern dates before considering embedded DATE tags.
+
+    A coherent structural date is group-level identity evidence. Embedded tags
+    are allowed to refine a compatible partial date or act as a fallback when
+    structural evidence cannot establish a date, but an incompatible tag must
+    not erase an otherwise established path date.
+    """
+    structural = [dict(item) for item in structural_candidates if item.get("normalized")]
+    tags = [dict(item) for item in tag_candidates if item.get("normalized")]
+    conflict_count_before = len(conflicts)
+
+    if structural:
+        chosen, structural_matches = _resolve_date_from_candidates_with_setlist_validation(
+            group, structural, evidence, conflicts, structural_conflict_label, observations
+        )
+        combined_matches = structural_matches + tags
+        if chosen:
+            compatible_tags = [item for item in tags if _dates_compatible(chosen, item.get("normalized", ""))]
+            incompatible_tags = [item for item in tags if not _dates_compatible(chosen, item.get("normalized", ""))]
+            if compatible_tags:
+                refinements = sorted(
+                    compatible_tags,
+                    key=lambda item: (-_date_specificity(item.get("normalized", "")), item.get("normalized", "")),
+                )
+                refined = refinements[0].get("normalized", "")
+                if _date_specificity(refined) > _date_specificity(chosen):
+                    evidence.setdefault("date", []).append(Candidate(refined, refinements[0].get("source", "tag_date_refinement"), 55))
+                    observations.append(
+                        f"compatible DATE tag refines structural date {chosen} to {refined}"
+                    )
+                    chosen = refined
+            for item in incompatible_tags:
+                observations.append(
+                    "conflicting DATE tag ignored because structural/setlist date is established: "
+                    f"{item.get('normalized', '')} != {chosen}"
+                )
+            return chosen, combined_matches
+
+        # If structural candidates themselves produced a real conflict, do not
+        # let tags decide group identity. The conflict remains for review.
+        if len(conflicts) > conflict_count_before:
+            return "", structural_matches + tags
+
+    if tags:
+        return _resolve_date_from_candidates_with_setlist_validation(
+            group, tags, evidence, conflicts, "date conflict across DATE tags", observations
+        )
+    return "", []
+
+
 def _apply_string2_to_record(record: ShowMetadata, match: Optional[Dict[str, str]], evidence: Dict[str, List[Candidate]]) -> None:
     if not match or not match.get("string2"):
         return
@@ -5387,14 +5455,21 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             dash_album_match = _find_string_dash_string_match(group)
     else:
         _blank_unusable_artist_tags_for_noncompliant(record, observations)
+        # Tag artist metadata is deliberately deferred until structural path and
+        # selected-setlist evidence have had the opportunity to identify the
+        # group. A single stale/foreign FLAC tag must not override a coherent
+        # folder/filename/setlist identity merely because the tag happens to be
+        # a valid Artist DB entry.
         deferred_tag_artist, deferred_tag_source = _selected_artist_tag_candidate(record, artist_matcher, observations)
-        tag_artist = _resolve_artist_from_tags(
-            record, artist_matcher, evidence, conflicts, observations, config=config, allow_unmatched=False
-        )
-        if tag_artist:
-            record.artist = tag_artist
-            deferred_tag_artist = ""
-            deferred_tag_source = ""
+        if deferred_tag_artist:
+            deferred_lookup_term, _deferred_qualifier = _split_terminal_performance_qualifier_from_artist(deferred_tag_artist)
+            deferred_detail, _deferred_apostrophe = _lookup_artist_detail_with_apostrophe_fallback(
+                deferred_lookup_term, artist_matcher
+            )
+            if deferred_detail["status"] != "matched":
+                observations.append(
+                    f"deferring raw tag artist while path/setlist evidence is checked: {deferred_tag_artist}"
+                )
 
         if not string_date_string_found:
             if record.artist:
@@ -5515,8 +5590,10 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                     if match.get(key):
                         item[key] = match[key]
                 date_candidates.append(item)
-            date_candidates.extend(tag_date_matches)
-            record.date, date_matches = _resolve_date_from_candidates_with_setlist_validation(group, date_candidates, evidence, conflicts, "date conflict across pattern/tag matches", observations)
+            record.date, date_matches = _resolve_date_with_structural_precedence(
+                group, date_candidates, tag_date_matches, evidence, conflicts, observations,
+                "date conflict across path pattern matches",
+            )
             if record.date:
                 for match in required_matches:
                     if match.get("date_norm") == record.date and match.get("string2"):
@@ -5525,8 +5602,10 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
         else:
             path_date_only = _collect_path_date_matches(group)
             if path_date_only:
-                date_candidates = path_date_only + tag_date_matches
-                record.date, date_matches = _resolve_date_from_candidates_with_setlist_validation(group, date_candidates, evidence, conflicts, "date conflict across path parts", observations)
+                record.date, date_matches = _resolve_date_with_structural_precedence(
+                    group, path_date_only, tag_date_matches, evidence, conflicts, observations,
+                    "date conflict across path parts",
+                )
             else:
                 if tag_date_matches:
                     record.date, date_matches = _resolve_date_from_candidates_with_setlist_validation(group, tag_date_matches, evidence, conflicts, "date conflict across DATE tags", observations)
@@ -5566,16 +5645,24 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             record.artist = _resolve_artist_from_setlist_filename(record, artist_matcher, evidence, observations, config=config)
 
         if not record.artist and deferred_tag_artist:
-            record.artist = deferred_tag_artist
-            evidence.setdefault("artist", []).append(
-                Candidate(record.artist, f"{deferred_tag_source}_unmatched:{deferred_tag_artist}", 45)
+            resolved_tag_artist = _resolve_artist_from_tags(
+                record, artist_matcher, evidence, conflicts, observations, config=config, allow_unmatched=False
             )
-            observations.append(
-                f"no DB-backed path or explicit setlist artist identified; using deferred raw tag artist: {deferred_tag_artist}"
-            )
-            # The original source order allowed a tag-derived artist to enable
-            # eTree venue/location lookup. Preserve that fallback after stronger
-            # path/setlist artist evidence has had its opportunity to win.
+            if resolved_tag_artist:
+                record.artist = resolved_tag_artist
+                observations.append(
+                    f"no stronger path or selected-setlist artist identified; using DB-backed deferred tag artist: {record.artist}"
+                )
+            else:
+                record.artist = deferred_tag_artist
+                evidence.setdefault("artist", []).append(
+                    Candidate(record.artist, f"{deferred_tag_source}_unmatched:{deferred_tag_artist}", 45)
+                )
+                observations.append(
+                    f"no DB-backed path or explicit setlist artist identified; using deferred raw tag artist: {deferred_tag_artist}"
+                )
+            # A tag-derived artist may still enable online venue/location lookup,
+            # but only after stronger local artist evidence has failed.
             if not dash_album_mode and record.date and not etree_success:
                 etree_lookup_key = _online_lookup_key(record)
                 etree_success = _apply_etree_lookup_to_record(config, record, evidence, observations)

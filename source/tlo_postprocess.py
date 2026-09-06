@@ -1,6 +1,6 @@
 """Postprocess metadata logs into setlist files, bootlist.csv, duplicate/group outputs, and summary/unidentified-show files."""
 
-__version__ = "v433"
+__version__ = "v440"
 import csv
 import json
 import os
@@ -844,6 +844,13 @@ def _adjust_show_name_for_output(record: Dict[str, str]) -> str:
     location = (record.get("location") or "").strip()
     parentheticals = (record.get("parentheticals") or "").strip()
     show_name = (record.get("show_name") or "").strip()
+    conflicted = (record.get("show_in_conflict") or "").strip().casefold() == "yes"
+    # Never invent a final identity for a conflicted record whose extractor did
+    # not commit SHOW_NAME. Such a synthetic name can point at a real source
+    # path while describing a show that never existed, corrupting bootlist.csv.
+    if conflicted and not show_name:
+        record["show_name"] = ""
+        return ""
     if artist and not date and not show_name:
         date = "xxxx-xx-xx"
         record["date"] = date

@@ -1,4 +1,4 @@
-__version__ = "v433"
+__version__ = "v440"
 import re
 
 LOCATION_CONNECTIVE_WORDS = frozenset({

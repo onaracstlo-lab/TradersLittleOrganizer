@@ -1,4 +1,4 @@
-__version__ = "v433"
+__version__ = "v440"
 from console_output_lib import console_print
 from initial_dir_walk_lib import initial_dir_walk
 from tlo_complete_path_log import compact_complete_path_log

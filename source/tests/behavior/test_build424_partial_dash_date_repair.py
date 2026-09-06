@@ -13,7 +13,7 @@ import tlo_phase23_v2 as phase
 from tlo_artist_db import ArtistMatcher
 
 pytestmark = pytest.mark.behavior
-__version__ = "v433"
+__version__ = "v440"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -99,15 +99,15 @@ def test_ray_price_folder_resolves_structured_partial_date_show():
 
 
 def test_build424_documentation_integrates_partial_boundary_date_rule():
-    requirements = Document(ROOT / "TLO_Inventory_Requirements_Working_v433.docx")
+    requirements = Document(ROOT / "TLO_Inventory_Requirements_Working_v440.docx")
     requirements_text = "\n".join(paragraph.text for paragraph in requirements.paragraphs)
-    manual_text = (ROOT / "TLO_Inventory_User_Manual_v433.rtf").read_text(
+    manual_text = (ROOT / "TLO_Inventory_User_Manual_v440.rtf").read_text(
         encoding="utf-8", errors="ignore"
     )
 
-    assert "Current document version: v433 (v1.5 Build 433)." in requirements_text
+    assert "Current document version: v440 (v1.5 Build 440)." in requirements_text
     assert "supported normalized partial date when it occurs at the beginning or end of String2" in requirements_text
     assert "Ray Price 1981-xx-xx Gilley's Pasadena, TX" in requirements_text
-    assert "Version v1.5 Build 433" in manual_text
+    assert "Version v1.5 Build 440" in manual_text
     assert "a supported partial date when that date is at the beginning or end of String2" in manual_text
     assert "Ray Price 1981-xx-xx Gilley's Pasadena, TX" in manual_text

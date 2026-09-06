@@ -7,7 +7,7 @@ from docx import Document
 import pytest
 
 pytestmark = pytest.mark.behavior
-__version__ = "v433"
+__version__ = "v440"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -24,12 +24,12 @@ def _doc_text(path: Path) -> str:
 def test_build423_public_version_and_current_documents():
     import tlo_version as V
 
-    assert V.VERSION == "v433"
+    assert V.VERSION == "v440"
     assert V.PUBLIC_VERSION == "1.5"
-    assert V.BUNDLE_BUILD == 433
-    assert V.DISPLAY_VERSION == "v1.5 Build 433"
-    assert (ROOT / "TLO_Inventory_Requirements_Working_v433.docx").is_file()
-    assert (ROOT / "TLO_Inventory_User_Manual_v433.rtf").is_file()
+    assert V.BUNDLE_BUILD == 440
+    assert V.DISPLAY_VERSION == "v1.5 Build 440"
+    assert (ROOT / "TLO_Inventory_Requirements_Working_v440.docx").is_file()
+    assert (ROOT / "TLO_Inventory_User_Manual_v440.rtf").is_file()
 
 
 def test_build423_source_bundle_contains_no_github_build_process_artifacts():
@@ -43,9 +43,9 @@ def test_build423_source_bundle_contains_no_github_build_process_artifacts():
 
 
 def test_build423_tlo_requirements_record_strict_separation_rule():
-    req = ROOT / "TLO_Inventory_Requirements_Working_v433.docx"
+    req = ROOT / "TLO_Inventory_Requirements_Working_v440.docx"
     text = _doc_text(req)
-    assert "Current document version: v433 (v1.5 Build 433)." in text
+    assert "Current document version: v440 (v1.5 Build 440)." in text
     assert "source bundle and the independently versioned GitHub Build Process are separate artifacts" in text
     assert "shall contain no GitHub Build Process files" in text
     assert "Run-TLO-GitHub-Build.ps1" in text

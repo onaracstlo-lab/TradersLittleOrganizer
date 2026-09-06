@@ -1,7 +1,7 @@
 """Bounded network response reads for small TLO metadata/API payloads."""
 from __future__ import annotations
 
-__version__ = "v433"
+__version__ = "v440"
 
 MAX_METADATA_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_ERROR_RESPONSE_BYTES = 64 * 1024

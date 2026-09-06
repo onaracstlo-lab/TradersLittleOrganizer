@@ -1,6 +1,6 @@
 """Build 419 regressions for commercial-release ALBUM tags and Parent (N) aggregation."""
 
-__version__ = "v433"
+__version__ = "v440"
 
 import os
 from types import SimpleNamespace
@@ -182,14 +182,14 @@ def test_build419_documentation_contract():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    doc = Document(root / "TLO_Inventory_Requirements_Working_v433.docx")
+    doc = Document(root / "TLO_Inventory_Requirements_Working_v440.docx")
     req = "\n".join(p.text for p in doc.paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v433.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual = (root / "TLO_Inventory_User_Manual_v440.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v433 (v1.5 Build 433)." in req
+    assert "Current document version: v440 (v1.5 Build 440)." in req
     assert "Parent/Parent (1)" in req
     assert "use ALBUM_NAME as the base Album value" in req
     assert "Build 419: Commercial multipart releases and ALBUM_NAME behavior" in req
-    assert "Version v1.5 Build 433" in manual
+    assert "Version v1.5 Build 440" in manual
     assert "Parent/Parent (1)" in manual
     assert "ALBUM_NAME" in manual

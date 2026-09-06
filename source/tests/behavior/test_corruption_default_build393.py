@@ -1,6 +1,6 @@
 """Build 393 regressions for the acceptable-corruption default."""
 
-__version__ = "v433"
+__version__ = "v440"
 
 import pytest
 

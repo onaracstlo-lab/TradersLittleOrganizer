@@ -1,5 +1,5 @@
 """Build 431 destructive-path safety regressions."""
-__version__ = "v433"
+__version__ = "v440"
 
 import argparse
 import importlib.util

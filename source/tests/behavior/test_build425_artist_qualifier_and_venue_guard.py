@@ -11,7 +11,7 @@ import tlo_phase23_v2 as P
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v433"
+__version__ = "v440"
 
 
 SETLIST = """The Travelin' McCoury's - Early Show
@@ -218,17 +218,17 @@ def test_build425_requirements_and_manual_document_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v433.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v440.docx")
     requirements_text = "\n".join(paragraph.text for paragraph in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v433.rtf").read_text(
+    manual_text = (root / "TLO_Inventory_User_Manual_v440.rtf").read_text(
         encoding="utf-8", errors="ignore"
     )
 
-    assert "Current document version: v433 (v1.5 Build 433)." in requirements_text
+    assert "Current document version: v440 (v1.5 Build 440)." in requirements_text
     assert "unique apostrophe-insensitive retry" in requirements_text
     assert "Attic inside Eddie's Attic" in requirements_text
     assert "final Show identity must end with (Early Show)" in requirements_text
-    assert "Version v1.5 Build 433" in manual_text
+    assert "Version v1.5 Build 440" in manual_text
     assert "unique-only apostrophe retry" in manual_text
     assert "Attic inside Eddie's Attic" in manual_text
     assert "retained as a parenthesized suffix" in manual_text
