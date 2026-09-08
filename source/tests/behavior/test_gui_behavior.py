@@ -1,6 +1,6 @@
 """Executable Tkinter behavior tests for layout and progress animation."""
 
-__version__ = "v446"
+__version__ = "v448"
 
 from pathlib import Path
 
@@ -54,9 +54,15 @@ def test_checkbox_grid_uses_registry_positions_and_dry_run_cell(tk_root, monkeyp
     for widget in _descendants(tk_root):
         if isinstance(widget, ttk.Checkbutton):
             text = str(widget.cget("text"))
-            if text in {option.gui_label for option in GUI_CHECKBOX_OPTIONS} | {"Dry run"}:
+            if text == "Thorough Setlist\nMatching":
+                registry_text = "Thorough Setlist Matching"
+            elif text == "Tag Copy/Delete\nOriginal":
+                registry_text = "Tag Copy/Delete Original"
+            else:
+                registry_text = text
+            if registry_text in {option.gui_label for option in GUI_CHECKBOX_OPTIONS} | {"Dry run"}:
                 info = widget.grid_info()
-                actual[text] = (int(info["row"]), int(info["column"]))
+                actual[registry_text] = (int(info["row"]), int(info["column"]))
 
     expected = {option.gui_label: (option.gui_row, option.gui_col) for option in GUI_CHECKBOX_OPTIONS}
     expected["Dry run"] = (2, 3)

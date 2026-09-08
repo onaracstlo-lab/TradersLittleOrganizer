@@ -1,4 +1,4 @@
-__version__ = "v446"
+__version__ = "v448"
 
 import argparse
 from dataclasses import dataclass
@@ -180,8 +180,9 @@ OPTIONS = [
         "thorough_setlist_matching", "--thorough-setlist-matching", "flag",
         gui="checkbox", gui_label="Thorough Setlist Matching", gui_row=3, gui_col=0,
         help=(
-            "Collect and compare additional local, eTreeDB, and enabled setlist.fm setlist candidates for better "
-            "track-title accuracy. This can substantially increase processing time and online lookups. When setlist.fm "
+            "Collect and compare additional local and enabled online setlist candidates for better track-title accuracy. "
+            "Only online sources explicitly enabled by their own lookup options are used. This can substantially increase "
+            "processing time and online lookups. When setlist.fm "
             "is enabled without setlist.fm upgrade, thorough coverage remains constrained by the normal setlist.fm "
             "rate/call limits; enable setlist.fm upgrade for broader/faster setlist.fm evidence collection."
         ),

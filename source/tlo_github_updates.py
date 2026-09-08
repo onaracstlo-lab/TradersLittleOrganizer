@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from tlo_diagnostics import debug_suppressed_exception
 
-__version__ = "v446"
+__version__ = "v448"
 
 import datetime as _dt
 import hashlib

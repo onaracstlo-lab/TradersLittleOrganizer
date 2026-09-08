@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v446"
+__version__ = "v448"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -75,6 +75,26 @@ CORRUPT_FOLDER_GUI_VALUES = {
 }
 CORRUPT_FILE_GUI_TO_POLICY = {label: value for value, label in CORRUPT_FILE_GUI_VALUES.items()}
 CORRUPT_FOLDER_GUI_TO_POLICY = {label: value for value, label in CORRUPT_FOLDER_GUI_VALUES.items()}
+
+
+def _thorough_setlist_info_message(*, thorough: bool, etree_enabled: bool, setlistfm_enabled: bool, setlistfm_upgrade: bool) -> str:
+    """Return concise Thorough status only when an enabled online source merits explanation."""
+    if not thorough or not (etree_enabled or setlistfm_enabled):
+        return ""
+    sources = []
+    if etree_enabled:
+        sources.append("etreeDB")
+    if setlistfm_enabled:
+        sources.append("setlist.fm")
+    source_text = " and ".join(sources)
+    if setlistfm_enabled and not setlistfm_upgrade:
+        return (
+            f"Thorough Setlist Matching will use {source_text} for additional setlist comparison; "
+            "setlist.fm coverage remains constrained by the normal 600-ms / 1,400-call limits unless setlist.fm upgrade is enabled."
+        )
+    if setlistfm_enabled and setlistfm_upgrade:
+        return f"Thorough Setlist Matching will use {source_text} for additional setlist comparison using upgraded setlist.fm access."
+    return f"Thorough Setlist Matching will use {source_text} for additional setlist comparison."
 
 
 def _start_activity_indicator(progress_bar) -> bool:
@@ -745,7 +765,7 @@ class App:
         row += 1
 
         ttk.Label(frm, text="Search Path", style="Main.TLabel").grid(row=row, column=0, sticky="w", padx=6, pady=(4, 1))
-        self.search_path_entry = ttk.Entry(frm, textvariable=self.vars["search_path_override"], width=86, style="Main.TEntry")
+        self.search_path_entry = ttk.Entry(frm, textvariable=self.vars["search_path_override"], width=66, style="Main.TEntry")
         self.search_path_entry.grid(
             row=row, column=1, columnspan=2, sticky="ew", padx=(12, 6), pady=(4, 1)
         )
@@ -757,7 +777,7 @@ class App:
         ttk.Label(frm, text=search_path_note, style="Main.TLabel").grid(row=row, column=1, columnspan=2, sticky="w", padx=(12, 6), pady=(0, 1))
         row += 1
         ttk.Label(frm, text="Slam", style="Main.TLabel").grid(row=row, column=0, sticky="w", padx=6, pady=(4, 1))
-        ttk.Entry(frm, textvariable=self.vars["search_path_slam_override"], width=86, style="Main.TEntry").grid(
+        ttk.Entry(frm, textvariable=self.vars["search_path_slam_override"], width=66, style="Main.TEntry").grid(
             row=row, column=1, columnspan=2, sticky="ew", padx=(12, 6), pady=(4, 1)
         )
         row += 1
@@ -834,7 +854,7 @@ class App:
             column=2,
             rowspan=3,
             sticky="nw",
-            padx=(8, 0),
+            padx=(0, 0),
             pady=(4, 4),
         )
         checkbox_frame.columnconfigure(0, weight=0)
@@ -847,9 +867,15 @@ class App:
                 checkbox_command = (lambda field=option.config_field: self._tag_mode_clicked(field))
             elif option.config_field in {"compliant", "rename_compliantly"}:
                 checkbox_command = (lambda field=option.config_field: self._compliant_rename_clicked(field))
+            if option.config_field == "thorough_setlist_matching":
+                checkbox_text = "Thorough Setlist\nMatching"
+            elif option.config_field == "tag_copy_and_delete_enabled":
+                checkbox_text = "Tag Copy/Delete\nOriginal"
+            else:
+                checkbox_text = option.gui_label
             ttk.Checkbutton(
                 checkbox_frame,
-                text=option.gui_label,
+                text=checkbox_text,
                 variable=self.bool_vars[option.config_field],
                 command=checkbox_command,
                 style="Main.Large.TCheckbutton",
@@ -857,7 +883,7 @@ class App:
                 row=option.gui_row,
                 column=option.gui_col,
                 sticky="w",
-                padx=(2, 12 if option.gui_col in (0, 1, 2) else 2),
+                padx=(0, 2 if option.gui_col in (0, 1, 2) else 0),
                 pady=(3, 3),
             )
         self.dry_run_checkbox = ttk.Checkbutton(
@@ -866,7 +892,7 @@ class App:
             variable=self.dry_run_var,
             style="Main.Large.TCheckbutton",
         )
-        self.dry_run_checkbox.grid(row=2, column=3, sticky="w", padx=(2, 2), pady=(3, 3))
+        self.dry_run_checkbox.grid(row=2, column=3, sticky="w", padx=(0, 0), pady=(3, 3))
         self._lookup_dependency_syncing = False
         self.bool_vars["setlistfm_lookup"].trace_add("write", self._reapply_lookup_dependency)
         self.bool_vars["etree_lookup"].trace_add("write", self._reapply_lookup_dependency)
@@ -1045,23 +1071,14 @@ class App:
             option_messages.append("Verified SHN conversions remove the original SHN source.")
         if bool(self.bool_vars.get("rename_compliantly", tk.BooleanVar(value=False)).get()):
             option_messages.append("Rename Compliantly may rename original folders.")
-        thorough = bool(self.bool_vars.get("thorough_setlist_matching", tk.BooleanVar(value=False)).get())
-        setlistfm_enabled = bool(self.bool_vars.get("setlistfm_lookup", tk.BooleanVar(value=False)).get())
-        setlistfm_upgrade = bool(self.bool_vars.get("setlistfm_upgrade", tk.BooleanVar(value=False)).get())
-        if thorough:
-            if setlistfm_enabled and not setlistfm_upgrade:
-                option_messages.append(
-                    "Thorough Setlist Matching may take substantially longer; setlist.fm evidence remains constrained "
-                    "by the normal 600-ms / 1,400-call limits unless setlist.fm upgrade is enabled."
-                )
-            elif setlistfm_enabled and setlistfm_upgrade:
-                option_messages.append(
-                    "Thorough Setlist Matching will proactively compare local, eTreeDB, and setlist.fm candidates using upgraded setlist.fm access."
-                )
-            else:
-                option_messages.append(
-                    "Thorough Setlist Matching will compare additional local/eTreeDB candidates; setlist.fm evidence is unavailable unless setlist.fm is enabled."
-                )
+        thorough_message = _thorough_setlist_info_message(
+            thorough=bool(self.bool_vars.get("thorough_setlist_matching", tk.BooleanVar(value=False)).get()),
+            etree_enabled=bool(self.bool_vars.get("etree_lookup", tk.BooleanVar(value=False)).get()),
+            setlistfm_enabled=bool(self.bool_vars.get("setlistfm_lookup", tk.BooleanVar(value=False)).get()),
+            setlistfm_upgrade=bool(self.bool_vars.get("setlistfm_upgrade", tk.BooleanVar(value=False)).get()),
+        )
+        if thorough_message:
+            option_messages.append(thorough_message)
 
         validation_message = ""
         if not max_workers_valid:
