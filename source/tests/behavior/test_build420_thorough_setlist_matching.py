@@ -1,6 +1,6 @@
 """Build 420 regressions for Thorough Setlist Matching."""
 
-__version__ = "v440"
+__version__ = "v446"
 
 from types import SimpleNamespace
 
@@ -199,7 +199,7 @@ def test_review_note_explains_normal_setlistfm_limits_when_thorough_without_upgr
 
     config = SimpleNamespace(
         TLOHome="/tmp/tlo", search_path_override="", performance_mode="balanced", max_workers=0,
-        acceptable_corruption_percent=100, thorough_setlist_matching=True, setlistfm_lookup=True,
+        corrupt_files="delete", corrupt_folders="all", corrupt_folder_threshold=100, thorough_setlist_matching=True, setlistfm_lookup=True,
         setlistfm_upgrade=False, etree_lookup=True, artist_in_album=True,
     )
     lines = operation_review_lines(config, operation="Full Inventory", dry_run=False)
@@ -259,9 +259,9 @@ def test_build420_documents_lock_thorough_coverage_vs_authority_contract():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v440.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v446.docx")
     req_text = "\n".join(paragraph.text for paragraph in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v440.rtf").read_text(encoding="utf-8", errors="replace")
+    manual_text = (root / "TLO_Inventory_User_Manual_v446.rtf").read_text(encoding="utf-8", errors="replace")
 
     assert "Build 420 Thorough Setlist Matching rule" in req_text
     assert "normal 600-millisecond / 1,400-call limits" in req_text

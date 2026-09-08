@@ -1,5 +1,5 @@
 """Build 433 directly testable corruption assessment/mutation regressions."""
-__version__ = "v440"
+__version__ = "v446"
 
 from types import SimpleNamespace
 
@@ -62,7 +62,7 @@ def test_assessment_is_separate_and_unverifiable_forces_no_action(monkeypatch):
     monkeypatch.setattr(C, "classify_audio_paths", lambda paths: (["a.flac"], [("b.flac", "OSError: offline")]))
     monkeypatch.setattr(C, "fully_corrupt_music_dirs", lambda *args: pytest.fail("must not derive destructive targets when unverifiable"))
 
-    result = C.assess_group_corruption(_group(), 100)
+    result = C.assess_group_corruption(_group(), "delete", "all", 100)
 
     assert result.audio_files == ["a.flac", "b.flac"]
     assert result.corrupt_files == ["a.flac"]
@@ -75,7 +75,7 @@ def test_positive_all_corrupt_assessment_authorizes_whole_show_trash(monkeypatch
     monkeypatch.setattr(C, "classify_audio_paths", lambda paths: (list(paths), []))
     monkeypatch.setattr(C, "fully_corrupt_music_dirs", lambda *args: ["/shows/show"])
 
-    result = C.assess_group_corruption(_group(), 100)
+    result = C.assess_group_corruption(_group(), "delete", "all", 100)
 
     assert not result.unverifiable
     assert result.action == "trash_folder_all_corrupt"
@@ -90,8 +90,10 @@ def test_apply_whole_show_trash_returns_structured_outcome(monkeypatch):
         corrupt_files=["a.flac"],
         action="trash_folder_all_corrupt",
         corruption_percent=100.0,
-        acceptable_percent=100,
-        fully_corrupt_dirs=["/shows/show"],
+        corrupt_files_policy="delete",
+        corrupt_folders_policy="all",
+        folder_threshold=100,
+        folder_candidates=["/shows/show"],
     )
     config = _config()
     record = _record()
@@ -112,7 +114,9 @@ def test_unverifiable_assessment_never_calls_trash(monkeypatch):
         corrupt_files=[],
         unverifiable_details=[("a.flac", "PermissionError: locked")],
         action="none",
-        acceptable_percent=100,
+        corrupt_files_policy="delete",
+        corrupt_folders_policy="all",
+        folder_threshold=100,
     )
     config = _config()
 
@@ -131,7 +135,7 @@ def test_handle_group_corruption_fails_closed_on_unexpected_assessment_error(mon
     monkeypatch.setattr(C, "move_to_trash", lambda path: pytest.fail("unexpected failure must not trash"))
     config = _config()
 
-    outcome = C.handle_group_corruption(config, _group(), _record(), 100)
+    outcome = C.handle_group_corruption(config, _group(), _record(), "delete", "all", 100)
 
     assert outcome.unverifiable
     assert outcome.unexpected_error.startswith("RuntimeError:")

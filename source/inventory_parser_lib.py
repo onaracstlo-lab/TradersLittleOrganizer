@@ -1,4 +1,4 @@
-__version__ = "v440"
+__version__ = "v446"
 import argparse
 import sys
 import os
@@ -12,10 +12,13 @@ from tlo_options import (
     namespace_values,
     parse_bool,
     parse_compliant_artist_mode,
+    parse_corrupt_file_policy,
+    parse_corrupt_folder_policy,
     parse_max_workers,
     parse_percent_0_100,
     parse_performance_mode,
     validate_compliant_rename_exclusivity,
+    validate_corruption_policy,
 )
 from tlo_path_inputs import (
     strip_optional_quotes,
@@ -61,7 +64,9 @@ class Config:
     setlistfm_lookup: bool = False
     setlistfm_upgrade: bool = False
     thorough_setlist_matching: bool = False
-    acceptable_corruption_percent: int = 100
+    corrupt_files: str = "delete"
+    corrupt_folders: str = "all"
+    corrupt_folder_threshold: int = 100
     setlistfm_min_interval_seconds: float = 0.600
     setlistfm_max_calls: int = 1400
     setlistfm_max_calls_per_day: int = 0
@@ -190,7 +195,9 @@ def build_inventory_parser() -> argparse.ArgumentParser:
         "setlistfm_lookup",
         "setlistfm_upgrade",
         "thorough_setlist_matching",
-        "acceptable_corruption_percent",
+        "corrupt_files",
+        "corrupt_folders",
+        "corrupt_folder_threshold",
         "performance_mode",
         "max_workers",
         "current_storage_volume",
@@ -236,6 +243,10 @@ def parse_command_line():
 
     values = vars(parsed)
     _apply_lookup_dependency_or_parser_error(values, parser, mode="strict")
+    try:
+        validate_corruption_policy(values, require_explicit_threshold=True)
+    except ValueError as exc:
+        parser.error(str(exc))
     _validate_tag_copy_values(values, parser)
     prompt_for_compliant_artist_mode(parsed)
     return vars(parsed)
@@ -246,6 +257,9 @@ def build_config():
     values = namespace_values(argparse.Namespace(**cli_config))
     _apply_lookup_dependency_or_parser_error(values, mode="strict")
     validate_compliant_rename_exclusivity(values)
+    # Command-line strictness is applied before namespace defaults are expanded.
+    # Re-normalize the three policy values here without requiring explicit threshold presence.
+    validate_corruption_policy(values, require_explicit_threshold=False)
     _validate_tag_copy_values(values)
     config = Config(
         debug=bool(cli_config.get("debug", False)),
@@ -269,7 +283,9 @@ def build_config():
         setlistfm_lookup=bool(values.get("setlistfm_lookup", False)),
         setlistfm_upgrade=bool(values.get("setlistfm_upgrade", False)),
         thorough_setlist_matching=bool(values.get("thorough_setlist_matching", False)),
-        acceptable_corruption_percent=parse_percent_0_100(values.get("acceptable_corruption_percent", 100)),
+        corrupt_files=parse_corrupt_file_policy(values.get("corrupt_files", "delete")),
+        corrupt_folders=parse_corrupt_folder_policy(values.get("corrupt_folders", "all")),
+        corrupt_folder_threshold=parse_percent_0_100(values.get("corrupt_folder_threshold", 100)),
         performance_mode=values.get("performance_mode", "balanced") or "balanced",
         max_workers=int(values.get("max_workers", 0) or 0),
         current_volume_label=resolve_current_storage_volume(values.get("current_storage_volume")),

@@ -1,5 +1,5 @@
 """Build 433 contract: GitHub Build Process remains outside the TLO source bundle."""
-__version__ = "v440"
+__version__ = "v446"
 
 from pathlib import Path
 from docx import Document
@@ -27,13 +27,13 @@ def test_build433_source_bundle_excludes_all_process_artifacts():
 
 
 def test_build433_source_readme_documents_process_separation():
-    text = (ROOT / "SOURCE_BUNDLE_README_v440.txt").read_text(encoding="utf-8")
+    text = (ROOT / "SOURCE_BUNDLE_README_v446.txt").read_text(encoding="utf-8")
     assert "No GitHub Build Process artifact is included in this source bundle." in text
     assert "independently versioned and distributed as its own separate package" in text
 
 
 def test_build433_requirements_document_process_separation():
-    text = _doc_text(ROOT / "TLO_Inventory_Requirements_Working_v440.docx")
+    text = _doc_text(ROOT / "TLO_Inventory_Requirements_Working_v446.docx")
     assert "shall contain no GitHub Build Process files" in text
     assert "TLO_GitHub_Build_Process_v<PROCESS>.zip" in text
     assert "transient build-process helpers" in text

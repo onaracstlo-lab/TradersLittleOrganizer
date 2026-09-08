@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v440"
+__version__ = "v446"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -32,8 +32,11 @@ from tlo_options import (
     add_options_to_parser,
     apply_lookup_dependency,
     parse_bool,
+    parse_corrupt_file_policy,
+    parse_corrupt_folder_policy,
     parse_percent_0_100,
     validate_compliant_rename_exclusivity,
+    validate_corruption_policy,
 )
 from tlo_path_inputs import normalize_platform_input_path, resolve_current_storage_volume, resolve_tlo_home as resolve_inventory_tlo_home
 from logging_lib import delete_logs_for_tokens
@@ -60,6 +63,18 @@ TAGGER_OUTPUT_TEXT_WIDTH = 55
 TAGGER_MODE_WRAP_PIXELS = 520
 TAGGER_DISPLAY_VERSION = versioned_title("TLO Tagger GUI")
 GUI_THREAD_CALLBACK_TIMEOUT_SECONDS = 30.0
+
+CORRUPT_FILE_GUI_VALUES = {
+    "keep": "Keep and report",
+    "delete": "Delete corrupt files",
+}
+CORRUPT_FOLDER_GUI_VALUES = {
+    "never": "Never",
+    "all": "100% corrupt only",
+    "threshold": "At threshold",
+}
+CORRUPT_FILE_GUI_TO_POLICY = {label: value for value, label in CORRUPT_FILE_GUI_VALUES.items()}
+CORRUPT_FOLDER_GUI_TO_POLICY = {label: value for value, label in CORRUPT_FOLDER_GUI_VALUES.items()}
 
 
 def _start_activity_indicator(progress_bar) -> bool:
@@ -513,6 +528,9 @@ def _parse_gui_command_line(argv=None):
         "artist_in_album",
         "etree_lookup",
         "setlistfm_lookup",
+        "corrupt_files",
+        "corrupt_folders",
+        "corrupt_folder_threshold",
         "performance_mode",
         "max_workers",
         "current_storage_volume",
@@ -531,6 +549,7 @@ def _parse_gui_command_line(argv=None):
     try:
         apply_lookup_dependency(vars(args), mode="strict")
         validate_compliant_rename_exclusivity(vars(args))
+        validate_corruption_policy(vars(args), require_explicit_threshold=True)
     except ValueError as exc:
         parser.error(str(exc))
     legacy_artist_mode = str(getattr(args, "compliant_artist_mode", "") or "").strip().lower().replace("_", "-")
@@ -660,23 +679,30 @@ class App:
         )
         self._max_workers_auto_default = not (cli_max_workers_supplied and cli_max_workers > 0)
         self._setting_max_workers_programmatically = False
+        cli_corrupt_files = parse_corrupt_file_policy(getattr(self.cli_args, "corrupt_files", "delete"))
+        cli_corrupt_folders = parse_corrupt_folder_policy(getattr(self.cli_args, "corrupt_folders", "all"))
+        cli_corrupt_threshold = parse_percent_0_100(getattr(self.cli_args, "corrupt_folder_threshold", 100))
         defaults = {
             "search_path_override": (getattr(self.cli_args, "search_path_override", "") or "").strip(),
             "search_path_slam_override": (getattr(self.cli_args, "search_path_slam_override", "") or "").strip(),
             "performance_mode": performance_mode_default,
             "max_workers": str(initial_max_workers),
-            "acceptable_corruption_percent": str(parse_percent_0_100(getattr(self.cli_args, "acceptable_corruption_percent", 100))),
+            "corrupt_files": CORRUPT_FILE_GUI_VALUES[cli_corrupt_files],
+            "corrupt_folders": CORRUPT_FOLDER_GUI_VALUES[cli_corrupt_folders],
+            "corrupt_folder_threshold": str(cli_corrupt_threshold),
         }
         self.vars = {key: tk.StringVar(value=value) for key, value in defaults.items()}
-        self.option_status_var = tk.StringVar(value="Checking option combination...")
+        self.option_status_var = tk.StringVar(value="")
         self.progress_stage_var = tk.StringVar(value="Ready")
         self.progress_item_var = tk.StringVar(value="")
         self.progress_counts_var = tk.StringVar(value="")
         self.progress_elapsed_var = tk.StringVar(value="Elapsed: 0:00")
         self.vars["performance_mode"].trace_add("write", self._sync_max_workers_to_performance_mode)
         self.vars["max_workers"].trace_add("write", self._mark_max_workers_manual)
-        for validation_field in ("search_path_override", "max_workers", "acceptable_corruption_percent"):
+        for validation_field in ("search_path_override", "max_workers", "corrupt_folder_threshold"):
             self.vars[validation_field].trace_add("write", self._schedule_inline_validation)
+        self.vars["corrupt_files"].trace_add("write", self._schedule_inline_validation)
+        self.vars["corrupt_folders"].trace_add("write", self._corruption_folder_policy_changed)
 
         row = 0
         ttk.Label(frm, text="Traders Little Organizer™ Inventory App", font=self.title_font).grid(
@@ -719,7 +745,7 @@ class App:
         row += 1
 
         ttk.Label(frm, text="Search Path", style="Main.TLabel").grid(row=row, column=0, sticky="w", padx=6, pady=(4, 1))
-        self.search_path_entry = ttk.Entry(frm, textvariable=self.vars["search_path_override"], width=92, style="Main.TEntry")
+        self.search_path_entry = ttk.Entry(frm, textvariable=self.vars["search_path_override"], width=86, style="Main.TEntry")
         self.search_path_entry.grid(
             row=row, column=1, columnspan=2, sticky="ew", padx=(12, 6), pady=(4, 1)
         )
@@ -731,20 +757,21 @@ class App:
         ttk.Label(frm, text=search_path_note, style="Main.TLabel").grid(row=row, column=1, columnspan=2, sticky="w", padx=(12, 6), pady=(0, 1))
         row += 1
         ttk.Label(frm, text="Slam", style="Main.TLabel").grid(row=row, column=0, sticky="w", padx=6, pady=(4, 1))
-        ttk.Entry(frm, textvariable=self.vars["search_path_slam_override"], width=92, style="Main.TEntry").grid(
+        ttk.Entry(frm, textvariable=self.vars["search_path_slam_override"], width=86, style="Main.TEntry").grid(
             row=row, column=1, columnspan=2, sticky="ew", padx=(12, 6), pady=(4, 1)
         )
         row += 1
         ttk.Label(frm, text="(optional/override)", style="Main.TLabel").grid(row=row, column=1, columnspan=2, sticky="w", padx=(12, 6), pady=(0, 6))
         row += 1
 
+        performance_options_row = row
         ttk.Label(frm, text="Performance Mode", style="Main.TLabel").grid(row=row, column=0, sticky="w", padx=6, pady=(4, 3))
         self.performance_combo = ttk.Combobox(
             frm,
             textvariable=self.vars["performance_mode"],
             values=("gentle", "balanced", "fast", "extreme"),
             state="readonly",
-            width=18,
+            width=10,
             style="Main.TCombobox",
         )
         self.performance_combo.grid(row=row, column=1, sticky="w", padx=(12, 6), pady=(4, 3))
@@ -756,10 +783,44 @@ class App:
         )
         row += 1
 
-        ttk.Label(frm, text="acceptable corruption %", style="Main.TLabel").grid(row=row, column=0, sticky="w", padx=6, pady=(4, 3))
-        ttk.Entry(frm, textvariable=self.vars["acceptable_corruption_percent"], width=12, style="Main.TEntry").grid(
-            row=row, column=1, sticky="w", padx=(12, 6), pady=(4, 3)
+        corruption_frame = ttk.LabelFrame(frm, text="Corruption Handling", padding=(4, 2))
+        corruption_frame.grid(row=row, column=0, columnspan=2, sticky="w", padx=4, pady=(3, 2))
+        ttk.Label(corruption_frame, text="Corrupt files", style="Main.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 4), pady=1)
+        self.corrupt_files_combo = ttk.Combobox(
+            corruption_frame,
+            textvariable=self.vars["corrupt_files"],
+            values=tuple(CORRUPT_FILE_GUI_VALUES.values()),
+            state="readonly",
+            width=15,
+            style="Main.TCombobox",
         )
+        self.corrupt_files_combo.grid(row=0, column=1, sticky="w", pady=1)
+
+        ttk.Label(corruption_frame, text="Folder removal", style="Main.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 4), pady=1)
+        self.corrupt_folders_combo = ttk.Combobox(
+            corruption_frame,
+            textvariable=self.vars["corrupt_folders"],
+            values=tuple(CORRUPT_FOLDER_GUI_VALUES.values()),
+            state="readonly",
+            width=15,
+            style="Main.TCombobox",
+        )
+        self.corrupt_folders_combo.grid(row=1, column=1, sticky="w", pady=1)
+
+        ttk.Label(
+            corruption_frame,
+            text="Folder corruption\nthreshold",
+            justify="left",
+            style="Main.TLabel",
+        ).grid(row=2, column=0, sticky="w", padx=(0, 4), pady=1)
+        threshold_value_frame = ttk.Frame(corruption_frame)
+        threshold_value_frame.grid(row=2, column=1, sticky="w", pady=1)
+        self.corruption_threshold_entry = ttk.Entry(
+            threshold_value_frame, textvariable=self.vars["corrupt_folder_threshold"], width=5, style="Main.TEntry"
+        )
+        self.corruption_threshold_entry.grid(row=0, column=0, sticky="w")
+        ttk.Label(threshold_value_frame, text="%", style="Main.TLabel").grid(row=0, column=1, sticky="w", padx=(1, 0))
+        self._sync_corruption_threshold_state()
         row += 1
 
         self.bool_vars = {
@@ -768,7 +829,14 @@ class App:
         }
         self.dry_run_var = tk.BooleanVar(value=False)
         checkbox_frame = ttk.Frame(frm)
-        checkbox_frame.grid(row=row, column=0, columnspan=3, sticky="w", padx=0, pady=(4, 4))
+        checkbox_frame.grid(
+            row=performance_options_row,
+            column=2,
+            rowspan=3,
+            sticky="nw",
+            padx=(8, 0),
+            pady=(4, 4),
+        )
         checkbox_frame.columnconfigure(0, weight=0)
         checkbox_frame.columnconfigure(1, weight=0)
         checkbox_frame.columnconfigure(2, weight=0)
@@ -789,7 +857,7 @@ class App:
                 row=option.gui_row,
                 column=option.gui_col,
                 sticky="w",
-                padx=(4, 24 if option.gui_col in (0, 1, 2) else 4),
+                padx=(2, 12 if option.gui_col in (0, 1, 2) else 2),
                 pady=(3, 3),
             )
         self.dry_run_checkbox = ttk.Checkbutton(
@@ -798,7 +866,7 @@ class App:
             variable=self.dry_run_var,
             style="Main.Large.TCheckbutton",
         )
-        self.dry_run_checkbox.grid(row=2, column=3, sticky="w", padx=(4, 4), pady=(3, 3))
+        self.dry_run_checkbox.grid(row=2, column=3, sticky="w", padx=(2, 2), pady=(3, 3))
         self._lookup_dependency_syncing = False
         self.bool_vars["setlistfm_lookup"].trace_add("write", self._reapply_lookup_dependency)
         self.bool_vars["etree_lookup"].trace_add("write", self._reapply_lookup_dependency)
@@ -809,10 +877,9 @@ class App:
         self._reapply_lookup_dependency()
         self._reapply_tag_mode_exclusivity()
         self._reapply_compliant_rename_exclusivity()
-        row += 1
-        ttk.Label(frm, textvariable=self.option_status_var, justify="left", wraplength=1000).grid(
-            row=row, column=0, columnspan=3, sticky="w", padx=6, pady=(0, 4)
-        )
+        self.option_status_label = ttk.Label(frm, textvariable=self.option_status_var, justify="left", wraplength=1000)
+        self.option_status_label.grid(row=row, column=0, columnspan=3, sticky="w", padx=6, pady=(0, 4))
+        self.option_status_label.grid_remove()
         row += 1
 
         button_frame = ttk.Frame(frm)
@@ -917,6 +984,20 @@ class App:
             on_error=lambda msg: messagebox.showwarning("tlo-ggi", msg, parent=self.root),
         )
 
+    def _corruption_folder_policy_changed(self, *_args):
+        self._sync_corruption_threshold_state()
+        self._schedule_inline_validation()
+
+    def _sync_corruption_threshold_state(self):
+        entry = getattr(self, "corruption_threshold_entry", None)
+        if entry is None:
+            return
+        policy = CORRUPT_FOLDER_GUI_TO_POLICY.get(self.vars["corrupt_folders"].get(), "all")
+        try:
+            entry.configure(state=("normal" if policy == "threshold" else "disabled"))
+        except tk.TclError:
+            pass
+
     def _schedule_inline_validation(self, *_args):
         try:
             if self._validation_after_id is not None:
@@ -936,7 +1017,6 @@ class App:
                 search_status = type(search_status)("error", str(exc))
         else:
             search_status = validate_search_path(self.vars["search_path_override"].get(), tlo_home)
-        copy_delete_enabled = bool(self.bool_vars.get("tag_copy_and_delete_enabled", tk.BooleanVar(value=False)).get())
         max_workers_valid = True
         try:
             max_workers = int((self.vars["max_workers"].get() or "0").strip())
@@ -945,16 +1025,18 @@ class App:
         except Exception:
             max_workers_valid = False
 
+        corrupt_folder_policy = CORRUPT_FOLDER_GUI_TO_POLICY.get(self.vars["corrupt_folders"].get(), "all")
         corruption_percent_valid = True
-        try:
-            corruption_percent = parse_percent_0_100(self.vars["acceptable_corruption_percent"].get())
-        except Exception:
-            corruption_percent_valid = False
+        if corrupt_folder_policy == "threshold":
+            try:
+                parse_percent_0_100(self.vars["corrupt_folder_threshold"].get())
+            except Exception:
+                corruption_percent_valid = False
 
         option_messages = []
         if bool(self.bool_vars["tag_copy_during_inventory"].get()):
             option_messages.append("Tag Copy destination will be requested after Inventory is started.")
-        if copy_delete_enabled:
+        if bool(self.bool_vars.get("tag_copy_and_delete_enabled", tk.BooleanVar(value=False)).get()):
             option_messages.append(
                 "Tag Copy/Delete Original destination will be requested after Inventory is started; "
                 "the original material will be removed after verified transfer."
@@ -980,15 +1062,30 @@ class App:
                 option_messages.append(
                     "Thorough Setlist Matching will compare additional local/eTreeDB candidates; setlist.fm evidence is unavailable unless setlist.fm is enabled."
                 )
-        if not option_messages:
-            option_messages.append("Option combination is ready.")
+
+        validation_message = ""
         if not max_workers_valid:
-            option_messages = ["Max Workers must be an integer of zero or greater."]
-        if not corruption_percent_valid:
-            option_messages = ["acceptable corruption % must be an integer from 0 through 100."]
+            validation_message = "Max Workers must be an integer of zero or greater."
+        elif not corruption_percent_valid:
+            validation_message = "Folder corruption threshold must be an integer from 0 through 100 when Folder removal is At threshold."
 
         form_values_valid = bool(max_workers_valid and corruption_percent_valid)
-        self.option_status_var.set(("Error: " if not form_values_valid else "Info: ") + " ".join(option_messages))
+        if validation_message:
+            status_message = "Error: " + validation_message
+        elif option_messages:
+            status_message = "Info: " + " ".join(option_messages)
+        else:
+            status_message = ""
+        self.option_status_var.set(status_message)
+        status_label = getattr(self, "option_status_label", None)
+        if status_label is not None:
+            try:
+                if status_message:
+                    status_label.grid()
+                else:
+                    status_label.grid_remove()
+            except tk.TclError:
+                pass
         self._form_valid = bool(search_status.valid and max_workers_valid)
         self._form_valid = bool(self._form_valid and corruption_percent_valid)
         self._update_main_action_states()
@@ -2306,7 +2403,19 @@ class App:
             setlistfm_lookup=self.bool_vars["setlistfm_lookup"].get(),
             setlistfm_upgrade=bool(getattr(self.bool_vars.get("setlistfm_upgrade"), "get", lambda: False)()),
             thorough_setlist_matching=bool(getattr(self.bool_vars.get("thorough_setlist_matching"), "get", lambda: False)()),
-            acceptable_corruption_percent=parse_percent_0_100(getattr(self.vars.get("acceptable_corruption_percent"), "get", lambda: "100")()),
+            corrupt_files=CORRUPT_FILE_GUI_TO_POLICY.get(
+                getattr(self.vars.get("corrupt_files"), "get", lambda: CORRUPT_FILE_GUI_VALUES["delete"])(), "delete"
+            ),
+            corrupt_folders=CORRUPT_FOLDER_GUI_TO_POLICY.get(
+                getattr(self.vars.get("corrupt_folders"), "get", lambda: CORRUPT_FOLDER_GUI_VALUES["all"])(), "all"
+            ),
+            corrupt_folder_threshold=(
+                parse_percent_0_100(getattr(self.vars.get("corrupt_folder_threshold"), "get", lambda: "100")())
+                if CORRUPT_FOLDER_GUI_TO_POLICY.get(
+                    getattr(self.vars.get("corrupt_folders"), "get", lambda: CORRUPT_FOLDER_GUI_VALUES["all"])(), "all"
+                ) == "threshold"
+                else 100
+            ),
             performance_mode=performance_mode,
             max_workers=max_workers,
         )

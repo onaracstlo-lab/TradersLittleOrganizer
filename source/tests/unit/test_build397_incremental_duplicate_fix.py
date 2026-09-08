@@ -1,6 +1,6 @@
 """Regression tests for incremental Add Shows duplicate artist validation."""
 
-__version__ = "v440"
+__version__ = "v446"
 
 from types import SimpleNamespace
 

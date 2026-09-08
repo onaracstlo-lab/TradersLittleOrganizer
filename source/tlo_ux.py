@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v440"
+__version__ = "v446"
 
 
 import copy
@@ -299,7 +299,14 @@ def operation_review_lines(
             f"Performance: {getattr(config, 'performance_mode', 'balanced')} / "
             f"max workers {getattr(config, 'max_workers', 0)}"
         )
-        lines.append(f"Acceptable corruption %: {int(getattr(config, 'acceptable_corruption_percent', 100) or 0)}")
+        corrupt_files = str(getattr(config, "corrupt_files", "delete") or "delete")
+        corrupt_folders = str(getattr(config, "corrupt_folders", "all") or "all")
+        file_display = {"keep": "Keep and report", "delete": "Delete corrupt files"}.get(corrupt_files, corrupt_files)
+        folder_display = {"never": "Never", "all": "100% corrupt only", "threshold": "At threshold"}.get(corrupt_folders, corrupt_folders)
+        lines.append(f"Corrupt files: {file_display}")
+        lines.append(f"Folder removal: {folder_display}")
+        if corrupt_folders == "threshold":
+            lines.append(f"Folder corruption threshold: {int(getattr(config, 'corrupt_folder_threshold', 100) or 0)}%")
         copy_delete = str(getattr(config, "tag_copy_and_delete_path", "") or "").strip()
         destination = str(getattr(config, "tag_copy_destination", "") or copy_delete).strip()
         if destination:
@@ -533,28 +540,43 @@ def preview_operation(
                     actions = _preview_actions(preview_config, copy_mode=copy_mode, tagger=tagger, shn_count=shn_count)
                     if not tagger:
                         try:
-                            from tlo_corruption import classify_audio_paths, corruption_action, fully_corrupt_music_dirs, group_audio_snapshot
+                            from tlo_corruption import classify_audio_paths, corruption_action, qualifying_corrupt_music_dirs, group_audio_snapshot
                             corruption_audio, snapshot_errors = group_audio_snapshot(group)
                             corruption_bad, unverifiable_files = classify_audio_paths(corruption_audio)
-                            corruption_limit = int(getattr(preview_config, "acceptable_corruption_percent", 100) or 0)
+                            file_policy = str(getattr(preview_config, "corrupt_files", "delete") or "delete")
+                            folder_policy = str(getattr(preview_config, "corrupt_folders", "all") or "all")
+                            folder_threshold = int(getattr(preview_config, "corrupt_folder_threshold", 100) or 0)
                             unverifiable = list(snapshot_errors) + list(unverifiable_files)
-                            corruption_policy = "unverifiable" if unverifiable else corruption_action(len(corruption_audio), len(corruption_bad), corruption_limit)
+                            corruption_policy = (
+                                "unverifiable"
+                                if unverifiable
+                                else corruption_action(
+                                    len(corruption_audio), len(corruption_bad), file_policy, folder_policy, folder_threshold
+                                )
+                            )
                             pct = (100.0 * len(corruption_bad) / len(corruption_audio)) if corruption_audio else 0.0
                             if corruption_policy == "unverifiable":
                                 actions = tuple(actions) + (f"CORRUPTION_UNVERIFIABLE ({len(unverifiable)} read/validator error(s); WOULD_NOT_TRASH; mutation steps would be skipped)",)
-                            if corruption_policy == "trash_folder_all_corrupt":
-                                actions = tuple(actions) + (f"WOULD_TRASH_CORRUPT_FOLDER ({len(corruption_bad)}/{len(corruption_audio)} = {pct:.2f}%; all audio corrupt; acceptable setting ignored)",)
+                            elif corruption_policy == "trash_folder_all_corrupt":
+                                actions = tuple(actions) + (f"WOULD_TRASH_CORRUPT_FOLDER ({len(corruption_bad)}/{len(corruption_audio)} = {pct:.2f}%; folder policy=100% corrupt only)",)
                             elif corruption_policy == "trash_folder_threshold":
-                                actions = tuple(actions) + (f"WOULD_TRASH_CORRUPT_FOLDER ({len(corruption_bad)}/{len(corruption_audio)} = {pct:.2f}% > {corruption_limit}%)",)
-                            elif corruption_policy == "trash_corrupt_files":
-                                all_bad_dirs = fully_corrupt_music_dirs(group, corruption_audio, corruption_bad)
-                                if all_bad_dirs:
-                                    labels = ", ".join(os.path.basename(os.path.normpath(path)) or os.path.normpath(path) for path in all_bad_dirs)
-                                    actions = tuple(actions) + (f"WOULD_TRASH_ALL_CORRUPT_MUSIC_FOLDER(S) ({len(all_bad_dirs)}: {labels}; acceptable setting does not protect an all-corrupt folder)",)
-                                bad_dir_keys = {os.path.normcase(os.path.normpath(path)) for path in all_bad_dirs}
-                                remaining_bad = [path for path in corruption_bad if os.path.normcase(os.path.normpath(os.path.dirname(path))) not in bad_dir_keys]
-                                if remaining_bad:
-                                    actions = tuple(actions) + (f"WOULD_TRASH_CORRUPT_FILES ({len(remaining_bad)} file(s); overall {pct:.2f}% <= {corruption_limit}%)",)
+                                actions = tuple(actions) + (f"WOULD_TRASH_CORRUPT_FOLDER ({len(corruption_bad)}/{len(corruption_audio)} = {pct:.2f}% >= {folder_threshold}%)",)
+                            else:
+                                folder_candidates = qualifying_corrupt_music_dirs(
+                                    group, corruption_audio, corruption_bad, folder_policy, folder_threshold
+                                )
+                                if folder_candidates:
+                                    labels = ", ".join(os.path.basename(os.path.normpath(path)) or os.path.normpath(path) for path in folder_candidates)
+                                    actions = tuple(actions) + (f"WOULD_TRASH_CORRUPT_MUSIC_FOLDER(S) ({len(folder_candidates)}: {labels}; folder policy={folder_policy})",)
+                                candidate_keys = {os.path.normcase(os.path.normpath(path)) for path in folder_candidates}
+                                remaining_bad = [
+                                    path for path in corruption_bad
+                                    if os.path.normcase(os.path.normpath(os.path.dirname(path))) not in candidate_keys
+                                ]
+                                if remaining_bad and file_policy == "delete":
+                                    actions = tuple(actions) + (f"WOULD_TRASH_CORRUPT_FILES ({len(remaining_bad)} file(s); file policy=delete)",)
+                                elif remaining_bad:
+                                    actions = tuple(actions) + (f"WOULD_KEEP_AND_REPORT_CORRUPT_FILES ({len(remaining_bad)} file(s); file policy=keep)",)
                         except Exception as exc:
                             result.issues.append(RunIssue("Corruption dry-run check failed", str(exc), str(group.get("main_dir_path") or root), "warning", "preview"))
                     tags = [PreviewTag(**entry) for entry in (plan.get("tags", []) or [])]

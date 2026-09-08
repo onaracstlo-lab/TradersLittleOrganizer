@@ -1,5 +1,5 @@
 """Build 400/431 corruption classification and fail-closed mutation safeguards."""
-__version__ = "v440"
+__version__ = "v446"
 
 from pathlib import Path
 
@@ -83,7 +83,7 @@ def test_build400_group_listing_error_is_unverifiable(monkeypatch, tmp_path):
 
 
 def test_build400_all_proven_corrupt_still_overrides_100_percent_setting():
-    assert C.corruption_action(3, 3, 100) == "trash_folder_all_corrupt"
+    assert C.corruption_action(3, 3, "delete", "all", 100) == "trash_folder_all_corrupt"
 
 
 def test_build400_windows_trash_has_no_legacy_shfileoperation_fallback():

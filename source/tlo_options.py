@@ -1,4 +1,4 @@
-__version__ = "v440"
+__version__ = "v446"
 
 import argparse
 from dataclasses import dataclass
@@ -26,10 +26,24 @@ def parse_percent_0_100(value):
     try:
         num = int(str(value).strip())
     except Exception:
-        raise argparse.ArgumentTypeError("acceptable-corruption-percent must be an integer from 0 through 100")
+        raise argparse.ArgumentTypeError("percentage must be an integer from 0 through 100")
     if num < 0 or num > 100:
-        raise argparse.ArgumentTypeError("acceptable-corruption-percent must be an integer from 0 through 100")
+        raise argparse.ArgumentTypeError("percentage must be an integer from 0 through 100")
     return num
+
+
+def parse_corrupt_file_policy(value):
+    val = str(value or "delete").strip().lower()
+    if val not in {"keep", "delete"}:
+        raise argparse.ArgumentTypeError("corrupt-files must be keep or delete")
+    return val
+
+
+def parse_corrupt_folder_policy(value):
+    val = str(value or "all").strip().lower()
+    if val not in {"never", "all", "threshold"}:
+        raise argparse.ArgumentTypeError("corrupt-folders must be never, all, or threshold")
+    return val
 
 
 def parse_max_workers(value):
@@ -173,9 +187,21 @@ OPTIONS = [
         ),
     ),
     Option(
-        "acceptable_corruption_percent", "--acceptable-corruption-percent", "int",
-        default=100, metavar="N", type_func=parse_percent_0_100,
-        help="If more than this percentage of a logical show's audio files are corrupt, move the logical show folder to the OS Trash/Recycle Bin and omit it from inventory. If all logical-show audio is corrupt, always trash the logical show folder regardless of this setting. When the logical show remains, any individual music folder whose direct audio is all corrupt is trashed regardless of the setting, and all other detected corrupt audio files are trashed individually. Integer 0-100; default 100.",
+        "corrupt_files", "--corrupt-files", "choice",
+        default="delete", choices=("keep", "delete"), metavar="ACTION",
+        type_func=parse_corrupt_file_policy,
+        help="Individual corrupt-file handling when the containing folder is retained: keep reports the corrupt files without moving them; delete moves the corrupt files to the OS Trash/Recycle Bin. Default delete.",
+    ),
+    Option(
+        "corrupt_folders", "--corrupt-folders", "choice",
+        default="all", choices=("never", "all", "threshold"), metavar="POLICY",
+        type_func=parse_corrupt_folder_policy,
+        help="Folder-removal policy for proven corruption: never means never remove a folder because of corruption; all removes a folder only when 100%% of its directly inventoried audio is corrupt; threshold removes a folder when its proven corruption percentage is at or above --corrupt-folder-threshold. Default all.",
+    ),
+    Option(
+        "corrupt_folder_threshold", "--corrupt-folder-threshold", "int",
+        default=100, metavar="PERCENT", type_func=parse_percent_0_100, suppress_absent=True,
+        help="Folder corruption percentage, 0-100 inclusive, used only with --corrupt-folders threshold. The option is required in threshold mode and rejected for the other folder policies.",
     ),
     Option(
         "performance_mode", "--performance-mode", "choice",
@@ -255,6 +281,24 @@ def namespace_values(namespace: argparse.Namespace, fields: Optional[Sequence[st
         option.config_field: getattr(namespace, option.config_field, option.default)
         for option in iter_options(fields)
     }
+
+
+def validate_corruption_policy(values: dict, *, require_explicit_threshold: bool = False) -> None:
+    """Validate the independent corrupt-file and corrupt-folder policy fields."""
+    file_policy = parse_corrupt_file_policy(values.get("corrupt_files", "delete"))
+    folder_policy = parse_corrupt_folder_policy(values.get("corrupt_folders", "all"))
+    threshold_present = "corrupt_folder_threshold" in values and values.get("corrupt_folder_threshold") is not None
+
+    if folder_policy == "threshold":
+        if require_explicit_threshold and not threshold_present:
+            raise ValueError("--corrupt-folders threshold requires --corrupt-folder-threshold PERCENT.")
+        if threshold_present:
+            values["corrupt_folder_threshold"] = parse_percent_0_100(values.get("corrupt_folder_threshold"))
+    elif threshold_present and require_explicit_threshold:
+        raise ValueError("--corrupt-folder-threshold is only valid with --corrupt-folders threshold.")
+
+    values["corrupt_files"] = file_policy
+    values["corrupt_folders"] = folder_policy
 
 
 def validate_compliant_rename_exclusivity(values: dict) -> None:

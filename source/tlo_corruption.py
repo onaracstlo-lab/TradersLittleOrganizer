@@ -1,7 +1,7 @@
 """Pre-mutation audio corruption threshold handling for TLO."""
 from __future__ import annotations
 
-__version__ = "v440"
+__version__ = "v446"
 
 import ctypes
 import os
@@ -168,26 +168,74 @@ def fully_corrupt_music_dirs(group, audio_files=None, bad_files=None):
 
 
 def exceeds_threshold(total, bad, acceptable_percent):
+    """Legacy strict-threshold helper retained for historical regression tests only."""
     return total > 0 and bad * 100 > int(acceptable_percent) * total
 
 
-def corruption_action(total, bad, acceptable_percent):
-    """Return the Trash/Recycle action for *proven* corruption.
+def meets_corruption_threshold(total, bad, threshold_percent):
+    """Return True when proven corruption is at or above the configured percentage."""
+    total = max(0, int(total or 0))
+    bad = max(0, int(bad or 0))
+    threshold_percent = int(threshold_percent)
+    return total > 0 and bad > 0 and bad * 100 >= threshold_percent * total
 
-    Build 398's policy remains in force: an all-proven-corrupt logical show is
-    removed regardless of acceptable_corruption_percent.  Build 400 changes
-    classification, not that policy: unverifiable files are never included in
-    ``bad`` and callers must not trash anything when verification is incomplete.
+
+def corruption_action(total, bad, corrupt_files="delete", corrupt_folders="all", folder_threshold=100):
+    """Return the top-level action authorized by the independent corruption policies.
+
+    Folder decisions are made from the original pre-mutation snapshot.  A folder
+    action always takes precedence.  Individual corrupt-file handling is considered
+    only when the logical-show folder is retained.
     """
     total = max(0, int(total or 0))
     bad = max(0, int(bad or 0))
-    if total > 0 and bad >= total:
+    corrupt_files = str(corrupt_files or "delete").strip().lower()
+    corrupt_folders = str(corrupt_folders or "all").strip().lower()
+    folder_threshold = int(folder_threshold)
+
+    if bad <= 0:
+        return "none"
+    if corrupt_folders == "all" and total > 0 and bad >= total:
         return "trash_folder_all_corrupt"
-    if exceeds_threshold(total, bad, acceptable_percent):
+    if corrupt_folders == "threshold" and meets_corruption_threshold(total, bad, folder_threshold):
         return "trash_folder_threshold"
-    if bad > 0:
+    if corrupt_files == "delete":
         return "trash_corrupt_files"
-    return "none"
+    return "report_only"
+
+
+def qualifying_corrupt_music_dirs(group, audio_files, bad_files, corrupt_folders, folder_threshold):
+    """Return direct music directories authorized for folder-level Trash handling."""
+    policy = str(corrupt_folders or "all").strip().lower()
+    if policy == "never":
+        return []
+
+    bad_keys = {_norm(path) for path in bad_files}
+    directories = list(group.get("music_dirs") or [])
+    if not directories and group.get("main_dir_path"):
+        directories = [group.get("main_dir_path")]
+
+    result = []
+    seen = set()
+    for directory in directories:
+        directory = os.path.normpath(str(directory or ""))
+        if not directory:
+            continue
+        directory_key = _norm(directory)
+        if directory_key in seen:
+            continue
+        seen.add(directory_key)
+        direct_audio = [path for path in audio_files if _norm(os.path.dirname(path)) == directory_key]
+        if not direct_audio:
+            continue
+        bad_count = sum(1 for path in direct_audio if _norm(path) in bad_keys)
+        if bad_count <= 0:
+            continue
+        if policy == "all" and bad_count == len(direct_audio):
+            result.append(directory)
+        elif policy == "threshold" and meets_corruption_threshold(len(direct_audio), bad_count, folder_threshold):
+            result.append(directory)
+    return sorted(result, key=str.lower)
 
 
 # --- Windows fail-closed Recycle Bin implementation -----------------------
@@ -359,8 +407,10 @@ class CorruptionAssessment:
     unverifiable_details: list[tuple[str, str]] = field(default_factory=list)
     action: str = "none"
     corruption_percent: float = 0.0
-    acceptable_percent: int = 100
-    fully_corrupt_dirs: list[str] = field(default_factory=list)
+    corrupt_files_policy: str = "delete"
+    corrupt_folders_policy: str = "all"
+    folder_threshold: int = 100
+    folder_candidates: list[str] = field(default_factory=list)
 
     @property
     def unverifiable(self):
@@ -382,32 +432,40 @@ class CorruptionOutcome:
         return self.assessment.unverifiable
 
 
-def assess_group_corruption(group, acceptable_percent):
+def assess_group_corruption(group, corrupt_files="delete", corrupt_folders="all", folder_threshold=100):
     """Return a deterministic pre-mutation corruption assessment.
 
-    This helper has no Trash/Recycle side effect.  Any directory, filesystem,
-    validator, memory/resource, or unexpected inspection failure makes the
-    logical show unverifiable and therefore forces ``action='none'``.
+    The original audio snapshot is authoritative for both folder and file policy
+    decisions.  Any inspection/validator failure makes the logical show
+    unverifiable and suppresses all corruption-driven mutation.
     """
-    acceptable_percent = int(acceptable_percent)
+    corrupt_files = str(corrupt_files or "delete").strip().lower()
+    corrupt_folders = str(corrupt_folders or "all").strip().lower()
+    folder_threshold = int(folder_threshold)
     audio_files, snapshot_errors = group_audio_snapshot(group)
-    corrupt_files, validator_errors = classify_audio_paths(audio_files)
+    corrupt_paths, validator_errors = classify_audio_paths(audio_files)
     unverifiable_details = list(snapshot_errors) + list(validator_errors)
     action = "none"
+    folder_candidates = []
     if not unverifiable_details:
-        action = corruption_action(len(audio_files), len(corrupt_files), acceptable_percent)
-    percent = (100.0 * len(corrupt_files) / len(audio_files)) if audio_files else 0.0
-    fully_bad_dirs = []
-    if corrupt_files and not unverifiable_details:
-        fully_bad_dirs = fully_corrupt_music_dirs(group, audio_files, corrupt_files)
+        action = corruption_action(
+            len(audio_files), len(corrupt_paths), corrupt_files, corrupt_folders, folder_threshold
+        )
+        if corrupt_paths and action not in {"trash_folder_all_corrupt", "trash_folder_threshold"}:
+            folder_candidates = qualifying_corrupt_music_dirs(
+                group, audio_files, corrupt_paths, corrupt_folders, folder_threshold
+            )
+    percent = (100.0 * len(corrupt_paths) / len(audio_files)) if audio_files else 0.0
     return CorruptionAssessment(
         audio_files=list(audio_files),
-        corrupt_files=list(corrupt_files),
+        corrupt_files=list(corrupt_paths),
         unverifiable_details=list(unverifiable_details),
         action=action,
         corruption_percent=percent,
-        acceptable_percent=acceptable_percent,
-        fully_corrupt_dirs=list(fully_bad_dirs),
+        corrupt_files_policy=corrupt_files,
+        corrupt_folders_policy=corrupt_folders,
+        folder_threshold=folder_threshold,
+        folder_candidates=list(folder_candidates),
     )
 
 
@@ -448,16 +506,17 @@ def _prune_group_after_corruption_trash(group, record, trashed_dirs, trashed_fil
 def apply_corruption_assessment(config, group, record, assessment):
     """Apply one already-computed assessment and return a structured outcome.
 
-    The assessment stage is intentionally separated from mutation so every
-    destructive decision can be tested without invoking the whole inventory
-    pipeline.  This function performs only the Trash/Recycle actions authorized
-    by the supplied assessment and updates the carried group/record afterward.
+    Folder decisions always use the original pre-mutation snapshot.  If the
+    logical-show folder is retained, qualifying direct music folders are handled
+    next; the individual-file policy is applied only to corrupt files that remain.
     """
     outcome = CorruptionOutcome(assessment=assessment)
-    acceptable = assessment.acceptable_percent
     audio_files = list(assessment.audio_files)
     bad_files = list(assessment.corrupt_files)
     percent = assessment.corruption_percent
+    file_policy = assessment.corrupt_files_policy
+    folder_policy = assessment.corrupt_folders_policy
+    threshold = assessment.folder_threshold
 
     if assessment.unverifiable:
         detail_text = "; ".join(f"{path}: {detail}" for path, detail in assessment.unverifiable_details[:8])
@@ -473,61 +532,77 @@ def apply_corruption_assessment(config, group, record, assessment):
         )
         return outcome
 
-    if assessment.action in ("trash_folder_all_corrupt", "trash_folder_threshold"):
+    if assessment.action in {"trash_folder_all_corrupt", "trash_folder_threshold"}:
         reason = (
-            "all audio files are corrupt; acceptable setting ignored"
+            "100% of logical-show audio is corrupt"
             if assessment.action == "trash_folder_all_corrupt"
-            else "corruption exceeds acceptable setting"
+            else f"logical-show corruption {percent:.2f}% is at or above folder threshold {threshold}%"
         )
         try:
             move_to_trash(record.main_dir_path)
         except Exception as exc:
             outcome.whole_folder_trash_failed = True
             config.logs.conflicts(
-                "CORRUPTION_REMOVAL_FAILED: %s | files=%s corrupt=%s percent=%.2f acceptable=%s reason=%s | %s",
-                record.main_dir_path, len(audio_files), len(bad_files), percent, acceptable, reason, exc,
+                "CORRUPTION_REMOVAL_FAILED: %s | files=%s corrupt=%s percent=%.2f folder_policy=%s folder_threshold=%s file_policy=%s reason=%s | %s",
+                record.main_dir_path, len(audio_files), len(bad_files), percent, folder_policy, threshold, file_policy, reason, exc,
             )
         else:
             config.logs.conflicts(
-                "REMOVED_CORRUPTION: %s | files=%s corrupt=%s corruption_percent=%.2f acceptable_corruption_percent=%s | %s | moved to Trash/Recycle Bin and omitted from inventory",
-                record.main_dir_path, len(audio_files), len(bad_files), percent, acceptable, reason,
+                "REMOVED_CORRUPTION: %s | files=%s corrupt=%s corruption_percent=%.2f folder_policy=%s folder_threshold=%s file_policy=%s | %s | moved to Trash/Recycle Bin and omitted from inventory",
+                record.main_dir_path, len(audio_files), len(bad_files), percent, folder_policy, threshold, file_policy, reason,
             )
             config.logs.tag(
-                "REMOVED_CORRUPTION: %s | files=%s corrupt=%s corruption_percent=%.2f acceptable=%s | %s",
-                record.main_dir_path, len(audio_files), len(bad_files), percent, acceptable, reason,
+                "REMOVED_CORRUPTION: %s | files=%s corrupt=%s corruption_percent=%.2f folder_policy=%s folder_threshold=%s file_policy=%s | %s",
+                record.main_dir_path, len(audio_files), len(bad_files), percent, folder_policy, threshold, file_policy, reason,
             )
             config.current_search_corruption_groups_removed = int(getattr(config, "current_search_corruption_groups_removed", 0) or 0) + 1
             config.current_search_corruption_removed_paths = list(getattr(config, "current_search_corruption_removed_paths", []) or []) + [os.path.normpath(record.main_dir_path)]
             outcome.show_removed = True
             return outcome
 
-    if bad_files and (assessment.action == "trash_corrupt_files" or outcome.whole_folder_trash_failed):
-        main_key = _norm(record.main_dir_path)
-        music_dirs = [os.path.normpath(path) for path in (group.get("music_dirs", []) or []) if path]
+    main_key = _norm(record.main_dir_path)
+    music_dirs = [os.path.normpath(path) for path in (group.get("music_dirs", []) or []) if path]
 
-        for bad_dir in assessment.fully_corrupt_dirs:
-            bad_dir_key = _norm(bad_dir)
-            if outcome.whole_folder_trash_failed and bad_dir_key == main_key:
-                continue
-            contains_other_music_dir = any(
-                _norm(other_dir) != bad_dir_key and _path_is_under(other_dir, bad_dir)
-                for other_dir in music_dirs
+    # A failed whole-show folder move does not silently change the user's file
+    # policy.  Folder candidates are skipped for the failed root; independent
+    # file deletion still runs below only when corrupt_files_policy == delete.
+    for bad_dir in assessment.folder_candidates:
+        bad_dir_key = _norm(bad_dir)
+        if outcome.whole_folder_trash_failed and bad_dir_key == main_key:
+            continue
+        contains_other_music_dir = any(
+            _norm(other_dir) != bad_dir_key and _path_is_under(other_dir, bad_dir)
+            for other_dir in music_dirs
+        )
+        if contains_other_music_dir:
+            config.logs.conflicts(
+                "CORRUPT_FOLDER_RETAINED_NESTED: %s | logical_show=%s | folder_policy=%s | contains another inventoried music directory",
+                bad_dir, record.main_dir_path, folder_policy,
             )
-            if contains_other_music_dir:
-                continue
-            try:
-                move_to_trash(bad_dir)
-            except Exception as exc:
-                config.logs.conflicts("CORRUPT_FOLDER_TRASH_FAILED: %s | logical_show=%s | %s", bad_dir, record.main_dir_path, exc)
-                config.logs.tag("CORRUPT_FOLDER_TRASH_FAILED: %s | %s", bad_dir, exc)
-            else:
-                outcome.trashed_dirs.append(os.path.normpath(bad_dir))
-                config.logs.conflicts("TRASHED_ALL_CORRUPT_FOLDER: %s | logical_show=%s | acceptable_corruption_percent=%s", bad_dir, record.main_dir_path, acceptable)
-                config.logs.tag("TRASHED_ALL_CORRUPT_FOLDER: %s", bad_dir)
+            continue
+        try:
+            move_to_trash(bad_dir)
+        except Exception as exc:
+            config.logs.conflicts(
+                "CORRUPT_FOLDER_TRASH_FAILED: %s | logical_show=%s | folder_policy=%s folder_threshold=%s | %s",
+                bad_dir, record.main_dir_path, folder_policy, threshold, exc,
+            )
+            config.logs.tag("CORRUPT_FOLDER_TRASH_FAILED: %s | %s", bad_dir, exc)
+        else:
+            outcome.trashed_dirs.append(os.path.normpath(bad_dir))
+            config.logs.conflicts(
+                "TRASHED_CORRUPT_FOLDER: %s | logical_show=%s | folder_policy=%s folder_threshold=%s",
+                bad_dir, record.main_dir_path, folder_policy, threshold,
+            )
+            config.logs.tag("TRASHED_CORRUPT_FOLDER: %s", bad_dir)
 
-        for bad_path in bad_files:
-            if any(_path_is_under(bad_path, directory) for directory in outcome.trashed_dirs):
-                continue
+    remaining_bad = [
+        path for path in bad_files
+        if not any(_path_is_under(path, directory) for directory in outcome.trashed_dirs)
+    ]
+
+    if file_policy == "delete":
+        for bad_path in remaining_bad:
             try:
                 move_to_trash(bad_path)
             except Exception as exc:
@@ -535,18 +610,31 @@ def apply_corruption_assessment(config, group, record, assessment):
                 config.logs.tag("CORRUPT_FILE_TRASH_FAILED: %s | %s", bad_path, exc)
             else:
                 outcome.trashed_files.append(os.path.normpath(bad_path))
-                config.logs.conflicts("TRASHED_CORRUPT_FILE: %s | logical_show=%s | corruption_percent=%.2f acceptable_corruption_percent=%s", bad_path, record.main_dir_path, percent, acceptable)
+                config.logs.conflicts(
+                    "TRASHED_CORRUPT_FILE: %s | logical_show=%s | corruption_percent=%.2f file_policy=delete folder_policy=%s folder_threshold=%s",
+                    bad_path, record.main_dir_path, percent, folder_policy, threshold,
+                )
                 config.logs.tag("TRASHED_CORRUPT_FILE: %s", bad_path)
+    elif remaining_bad:
+        config.logs.conflicts(
+            "CORRUPTION_REPORTED: %s | corrupt_files_retained=%s files_seen=%s corruption_percent=%.2f file_policy=keep folder_policy=%s folder_threshold=%s",
+            record.main_dir_path, len(remaining_bad), len(audio_files), percent, folder_policy, threshold,
+        )
+        config.logs.tag(
+            "CORRUPTION_REPORTED: %s | %s corrupt file(s) retained by policy",
+            record.main_dir_path, len(remaining_bad),
+        )
 
-        _prune_group_after_corruption_trash(group, record, outcome.trashed_dirs, outcome.trashed_files)
-
+    _prune_group_after_corruption_trash(group, record, outcome.trashed_dirs, outcome.trashed_files)
     return outcome
 
 
-def handle_group_corruption(config, group, record, acceptable_percent):
+def handle_group_corruption(config, group, record, corrupt_files="delete", corrupt_folders="all", folder_threshold=100):
     """Fail-closed assessment + mutation wrapper for inventory orchestration."""
     try:
-        assessment = assess_group_corruption(group, acceptable_percent)
+        assessment = assess_group_corruption(
+            group, corrupt_files=corrupt_files, corrupt_folders=corrupt_folders, folder_threshold=folder_threshold
+        )
         return apply_corruption_assessment(config, group, record, assessment)
     except Exception as exc:
         detail = f"{type(exc).__name__}: {exc}"
@@ -554,7 +642,9 @@ def handle_group_corruption(config, group, record, acceptable_percent):
             audio_files=[], corrupt_files=[],
             unverifiable_details=[(record.main_dir_path, detail)],
             action="none", corruption_percent=0.0,
-            acceptable_percent=int(acceptable_percent), fully_corrupt_dirs=[],
+            corrupt_files_policy=str(corrupt_files or "delete"),
+            corrupt_folders_policy=str(corrupt_folders or "all"),
+            folder_threshold=int(folder_threshold), folder_candidates=[],
         )
         config.logs.conflicts(
             "CORRUPTION_CHECK_FAILED_UNVERIFIABLE: %s | no corruption-driven Trash action; mutation steps skipped | %s",

@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v440"
+__version__ = "v446"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
@@ -5993,10 +5993,14 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
         inventory_record = record
         tag_group_ready = True
 
-        acceptable_corruption = int(getattr(config, "acceptable_corruption_percent", 100) or 0)
         from tlo_corruption import handle_group_corruption
         corruption_outcome = handle_group_corruption(
-            config, group, record, acceptable_corruption
+            config,
+            group,
+            record,
+            corrupt_files=str(getattr(config, "corrupt_files", "delete") or "delete"),
+            corrupt_folders=str(getattr(config, "corrupt_folders", "all") or "all"),
+            folder_threshold=int(getattr(config, "corrupt_folder_threshold", 100) or 0),
         )
         corruption_unverifiable = corruption_outcome.unverifiable
         corruption_unverifiable_details = list(corruption_outcome.assessment.unverifiable_details)

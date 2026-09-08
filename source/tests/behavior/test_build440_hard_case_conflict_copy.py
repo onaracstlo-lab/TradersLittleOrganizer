@@ -1,4 +1,4 @@
-"""Build 440 regressions for hard-case identity conflicts and copy/delete gating."""
+"""Build 441 regressions for hard-case identity conflicts and copy/delete gating."""
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,7 +12,7 @@ import tlo_tag_lib as T
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v440"
+__version__ = "v446"
 
 
 def _matcher(*masters):
