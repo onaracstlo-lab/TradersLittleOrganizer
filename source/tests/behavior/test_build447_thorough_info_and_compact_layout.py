@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v453"
+__version__ = "v455"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -33,26 +33,24 @@ def test_build447_thorough_info_does_not_claim_etreedb_when_unchecked():
     assert "setlist.fm candidates" not in message
 
 
-def test_build447_thorough_info_mentions_only_enabled_online_sources():
+def test_build447_thorough_info_never_claims_unselected_sources_under_current_policy():
     gui = _load_gui_module()
-    etree_message = gui._thorough_setlist_info_message(
-        thorough=True,
-        etree_enabled=True,
-        setlistfm_enabled=False,
-        setlistfm_upgrade=False,
+    etree_only = gui._thorough_setlist_info_message(
+        thorough=True, etree_enabled=True, setlistfm_enabled=False, setlistfm_upgrade=False
     )
-    assert "will use etreeDB for additional setlist comparison" in etree_message
-    assert "setlist.fm candidates" not in etree_message
+    assert etree_only == ""
 
-    all_message = gui._thorough_setlist_info_message(
-        thorough=True,
-        etree_enabled=True,
-        setlistfm_enabled=True,
-        setlistfm_upgrade=False,
+    slow_setlistfm = gui._thorough_setlist_info_message(
+        thorough=True, etree_enabled=True, setlistfm_enabled=True, setlistfm_upgrade=False
     )
-    assert "will use etreeDB and setlist.fm for additional setlist comparison" in all_message
-    assert "normal 600-ms / 1,400-call limits" in all_message
+    assert "setlist.fm" in slow_setlistfm
+    assert "600-ms / 1,400-call limits" in slow_setlistfm
+    assert "etreeDB" not in slow_setlistfm
 
+    upgraded = gui._thorough_setlist_info_message(
+        thorough=True, etree_enabled=True, setlistfm_enabled=True, setlistfm_upgrade=True
+    )
+    assert upgraded == ""
 
 def test_build447_thorough_checkbox_wraps_without_changing_registry_label():
     source = _source()

@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v453"
+__version__ = "v455"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -30,26 +30,24 @@ def test_build448_thorough_has_no_info_line_without_enabled_online_sources():
     ) == ""
 
 
-def test_build448_thorough_info_is_plain_and_only_names_enabled_online_sources():
+def test_build448_thorough_info_current_policy_only_warns_for_normal_setlistfm():
     gui = _load_gui_module()
     etree = gui._thorough_setlist_info_message(
-        thorough=True,
-        etree_enabled=True,
-        setlistfm_enabled=False,
-        setlistfm_upgrade=False,
+        thorough=True, etree_enabled=True, setlistfm_enabled=False, setlistfm_upgrade=False
     )
-    assert etree == "Thorough Setlist Matching will use etreeDB for additional setlist comparison."
+    assert etree == ""
 
     both = gui._thorough_setlist_info_message(
-        thorough=True,
-        etree_enabled=True,
-        setlistfm_enabled=True,
-        setlistfm_upgrade=False,
+        thorough=True, etree_enabled=True, setlistfm_enabled=True, setlistfm_upgrade=False
     )
-    assert "will use etreeDB and setlist.fm for additional setlist comparison" in both
+    assert "will be slow" in both
     assert "600-ms / 1,400-call limits" in both
-    assert "local candidates" not in both
+    assert "etreeDB" not in both
 
+    upgraded = gui._thorough_setlist_info_message(
+        thorough=True, etree_enabled=True, setlistfm_enabled=True, setlistfm_upgrade=True
+    )
+    assert upgraded == ""
 
 def test_build448_tag_copy_delete_wraps_and_last_checkbox_column_moves_left():
     source = _source()

@@ -1,6 +1,6 @@
 """Build 392 regressions for terminal ``Band`` Artist DB fallback."""
 
-__version__ = "v453"
+__version__ = "v455"
 
 import os
 from types import SimpleNamespace

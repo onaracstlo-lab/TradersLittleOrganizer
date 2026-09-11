@@ -1,6 +1,6 @@
 """Text cleanup utilities for safe titles, ASCII normalization, comparison keys, and full-file reads."""
 
-__version__ = "v453"
+__version__ = "v455"
 import os
 import re
 import unicodedata

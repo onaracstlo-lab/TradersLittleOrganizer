@@ -1,6 +1,6 @@
 """Build 378 regressions for weak artist-abbreviation precedence."""
 
-__version__ = "v453"
+__version__ = "v455"
 
 import os
 from types import SimpleNamespace

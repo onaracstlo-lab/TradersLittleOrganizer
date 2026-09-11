@@ -1,26 +1,25 @@
-TLO Source and Utilities Bundle v453
+TLO Source and Utilities Bundle v455
 
-Public application version: v1.6 Build 453
-Source bundle label: v453
+Public application version: v1.6 Build 455
+Source bundle label: v455
 
-Build 453 summary
-- Starts from the verified v1.6 Build 452 application source bundle.
-- Keeps the main checkbox logical grid but prevents the wrapped Tag Copy/Delete Original label from pushing Thorough Setlist Matching down.
-- Gives etreeDB, setlist.fm, setlist.fm upgrade, and Thorough Setlist Matching the same compact vertical row increment in the first checkbox column.
-- Reflows Corruption Handling into one fully horizontal label/control strip beneath the checkbox options.
-- Places each corruption label immediately beside its control; the threshold value and % remain one compact unit.
-- Preserves Build 452 first-open screen fitting so the initial visible main window is bounded by the current display.
-- Preserves inventory, lookup, tagging, corruption-policy, and CLI semantics.
-- Updates the manual, requirements, tests, screenshot, and packaging metadata to v1.6 Build 453.
+Build 455 summary
+- Starts from the verified v1.6 Build 454 application source bundle.
+- Removes stale `unidentifiedShows.txt` entries when the same path is processed again and successfully resolved.
+- Preserves untouched prior unresolved entries and any path that remains unresolved in the current run.
+- Preserves encounter order in `unidentifiedShows.txt` and `artistsNotInDatabase.txt`; neither file is alphabetically sorted.
+- Retains case-insensitive de-duplication for artists and path de-duplication for unidentified shows.
+- Trims the Corrupt files dropdown from width 20 to width 18 so it is only slightly wider than the compact baseline.
+- Updates the manual, requirements, tests, and packaging metadata to v1.6 Build 455.
 - Keeps the GitHub Build Process strictly separate from the TLO application source bundle.
-- Archives Build 452 change notes in old-change-logs.zip.
+- Archives Build 454 change notes in old-change-logs.zip.
 
 Current documentation files:
-- TLO_Inventory_User_Manual_v453.rtf: current end-user manual.
-- TLO_Inventory_Requirements_Working_v453.docx: current TLO requirements/development document.
+- TLO_Inventory_User_Manual_v455.rtf: current end-user manual.
+- TLO_Inventory_Requirements_Working_v455.docx: current TLO requirements/development document.
 - TLO-FAQ.txt: current frequently asked questions.
-- CHANGES_v453.txt: changes introduced by this build.
-- old-change-logs.zip: archived historical TLO change notes through Build 452.
+- CHANGES_v455.txt: changes introduced by this build.
+- old-change-logs.zip: archived historical TLO change notes through Build 454.
 
 GitHub Build Process separation:
 - No GitHub Build Process artifact is included in this source bundle.

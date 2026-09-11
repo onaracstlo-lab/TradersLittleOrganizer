@@ -2,7 +2,7 @@
 """Compatibility CLI wrapper over the production setlist.fm lookup module."""
 from __future__ import annotations
 
-__version__ = "v453"
+__version__ = "v455"
 
 import argparse
 from typing import Optional, List

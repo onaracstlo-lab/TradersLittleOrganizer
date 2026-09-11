@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v453"
+__version__ = "v455"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -79,23 +79,14 @@ CORRUPT_FOLDER_GUI_TO_POLICY = {label: value for value, label in CORRUPT_FOLDER_
 
 
 def _thorough_setlist_info_message(*, thorough: bool, etree_enabled: bool, setlistfm_enabled: bool, setlistfm_upgrade: bool) -> str:
-    """Return concise Thorough status only when an enabled online source merits explanation."""
-    if not thorough or not (etree_enabled or setlistfm_enabled):
+    """Warn only for Thorough setlist.fm use under the normal, slower access limits."""
+    del etree_enabled  # etreeDB alone does not require a Thorough-specific status line.
+    if not thorough or not setlistfm_enabled or setlistfm_upgrade:
         return ""
-    sources = []
-    if etree_enabled:
-        sources.append("etreeDB")
-    if setlistfm_enabled:
-        sources.append("setlist.fm")
-    source_text = " and ".join(sources)
-    if setlistfm_enabled and not setlistfm_upgrade:
-        return (
-            f"Thorough Setlist Matching will use {source_text} for additional setlist comparison; "
-            "setlist.fm coverage remains constrained by the normal 600-ms / 1,400-call limits unless setlist.fm upgrade is enabled."
-        )
-    if setlistfm_enabled and setlistfm_upgrade:
-        return f"Thorough Setlist Matching will use {source_text} for additional setlist comparison using upgraded setlist.fm access."
-    return f"Thorough Setlist Matching will use {source_text} for additional setlist comparison."
+    return (
+        "Thorough Setlist Matching with setlist.fm enabled and setlist.fm upgrade off will be slow "
+        "because the normal 600-ms / 1,400-call limits apply unless setlist.fm upgrade is enabled."
+    )
 
 
 def _start_activity_indicator(progress_bar) -> bool:
@@ -935,7 +926,7 @@ class App:
             textvariable=self.vars["corrupt_files"],
             values=tuple(CORRUPT_FILE_GUI_VALUES.values()),
             state="readonly",
-            width=15,
+            width=18,
             style="Main.TCombobox",
         )
         self.corrupt_files_combo.grid(row=0, column=1, sticky="w", padx=(0, 12), pady=0)

@@ -1,6 +1,6 @@
 """Executable Tkinter behavior tests for layout and progress animation."""
 
-__version__ = "v453"
+__version__ = "v455"
 
 from pathlib import Path
 

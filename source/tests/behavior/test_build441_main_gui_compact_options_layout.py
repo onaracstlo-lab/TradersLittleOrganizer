@@ -9,7 +9,7 @@ from tlo_options import GUI_CHECKBOX_OPTIONS, OPTIONS_BY_FIELD
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v453"
+__version__ = "v455"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -20,9 +20,10 @@ def _source() -> str:
 
 def test_build441_performance_mode_combo_is_narrower():
     source = _source()
-    assert 'values=("gentle", "balanced", "fast", "extreme")' in source
-    assert "width=10," in source
-    assert "width=18," not in source
+    start = source.index('values=("gentle", "balanced", "fast", "extreme")')
+    block = source[start:start + 300]
+    assert "width=10," in block
+    assert "width=18," not in block
 
 
 def test_build441_checkbox_block_sits_right_of_performance_controls():

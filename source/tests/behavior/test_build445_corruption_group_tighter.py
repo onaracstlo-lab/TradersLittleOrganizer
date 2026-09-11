@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v453"
+__version__ = "v455"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -15,12 +15,14 @@ def _source() -> str:
     return (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
 
 
-def test_build445_corruption_dropdowns_are_slightly_narrower():
+def test_build445_folder_removal_dropdown_remains_compact_after_later_corrupt_files_widening():
     source = _source()
     block = source[source.index('corruption_frame = ttk.LabelFrame'):source.index('self._sync_corruption_threshold_state()')]
-    assert block.count("width=15,") == 2
+    corrupt_block = block[block.index('self.corrupt_files_combo = ttk.Combobox'):block.index('self.corrupt_files_combo.grid')]
+    folder_block = block[block.index('self.corrupt_folders_combo = ttk.Combobox'):block.index('self.corrupt_folders_combo.grid')]
+    assert "width=18," in corrupt_block
+    assert "width=15," in folder_block
     assert "width=16," not in block
-
 
 def test_build445_percent_is_attached_to_threshold_entry():
     source = _source()

@@ -1,7 +1,7 @@
 """Pre-mutation audio corruption threshold handling for TLO."""
 from __future__ import annotations
 
-__version__ = "v453"
+__version__ = "v455"
 
 import ctypes
 import os

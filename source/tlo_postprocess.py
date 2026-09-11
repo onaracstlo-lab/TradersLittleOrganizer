@@ -1,6 +1,6 @@
 """Postprocess metadata logs into setlist files, bootlist.csv, duplicate/group outputs, and summary/unidentified-show files."""
 
-__version__ = "v453"
+__version__ = "v455"
 import csv
 import json
 import os
@@ -907,6 +907,25 @@ def _dedupe_paths(paths: List[str]) -> List[str]:
     return ordered
 
 
+def _collect_addressed_paths_from_metadata(records: List[Dict[str, str]]) -> List[str]:
+    """Return current-run source paths whose metadata now has a resolved show.
+
+    ``unidentifiedShows.txt`` is persistent across runs.  When a path that was
+    previously unresolved is processed again and now has a committed show
+    identity, both its current and pre-rename/original path forms are considered
+    addressed so the stale unresolved entry can be removed.
+    """
+    paths: List[str] = []
+    for record in records:
+        if _record_has_blank_show(record):
+            continue
+        for key in ("main_dir_path", "original_main_dir_path"):
+            path_name = (record.get(key) or "").strip()
+            if path_name:
+                paths.append(path_name)
+    return _dedupe_paths(paths)
+
+
 POSTPROCESS_EXTREME_THREAD_CAP = 64
 
 
@@ -1188,26 +1207,53 @@ def _write_bootlist_csv(tlo_home: str, rows: List[Dict[str, str]]) -> str:
 
 
 
-def _write_unidentified_shows(tlo_home: str, paths: List[str]) -> str:
+def _unidentified_path_key(path_name: str) -> str:
+    """Return a stable key for reconciling persistent unidentified-show paths."""
+    clean = (path_name or "").strip()
+    return normalize_path_for_compare(clean) if clean else ""
+
+
+def _write_unidentified_shows(
+    tlo_home: str,
+    paths: List[str],
+    *,
+    addressed_paths: Sequence[str] | None = None,
+) -> str:
+    """Reconcile the persistent unresolved-show list without sorting it.
+
+    Existing entries keep their original encounter order.  A prior entry is
+    removed only when the same path (or its original pre-rename path) was
+    processed in the current run and now has a resolved show identity.  Current
+    unresolved paths always win over an addressed-path alias and are appended in
+    current encounter order.
+    """
     target = os.path.join(tlo_home, "unidentifiedShows.txt")
-    seen = set()
-    ordered = []
+    current_paths = [(path or "").strip() for path in paths if (path or "").strip()]
+    current_keys = {_unidentified_path_key(path) for path in current_paths}
+    current_keys.discard("")
+    addressed_keys = {_unidentified_path_key(path) for path in (addressed_paths or [])}
+    addressed_keys.discard("")
+    removable_keys = addressed_keys - current_keys
+
+    seen_keys = set()
+    ordered: List[str] = []
 
     if os.path.isfile(target):
         with open(target, "r", encoding="utf-8", errors="ignore") as infile:
             for raw_line in infile:
                 clean = raw_line.strip()
-                if clean and clean not in seen:
-                    seen.add(clean)
-                    ordered.append(clean)
+                key = _unidentified_path_key(clean)
+                if not clean or not key or key in removable_keys or key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                ordered.append(clean)
 
-    for path in paths:
-        clean = (path or "").strip()
-        if clean and clean not in seen:
-            seen.add(clean)
+    for clean in current_paths:
+        key = _unidentified_path_key(clean)
+        if key and key not in seen_keys:
+            seen_keys.add(key)
             ordered.append(clean)
 
-    ordered = sorted(ordered, key=lambda value: value.casefold())
     with open(target, "w", encoding="utf-8", newline="\n") as outfile:
         for path in ordered:
             outfile.write(path + "\n")
@@ -1215,23 +1261,27 @@ def _write_unidentified_shows(tlo_home: str, paths: List[str]) -> str:
 
 
 def _write_artists_not_in_database(tlo_home: str, artists: List[str]) -> str:
-    """Merge restored suffix-fallback performance artists into a persistent review list."""
+    """Merge missing artists into a persistent, encounter-ordered review list."""
     target = os.path.join(tlo_home, "artistsNotInDatabase.txt")
-    by_key: Dict[str, str] = {}
+    seen = set()
+    ordered: List[str] = []
 
     if os.path.isfile(target):
         with open(target, "r", encoding="utf-8", errors="ignore") as infile:
             for raw_line in infile:
                 clean = compact_ws(raw_line)
-                if clean:
-                    by_key.setdefault(clean.casefold(), clean)
+                key = clean.casefold()
+                if clean and key not in seen:
+                    seen.add(key)
+                    ordered.append(clean)
 
     for artist in artists:
         clean = compact_ws(artist)
-        if clean:
-            by_key.setdefault(clean.casefold(), clean)
+        key = clean.casefold()
+        if clean and key not in seen:
+            seen.add(key)
+            ordered.append(clean)
 
-    ordered = sorted(by_key.values(), key=lambda value: value.casefold())
     with open(target, "w", encoding="utf-8", newline="\n") as outfile:
         for artist in ordered:
             outfile.write(artist + "\n")
@@ -1872,7 +1922,10 @@ def postprocess_metadata_outputs(config) -> Dict[str, int | str]:
     _postprocess_status(config, "writing unidentifiedShows.txt...")
     stage_started = time.monotonic()
     unidentified_paths = current_unidentified_paths
-    unidentified_path = _write_unidentified_shows(config.TLOHome, unidentified_paths)
+    addressed_paths = _collect_addressed_paths_from_metadata(records)
+    unidentified_path = _write_unidentified_shows(
+        config.TLOHome, unidentified_paths, addressed_paths=addressed_paths
+    )
     elapsed = _record_postprocess_timing(timing_entries, "write unidentifiedShows.txt", stage_started)
     _postprocess_status(config, f"writing unidentifiedShows.txt complete: {len(unidentified_paths)} unresolved path(s) ({_format_elapsed_seconds(elapsed)})")
 
