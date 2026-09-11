@@ -14,7 +14,7 @@ Tkinter GUI that:
 
 from __future__ import annotations
 
-__version__ = "v448"
+__version__ = "v453"
 
 import csv
 import os
@@ -34,6 +34,7 @@ try:
 except ImportError:
     DISPLAY_VERSION = "version unavailable"
 from tlo_gui_shortcuts import install_global_ctrl_a
+from tlo_gui_shortcuts import configure_centered_ttk_button_text
 
 try:
     from tlo_github_updates import (
@@ -261,6 +262,7 @@ class BootlistSearchApp:
         self.root.geometry("860x280")
 
         self.style = ttk.Style(self.root)
+        configure_centered_ttk_button_text(self.style)
         self.search_var = tk.StringVar()
         self.deep_var = tk.BooleanVar(value=False)
         self.font_family_var = tk.StringVar()

@@ -1,6 +1,6 @@
 """Build 375 Research application and GUI contracts."""
 
-__version__ = "v448"
+__version__ = "v453"
 
 from pathlib import Path
 
@@ -27,7 +27,8 @@ def test_research_sources_are_present_and_gui_is_wired():
     assert "resolve_tlo_home" in cli
     assert "meta*.log" in lib
     assert "comp*.log" in lib
-    assert 'text="Research\\n "' in gui
+    assert 'text="Research"' in gui
+    assert 'text="Research\\n "' not in gui
     assert "command=self._open_research" in gui
     assert "research_logs" in gui
 
@@ -44,8 +45,8 @@ def test_research_is_built_on_all_platforms():
 
 
 def test_research_documentation_is_present():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v448.docx")
-    manual = (ROOT / "TLO_Inventory_User_Manual_v448.rtf").read_text(encoding="utf-8", errors="ignore")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v453.docx")
+    manual = (ROOT / "TLO_Inventory_User_Manual_v453.rtf").read_text(encoding="utf-8", errors="ignore")
     for text in (requirements, manual):
         assert "tlo-research" in text
         assert "artist followed by a date" in text.lower()

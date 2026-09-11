@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v448"
+__version__ = "v453"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
@@ -1976,6 +1976,50 @@ _STRING_DASH_STRING_RE = re.compile(r"^(?P<string1>.+?)\s+-\s+(?P<string2>.+)$")
 _COMMERCIAL_RELEASE_YEAR_RE = re.compile(r"^(?:\((?P<paren_year>(?:19|20)\d{2})\)|(?P<bare_year>(?:19|20)\d{2}))$")
 
 
+def _artist_aware_unspaced_dash_row(text: str, matcher: Optional[ArtistMatcher]) -> Optional[Dict[str, str]]:
+    """Recognize an Artist/Album dash even when spaces around the first dash are missing.
+
+    The relaxed form is deliberately DB-gated.  TLO does *not* treat every hyphen
+    as an Artist/Album separator.  Instead, it scans dash boundaries from left to
+    right and accepts the first boundary whose complete left side resolves
+    uniquely in the Artist DB.  Everything after that one boundary is preserved
+    as String2, including later dashes that belong to the album/collection title.
+
+    Examples accepted when ``Van Morrison`` is a unique Artist DB match::
+
+        Van Morrison - Album
+        Van Morrison- Album
+        Van Morrison -Album
+        Van Morrison-Album
+
+    A double dash is not considered by this fallback, and an unspaced boundary
+    whose left side does not resolve uniquely remains ordinary folder text.
+    """
+    cleaned = _clean_piece(text)
+    if not cleaned or matcher is None or "-" not in cleaned:
+        return None
+
+    for match in re.finditer(r"-", cleaned):
+        index = match.start()
+        if (index > 0 and cleaned[index - 1] == "-") or (index + 1 < len(cleaned) and cleaned[index + 1] == "-"):
+            continue
+        string1 = _clean_piece(cleaned[:index])
+        string2 = _clean_piece(cleaned[index + 1 :])
+        if not string1 or not string2:
+            continue
+        detail = _lookup_artist_detail(string1, matcher)
+        if detail.get("status") != "matched" or len(detail.get("masters", [])) != 1:
+            continue
+        return {
+            "string1": string1,
+            "string1_stripped": _strip_string1_articles(string1),
+            "string2": string2,
+            "artist_aware_unspaced_dash": "yes",
+            "artist_master": detail["masters"][0],
+        }
+    return None
+
+
 def _match_string_dash_string(text: str) -> Optional[Dict[str, str]]:
     cleaned = _clean_piece(text)
     if not cleaned:
@@ -1994,7 +2038,7 @@ def _match_string_dash_string(text: str) -> Optional[Dict[str, str]]:
     }
 
 
-def _match_compliant_string_dash_string_date(text: str) -> Optional[Dict[str, str]]:
+def _match_compliant_string_dash_string_date(text: str, matcher: Optional[ArtistMatcher] = None) -> Optional[Dict[str, str]]:
     """Return a narrow compliant ``String1 - String2 Date`` boundary match.
 
     The generic compliant dash form intentionally treats all of String2 as raw
@@ -2004,6 +2048,8 @@ def _match_compliant_string_dash_string_date(text: str) -> Optional[Dict[str, st
     String2 text so existing ``Artist - Album`` behavior is preserved.
     """
     row = _match_string_dash_string(text)
+    if not row:
+        row = _artist_aware_unspaced_dash_row(text, matcher)
     if not row:
         return None
 
@@ -2120,9 +2166,13 @@ def _resolve_artist_from_date_string3(group: dict, matcher: Optional[ArtistMatch
     return "", ""
 
 
-def _find_string_dash_string_match(group: dict) -> Optional[Dict[str, str]]:
+def _find_string_dash_string_match(
+    group: dict, matcher: Optional[ArtistMatcher] = None
+) -> Optional[Dict[str, str]]:
     for part, part_path in _candidate_path_parts(group["main_dir_path"]):
         row = _match_string_dash_string(part)
+        if not row:
+            row = _artist_aware_unspaced_dash_row(part, matcher)
         if not row:
             continue
         row["part"] = part
@@ -2142,6 +2192,8 @@ def _resolve_from_string_dash_string(
 ) -> Tuple[str, Optional[Dict[str, str]]]:
     for part, part_path in _candidate_path_parts(group["main_dir_path"]):
         row = _match_string_dash_string(part)
+        if not row:
+            row = _artist_aware_unspaced_dash_row(part, matcher)
         if not row:
             continue
         term = row["string1"] if len(re.sub(r"[^A-Za-z]", "", row["string1"])) <= 4 and row["string1"].isupper() else (row["string1_stripped"] or row["string1"])
@@ -2187,6 +2239,8 @@ def _resolve_noncompliant_from_string_dash_string(
     """
     for part, part_path in _candidate_path_parts(group["main_dir_path"]):
         row = _match_string_dash_string(part)
+        if not row:
+            row = _artist_aware_unspaced_dash_row(part, matcher)
         if not row:
             continue
         row["part"] = part
@@ -2250,6 +2304,11 @@ def _resolve_noncompliant_from_string_dash_string(
             master = detail["masters"][0]
             artist_name = _artist_output_name(config, row["string1"], master)
             evidence.setdefault("artist", []).append(Candidate(artist_name, f"string_dash_string:{part_path}", 56))
+            if row.get("artist_aware_unspaced_dash"):
+                observations.append(
+                    "artist-aware Artist/Album dash accepted without requiring spaces: "
+                    f"{row['string1']}-{row['string2']}"
+                )
             return artist_name, row
 
         path_artist = _resolve_artist_from_subdirs(
@@ -5165,8 +5224,8 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
     matches = _compliant_string_date_matches(compliant_text, allow_string2=False)
     if not matches:
         observations.append("unable to find String1 Date String2 in compliant path text")
-        dash_date_match = _match_compliant_string_dash_string_date(compliant_text)
-        dash_match = None if dash_date_match else _match_string_dash_string(compliant_text)
+        dash_date_match = _match_compliant_string_dash_string_date(compliant_text, artist_matcher)
+        dash_match = None if dash_date_match else (_match_string_dash_string(compliant_text) or _artist_aware_unspaced_dash_row(compliant_text, artist_matcher))
         dash_artist = ""
         active_dash_match = dash_date_match or dash_match
         if active_dash_match:
@@ -5212,6 +5271,10 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
             )
         elif dash_match:
             compliant_dash_match = True
+            if dash_match.get("artist_aware_unspaced_dash"):
+                observations.append(
+                    "compliant artist-aware Artist/Album dash accepted without requiring spaces"
+                )
             raw_string2 = compact_ws(dash_match.get("string2", ""))
             stripped_string2, parentheticals = _strip_trailing_parenthetical_items_with_cache(raw_string2)
             # For compliant String1 - String2, String2 is the show title as
@@ -5452,7 +5515,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
         record.artist = config.current_slam.strip()
         evidence.setdefault("artist", []).append(Candidate(record.artist, "slam_override", 100))
         if not string_date_string_found:
-            dash_album_match = _find_string_dash_string_match(group)
+            dash_album_match = _find_string_dash_string_match(group, artist_matcher)
     else:
         _blank_unusable_artist_tags_for_noncompliant(record, observations)
         # Tag artist metadata is deliberately deferred until structural path and

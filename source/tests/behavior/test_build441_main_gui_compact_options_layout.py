@@ -9,7 +9,7 @@ from tlo_options import GUI_CHECKBOX_OPTIONS, OPTIONS_BY_FIELD
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v448"
+__version__ = "v453"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -25,13 +25,20 @@ def test_build441_performance_mode_combo_is_narrower():
     assert "width=18," not in source
 
 
-def test_build441_checkbox_block_sits_right_of_three_performance_controls():
+def test_build441_checkbox_block_sits_right_of_performance_controls():
     source = _source()
-    assert "performance_options_row = row" in source
-    assert "row=performance_options_row," in source
-    assert "column=2," in source
-    assert "rowspan=3," in source
-    assert 'sticky="nw",' in source
+    if "performance_options_row = row" in source:
+        assert "row=performance_options_row," in source
+        assert "column=2," in source
+        assert "rowspan=3," in source
+    else:
+        # Build 453 nests Performance/Max Workers and the checkbox grid in one
+        # horizontal options frame so Corruption Handling can run beneath it.
+        assert "options_frame = ttk.Frame(frm)" in source
+        assert "performance_frame = ttk.Frame(options_frame)" in source
+        assert "checkbox_frame = ttk.Frame(options_frame)" in source
+        assert 'row=0,\n            column=1,\n            sticky="nw"' in source
+    assert 'sticky="nw"' in source
 
 
 def test_build441_checkbox_internal_layout_is_unchanged():

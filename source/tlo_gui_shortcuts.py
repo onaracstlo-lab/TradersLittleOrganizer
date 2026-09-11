@@ -2,10 +2,55 @@
 
 from __future__ import annotations
 
-__version__ = "v448"
+__version__ = "v453"
 
 import tkinter as tk
+from tkinter import ttk
 
+
+def configure_centered_ttk_button_text(style: ttk.Style) -> None:
+    """Center ttk button/menubutton labels horizontally and vertically.
+
+    ``anchor`` centers the label element within the available button area;
+    ``justify`` centers every line of a multi-line button label.  Keeping this
+    in the shared GUI helper makes the Inventory and Search applications use
+    the same alignment rule regardless of the active Tk theme.
+    """
+    if style is None:
+        return
+    for style_name in ("TButton", "TMenubutton"):
+        try:
+            style.configure(style_name, anchor="center", justify="center")
+        except (AttributeError, tk.TclError):
+            continue
+
+
+
+def bounded_initial_window_size(
+    requested_width: int,
+    requested_height: int,
+    screen_width: int,
+    screen_height: int,
+    *,
+    horizontal_margin: int = 48,
+    vertical_margin: int = 96,
+) -> tuple[int, int]:
+    """Return a first-open client size that stays inside the current screen.
+
+    Margins leave room for ordinary window-manager borders plus a taskbar/dock.
+    The helper is intentionally independent of Tk so startup-fit behavior can be
+    regression-tested without opening a GUI.
+    """
+    requested_width = max(1, int(requested_width))
+    requested_height = max(1, int(requested_height))
+    screen_width = max(1, int(screen_width))
+    screen_height = max(1, int(screen_height))
+    horizontal_margin = max(0, int(horizontal_margin))
+    vertical_margin = max(0, int(vertical_margin))
+
+    available_width = max(1, screen_width - horizontal_margin)
+    available_height = max(1, screen_height - vertical_margin)
+    return min(requested_width, available_width), min(requested_height, available_height)
 
 def _select_all_entry(event) -> str:
     """Select the complete contents of an Entry/ttk Entry/Combobox."""

@@ -1,6 +1,6 @@
 """Build 375 Research CLI/GUI and log-search behavior."""
 
-__version__ = "v448"
+__version__ = "v453"
 
 from pathlib import Path
 import importlib.util

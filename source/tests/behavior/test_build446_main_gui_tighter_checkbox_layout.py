@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v448"
+__version__ = "v453"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -17,19 +17,19 @@ def _source() -> str:
 
 def test_build446_checkbox_block_moves_left_without_changing_grid_coordinates():
     source = _source()
-    block = source[source.index("checkbox_frame = ttk.Frame(frm)"):source.index("self._lookup_dependency_syncing = False")]
+    block = source[source.index("checkbox_frame = ttk.Frame("):source.index("self._lookup_dependency_syncing = False")]
     assert "padx=(0, 0)," in block
     assert "padx=(18, 0)," not in block
-    assert "row=option.gui_row," in block
-    assert "column=option.gui_col," in block
+    assert ("row=option.gui_row," in block or '"row": option.gui_row' in block)
+    assert ("column=option.gui_col," in block or '"column": option.gui_col' in block)
 
 
 def test_build446_checkbox_columns_use_tighter_horizontal_spacing():
     source = _source()
-    block = source[source.index("checkbox_frame = ttk.Frame(frm)"):source.index("self._lookup_dependency_syncing = False")]
-    assert "padx=(0, 2 if option.gui_col in (0, 1, 2) else 0)," in block
+    block = source[source.index("checkbox_frame = ttk.Frame("):source.index("self._lookup_dependency_syncing = False")]
+    assert any(marker in block for marker in ("padx=(0, 2 if option.gui_col in (0, 1, 2) else 0),", "padx=(0, 1 if option.gui_col in (0, 1, 2) else 0),", '"padx": (0, 1 if option.gui_col in (0, 1, 2) else 0)'))
     assert "24 if option.gui_col" not in block
-    assert 'self.dry_run_checkbox.grid(row=2, column=3, sticky="w", padx=(0, 0)' in block
+    assert any(marker in block for marker in ('self.dry_run_checkbox.grid(row=2, column=3, sticky="w", padx=(0, 0)', 'self.dry_run_checkbox.grid(row=2, column=3, sticky="nw", padx=(0, 0)'))
 
 
 def test_build446_main_path_entries_are_narrower_to_reduce_natural_window_width():

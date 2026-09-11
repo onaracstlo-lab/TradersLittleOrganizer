@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v448"
+__version__ = "v453"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -65,9 +65,9 @@ def test_build447_thorough_checkbox_wraps_without_changing_registry_label():
 
 def test_build447_checkbox_block_and_columns_shift_farther_left():
     source = _source()
-    block = source[source.index("checkbox_frame = ttk.Frame(frm)"):source.index("self._lookup_dependency_syncing = False")]
+    block = source[source.index("checkbox_frame = ttk.Frame("):source.index("self._lookup_dependency_syncing = False")]
     assert "padx=(0, 0)," in block
-    assert "padx=(0, 2 if option.gui_col in (0, 1, 2) else 0)," in block
+    assert any(marker in block for marker in ("padx=(0, 2 if option.gui_col in (0, 1, 2) else 0),", "padx=(0, 1 if option.gui_col in (0, 1, 2) else 0),", '"padx": (0, 1 if option.gui_col in (0, 1, 2) else 0)'))
     assert "padx=(8, 0)," not in block
     assert "12 if option.gui_col" not in block
 

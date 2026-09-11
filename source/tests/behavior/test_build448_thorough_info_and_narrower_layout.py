@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v448"
+__version__ = "v453"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -53,10 +53,10 @@ def test_build448_thorough_info_is_plain_and_only_names_enabled_online_sources()
 
 def test_build448_tag_copy_delete_wraps_and_last_checkbox_column_moves_left():
     source = _source()
-    block = source[source.index("checkbox_frame = ttk.Frame(frm)"):source.index("self._lookup_dependency_syncing = False")]
+    block = source[source.index("checkbox_frame = ttk.Frame("):source.index("self._lookup_dependency_syncing = False")]
     assert 'checkbox_text = "Tag Copy/Delete\\nOriginal"' in block
-    assert "padx=(0, 2 if option.gui_col in (0, 1, 2) else 0)," in block
-    assert 'self.dry_run_checkbox.grid(row=2, column=3, sticky="w", padx=(0, 0)' in block
+    assert any(marker in block for marker in ("padx=(0, 2 if option.gui_col in (0, 1, 2) else 0),", "padx=(0, 1 if option.gui_col in (0, 1, 2) else 0),", '"padx": (0, 1 if option.gui_col in (0, 1, 2) else 0)'))
+    assert any(marker in block for marker in ('self.dry_run_checkbox.grid(row=2, column=3, sticky="w", padx=(0, 0)', 'self.dry_run_checkbox.grid(row=2, column=3, sticky="nw", padx=(0, 0)'))
 
 
 def test_build448_search_path_and_slam_are_trimmed_again():

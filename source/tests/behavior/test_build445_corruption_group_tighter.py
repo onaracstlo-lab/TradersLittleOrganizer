@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v448"
+__version__ = "v453"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -33,6 +33,18 @@ def test_build445_percent_is_attached_to_threshold_entry():
 
 def test_build445_corruption_group_padding_is_tighter():
     source = _source()
-    assert 'ttk.LabelFrame(frm, text="Corruption Handling", padding=(4, 2))' in source
-    assert 'corruption_frame.grid(row=row, column=0, columnspan=2, sticky="w", padx=4, pady=(3, 2))' in source
-    assert 'text="Folder corruption\\nthreshold"' in source
+    assert any(marker in source for marker in ('ttk.LabelFrame(frm, text="Corruption Handling", padding=(4, 2))', 'ttk.LabelFrame(frm, text="Corruption Handling", padding=(4, 1))'))
+    # Later GUI compaction may reduce this padding further; Build 445's contract is that
+    # the corruption group never regresses to a looser top/bottom gap.
+    assert any(
+        marker in source
+        for marker in (
+            'corruption_frame.grid(row=row, column=0, columnspan=2, sticky="w", padx=4, pady=(3, 2))',
+            'corruption_frame.grid(row=row, column=0, columnspan=2, sticky="w", padx=4, pady=(2, 2))',
+            'corruption_frame.grid(row=row, column=0, columnspan=2, sticky="w", padx=4, pady=(1, 2))',
+            'corruption_frame.grid(row=row, column=0, columnspan=2, sticky="w", padx=4, pady=(0, 2))',
+            'corruption_frame.grid(row=row, column=0, columnspan=2, sticky="w", padx=4, pady=(0, 1))',
+            'corruption_frame.grid(row=row, column=0, columnspan=3, sticky="ew", padx=4, pady=(0, 1))',
+        )
+    )
+    assert ('text="Folder corruption\\nthreshold"' in source or 'text="Folder corruption threshold"' in source)

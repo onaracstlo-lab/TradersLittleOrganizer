@@ -1,25 +1,26 @@
-TLO Source and Utilities Bundle v448
+TLO Source and Utilities Bundle v453
 
-Public application version: v1.6 Build 448
-Source bundle label: v448
+Public application version: v1.6 Build 453
+Source bundle label: v453
 
-Build 448 summary
-- Starts from the verified v1.6 Build 447 application source bundle.
-- Removes the confusing Thorough Setlist Matching Info line when neither etreeDB nor setlist.fm is enabled.
-- When online lookup sources are enabled, Thorough Info simply names the enabled source(s); normal setlist.fm access still warns about the 600-ms / 1,400-call limits.
-- Wraps the visible Tag Copy/Delete Original checkbox label to two lines, tightens checkbox-column gaps, and pulls the final checkbox column farther left.
-- Narrows Search Path and Slam entry widths from 74 to 66 characters, reducing the natural main Inventory window width to about 1107 px in the same Tk/Xvfb environment.
-- Preserves checkbox ordering/grid coordinates, lookup behavior, corruption behavior, tagging behavior, and CLI semantics.
-- Updates the current main-window figure, manual, requirements, tests, and packaging metadata to v1.6 Build 448.
+Build 453 summary
+- Starts from the verified v1.6 Build 452 application source bundle.
+- Keeps the main checkbox logical grid but prevents the wrapped Tag Copy/Delete Original label from pushing Thorough Setlist Matching down.
+- Gives etreeDB, setlist.fm, setlist.fm upgrade, and Thorough Setlist Matching the same compact vertical row increment in the first checkbox column.
+- Reflows Corruption Handling into one fully horizontal label/control strip beneath the checkbox options.
+- Places each corruption label immediately beside its control; the threshold value and % remain one compact unit.
+- Preserves Build 452 first-open screen fitting so the initial visible main window is bounded by the current display.
+- Preserves inventory, lookup, tagging, corruption-policy, and CLI semantics.
+- Updates the manual, requirements, tests, screenshot, and packaging metadata to v1.6 Build 453.
 - Keeps the GitHub Build Process strictly separate from the TLO application source bundle.
-- Archives Build 447 change notes in old-change-logs.zip.
+- Archives Build 452 change notes in old-change-logs.zip.
 
 Current documentation files:
-- TLO_Inventory_User_Manual_v448.rtf: current end-user manual.
-- TLO_Inventory_Requirements_Working_v448.docx: current TLO requirements/development document.
+- TLO_Inventory_User_Manual_v453.rtf: current end-user manual.
+- TLO_Inventory_Requirements_Working_v453.docx: current TLO requirements/development document.
 - TLO-FAQ.txt: current frequently asked questions.
-- CHANGES_v448.txt: changes introduced by this build.
-- old-change-logs.zip: archived historical TLO change notes through Build 447.
+- CHANGES_v453.txt: changes introduced by this build.
+- old-change-logs.zip: archived historical TLO change notes through Build 452.
 
 GitHub Build Process separation:
 - No GitHub Build Process artifact is included in this source bundle.

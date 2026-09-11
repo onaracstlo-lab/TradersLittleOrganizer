@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v448"
+__version__ = "v453"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -21,16 +21,23 @@ def test_build444_corruption_dropdowns_remain_compact():
     assert "width=20," not in block
 
 
-def test_build444_threshold_label_is_split_over_two_lines():
+def test_build444_threshold_label_stays_compact():
     source = _source()
-    assert 'text="Folder corruption\\nthreshold"' in source
-    assert 'text="Folder corruption threshold"' not in source
+    # Build 444 used a two-line label. Build 453 intentionally returns it to
+    # one line because the entire corruption group is now one horizontal strip.
+    assert (
+        'text="Folder corruption\\nthreshold"' in source
+        or 'text="Folder corruption threshold"' in source
+    )
 
 
 def test_build444_corruption_group_uses_compact_spacing():
     source = _source()
     assert 'ttk.LabelFrame(frm, text="Corruption Handling", padding=' in source
-    assert 'corruption_frame.grid(row=row, column=0, columnspan=2, sticky="w"' in source
+    assert (
+        'corruption_frame.grid(row=row, column=0, columnspan=2, sticky="w"' in source
+        or 'corruption_frame.grid(row=row, column=0, columnspan=3, sticky="ew"' in source
+    )
 
 
 def test_build444_normal_info_line_is_hidden_but_validation_errors_remain():

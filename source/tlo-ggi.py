@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v448"
+__version__ = "v453"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -47,6 +47,7 @@ from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION, PUBLIC_VERSION, versioned
 from tlo_research_lib import research_logs
 from tlo_reverse_copy_delete import prepare_reverse_selection, reverse_copy_delete_and_rename
 from tlo_gui_shortcuts import install_global_ctrl_a
+from tlo_gui_shortcuts import configure_centered_ttk_button_text, bounded_initial_window_size
 from tlo_github_updates import (
     check_for_updates,
     is_auto_update_enabled,
@@ -621,6 +622,7 @@ class App:
             normalize_platform_input_path(str(getattr(self.cli_args, "tag_copy_and_delete_path", "") or "").strip())
         ) if str(getattr(self.cli_args, "tag_copy_and_delete_path", "") or "").strip() else ""
         self._build()
+        self._fit_initial_window_to_screen()
         self.root.protocol("WM_DELETE_WINDOW", self._on_quit)
         self._install_sigint_handler()
         self.root.after(100, self._drain)
@@ -650,6 +652,7 @@ class App:
             except tk.TclError:
                 pass
         style = ttk.Style(self.root)
+        configure_centered_ttk_button_text(style)
         for style_name in (
             "TLabel",
             "TButton",
@@ -672,12 +675,59 @@ class App:
         self.title_font = tkfont.Font(size=target_size, weight="bold")
         try:
             style.configure("Main.TLabel", font=self.main_font)
-            style.configure("Main.TButton", font=self.main_font, padding=(8, 7))
+            style.configure("Main.TButton", font=self.main_font, padding=(8, 7), anchor="center", justify="center")
             style.configure("Main.TEntry", font=self.main_font)
             style.configure("Main.TCombobox", font=self.main_font)
-            style.configure("Main.Large.TCheckbutton", font=self.main_font, padding=(2, 4, 10, 4), indicatorsize=target_size + 4)
+            style.configure(
+                "Main.Large.TCheckbutton",
+                font=self.main_font,
+                padding=(1, 0, 3, 0),
+                indicatorsize=target_size + 4,
+                anchor="nw",
+                justify="left",
+            )
+            # Keep the indicator aligned with the first text line when a label wraps.
+            style.layout(
+                "Main.Large.TCheckbutton",
+                [
+                    (
+                        "Checkbutton.padding",
+                        {
+                            "sticky": "nswe",
+                            "children": [
+                                ("Checkbutton.indicator", {"side": "left", "sticky": "n"}),
+                                (
+                                    "Checkbutton.focus",
+                                    {
+                                        "side": "left",
+                                        "sticky": "w",
+                                        "children": [("Checkbutton.label", {"sticky": "nswe"})],
+                                    },
+                                ),
+                            ],
+                        },
+                    )
+                ],
+            )
         except tk.TclError:
             pass
+
+    def _fit_initial_window_to_screen(self):
+        """Size the first visible main window so it fits inside the current screen."""
+        self.root.update_idletasks()
+        requested_width = max(1, int(self.root.winfo_reqwidth()))
+        requested_height = max(1, int(self.root.winfo_reqheight()))
+        screen_width = max(1, int(self.root.winfo_screenwidth()))
+        screen_height = max(1, int(self.root.winfo_screenheight()))
+
+        width, height = bounded_initial_window_size(
+            requested_width, requested_height, screen_width, screen_height
+        )
+
+        if width != requested_width or height != requested_height:
+            x = max(0, (screen_width - width) // 2)
+            y = max(0, (screen_height - height) // 2)
+            self.root.geometry(f"{width}x{height}+{x}+{y}")
 
     def _build(self):
         self._configure_gui_fonts()
@@ -725,11 +775,22 @@ class App:
         self.vars["corrupt_folders"].trace_add("write", self._corruption_folder_policy_changed)
 
         row = 0
-        ttk.Label(frm, text="Traders Little Organizer™ Inventory App", font=self.title_font).grid(
-            row=row, column=0, columnspan=2, sticky="w", padx=6, pady=(0, 4)
+        try:
+            tlohome_display = self._resolve_gui_tlo_home(error_type=ValueError)
+        except Exception:
+            tlohome_display = self._cli_my_tlo_value() or self._cli_tlo_home_value() or os.environ.get("TLOHome", "") or "(not set)"
+
+        header_frame = ttk.Frame(frm)
+        header_frame.grid(row=row, column=0, columnspan=3, sticky="ew", padx=(4, 4), pady=(0, 1))
+        header_frame.columnconfigure(0, weight=1)
+        ttk.Label(header_frame, text="Traders Little Organizer™ Inventory App", font=self.title_font).grid(
+            row=0, column=0, sticky="w", padx=(0, 6), pady=0
+        )
+        ttk.Label(header_frame, text=f"TLOHome: {tlohome_display}", style="Main.TLabel").grid(
+            row=0, column=1, sticky="e", padx=(6, 4), pady=0
         )
         self.hamburger_button = ttk.Menubutton(
-            frm,
+            header_frame,
             text="☰",
             style="Main.TButton",
         )
@@ -752,110 +813,71 @@ class App:
         self.hamburger_menu.add_separator()
         self.hamburger_menu.add_cascade(label="Help", menu=self.help_menu)
         self.hamburger_button.configure(menu=self.hamburger_menu)
-        self.hamburger_button.grid(row=row, column=2, sticky="e", padx=6, pady=(0, 4))
+        self.hamburger_button.grid(row=0, column=2, sticky="e", padx=0, pady=0)
         row += 1
 
-        try:
-            tlohome_display = self._resolve_gui_tlo_home(error_type=ValueError)
-        except Exception:
-            tlohome_display = self._cli_my_tlo_value() or self._cli_tlo_home_value() or os.environ.get("TLOHome", "") or "(not set)"
-        ttk.Label(frm, text=f"TLOHome: {tlohome_display}", style="Main.TLabel").grid(
-            row=row, column=0, columnspan=3, sticky="w", padx=6, pady=(0, 8)
-        )
-        row += 1
-
-        ttk.Label(frm, text="Search Path", style="Main.TLabel").grid(row=row, column=0, sticky="w", padx=6, pady=(4, 1))
+        ttk.Label(
+            frm,
+            text="Search Path\n(optional/override)",
+            justify="left",
+            style="Main.TLabel",
+        ).grid(row=row, column=0, sticky="w", padx=(4, 6), pady=0)
         self.search_path_entry = ttk.Entry(frm, textvariable=self.vars["search_path_override"], width=66, style="Main.TEntry")
         self.search_path_entry.grid(
-            row=row, column=1, columnspan=2, sticky="ew", padx=(12, 6), pady=(4, 1)
+            row=row, column=1, columnspan=2, sticky="ew", padx=(6, 4), pady=0
         )
         self.search_path_drop_status = self._enable_search_path_drag_drop()
         row += 1
-        search_path_note = "Optional override; may start with [Volume]."
-        if getattr(self, "search_path_drop_status", None) and self.search_path_drop_status.enabled:
-            search_path_note += " Drag a folder here from File Explorer."
-        ttk.Label(frm, text=search_path_note, style="Main.TLabel").grid(row=row, column=1, columnspan=2, sticky="w", padx=(12, 6), pady=(0, 1))
-        row += 1
-        ttk.Label(frm, text="Slam", style="Main.TLabel").grid(row=row, column=0, sticky="w", padx=6, pady=(4, 1))
+
+        ttk.Label(frm, text="Slam (optional)", style="Main.TLabel").grid(
+            row=row, column=0, sticky="w", padx=(4, 6), pady=(0, 1)
+        )
         ttk.Entry(frm, textvariable=self.vars["search_path_slam_override"], width=66, style="Main.TEntry").grid(
-            row=row, column=1, columnspan=2, sticky="ew", padx=(12, 6), pady=(4, 1)
+            row=row, column=1, columnspan=2, sticky="ew", padx=(6, 4), pady=(0, 1)
         )
         row += 1
-        ttk.Label(frm, text="(optional/override)", style="Main.TLabel").grid(row=row, column=1, columnspan=2, sticky="w", padx=(12, 6), pady=(0, 6))
-        row += 1
 
-        performance_options_row = row
-        ttk.Label(frm, text="Performance Mode", style="Main.TLabel").grid(row=row, column=0, sticky="w", padx=6, pady=(4, 3))
+        options_frame = ttk.Frame(frm)
+        options_frame.grid(
+            row=row, column=0, columnspan=3, sticky="ew", padx=(4, 4), pady=0
+        )
+        options_frame.columnconfigure(0, weight=0)
+        options_frame.columnconfigure(1, weight=1)
+
+        performance_frame = ttk.Frame(options_frame)
+        performance_frame.grid(row=0, column=0, sticky="nw", padx=(0, 8), pady=0)
+        ttk.Label(performance_frame, text="Performance Mode", style="Main.TLabel").grid(
+            row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 1)
+        )
         self.performance_combo = ttk.Combobox(
-            frm,
+            performance_frame,
             textvariable=self.vars["performance_mode"],
             values=("gentle", "balanced", "fast", "extreme"),
             state="readonly",
             width=10,
             style="Main.TCombobox",
         )
-        self.performance_combo.grid(row=row, column=1, sticky="w", padx=(12, 6), pady=(4, 3))
-        row += 1
+        self.performance_combo.grid(row=0, column=1, sticky="w", padx=(0, 4), pady=(0, 1))
 
-        ttk.Label(frm, text="Max Workers", style="Main.TLabel").grid(row=row, column=0, sticky="w", padx=6, pady=(4, 3))
-        ttk.Entry(frm, textvariable=self.vars["max_workers"], width=12, style="Main.TEntry").grid(
-            row=row, column=1, sticky="w", padx=(12, 6), pady=(4, 3)
+        ttk.Label(performance_frame, text="Max Workers", style="Main.TLabel").grid(
+            row=1, column=0, sticky="w", padx=(0, 6), pady=0
         )
-        row += 1
-
-        corruption_frame = ttk.LabelFrame(frm, text="Corruption Handling", padding=(4, 2))
-        corruption_frame.grid(row=row, column=0, columnspan=2, sticky="w", padx=4, pady=(3, 2))
-        ttk.Label(corruption_frame, text="Corrupt files", style="Main.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 4), pady=1)
-        self.corrupt_files_combo = ttk.Combobox(
-            corruption_frame,
-            textvariable=self.vars["corrupt_files"],
-            values=tuple(CORRUPT_FILE_GUI_VALUES.values()),
-            state="readonly",
-            width=15,
-            style="Main.TCombobox",
-        )
-        self.corrupt_files_combo.grid(row=0, column=1, sticky="w", pady=1)
-
-        ttk.Label(corruption_frame, text="Folder removal", style="Main.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 4), pady=1)
-        self.corrupt_folders_combo = ttk.Combobox(
-            corruption_frame,
-            textvariable=self.vars["corrupt_folders"],
-            values=tuple(CORRUPT_FOLDER_GUI_VALUES.values()),
-            state="readonly",
-            width=15,
-            style="Main.TCombobox",
-        )
-        self.corrupt_folders_combo.grid(row=1, column=1, sticky="w", pady=1)
-
-        ttk.Label(
-            corruption_frame,
-            text="Folder corruption\nthreshold",
-            justify="left",
-            style="Main.TLabel",
-        ).grid(row=2, column=0, sticky="w", padx=(0, 4), pady=1)
-        threshold_value_frame = ttk.Frame(corruption_frame)
-        threshold_value_frame.grid(row=2, column=1, sticky="w", pady=1)
-        self.corruption_threshold_entry = ttk.Entry(
-            threshold_value_frame, textvariable=self.vars["corrupt_folder_threshold"], width=5, style="Main.TEntry"
-        )
-        self.corruption_threshold_entry.grid(row=0, column=0, sticky="w")
-        ttk.Label(threshold_value_frame, text="%", style="Main.TLabel").grid(row=0, column=1, sticky="w", padx=(1, 0))
-        self._sync_corruption_threshold_state()
-        row += 1
+        ttk.Entry(
+            performance_frame, textvariable=self.vars["max_workers"], width=12, style="Main.TEntry"
+        ).grid(row=1, column=1, sticky="w", padx=(0, 4), pady=0)
 
         self.bool_vars = {
             option.config_field: tk.BooleanVar(value=bool(getattr(self.cli_args, option.config_field, option.default)))
             for option in GUI_CHECKBOX_OPTIONS
         }
         self.dry_run_var = tk.BooleanVar(value=False)
-        checkbox_frame = ttk.Frame(frm)
+        checkbox_frame = ttk.Frame(options_frame)
         checkbox_frame.grid(
-            row=performance_options_row,
-            column=2,
-            rowspan=3,
+            row=0,
+            column=1,
             sticky="nw",
             padx=(0, 0),
-            pady=(4, 4),
+            pady=(0, 0),
         )
         checkbox_frame.columnconfigure(0, weight=0)
         checkbox_frame.columnconfigure(1, weight=0)
@@ -873,26 +895,79 @@ class App:
                 checkbox_text = "Tag Copy/Delete\nOriginal"
             else:
                 checkbox_text = option.gui_label
-            ttk.Checkbutton(
+            checkbox = ttk.Checkbutton(
                 checkbox_frame,
                 text=checkbox_text,
                 variable=self.bool_vars[option.config_field],
                 command=checkbox_command,
                 style="Main.Large.TCheckbutton",
-            ).grid(
-                row=option.gui_row,
-                column=option.gui_col,
-                sticky="w",
-                padx=(0, 2 if option.gui_col in (0, 1, 2) else 0),
-                pady=(3, 3),
             )
+            grid_options = {
+                "row": option.gui_row,
+                "column": option.gui_col,
+                "sticky": "nw",
+                "padx": (0, 1 if option.gui_col in (0, 1, 2) else 0),
+                "pady": (0, 0),
+            }
+            # Let this wrapped label occupy the following otherwise-unused cell so
+            # it does not make row 2 taller and push Thorough Setlist Matching down.
+            if option.config_field == "tag_copy_and_delete_enabled":
+                grid_options["rowspan"] = 2
+            checkbox.grid(**grid_options)
         self.dry_run_checkbox = ttk.Checkbutton(
             checkbox_frame,
             text="Dry run",
             variable=self.dry_run_var,
             style="Main.Large.TCheckbutton",
         )
-        self.dry_run_checkbox.grid(row=2, column=3, sticky="w", padx=(0, 0), pady=(3, 3))
+        self.dry_run_checkbox.grid(row=2, column=3, sticky="nw", padx=(0, 0), pady=(0, 0))
+        row += 1
+
+        corruption_frame = ttk.LabelFrame(frm, text="Corruption Handling", padding=(4, 1))
+        corruption_frame.grid(row=row, column=0, columnspan=3, sticky="ew", padx=4, pady=(0, 1))
+
+        # Build 453: one fully horizontal label/control strip beneath the checkboxes.
+        ttk.Label(corruption_frame, text="Corrupt files", style="Main.TLabel").grid(
+            row=0, column=0, sticky="w", padx=(0, 4), pady=0
+        )
+        self.corrupt_files_combo = ttk.Combobox(
+            corruption_frame,
+            textvariable=self.vars["corrupt_files"],
+            values=tuple(CORRUPT_FILE_GUI_VALUES.values()),
+            state="readonly",
+            width=15,
+            style="Main.TCombobox",
+        )
+        self.corrupt_files_combo.grid(row=0, column=1, sticky="w", padx=(0, 12), pady=0)
+
+        ttk.Label(corruption_frame, text="Folder removal", style="Main.TLabel").grid(
+            row=0, column=2, sticky="w", padx=(0, 4), pady=0
+        )
+        self.corrupt_folders_combo = ttk.Combobox(
+            corruption_frame,
+            textvariable=self.vars["corrupt_folders"],
+            values=tuple(CORRUPT_FOLDER_GUI_VALUES.values()),
+            state="readonly",
+            width=15,
+            style="Main.TCombobox",
+        )
+        self.corrupt_folders_combo.grid(row=0, column=3, sticky="w", padx=(0, 12), pady=0)
+
+        ttk.Label(corruption_frame, text="Folder corruption threshold", style="Main.TLabel").grid(
+            row=0, column=4, sticky="w", padx=(0, 4), pady=0
+        )
+        threshold_value_frame = ttk.Frame(corruption_frame)
+        threshold_value_frame.grid(row=0, column=5, sticky="w", pady=0)
+        self.corruption_threshold_entry = ttk.Entry(
+            threshold_value_frame, textvariable=self.vars["corrupt_folder_threshold"], width=5, style="Main.TEntry"
+        )
+        self.corruption_threshold_entry.grid(row=0, column=0, sticky="w")
+        ttk.Label(threshold_value_frame, text="%", style="Main.TLabel").grid(
+            row=0, column=1, sticky="w", padx=(1, 0)
+        )
+        self._sync_corruption_threshold_state()
+        row += 1
+
         self._lookup_dependency_syncing = False
         self.bool_vars["setlistfm_lookup"].trace_add("write", self._reapply_lookup_dependency)
         self.bool_vars["etree_lookup"].trace_add("write", self._reapply_lookup_dependency)
@@ -919,38 +994,38 @@ class App:
         left_button_group.grid(row=0, column=0, sticky="w")
         self.tag_button = ttk.Button(
             left_button_group,
-            text="Tag\n ",
+            text="Tag",
             command=self._open_tagger,
             style=main_button_style,
         )
-        self.tag_button.grid(row=0, column=0, padx=4, sticky="w")
+        self.tag_button.grid(row=0, column=0, padx=4, sticky="nsw")
         self.add_shows_button = ttk.Button(
             left_button_group,
             text="Add Shows\n(incremental)",
             command=self._open_add_to_inventory,
             style=main_button_style,
         )
-        self.add_shows_button.grid(row=0, column=1, padx=4, sticky="w")
+        self.add_shows_button.grid(row=0, column=1, padx=4, sticky="nsw")
         self.research_button = ttk.Button(
             left_button_group,
-            text="Research\n ",
+            text="Research",
             command=self._open_research,
             style=main_button_style,
         )
-        self.research_button.grid(row=0, column=2, padx=4, sticky="w")
+        self.research_button.grid(row=0, column=2, padx=4, sticky="nsw")
         self.reverse_copy_delete_button = ttk.Button(
             left_button_group,
             text="Reverse Copy/Delete\n+ Rename",
             command=self._open_reverse_copy_delete,
             style=main_button_style,
         )
-        self.reverse_copy_delete_button.grid(row=0, column=3, padx=4, sticky="w")
+        self.reverse_copy_delete_button.grid(row=0, column=3, padx=4, sticky="nsw")
         ttk.Button(
             button_frame,
-            text="Quit\n ",
+            text="Quit",
             command=self._on_quit,
             style=main_button_style,
-        ).grid(row=0, column=1, padx=4)
+        ).grid(row=0, column=1, padx=4, sticky="ns")
 
         inventory_group = ttk.Frame(button_frame)
         inventory_group.grid(row=0, column=2, sticky="e")
@@ -960,21 +1035,21 @@ class App:
             command=self._start,
             style=main_button_style,
         )
-        self.inventory_button.grid(row=0, column=0, padx=4)
+        self.inventory_button.grid(row=0, column=0, padx=4, sticky="ns")
         self.pause_button = ttk.Button(
             inventory_group,
-            text="Pause\n ",
+            text="Pause",
             command=self._pause_inventory,
             style=main_button_style,
         )
-        self.pause_button.grid(row=0, column=1, padx=4)
+        self.pause_button.grid(row=0, column=1, padx=4, sticky="ns")
         self.resume_button = ttk.Button(
             inventory_group,
-            text="Resume\n ",
+            text="Resume",
             command=self._resume_inventory,
             style=main_button_style,
         )
-        self.resume_button.grid(row=0, column=2, padx=4)
+        self.resume_button.grid(row=0, column=2, padx=4, sticky="ns")
         row += 1
 
         progress_frame = ttk.LabelFrame(frm, text="Current Operation", padding=6)
@@ -3689,7 +3764,9 @@ def main() -> int:
         return 0
     cli_args = _parse_gui_command_line(sys.argv[1:])
     root, _drop_provider = create_tk_root(tk)
+    root.withdraw()
     app = App(root, cli_args=cli_args)
+    root.deiconify()
     try:
         root.mainloop()
     except KeyboardInterrupt:
