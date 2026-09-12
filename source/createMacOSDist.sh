@@ -192,6 +192,7 @@ build_one "$(find_script search-artist-db.py)" yes
 build_windowed_with_optional_icon "$(find_script tlo-gsi.py)" "$SEARCH_ICON"
 build_one "$(find_script tlo-gi.py)" no
 build_one "$(find_script tlo-research.py)" no
+build_one "$(find_script tlo-reverse.py)" no
 build_windowed_with_optional_icon "$(find_script tlo-ggi.py)" "$INVENTORY_ICON" \
     --collect-all mutagen \
     --collect-all imageio_ffmpeg \
@@ -215,6 +216,7 @@ EXPECTED_EXECUTABLES=(
     tlo-gsi
     tlo-gi
     tlo-research
+    tlo-reverse
     tlo-ggi
     tlo-tag
     tlo-deleteDupes

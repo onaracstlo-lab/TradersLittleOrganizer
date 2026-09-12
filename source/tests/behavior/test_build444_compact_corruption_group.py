@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v455"
+__version__ = "v456"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -20,7 +20,7 @@ def test_build444_corruption_dropdowns_remain_compact_under_current_layout():
     block = source[source.index('corruption_frame = ttk.LabelFrame'):source.index('self._sync_corruption_threshold_state()')]
     corrupt_block = block[block.index('self.corrupt_files_combo = ttk.Combobox'):block.index('self.corrupt_files_combo.grid')]
     folder_block = block[block.index('self.corrupt_folders_combo = ttk.Combobox'):block.index('self.corrupt_folders_combo.grid')]
-    # Build 455 trims the later widening while keeping Corrupt files wider than Folder removal.
+    # Build 456 trims the later widening while keeping Corrupt files wider than Folder removal.
     assert "width=18," in corrupt_block
     assert "width=15," in folder_block
     assert "width=16," not in block

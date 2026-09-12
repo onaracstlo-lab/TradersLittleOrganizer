@@ -1,6 +1,6 @@
 """Executable Tkinter behavior tests for layout and progress animation."""
 
-__version__ = "v455"
+__version__ = "v456"
 
 from pathlib import Path
 
@@ -85,21 +85,10 @@ def test_three_progress_bars_receive_shared_interval(tk_root):
     assert calls == [gui.ACTIVITY_INDICATOR_INTERVAL_MS] * 3
 
 
-def test_reverse_copy_delete_button_opens_tlohome_scoped_dialog(tk_root, monkeypatch, tmp_path):
+def test_reverse_folder_workflow_is_not_exposed_in_inventory_gui(tk_root, monkeypatch, tmp_path):
     gui = _load_gui_module()
     monkeypatch.setenv("TLOHome", str(tmp_path))
     app = gui.App(tk_root, gui._parse_gui_command_line([]))
-    tk_root.update_idletasks()
+    assert not hasattr(app, "reverse_copy_delete_button")
+    assert not hasattr(app, "_open_reverse_copy_delete")
 
-    assert app.reverse_copy_delete_button is not None
-    assert "Reverse Copy/Delete" in str(app.reverse_copy_delete_button.cget("text"))
-
-    app._open_reverse_copy_delete()
-    tk_root.update_idletasks()
-    dialog = app.active_reverse_window
-    assert dialog is not None and dialog.winfo_exists()
-    texts = [str(widget.cget("text")) for widget in _descendants(dialog) if isinstance(widget, ttk.Label)]
-    assert any(text.startswith("TLOHome:") and str(tmp_path) in text for text in texts)
-    assert "Original Partition / Path" in texts
-    assert "Copy/Delete Destination" in texts
-    dialog.destroy()

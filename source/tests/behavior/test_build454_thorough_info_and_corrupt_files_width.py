@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v455"
+__version__ = "v456"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -57,5 +57,5 @@ def test_build454_thorough_normal_setlistfm_warns_that_it_will_be_slow():
 def test_build454_corrupt_files_dropdown_fits_longest_label():
     source = _source()
     block = source[source.index('self.corrupt_files_combo = ttk.Combobox'):source.index('self.corrupt_files_combo.grid')]
-    assert 'width=18' in block  # Build 455 trims the Build 454 widening
+    assert 'width=18' in block  # Build 456 trims the Build 454 widening
     assert '"delete": "Delete corrupt files"' in source

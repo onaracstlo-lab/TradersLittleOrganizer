@@ -1,4 +1,4 @@
-"""Build 455: persistent unidentified lists reconcile in encounter order."""
+"""Build 456: persistent unidentified lists reconcile in encounter order."""
 
 from pathlib import Path
 
@@ -7,7 +7,7 @@ import tlo_postprocess as PP
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v455"
+__version__ = "v456"
 
 
 def test_unidentified_shows_preserve_existing_then_current_encounter_order(tmp_path: Path):

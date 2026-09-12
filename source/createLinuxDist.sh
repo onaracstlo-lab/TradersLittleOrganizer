@@ -91,6 +91,7 @@ build_one "$(find_script search-artist-db.py)" --windowed
 build_one "$(find_script tlo-gsi.py)" --windowed
 build_one "$(find_script tlo-gi.py)"
 build_one "$(find_script tlo-research.py)"
+build_one "$(find_script tlo-reverse.py)"
 build_one "$(find_script tlo-ggi.py)" --windowed \
     --collect-all mutagen \
     --collect-all imageio_ffmpeg \

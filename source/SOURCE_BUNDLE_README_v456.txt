@@ -1,24 +1,26 @@
-TLO Source and Utilities Bundle v455
+TLO Source and Utilities Bundle v456
 
-Public application version: v1.6 Build 455
-Source bundle label: v455
+Public application version: v1.6 Build 456
+Source bundle label: v456
 
-Build 455 summary
-- Starts from the verified v1.6 Build 454 application source bundle.
-- Removes stale `unidentifiedShows.txt` entries when the same path is processed again and successfully resolved.
-- Preserves untouched prior unresolved entries and any path that remains unresolved in the current run.
-- Preserves encounter order in `unidentifiedShows.txt` and `artistsNotInDatabase.txt`; neither file is alphabetically sorted.
-- Retains case-insensitive de-duplication for artists and path de-duplication for unidentified shows.
-- Trims the Corrupt files dropdown from width 20 to width 18 so it is only slightly wider than the compact baseline.
-- Updates the manual, requirements, tests, and packaging metadata to v1.6 Build 455.
+Build 456 summary
+- Continues from the verified v1.6 Build 455 application source bundle.
+- Removes Reverse Copy/Delete + Rename from the main Inventory GUI.
+- Adds tlo-reverse, a standalone folder-only reversal CLI driven by TLO success logs.
+- Infers Rename Compliantly, Tag Copy, and Tag Copy/Delete Original from authoritative source -> destination mappings; no required operation-type flag.
+- Supports Copy/Delete whether Rename Compliantly was enabled or not, plus rename-only and retained-original Tag Copy reversal.
+- Refuses ambiguous multi-run selection, overwrite conflicts, and changed Tag Copy file sets; adds --log and --dry-run.
+- Never changes or attempts to reverse audio tags.
+- Packages tlo-reverse on Windows, Linux, and macOS.
+- Updates the User Manual, FAQ, requirements, tests, and packaging metadata to v1.6 Build 456.
 - Keeps the GitHub Build Process strictly separate from the TLO application source bundle.
-- Archives Build 454 change notes in old-change-logs.zip.
+- Archives historical change notes in old-change-logs.zip.
 
 Current documentation files:
-- TLO_Inventory_User_Manual_v455.rtf: current end-user manual.
-- TLO_Inventory_Requirements_Working_v455.docx: current TLO requirements/development document.
+- TLO_Inventory_User_Manual_v456.rtf: current end-user manual.
+- TLO_Inventory_Requirements_Working_v456.docx: current TLO requirements/development document.
 - TLO-FAQ.txt: current frequently asked questions.
-- CHANGES_v455.txt: changes introduced by this build.
+- CHANGES_v456.txt: changes introduced by this build.
 - old-change-logs.zip: archived historical TLO change notes through Build 454.
 
 GitHub Build Process separation:
@@ -32,6 +34,7 @@ Primary applications:
 - tlo-tag.py: standalone tagger CLI.
 - tlo-gsi.py: collection search.
 - tlo-research.py: comp/meta log Research CLI.
+- tlo-reverse.py: standalone folder-operation reversal CLI; operation type is inferred from TLO logs.
 - tlo-deleteDupes.py: duplicate-folder analysis/holding-area cleanup utility.
 - search-artist-db.py: Artist DB search utility.
 
