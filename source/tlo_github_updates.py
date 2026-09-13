@@ -1,14 +1,14 @@
 """GitHub release update checking for TLO GUI applications.
 
 The update checker deliberately downloads only. It does not unzip, install, or
-replace files in TLOHome. This keeps updates safe while TLO is running and
-avoids overwriting user inventory, setlists, logs, or databases.
+replace files in TLOHome. This keeps the check/download action safe while TLO is
+running; package contents are validated and any database inclusion is reported.
 """
 from __future__ import annotations
 
 from tlo_diagnostics import debug_suppressed_exception
 
-__version__ = "v456"
+__version__ = "v458"
 
 import datetime as _dt
 import hashlib
@@ -20,6 +20,7 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -52,6 +53,9 @@ class UpdateCheckResult:
     path: str = ""
     asset_name: str = ""
     package_kind: str = ""
+    platform_key: str = ""
+    packaging_mode: str = ""
+    databases_included: bool | None = None
 
 
 def _utc_now() -> _dt.datetime:
@@ -165,10 +169,42 @@ def _extract_build_number(*values: Any) -> int | None:
     return None
 
 
-def _detect_platform_key() -> tuple[str, tuple[str, ...]]:
-    if sys.platform.startswith("win"):
-        return "windows", ("windows", "win")
+def _detect_installed_platform_key(tlo_home: str | os.PathLike[str] | None = None) -> str:
+    """Return the exact release platform/layout required by this installation.
+
+    Windows hybrid and Windows onedir distributions share the same operating
+    system but are not overlay-compatible. Prefer the installed TLOHome layout
+    when it is available; fall back to the running executable layout; finally
+    retain the historic Windows-hybrid default for source/development runs.
+    """
     if sys.platform == "darwin":
+        return "macos"
+    if not sys.platform.startswith("win"):
+        return "linux"
+
+    candidates: list[Path] = []
+    if tlo_home:
+        try:
+            candidates.append(Path(tlo_home).expanduser().resolve() / "apps" / "Windows")
+        except Exception:
+            pass
+    try:
+        candidates.append(Path(sys.executable).resolve().parent)
+    except Exception:
+        pass
+
+    for apps_dir in candidates:
+        if (apps_dir / "_internal").is_dir():
+            return "windows_onedir"
+    return "windows"
+
+
+def _detect_platform_key() -> tuple[str, tuple[str, ...]]:
+    """Backward-compatible coarse platform helper used by older callers/tests."""
+    exact = _detect_installed_platform_key(None)
+    if exact in {"windows", "windows_onedir"}:
+        return "windows", ("windows", "win")
+    if exact == "macos":
         return "macos", ("macos", "mac", "darwin", "osx", "os-x")
     return "linux", ("linux",)
 
@@ -221,41 +257,56 @@ def _matching_assets(release: dict[str, Any]) -> list[dict[str, Any]]:
     return [asset for asset in assets if isinstance(asset, dict)] if isinstance(assets, list) else []
 
 
-def _choose_asset(release: dict[str, Any], latest_build: int) -> tuple[dict[str, Any] | None, str, str]:
-    platform_key, aliases = _detect_platform_key()
-    assets = _matching_assets(release)
+def _asset_release_identity(asset_name: str) -> tuple[int | None, str, str] | None:
+    """Return ``(build, kind, platform_key)`` for an official release ZIP name."""
+    name = Path(str(asset_name or "")).name
+    match = re.fullmatch(
+        r"(?i)TLO_V\d+(?:\.\d+){1,2}Build(?P<build>\d{1,6})_"
+        r"(?P<kind>update|complete)_(?P<platform>Windows_onedir|Windows|Linux|macOS)\.zip",
+        name,
+    )
+    if not match:
+        return None
+    platform_token = match.group("platform").casefold()
+    platform_key = {
+        "windows": "windows",
+        "windows_onedir": "windows_onedir",
+        "linux": "linux",
+        "macos": "macos",
+    }[platform_token]
+    return int(match.group("build")), match.group("kind").casefold(), platform_key
 
-    def normalized(name: str) -> str:
-        return re.sub(r"[^a-z0-9]+", "-", name.casefold()).strip("-")
 
+def _choose_asset(
+    release: dict[str, Any],
+    latest_build: int,
+    tlo_home: str | os.PathLike[str] | None = None,
+) -> tuple[dict[str, Any] | None, str, str]:
+    """Choose only an exact platform/layout TLO update or complete ZIP.
+
+    Update ZIPs are preferred. A matching complete ZIP is the only fallback.
+    Generic ZIPs (including the source bundle) and the other Windows packaging
+    layout are never selected as substitutes.
+    """
+    platform_key = _detect_installed_platform_key(tlo_home)
     update_candidates: list[dict[str, Any]] = []
     complete_candidates: list[dict[str, Any]] = []
-    generic_candidates: list[dict[str, Any]] = []
-    for asset in assets:
-        name = _asset_name(asset)
-        norm = normalized(name)
-        if not norm.endswith("zip"):
+    for asset in _matching_assets(release):
+        identity = _asset_release_identity(_asset_name(asset))
+        if identity is None:
             continue
-        has_platform = any(alias in norm for alias in aliases)
-        has_update = "update" in norm
-        has_complete = "complete" in norm or "distribution" in norm
-        asset_build = _extract_build_number(name)
-        build_ok = asset_build is None or asset_build == latest_build
-        if has_update and has_platform and build_ok:
+        asset_build, kind, asset_platform = identity
+        if asset_build != latest_build or asset_platform != platform_key:
+            continue
+        if kind == "update":
             update_candidates.append(asset)
-        elif has_complete and has_platform and build_ok:
+        elif kind == "complete":
             complete_candidates.append(asset)
-        elif has_complete and build_ok and not has_platform:
-            generic_candidates.append(asset)
-        elif build_ok and not has_update and not has_platform:
-            generic_candidates.append(asset)
 
     if update_candidates:
         return update_candidates[0], "update", platform_key
     if complete_candidates:
         return complete_candidates[0], "complete", platform_key
-    if generic_candidates:
-        return generic_candidates[0], "complete", platform_key
     return None, "", platform_key
 
 
@@ -367,7 +418,129 @@ def _download_asset(asset: dict[str, Any], destination: Path) -> bool:
             debug_suppressed_exception(__name__, exc)
 
 
-def _update_download_settings(tlo_home: str | os.PathLike[str] | None, latest_build: int, asset_name: str, path: Path, package_kind: str) -> str:
+
+MAX_PACKAGE_MANIFEST_BYTES = 1024 * 1024
+
+
+def _read_zip_json_member(archive: zipfile.ZipFile, member_name: str) -> dict[str, Any]:
+    try:
+        info = archive.getinfo(member_name)
+    except KeyError as exc:
+        raise ValueError(f"Downloaded TLO package is missing {member_name}.") from exc
+    if info.file_size < 1 or info.file_size > MAX_PACKAGE_MANIFEST_BYTES:
+        raise ValueError(f"Downloaded TLO package has an invalid {member_name} size.")
+    with archive.open(info, "r") as handle:
+        payload = handle.read(MAX_PACKAGE_MANIFEST_BYTES + 1)
+    if len(payload) > MAX_PACKAGE_MANIFEST_BYTES:
+        raise ValueError(f"Downloaded TLO package {member_name} exceeds the safety limit.")
+    try:
+        data = json.loads(payload.decode("utf-8"))
+    except Exception as exc:
+        raise ValueError(f"Downloaded TLO package has malformed {member_name}.") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"Downloaded TLO package has malformed {member_name}.")
+    return data
+
+
+def _manifest_build_number(manifest: dict[str, Any]) -> int | None:
+    raw = manifest.get("build", manifest.get("build_number"))
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _inspect_downloaded_package(
+    path: Path,
+    *,
+    expected_kind: str,
+    expected_platform_key: str,
+    expected_build: int,
+) -> dict[str, Any]:
+    """Validate release-package identity without extracting any files."""
+    try:
+        with zipfile.ZipFile(path, "r") as archive:
+            bad_member = archive.testzip()
+            if bad_member:
+                raise ValueError(f"Downloaded TLO package contains a corrupt ZIP member: {bad_member}")
+            member_name = "UPDATE_MANIFEST.json" if expected_kind == "update" else "manifest.json"
+            manifest = _read_zip_json_member(archive, member_name)
+            names = {name.replace("\\", "/") for name in archive.namelist()}
+    except zipfile.BadZipFile as exc:
+        raise ValueError("Downloaded TLO release asset is not a valid ZIP file.") from exc
+
+    kind = str(manifest.get("kind") or "").casefold()
+    if kind != expected_kind:
+        raise ValueError(f"Downloaded TLO package kind is {kind or 'unknown'}, expected {expected_kind}.")
+    platform_key = str(manifest.get("platform_key") or "").casefold().replace("-", "_")
+    if platform_key != expected_platform_key:
+        raise ValueError(
+            f"Downloaded TLO package targets {platform_key or 'an unknown platform/layout'}, "
+            f"expected {expected_platform_key}."
+        )
+    build = _manifest_build_number(manifest)
+    if build != int(expected_build):
+        raise ValueError(f"Downloaded TLO package build is {build!r}, expected Build {expected_build}.")
+
+    required_db_names = {"TLO_DBs/artists.sqlite", "TLO_DBs/venues.txt"}
+    database_members = {name for name in names if name.startswith("TLO_DBs/") and not name.endswith("/")}
+    declared_databases = manifest.get("databases_included")
+    if not isinstance(declared_databases, bool):
+        raise ValueError("Downloaded TLO package has an invalid databases_included manifest value.")
+    databases_included = declared_databases
+    expected_database_members = required_db_names if databases_included else set()
+    if database_members != expected_database_members:
+        raise ValueError("Downloaded TLO package database manifest does not match its ZIP contents.")
+
+    declared_database_files = manifest.get("database_files")
+    if declared_database_files is not None:
+        if not isinstance(declared_database_files, list) or not all(isinstance(item, str) for item in declared_database_files):
+            raise ValueError("Downloaded TLO package has an invalid database_files manifest value.")
+        expected_database_files = sorted(path.split("/", 1)[1] for path in expected_database_members)
+        if sorted(declared_database_files) != expected_database_files:
+            raise ValueError("Downloaded TLO package database_files manifest does not match its ZIP contents.")
+
+    if expected_kind == "complete" and not databases_included:
+        raise ValueError("Downloaded complete TLO package is missing the required databases.")
+
+    packaging_mode = str(manifest.get("packaging_mode") or "").strip()
+    return {
+        "kind": kind,
+        "platform_key": platform_key,
+        "packaging_mode": packaging_mode,
+        "databases_included": databases_included,
+    }
+
+
+def _package_message(package_kind: str, databases_included: bool) -> tuple[str, str]:
+    if package_kind == "update":
+        kind_text = "update"
+        if databases_included:
+            extra = (
+                "This update includes refreshed TLO_DBs/artists.sqlite and venues.txt. "
+                "Applying it will replace those database master files. It does not contain "
+                "your inventory, setlists, logs, or other user-created output."
+            )
+        else:
+            extra = "This update does not contain your inventory, setlists, logs, or databases."
+        return kind_text, extra
+    return (
+        "complete distribution",
+        "This complete distribution includes the required database master files and support files. "
+        "Use it for a new installation; review the release notes before replacing files in an existing TLOHome.",
+    )
+
+def _update_download_settings(
+    tlo_home: str | os.PathLike[str] | None,
+    latest_build: int,
+    asset_name: str,
+    path: Path,
+    package_kind: str,
+    *,
+    platform_key: str = "",
+    packaging_mode: str = "",
+    databases_included: bool | None = None,
+) -> str:
     if not tlo_home:
         return ""
     settings = load_update_settings(tlo_home)
@@ -377,6 +550,9 @@ def _update_download_settings(tlo_home: str | os.PathLike[str] | None, latest_bu
     settings["last_downloaded_asset"] = asset_name
     settings["last_downloaded_path"] = str(path)
     settings["last_downloaded_kind"] = package_kind
+    settings["last_downloaded_platform_key"] = platform_key
+    settings["last_downloaded_packaging_mode"] = packaging_mode
+    settings["last_downloaded_databases_included"] = databases_included
     try:
         save_update_settings(tlo_home, settings)
     except Exception as exc:  # noqa: BLE001 - download succeeded; disclose persistence failure
@@ -420,13 +596,13 @@ def check_for_updates(
                 status="up_to_date", title="TLO is up to date", message=message, latest_build=latest_build,
             )
 
-        asset, package_kind, platform_key = _choose_asset(release, latest_build)
+        asset, package_kind, platform_key = _choose_asset(release, latest_build, tlo_home)
         if not asset:
             settings_warning = _write_last_check(tlo_home, latest_build)
             message = (
                 f"Installed: {DISPLAY_VERSION}\n"
                 f"Latest: v{PUBLIC_VERSION} Build {latest_build}\n\n"
-                f"No update ZIP for {platform_key} and no complete ZIP were found in the latest GitHub Release."
+                f"No update ZIP or complete ZIP matching {platform_key} was found in the latest GitHub Release."
             )
             if settings_warning:
                 message += f"\n\n{settings_warning}"
@@ -438,14 +614,21 @@ def check_for_updates(
         asset_name = _asset_name(asset)
         destination = _downloads_dir() / _safe_asset_filename(asset_name)
         downloaded = _download_asset(asset, destination)
-        settings_warning = _update_download_settings(tlo_home, latest_build, asset_name, destination, package_kind)
-        if package_kind == "update":
-            kind_text = "executable-only update"
-            extra = "This ZIP does not contain your inventory, setlists, logs, or databases."
-        else:
-            kind_text = "complete distribution"
-            extra = "This ZIP may include required support files. Review the release notes before replacing files in TLOHome."
-        verification_note = "" if _expected_digest(asset) else "\n\nGitHub did not provide a SHA-256 digest for this asset; TLO verified the downloaded file size only."
+        package_info = _inspect_downloaded_package(
+            destination,
+            expected_kind=package_kind,
+            expected_platform_key=platform_key,
+            expected_build=latest_build,
+        )
+        databases_included = bool(package_info["databases_included"])
+        packaging_mode = str(package_info["packaging_mode"] or "")
+        settings_warning = _update_download_settings(
+            tlo_home, latest_build, asset_name, destination, package_kind,
+            platform_key=platform_key, packaging_mode=packaging_mode,
+            databases_included=databases_included,
+        )
+        kind_text, extra = _package_message(package_kind, databases_included)
+        verification_note = ""
         if downloaded:
             title = "TLO update downloaded"
             lead = f"TLO v{PUBLIC_VERSION} Build {latest_build} {kind_text} was downloaded to:"
@@ -462,6 +645,9 @@ def check_for_updates(
             path=str(destination),
             asset_name=asset_name,
             package_kind=package_kind,
+            platform_key=platform_key,
+            packaging_mode=packaging_mode,
+            databases_included=databases_included,
         )
     except urllib.error.HTTPError as exc:
         return UpdateCheckResult(

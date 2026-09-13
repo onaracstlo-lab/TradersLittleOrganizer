@@ -9,7 +9,7 @@ pytestmark = pytest.mark.behavior
 from inventory_parser_lib import Config
 import tlo_tag_lib as T
 
-__version__ = "v456"
+__version__ = "v458"
 
 
 COUNTRY_JOE_INFO = """Country Joe Mcdonald-The Red Barn,Deposit,N.Y. U.S.A. 2001-05-26
@@ -187,15 +187,15 @@ def test_build410_requirements_and_manual_document_reported_fix():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v456.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v458.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v456.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v458.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v456 (v1.6 Build 456)." in req_text
+    assert "Current document version: v458 (v1.6 Build 458)." in req_text
     assert "Build 410 explicit-setlist and disc-order rule" in req_text
     assert "CJM-Disc01,Track01.flac" in req_text
     assert "Thank The Nurse That's Nursing You" in req_text
     assert "later collector notes beginning 1), 2), 3)" in req_text
-    assert "Version v1.6 Build 456" in manual_text
+    assert "Version v1.6 Build 458" in manual_text
     assert "CJM-Disc01,Track01.flac" in manual_text
 

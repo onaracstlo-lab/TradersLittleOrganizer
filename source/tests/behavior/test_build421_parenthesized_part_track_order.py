@@ -10,7 +10,7 @@ pytestmark = pytest.mark.behavior
 from inventory_parser_lib import Config
 import tlo_tag_lib as T
 
-__version__ = "v456"
+__version__ = "v458"
 
 
 def _make_part(tmp_path: Path, release: str, part: int, titles: list[str]) -> Path:
@@ -100,13 +100,13 @@ def test_build421_documentation_contract():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v456.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v458.docx")
     req_text = "\n".join(paragraph.text for paragraph in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v456.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v458.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v456 (v1.6 Build 456)." in req_text
+    assert "Current document version: v458 (v1.6 Build 458)." in req_text
     assert "Build 421 extends the same disc-first ordering" in req_text
     assert "Parent (1) through Parent (N)" in req_text
-    assert "Version v1.6 Build 456" in manual_text
+    assert "Version v1.6 Build 458" in manual_text
     assert "The same ordering applies to validated multipart release folders named Parent (1) through Parent (N)" in manual_text
     assert "stripe all track 01 files across the parts" in manual_text

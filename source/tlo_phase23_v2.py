@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v456"
+__version__ = "v458"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
@@ -116,6 +116,29 @@ MAX_YEAR_RANGE_SPAN = 5
 THE_PREFIX_RE = re.compile(r"^(?:the|a)\s+", re.IGNORECASE)
 THE_SUFFIX_RE = re.compile(r",\s*(?:the|a)$", re.IGNORECASE)
 ORDINAL_RE = re.compile(r"(?i)(\d{1,2})(?:st|nd|rd|th)$")
+DAY_TOKEN_RE_TEXT = r"\d{1,2}(?:st|nd|rd|th|ST|ND|RD|TH)?"
+DAY_RANGE_SEP_RE_TEXT = r"(?:\s*[-,\u2013\u2014]\s*)"
+YEAR_FIRST_SAME_MONTH_DAY_RANGE_RE = re.compile(
+    rf"(?<![0-9xX])(?P<year>{YEAR4_FULL_RE_TEXT})-(?P<month>\d{{1,2}})-"
+    rf"(?P<days>{DAY_TOKEN_RE_TEXT}(?:{DAY_RANGE_SEP_RE_TEXT}{DAY_TOKEN_RE_TEXT})+)"
+    rf"(?!(?:\s*[-,\u2013\u2014]\s*)\d{{1,2}})(?![A-Za-z0-9])"
+)
+MONTH_DAY_RANGE_YEAR_RE = re.compile(
+    rf"(?<![A-Za-z0-9])(?P<month_name>{MONTH_NAME_CASED_PATTERN})\.?{TEXT_DATE_SEP_OPT}"
+    rf"(?P<days>{DAY_TOKEN_RE_TEXT}(?:{DAY_RANGE_SEP_RE_TEXT}{DAY_TOKEN_RE_TEXT})+)"
+    rf"{TEXT_DATE_SEP_OPT}(?P<year>{YEAR4_TOKEN_RE_TEXT})(?![A-Za-z0-9])"
+)
+DAY_RANGE_MONTH_YEAR_RE = re.compile(
+    rf"(?<![A-Za-z0-9])(?P<days>{DAY_TOKEN_RE_TEXT}(?:{DAY_RANGE_SEP_RE_TEXT}{DAY_TOKEN_RE_TEXT})+)"
+    rf"{TEXT_DATE_SEP_OPT}(?P<month_name>{MONTH_NAME_CASED_PATTERN})\.?{TEXT_DATE_SEP_OPT}"
+    rf"(?P<year>{YEAR_TOKEN_RE_TEXT})(?![A-Za-z0-9])"
+)
+YEAR_MONTHNAME_DAY_RANGE_RE = re.compile(
+    rf"(?<![A-Za-z0-9])(?P<year>{YEAR4_TOKEN_RE_TEXT}){TEXT_DATE_SEP_OPT}"
+    rf"(?P<month_name>{MONTH_NAME_CASED_PATTERN})\.?{TEXT_DATE_SEP_OPT}"
+    rf"(?P<days>{DAY_TOKEN_RE_TEXT}(?:{DAY_RANGE_SEP_RE_TEXT}{DAY_TOKEN_RE_TEXT})+)"
+    rf"(?!(?:\s*[-,\u2013\u2014]\s*)\d{{1,2}})(?![A-Za-z0-9])"
+)
 MULTIPART_CITY_PREFIXES = [
     "Marina Del", "de la", "La", "El", "San", "Santa", "Le", "Los", "Las", "New", "West", "North", "Al",
     "East", "Villa", "South", "Saint", "Lake", "Bad", "Les", "Mount", "Santiago", "Nova",
@@ -1561,6 +1584,103 @@ def _strip_ordinal(day_value: str) -> str:
     return match.group(1) if match else text
 
 
+def _day_range_values(day_sequence: str) -> List[str]:
+    """Return 2-3 day values from one same-month range, or [] when malformed.
+
+    A range may use either dashes (including typographic dashes) or commas
+    between its day numbers.  When three dates are present, the same separator
+    family must be used throughout so mixed punctuation does not broaden the
+    existing numeric-date separator rules.
+    """
+    sequence = str(day_sequence or "").strip()
+    if not sequence:
+        return []
+    days = re.findall(DAY_TOKEN_RE_TEXT, sequence)
+    if len(days) not in {2, 3}:
+        return []
+    separators = re.findall(r"[-,\u2013\u2014]", sequence)
+    if len(separators) != len(days) - 1:
+        return []
+    separator_families = {"," if item == "," else "-" for item in separators}
+    if len(separator_families) != 1:
+        return []
+    return [_strip_ordinal(day) for day in days]
+
+
+def _normalize_same_month_day_range(year: str, month: str, day_sequence: str) -> str:
+    """Return the first yyyy-mm-dd for one validated same-month multi-day range.
+
+    TLO uses the first date as the canonical show date.  A range contains the
+    first day plus one or two trailing day values, and every day must be a real
+    calendar date in the same month and strictly increase left-to-right.
+    """
+    year_norm = _normalize_year_token(year)
+    month_norm = _normalize_partial_component(month, "month")
+    days = _day_range_values(day_sequence)
+    if not (year_norm and year_norm.isdigit() and month_norm and month_norm.isdigit() and days):
+        return ""
+    try:
+        day_numbers = [int(value) for value in days]
+    except ValueError:
+        return ""
+    if any(right <= left for left, right in zip(day_numbers, day_numbers[1:])):
+        return ""
+    for day in day_numbers:
+        try:
+            datetime(int(year_norm), int(month_norm), day)
+        except ValueError:
+            return ""
+    return f"{year_norm}-{month_norm}-{day_numbers[0]:02d}"
+
+
+def _same_month_day_range_candidates(text: str) -> List[Dict[str, str]]:
+    """Return range-shaped date candidates, including invalid ones for blocking.
+
+    Invalid range-shaped values still occupy their full span so the ordinary
+    date parser cannot silently accept only the first yyyy-mm-dd (or first
+    textual date) from a descending or impossible range.
+    """
+    value = str(text or "")
+    if not value:
+        return []
+    rows: List[Dict[str, str]] = []
+    seen = set()
+
+    def add(match, year: str, month: str, days: str) -> None:
+        month_norm = _normalize_partial_component(month, "month")
+        # Preserve existing year-range behavior such as 1996-97-98.  A numeric
+        # candidate becomes a multi-day range only when its month is plausible.
+        if not month_norm or not month_norm.isdigit():
+            return
+        key = (match.start(), match.end())
+        if key in seen:
+            return
+        seen.add(key)
+        rows.append({
+            "raw": match.group(0),
+            "normalized": _normalize_same_month_day_range(year, month_norm, days),
+            "start": match.start(),
+            "end": match.end(),
+            "date_range_kind": "same_month_day",
+        })
+
+    for match in YEAR_FIRST_SAME_MONTH_DAY_RANGE_RE.finditer(value):
+        add(match, match.group("year"), match.group("month"), match.group("days"))
+    for match in MONTH_DAY_RANGE_YEAR_RE.finditer(value):
+        add(match, match.group("year"), _month_name_to_number(match.group("month_name")), match.group("days"))
+    for match in DAY_RANGE_MONTH_YEAR_RE.finditer(value):
+        add(match, match.group("year"), _month_name_to_number(match.group("month_name")), match.group("days"))
+    for match in YEAR_MONTHNAME_DAY_RANGE_RE.finditer(value):
+        add(match, match.group("year"), _month_name_to_number(match.group("month_name")), match.group("days"))
+
+    rows.sort(key=lambda item: (int(item["start"]), int(item["end"])))
+    return rows
+
+
+def _span_overlaps(start: int, end: int, spans: Sequence[Tuple[int, int]]) -> bool:
+    return any(not (end <= span_start or start >= span_end) for span_start, span_end in spans)
+
+
 
 AUDIO_RATE_DEPTH_RE = re.compile(
     r"(?i)(?<!\d)(?:"
@@ -1638,6 +1758,8 @@ def _append_date_result(results: List[Dict[str, str]], seen: set, raw: str, norm
     # already constrained by the textual-date regexes themselves.
     textual_month_date = bool(re.search(r"[A-Za-z]", str(raw or "")))
     if _is_audio_rate_depth_reference(raw) or (
+        extra.get("date_range_kind") != "same_month_day"
+        and
         not textual_month_date
         and _date_raw_has_mixed_component_separators(
             raw, allow_year_space_month_day_exception=allow_year_space_month_day_exception
@@ -1665,7 +1787,26 @@ def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_mo
     results: List[Dict[str, str]] = []
     seen = set()
 
+    day_range_candidates = _same_month_day_range_candidates(text)
+    day_range_spans = [(int(item["start"]), int(item["end"])) for item in day_range_candidates]
+    for item in day_range_candidates:
+        _append_date_result(
+            results,
+            seen,
+            item["raw"],
+            item["normalized"],
+            int(item["start"]),
+            int(item["end"]),
+            date_order="ymd_range" if re.match(r"^(?:19|20)\d{2}-", item["raw"]) else "text_range",
+            date_range_kind="same_month_day",
+        )
+
+    def overlaps_day_range(match) -> bool:
+        return _span_overlaps(match.start(), match.end(), day_range_spans)
+
     for match in YEAR_FIRST_RE.finditer(text):
+        if overlaps_day_range(match):
+            continue
         normalized = _normalize_date(match.group("year"), match.group("month"), match.group("day"))
         extra = {"date_order": "ymd"}
         if normalized and _is_year_space_month_punct_day_exception(match.group(0)):
@@ -1674,14 +1815,20 @@ def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_mo
 
 
     for match in DASHED_YEAR_RANGE_RE.finditer(text):
+        if overlaps_day_range(match):
+            continue
         normalized = _normalize_dashed_year_range(match.group("range"))
         _append_date_result(results, seen, match.group(0), normalized, match.start(), match.end())
 
     for match in COMPACT_YMD_RE.finditer(text):
+        if overlaps_day_range(match):
+            continue
         normalized = _normalize_date(match.group("year"), match.group("month"), match.group("day"))
         _append_date_result(results, seen, match.group(0), normalized, match.start(), match.end())
 
     for match in COMPACT_YEAR_MONTH_OR_RANGE_RE.finditer(text):
+        if overlaps_day_range(match):
+            continue
         raw = match.group(0)
         normalized_date = _normalize_date(match.group("year"), match.group("tail"), "xx")
         _append_date_result(results, seen, raw, normalized_date, match.start(), match.end())
@@ -1689,6 +1836,8 @@ def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_mo
         _append_date_result(results, seen, raw, normalized_range, match.start(), match.end())
 
     for match in END_FIRST_RE.finditer(text):
+        if overlaps_day_range(match):
+            continue
         year = match.group("year")
         first = match.group("a")
         second = match.group("b")
@@ -1710,6 +1859,8 @@ def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_mo
 
     if allow_slash:
         for match in SLASH_END_FIRST_RE.finditer(text):
+            if overlaps_day_range(match):
+                continue
             year = match.group("year")
             first = match.group("a")
             second = match.group("b")
@@ -1721,6 +1872,8 @@ def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_mo
                 _append_date_result(results, seen, match.group(0), dmy, match.start(), match.end(), date_order="slash_dmy")
 
     for match in MONTH_DAY_YEAR_RE.finditer(text):
+        if overlaps_day_range(match):
+            continue
         # A compact month-year value such as November2020 or November 2020 is
         # partial, not November 20, 2020. Let MONTH_YEAR_RE handle it later.
         if re.fullmatch(rf"(?:{MONTH_NAME_CASED_PATTERN})\.?(?:{TEXT_DATE_SEP_OPT})(?:{YEAR4_TOKEN_RE_TEXT})", match.group(0)):
@@ -1729,18 +1882,24 @@ def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_mo
         _append_date_result(results, seen, match.group(0), normalized, match.start(), match.end())
 
     for match in DAY_MONTH_YEAR_RE.finditer(text):
+        if overlaps_day_range(match):
+            continue
         normalized = _normalize_date(match.group("year"), _month_name_to_number(match.group("month_name")), _strip_ordinal(match.group("day")))
         _append_date_result(results, seen, match.group(0), normalized, match.start(), match.end())
 
     occupied_spans = [(item["start"], item["end"]) for item in results]
 
     for match in YEAR_MONTHNAME_DAY_RE.finditer(text):
+        if overlaps_day_range(match):
+            continue
         normalized = _normalize_date(match.group("year"), _month_name_to_number(match.group("month_name")), _strip_ordinal(match.group("day")))
         _append_date_result(results, seen, match.group(0), normalized, match.start(), match.end())
         if normalized:
             occupied_spans.append((match.start(), match.end()))
 
     for match in MONTH_YEAR_RE.finditer(text):
+        if overlaps_day_range(match):
+            continue
         # Month-year forms such as November2020 or November 2020 are less
         # specific than complete dates. Do not add a month-year match when its
         # span overlaps a fuller date already extracted from the same text.
@@ -1750,6 +1909,8 @@ def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_mo
         _append_date_result(results, seen, match.group(0), normalized, match.start(), match.end())
 
     for match in FOUR_PLUS_FOUR_RE.finditer(text):
+        if overlaps_day_range(match):
+            continue
         separator = match.group("four_sep")
         monthday = match.group("monthday")
         normalized_range = _normalize_four_plus_four_range_candidate(match.group("year"), monthday, separator)
@@ -1816,10 +1977,28 @@ def _find_compliant_primary_date_matches(text: str) -> List[Dict[str, str]]:
         return []
     results: List[Dict[str, str]] = []
     seen = set()
+    day_range_candidates = _same_month_day_range_candidates(text)
+    day_range_spans = [(int(item["start"]), int(item["end"])) for item in day_range_candidates]
+    for item in day_range_candidates:
+        _append_date_result(
+            results,
+            seen,
+            item["raw"],
+            item["normalized"],
+            int(item["start"]),
+            int(item["end"]),
+            date_order="ymd_range" if re.match(r"^(?:19|20)\d{2}-", item["raw"]) else "text_range",
+            date_source_kind="compliant_primary",
+            date_range_kind="same_month_day",
+        )
     for match in COMPLIANT_PRIMARY_YMD_RE.finditer(text):
+        if _span_overlaps(match.start(), match.end(), day_range_spans):
+            continue
         normalized = _normalize_date(match.group("year"), match.group("month"), match.group("day"))
         _append_date_result(results, seen, match.group(0), normalized, match.start(), match.end(), date_order="ymd", date_source_kind="compliant_primary")
     for match in DASHED_YEAR_RANGE_RE.finditer(text):
+        if _span_overlaps(match.start(), match.end(), day_range_spans):
+            continue
         normalized = _normalize_dashed_year_range(match.group("range"))
         _append_date_result(results, seen, match.group(0), normalized, match.start(), match.end(), date_source_kind="compliant_primary_range")
     results.sort(key=lambda item: (item["start"], item["end"], item["normalized"]))
@@ -2147,7 +2326,7 @@ def _string_dash_string_tail_date(row: Optional[Dict[str, str]]) -> str:
     match = _date_match_consumes_entire_text(row.get("string2", ""))
     return match.get("normalized", "") if match else ""
 
-def _resolve_artist_from_date_string3(group: dict, matcher: Optional[ArtistMatcher], evidence: Dict[str, List[Candidate]], conflicts: List[str], config=None) -> Tuple[str, str]:
+def _resolve_artist_from_date_string3(group: dict, matcher: Optional[ArtistMatcher], evidence: Dict[str, List[Candidate]], conflicts: List[str], config=None) -> Tuple[str, str, str]:
     for part, part_path in _candidate_path_parts(group["main_dir_path"]):
         row = _match_date_string3(part)
         if not row:
@@ -2156,14 +2335,14 @@ def _resolve_artist_from_date_string3(group: dict, matcher: Optional[ArtistMatch
         detail = _lookup_artist_detail(term, matcher)
         if detail["status"] == "collision":
             conflicts.append(_collision_note(f"artist query collision for Date String3: {term}", detail["masters"]))
-            return "", ""
+            return "", "", ""
         if detail["status"] == "matched" and detail["masters"]:
             master = detail["masters"][0]
             artist_name = _artist_output_name(config, row["string3"], master)
             evidence.setdefault("artist", []).append(Candidate(artist_name, f"date_string3:{part_path}", 58))
             evidence.setdefault("date", []).append(Candidate(row["date_norm"], f"date_string3:{part_path}", 58))
-            return artist_name, row["date_norm"]
-    return "", ""
+            return artist_name, row["date_norm"], row["date_raw"]
+    return "", "", ""
 
 
 def _find_string_dash_string_match(
@@ -3514,6 +3693,45 @@ def _append_parentheticals_to_show_name(show_name: str, parentheticals: str) -> 
     if show_name and parentheticals and not show_name.endswith(parentheticals):
         return compact_ws(f"{show_name} {parentheticals}")
     return show_name
+
+
+def _apply_selected_day_range_parenthetical(
+    record: ShowMetadata,
+    date_matches: Sequence[Dict[str, str]],
+    observations: List[str],
+) -> None:
+    """Retain the original multi-day range after its first date is selected.
+
+    Only the same-month multi-day range syntax added for this purpose is
+    parenthesized here.  Existing year-range behavior is intentionally left
+    unchanged.
+    """
+    selected = compact_ws(getattr(record, "date", ""))
+    if not selected or not _is_complete_normalized_date(selected):
+        return
+    for match in date_matches or []:
+        if compact_ws(match.get("normalized", match.get("date_norm", ""))) != selected:
+            continue
+        raw = str(match.get("raw", match.get("date_raw", "")) or "").strip()
+        if not raw:
+            continue
+        exact_ranges = [
+            item
+            for item in _same_month_day_range_candidates(raw)
+            if item.get("normalized") == selected
+            and int(item.get("start", -1)) == 0
+            and int(item.get("end", -1)) == len(raw)
+        ]
+        if not exact_ranges:
+            continue
+        parenthetical = f"({raw})"
+        merged = _merge_parenthetical_items(record.parentheticals, parenthetical)
+        if merged != record.parentheticals:
+            record.parentheticals = merged
+            observations.append(
+                f"multi-day date range retained in parentheticals: {raw}; canonical date {selected}"
+            )
+        return
 
 
 def _build_show_name(record: ShowMetadata) -> str:
@@ -5371,6 +5589,7 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
 
     if not record.artist and not (compliant_folder_name_show_match or compliant_mp3_year_show_match):
         unresolved_reasons.append("unable to identify artist")
+    _apply_selected_day_range_parenthetical(record, date_matches, observations)
     if compliant_dash_match:
         record.show_name = _build_compliant_dash_show_name(record)
     elif compliant_string_date_match:
@@ -5736,12 +5955,12 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             )
 
         if not record.artist:
-            date_string3_artist, date_string3_date = _resolve_artist_from_date_string3(group, artist_matcher, evidence, conflicts, config=config)
+            date_string3_artist, date_string3_date, date_string3_raw = _resolve_artist_from_date_string3(group, artist_matcher, evidence, conflicts, config=config)
             if date_string3_artist:
                 record.artist = date_string3_artist
                 if not record.date:
                     record.date = date_string3_date
-                    date_matches.append({"raw": date_string3_date, "normalized": date_string3_date, "part": group["main_dir_path"], "source": "date_string3"})
+                    date_matches.append({"raw": date_string3_raw or date_string3_date, "normalized": date_string3_date, "part": group["main_dir_path"], "source": "date_string3"})
 
         # A short no-space-date prefix (for example, the kind of artist
         # abbreviation commonly carried at the front of traded-music file
@@ -5845,6 +6064,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
 
     if not record.artist:
         unresolved_reasons.append("unable to identify artist")
+    _apply_selected_day_range_parenthetical(record, date_matches, observations)
     if dash_album_mode:
         if _dash_album_mode_should_use_structured_show_name(record, evidence):
             record.show_name = _build_show_name(record)
