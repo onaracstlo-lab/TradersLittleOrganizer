@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v461"
+__version__ = "v463"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -31,8 +31,8 @@ def test_build451_tlohome_shares_title_row_immediately_left_of_hamburger():
 
 def test_build451_search_path_is_single_line_label_with_no_helper_row():
     block = _build_block()
-    # Build 461 supersedes the former two-line optional/override label.
-    assert 'text="Search Path"' in block
+    # Build 461 removed the helper line; Build 463 renames the visible label to Path(s).
+    assert 'text="Path(s)"' in block
     assert 'text="Search Path\\n(optional/override)"' not in block
     assert 'search_path_note =' not in block
     assert 'Drag a folder here from File Explorer.' not in block

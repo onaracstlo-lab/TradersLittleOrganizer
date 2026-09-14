@@ -1,6 +1,6 @@
 """Repair corrupt FLACs from duplicate copies, then move duplicates to a partition holding folder."""
 
-__version__ = "v461"
+__version__ = "v463"
 
 import argparse
 import hashlib

@@ -1,4 +1,4 @@
-__version__ = "v461"
+__version__ = "v463"
 
 import argparse
 from dataclasses import dataclass
@@ -218,7 +218,7 @@ OPTIONS = [
     ),
     Option(
         "search_path_override", "--search-path", "text",
-        default="", metavar="STRING", gui="entry", gui_label="Search Path",
+        default="", metavar="STRING", gui="entry", gui_label="Path(s)",
         help=(
             "Required inventory input. Accepts one or more semicolon-separated path entries using the same "
             "optional [Volume], --$slam, --$copy, and --$copy-delete grammar as an inventory-control text file. "

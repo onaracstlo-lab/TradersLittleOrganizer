@@ -10,7 +10,7 @@ from tlo_ux import _inventory_roots, validate_search_path
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v461"
+__version__ = "v463"
 
 
 def _touch_music(root: Path, name: str = "01.flac") -> Path:
@@ -163,7 +163,7 @@ def test_build461_inventory_cli_requires_search_path(monkeypatch):
 def test_build461_main_gui_label_and_slam_width_contract():
     source = Path(__file__).resolve().parents[2].joinpath("tlo-ggi.py").read_text(encoding="utf-8")
 
-    assert 'text="Search Path"' in source
+    assert 'text="Path(s)"' in source
     assert 'text="Search Path\\n(optional/override)"' not in source
     assert 'textvariable=self.vars["search_path_slam_override"], width=33' in source
     assert 'textvariable=self.vars["search_path_slam_override"], width=66' not in source

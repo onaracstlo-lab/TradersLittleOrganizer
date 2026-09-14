@@ -1,4 +1,4 @@
-__version__ = "v461"
+__version__ = "v463"
 
 """Native-Windows-only drag-and-drop helpers for the TLO Tk GUI.
 
@@ -17,6 +17,13 @@ from urllib.parse import unquote, urlparse
 
 
 DND_FILES = "DND_Files"
+_VALID_DROP_ACTIONS = {"copy", "move", "link", "ask", "private"}
+
+
+def _accepted_drop_action(event) -> str:
+    """Return the TkDND action that the drop target actually performed."""
+    action = str(getattr(event, "action", "") or "").strip().lower()
+    return action if action in _VALID_DROP_ACTIONS else "copy"
 
 
 @dataclass(frozen=True)
@@ -97,19 +104,52 @@ def _first_folder_from_drop(widget, data: str) -> Optional[str]:
     return paths[0] if paths else None
 
 
-def _first_search_path_from_drop(widget, data: str) -> Optional[str]:
-    """Return a dropped Search Path value, preserving .txt control files."""
+def _search_path_values_from_drop(widget, data: str) -> list[str]:
+    """Return every dropped Search Path value in payload order.
+
+    Folders are preserved.  A .txt file is preserved so it can act as an
+    inventory-control file.  Other files retain the legacy behavior of using
+    their containing folder.  If existence cannot be confirmed (for example a
+    transient/network path), keep the normalized dropped value and let normal
+    Search Path validation report any problem later.
+    """
+    values = []
     for path in split_dropped_paths(widget, data):
         if os.path.isdir(path):
-            return path
+            values.append(path)
+            continue
         if os.path.isfile(path):
             if path.lower().endswith(".txt"):
-                return path
+                values.append(path)
+                continue
             parent = os.path.dirname(path)
-            if parent and os.path.isdir(parent):
-                return parent
-    paths = split_dropped_paths(widget, data)
-    return paths[0] if paths else None
+            values.append(parent if parent else path)
+            continue
+        values.append(path)
+    return values
+
+
+def _format_search_path_drop_value(path: str) -> str:
+    """Format one dropped path for the semicolon-delimited Search Path field."""
+    value = str(path or "").strip()
+    if ";" in value:
+        return f'"{value}"'
+    return value
+
+
+def _append_search_path_drop_values(existing: str, values: list[str]) -> str:
+    """Append dropped Search Path values, inserting semicolon delimiters."""
+    additions = [_format_search_path_drop_value(value) for value in values if str(value or "").strip()]
+    if not additions:
+        return str(existing or "")
+
+    current = str(existing or "").strip()
+    joined = ";".join(additions)
+    if not current:
+        return joined
+    if current.endswith(";"):
+        return current + joined
+    return current + ";" + joined
 
 
 def enable_folder_path_drop(
@@ -131,21 +171,22 @@ def enable_folder_path_drop(
 
     clean_label = str(field_label or "Path").strip() or "Path"
 
-    def handle_data(data: str) -> None:
-        folder = _first_folder_from_drop(entry_widget, data)
+    def handle_drop(event):
+        folder = _first_folder_from_drop(entry_widget, getattr(event, "data", ""))
         if not folder:
             if on_error:
                 on_error(f"Drop a folder onto the {clean_label} field.")
-            return
+            return "refuse_drop"
         string_var.set(folder)
         try:
             entry_widget.icursor("end")
             entry_widget.focus_set()
         except Exception as exc:  # noqa: BLE001 - best-effort boundary
             debug_suppressed_exception(__name__, exc)
+        return _accepted_drop_action(event)
 
     entry_widget.drop_target_register(DND_FILES)
-    entry_widget.dnd_bind("<<Drop>>", lambda event: handle_data(getattr(event, "data", "")))
+    entry_widget.dnd_bind("<<Drop:DND_Files>>", handle_drop)
     return DragDropStatus(True, provider="tkinterdnd2")
 
 
@@ -157,28 +198,37 @@ def enable_search_path_folder_drop(
 ) -> DragDropStatus:
     """Enable native-Windows Search Path drops.
 
-    Folders are used directly. A dropped .txt file is preserved so it can be
-    processed as an inventory-control file; other dropped files retain the
-    legacy behavior of using their containing folder.
+    Every dropped folder is used directly. A dropped .txt file is preserved so
+    it can be processed as an inventory-control file; other dropped files retain
+    the legacy behavior of using their containing folder. Multiple values in one
+    drop are separated with semicolons, and later drops append to the existing
+    Search Path value instead of replacing it.
     """
     if not is_drag_drop_platform():
         return DragDropStatus(False, "Folder drag/drop is available only in native Windows.")
 
-    def handle_data(data: str) -> None:
-        value = _first_search_path_from_drop(entry_widget, data)
-        if not value:
+    def handle_drop(event):
+        # TkDND delivers DND_Files as a raw Tcl list in event.data.  splitlist()
+        # must see the complete payload so one Explorer drag can contribute every
+        # selected item, including braced paths containing spaces.
+        values = _search_path_values_from_drop(entry_widget, getattr(event, "data", ""))
+        if not values:
             if on_error:
-                on_error("Drop a folder or .txt control file onto the Search Path field.")
-            return
-        string_var.set(value)
+                on_error("Drop one or more folders or .txt control files onto the Path(s) field.")
+            return "refuse_drop"
+        current = string_var.get() if hasattr(string_var, "get") else ""
+        string_var.set(_append_search_path_drop_values(current, values))
         try:
             entry_widget.icursor("end")
             entry_widget.focus_set()
         except Exception as exc:  # noqa: BLE001 - best-effort boundary
             debug_suppressed_exception(__name__, exc)
+        # TkDND requires Drop callbacks to return the action performed.  Returning
+        # None causes the target to report a refused drop after we update the field.
+        return _accepted_drop_action(event)
 
     entry_widget.drop_target_register(DND_FILES)
-    entry_widget.dnd_bind("<<Drop>>", lambda event: handle_data(getattr(event, "data", "")))
+    entry_widget.dnd_bind("<<Drop:DND_Files>>", handle_drop)
     return DragDropStatus(True, provider="tkinterdnd2")
 
 

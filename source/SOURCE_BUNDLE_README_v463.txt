@@ -1,25 +1,22 @@
-TLO Source and Utilities Bundle v461
+TLO Source and Utilities Bundle v463
 
-Public application version: v1.6 Build 461
-Source bundle label: v461
+Public application version: v1.6 Build 463
+Source bundle label: v463
 
-Build 461 summary
-- Makes Search Path the required Full Inventory input; TLOHome/toBeInventoried.txt is no longer consumed automatically.
-- Search Path accepts semicolon-separated entries. Direct entries use the established inventory-control grammar with optional [Volume], --$slam, --$copy, and --$copy-delete directives.
-- Any Search Path entry ending in a .txt file is parsed using the former toBeInventoried.txt line/file rules, regardless of filename.
-- Preserves the separate Slam field for direct-path compatibility while rejecting ambiguous separate directives when a .txt control file is used.
-- Removes "(optional/override)" from the main-window Search Path label and reduces the Slam box from width 66 to width 33.
-- Keeps toBeInventoried.txt in COMPLETE distributions as an example/template only through companion GitHub Build Process v089.
-- Preserves Build 460 guarded Artist + Place + Date + technical-suffix handling, Build 459 Tag controls, and Build 458 updater package behavior.
-- Keeps the GitHub Build Process strictly separate from the TLO application source bundle.
+Build 463 summary
+- Renames the visible main Inventory Search Path label to Path(s); Search Path semantics and the --search-path CLI option are unchanged.
+- Vertically centers one-line checkbox indicators with their labels so checkbox text no longer appears slightly lower than the indicator.
+- Keeps the two wrapped checkbox labels aligned to their first text line instead of centering their indicator between both lines.
+- Corrects Build 462 cumulative native-Windows Path(s) drag/drop while preserving Build 461 required Search Path/control-file behavior and all other existing inventory/tagging rules.
+- Keeps the GitHub Build Process strictly separate from the TLO application source bundle; companion process v089 remains current because packaging behavior is unchanged.
 - Archives historical change notes in old-change-logs.zip.
 
 Current documentation files:
-- TLO_Inventory_User_Manual_v461.rtf: current end-user manual.
-- TLO_Inventory_Requirements_Working_v461.docx: current TLO requirements/development document.
+- TLO_Inventory_User_Manual_v463.rtf: current end-user manual.
+- TLO_Inventory_Requirements_Working_v463.docx: current TLO requirements/development document.
 - TLO-FAQ.txt: current frequently asked questions.
-- CHANGES_v461.txt: changes introduced by this build.
-- old-change-logs.zip: archived historical TLO change notes through Build 460.
+- CHANGES_v463.txt: changes introduced by this build.
+- old-change-logs.zip: archived historical TLO change notes through Build 462.
 
 GitHub Build Process separation:
 - No GitHub Build Process artifact is included in this source bundle.

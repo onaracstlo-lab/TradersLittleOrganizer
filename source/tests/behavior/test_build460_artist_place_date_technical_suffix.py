@@ -10,7 +10,7 @@ import tlo_phase23_v2 as P
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v461"
+__version__ = "v463"
 
 
 def _matcher(*, include_rtf=True):
@@ -192,16 +192,16 @@ def test_build460_requirements_and_manual_document_guarded_fallback():
 
     root = Path(__file__).resolve().parents[2]
     req = "\n".join(
-        paragraph.text for paragraph in Document(root / "TLO_Inventory_Requirements_Working_v461.docx").paragraphs
+        paragraph.text for paragraph in Document(root / "TLO_Inventory_Requirements_Working_v463.docx").paragraphs
     )
-    manual = (root / "TLO_Inventory_User_Manual_v461.rtf").read_text(
+    manual = (root / "TLO_Inventory_User_Manual_v463.rtf").read_text(
         encoding="utf-8", errors="ignore"
     )
 
-    assert "Current document version: v461 (v1.6 Build 461)." in req
+    assert "Current document version: v463 (v1.6 Build 463)." in req
     assert "Artist + Place + Date + TechnicalSuffix" in req
     assert "TLO must not construct, infer, or guess an initialism" in req
     assert "RTF Paris 7 March 76 flac16" in req
-    assert "Version v1.6 Build 461" in manual
+    assert "Version v1.6 Build 463" in manual
     assert "RTF Paris 7 March 76 flac16" in manual
     assert "TLO does not invent RTF from Return to Forever" in manual

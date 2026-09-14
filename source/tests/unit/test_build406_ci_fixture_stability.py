@@ -1,6 +1,6 @@
 """Build 406 regression-fixture stability checks."""
 
-__version__ = "v461"
+__version__ = "v463"
 
 from pathlib import Path
 

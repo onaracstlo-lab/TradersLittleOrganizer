@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v461"
+__version__ = "v463"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -176,7 +176,7 @@ HELP_TEXT = (
     "Argument details:\n"
     "  --TLOHome DIR        Fully qualified existing writable directory path. Defaults from the TLOHome environment variable when present.\n"
     "  --search-path STRING  Required when Inventory starts. Accepts semicolon-separated path entries; each may use [Volume], --$slam, --$copy, and --$copy-delete. A .txt entry is read using the inventory-control-file format.\n"
-    "                        In the native Windows GUI, drag a folder or .txt control file from File Explorer onto the Search Path field to fill it in.\n"
+    "                        In the native Windows GUI, drag one or more folders or .txt control files from File Explorer onto Search Path; each drop appends semicolon-separated entries.\n"
     "  --tag-path STRING     Optional fully qualified tagger input path. Used only by the Tag workflow; inventory and updater do not use it.\n"
     "  -$slam STRING        Artist override paired with --search-path. Invalid by itself.\n"
     "  --silent             Suppress all console output.\n"
@@ -665,17 +665,43 @@ class App:
             style.configure("Main.TButton", font=self.main_font, padding=(8, 7), anchor="center", justify="center")
             style.configure("Main.TEntry", font=self.main_font)
             style.configure("Main.TCombobox", font=self.main_font)
-            style.configure(
-                "Main.Large.TCheckbutton",
-                font=self.main_font,
-                padding=(1, 0, 3, 0),
-                indicatorsize=target_size + 4,
-                anchor="nw",
-                justify="left",
-            )
-            # Keep the indicator aligned with the first text line when a label wraps.
+            for checkbox_style in ("Main.Large.TCheckbutton", "Main.Multiline.TCheckbutton"):
+                style.configure(
+                    checkbox_style,
+                    font=self.main_font,
+                    padding=(1, 0, 3, 0),
+                    indicatorsize=target_size + 4,
+                    anchor="nw",
+                    justify="left",
+                )
+            # Build 463: center the indicator vertically beside one-line labels so
+            # the label and checkbox sit on the same visual line. Wrapped labels
+            # keep their indicator aligned with the first line instead of centering
+            # the box between both lines.
             style.layout(
                 "Main.Large.TCheckbutton",
+                [
+                    (
+                        "Checkbutton.padding",
+                        {
+                            "sticky": "nswe",
+                            "children": [
+                                ("Checkbutton.indicator", {"side": "left", "sticky": ""}),
+                                (
+                                    "Checkbutton.focus",
+                                    {
+                                        "side": "left",
+                                        "sticky": "w",
+                                        "children": [("Checkbutton.label", {"sticky": "nswe"})],
+                                    },
+                                ),
+                            ],
+                        },
+                    )
+                ],
+            )
+            style.layout(
+                "Main.Multiline.TCheckbutton",
                 [
                     (
                         "Checkbutton.padding",
@@ -805,7 +831,7 @@ class App:
 
         ttk.Label(
             frm,
-            text="Search Path",
+            text="Path(s)",
             justify="left",
             style="Main.TLabel",
         ).grid(row=row, column=0, sticky="w", padx=(4, 6), pady=0)
@@ -882,12 +908,15 @@ class App:
                 checkbox_text = "Tag Copy/Delete\nOriginal"
             else:
                 checkbox_text = option.gui_label
+            checkbox_style = (
+                "Main.Multiline.TCheckbutton" if "\n" in checkbox_text else "Main.Large.TCheckbutton"
+            )
             checkbox = ttk.Checkbutton(
                 checkbox_frame,
                 text=checkbox_text,
                 variable=self.bool_vars[option.config_field],
                 command=checkbox_command,
-                style="Main.Large.TCheckbutton",
+                style=checkbox_style,
             )
             grid_options = {
                 "row": option.gui_row,

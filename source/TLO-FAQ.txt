@@ -19,6 +19,9 @@ A: No. Build 461 keeps toBeInventoried.txt only as an example/template in COMPLE
 Q: Can Search Path contain more than one root?
 A: Yes. Separate direct Search Path entries with semicolons. Each direct entry may use the same optional [Volume], --$slam, --$copy, and --$copy-delete directives as a control-file line. A .txt Search Path entry is expanded using the same line/comment rules as the former toBeInventoried.txt input file.
 
+Q: Can I drag more than one folder into the Path(s) box?
+A: Yes, on native Windows. Build 463 corrects the Windows TkDND handling so every folder or .txt control file selected in one drag is retained, and each later drag appends to the existing Path(s) value instead of replacing it. Items are separated automatically with semicolons. For example, dragging A, then B, then C and D together produces A;B;C;D. A dropped path containing a literal semicolon is quoted automatically.
+
 Q: How difficult is it to set the TLO-related environment variables?
 A: The Windows and macOS/Linux/WSL setup steps are described in Sections 4 through 6 of the User Manual.
 
