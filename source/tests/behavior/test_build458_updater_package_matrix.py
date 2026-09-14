@@ -1,5 +1,5 @@
 """Build 458 regressions for exact release-package/update handling."""
-__version__ = "v463"
+__version__ = "v465"
 
 import json
 import zipfile
@@ -157,10 +157,10 @@ def test_build458_check_for_updates_reports_database_refresh(monkeypatch, tmp_pa
 def test_build458_current_documentation_describes_package_matrix():
     root = Path(__file__).resolve().parents[2]
     from docx import Document
-    req_text = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v463.docx").paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v463.rtf").read_text(encoding="utf-8", errors="ignore")
+    req_text = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v465.docx").paragraphs)
+    manual = (root / "TLO_Inventory_User_Manual_v465.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = (root / "TLO-FAQ.txt").read_text(encoding="utf-8")
-    assert "Current document version: v463 (v1.6 Build 463)." in req_text
+    assert "Current document version: v465 (v1.6 Build 465)." in req_text
     assert "exact matching complete ZIP" in req_text
     assert "databases_included" in req_text
     assert "only the four complete ZIPs" in manual

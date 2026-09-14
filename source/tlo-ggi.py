@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v463"
+__version__ = "v465"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -2038,7 +2038,10 @@ class App:
         if worker_alive and not inventory_complete and scanning_complete:
             force_exit = messagebox.askyesno(
                 "tlo-ggi",
-                "Cleanup, aggregation, or output generation is still running. Force exit now?",
+                "Cleanup, collection aggregation, or output generation is still running. "
+                "Forcing exit can interrupt a collection move. TLO records recovery information "
+                "and will attempt an automatic rollback on the next normal Inventory run. "
+                "Force exit now?",
                 default=messagebox.NO,
             )
             if not force_exit:

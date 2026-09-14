@@ -1,5 +1,5 @@
 """Build 404 updater and scanner hardening regressions."""
-__version__ = "v463"
+__version__ = "v465"
 
 import hashlib
 import importlib.util

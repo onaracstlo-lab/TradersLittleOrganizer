@@ -4,7 +4,7 @@ The categorized suite lives under tests/. Importing the tests here preserves the
 existing CI command: python -m pytest -q test_tlo_requirements.py.
 """
 
-__version__ = "v463"
+__version__ = "v465"
 
 from tests.contracts.test_legacy_contracts import *  # noqa: F401,F403
 from tests.contracts.test_build364_contracts import *  # noqa: F401,F403
@@ -133,3 +133,8 @@ from tests.behavior.test_build459_tagger_controls import *  # noqa: F401,F403
 from tests.behavior.test_build460_artist_place_date_technical_suffix import *  # noqa: F401,F403
 from tests.behavior.test_build461_required_search_path_control_files import *  # noqa: F401,F403
 from tests.behavior.test_build462_search_path_multidrop import *  # noqa: F401,F403
+
+from tests.behavior.test_build463_main_gui_label_checkbox_alignment import *  # noqa: F401,F403
+
+from tests.behavior.test_build464_interrupted_collection_recovery import *  # noqa: F401,F403
+from tests.behavior.test_build465_cross_platform_collection_recovery import *  # noqa: F401,F403

@@ -2,7 +2,7 @@
 """Reverse logged TLO folder operations. Audio tags are never changed."""
 from __future__ import annotations
 
-__version__ = "v463"
+__version__ = "v465"
 
 import argparse
 import os

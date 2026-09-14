@@ -1,6 +1,6 @@
 """Suite-level CI display support for Tkinter behavior coverage."""
 
-__version__ = "v463"
+__version__ = "v465"
 
 import atexit
 import os

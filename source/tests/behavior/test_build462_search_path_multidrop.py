@@ -7,7 +7,7 @@ import pytest
 import tlo_dragdrop as DD
 
 pytestmark = pytest.mark.behavior
-__version__ = "v463"
+__version__ = "v465"
 
 
 class _FakeTk:
@@ -158,11 +158,11 @@ def test_build462_documentation_records_cumulative_multidrop_behavior():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    req = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v463.docx").paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v463.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v465.docx").paragraphs)
+    manual = (root / "TLO_Inventory_User_Manual_v465.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = (root / "TLO-FAQ.txt").read_text(encoding="utf-8")
 
-    assert "Current document version: v463 (v1.6 Build 463)." in req
+    assert "Current document version: v465 (v1.6 Build 465)." in req
     assert "Repeated drag actions are cumulative" in req
     assert "complete file list supplied by File Explorer" in req
     assert "A;B;C;D" in req

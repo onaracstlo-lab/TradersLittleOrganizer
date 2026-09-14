@@ -1,22 +1,24 @@
-TLO Source and Utilities Bundle v463
+TLO Source and Utilities Bundle v465
 
-Public application version: v1.6 Build 463
-Source bundle label: v463
+Public application version: v1.6 Build 465
+Source bundle label: v465
 
-Build 463 summary
-- Renames the visible main Inventory Search Path label to Path(s); Search Path semantics and the --search-path CLI option are unchanged.
-- Vertically centers one-line checkbox indicators with their labels so checkbox text no longer appears slightly lower than the indicator.
-- Keeps the two wrapped checkbox labels aligned to their first text line instead of centering their indicator between both lines.
-- Corrects Build 462 cumulative native-Windows Path(s) drag/drop while preserving Build 461 required Search Path/control-file behavior and all other existing inventory/tagging rules.
+Build 465 summary
+- Fixes automatic recovery after a forced Quit interrupts sibling-collection aggregation when the completed recovery container occupies the same pathname as an original collection member.
+- Moves that outer recovery container aside before restoring journaled member folders, so duplicated-path cases can roll back safely and Inventory can continue.
+- Reports successful recovery in the console and expands failure diagnostics to show the exact recovery container, journal, planned final folder, and original/staged state for every member.
+- Fails closed on unreadable recovery journals and orphaned .tlo-collection-* temporary folders instead of traversing them.
+- Updates the late-stage Quit warning to explain that forced exit can interrupt a collection move and that the next normal Inventory run attempts journal-based rollback.
+- Keeps Build 463 Path(s), checkbox-alignment, and native-Windows cumulative drag/drop behavior unchanged.
 - Keeps the GitHub Build Process strictly separate from the TLO application source bundle; companion process v089 remains current because packaging behavior is unchanged.
 - Archives historical change notes in old-change-logs.zip.
 
 Current documentation files:
-- TLO_Inventory_User_Manual_v463.rtf: current end-user manual.
-- TLO_Inventory_Requirements_Working_v463.docx: current TLO requirements/development document.
+- TLO_Inventory_User_Manual_v465.rtf: current end-user manual.
+- TLO_Inventory_Requirements_Working_v465.docx: current TLO requirements/development document.
 - TLO-FAQ.txt: current frequently asked questions.
-- CHANGES_v463.txt: changes introduced by this build.
-- old-change-logs.zip: archived historical TLO change notes through Build 462.
+- CHANGES_v465.txt: changes introduced by this build.
+- old-change-logs.zip: archived historical TLO change notes through Build 463.
 
 GitHub Build Process separation:
 - No GitHub Build Process artifact is included in this source bundle.

@@ -1,4 +1,4 @@
-__version__ = "v463"
+__version__ = "v465"
 from console_output_lib import console_print
 from initial_dir_walk_lib import initial_dir_walk
 from tlo_complete_path_log import compact_complete_path_log
@@ -36,10 +36,19 @@ def run_search_path(config, path_name, slam_value, search_index, volume_label=""
     if dry_run:
         assert_no_interrupted_sibling_consolidations(path_name)
     else:
-        recover_interrupted_sibling_consolidations(
+        def _report_collection_recovery(message):
+            config.logs.conflicts("%s", message)
+            console_print(config, message)
+
+        recovered_collections = recover_interrupted_sibling_consolidations(
             path_name,
-            lambda message: config.logs.conflicts("%s", message),
+            _report_collection_recovery,
         )
+        if recovered_collections:
+            console_print(
+                config,
+                f"Interrupted sibling collection move(s) recovered = {recovered_collections}; inventory will continue.",
+            )
 
     directory_count = initial_dir_walk(config, path_name)
     compact_complete_path_log(config.logs.paths.complete_paths)

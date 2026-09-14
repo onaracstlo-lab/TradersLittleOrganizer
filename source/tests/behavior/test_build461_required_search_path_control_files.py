@@ -10,7 +10,7 @@ from tlo_ux import _inventory_roots, validate_search_path
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v463"
+__version__ = "v465"
 
 
 def _touch_music(root: Path, name: str = "01.flac") -> Path:

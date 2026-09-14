@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-__version__ = "v463"
+__version__ = "v465"
 
 import json
+import ntpath
 import os
 import re
 import uuid
@@ -46,6 +47,42 @@ WORD_NUMBER = {
     "a": 1, "b": 2,
 }
 
+_WINDOWS_DRIVE_JOURNAL_RE = re.compile(r"^([A-Za-z]):[\\/](.*)$")
+_WSL_DRIVE_JOURNAL_RE = re.compile(r"^/mnt/([A-Za-z])(?:/(.*))?$", re.IGNORECASE)
+_WSL_MOUNT_ROOT = "/mnt"
+
+
+def _runtime_recovery_path(path_name: str, *, platform_name: Optional[str] = None) -> str:
+    """Translate a journal path to the path syntax used by this runtime.
+
+    Recovery journals are intentionally durable across interrupted runs.  A
+    collection may therefore be interrupted under native Windows and recovered
+    under WSL (or vice versa).  The journal keeps the paths written by the
+    original runtime, while recovery validates and operates on equivalent paths
+    for the current runtime.
+    """
+    text = str(path_name or "").strip().strip('\"').strip("'")
+    if not text:
+        return ""
+    runtime = os.name if platform_name is None else str(platform_name)
+    if runtime == "nt":
+        normalized = text.replace("\\", "/")
+        match = _WSL_DRIVE_JOURNAL_RE.match(normalized)
+        if match:
+            drive = match.group(1).upper()
+            rest = (match.group(2) or "").replace("/", "\\").strip("\\")
+            return ntpath.normpath(f"{drive}:\\{rest}" if rest else f"{drive}:\\")
+        return ntpath.normpath(text)
+
+    match = _WINDOWS_DRIVE_JOURNAL_RE.match(text)
+    if match:
+        drive = match.group(1).lower()
+        rest = match.group(2).replace("\\", "/").lstrip("/")
+        return os.path.normpath(
+            os.path.join(_WSL_MOUNT_ROOT, drive, *([part for part in rest.split("/") if part] if rest else []))
+        )
+    return os.path.normpath(text)
+
 
 @dataclass
 class CollectionMember:
@@ -73,12 +110,107 @@ class SiblingCollectionRecoveryError(RuntimeError):
     """An interrupted TLO move cannot be recovered without user review."""
 
 
+class _SiblingCollectionRollbackFailure(RuntimeError):
+    """Internal rollback failure carrying the container that still holds the journal."""
+
+    def __init__(self, container: str, reason: str):
+        super().__init__(reason)
+        self.container = container
+
+
+def _same_path(left: str, right: str) -> bool:
+    try:
+        return os.path.normcase(os.path.abspath(os.path.normpath(left))) == os.path.normcase(
+            os.path.abspath(os.path.normpath(right))
+        )
+    except Exception:
+        return os.path.normcase(os.path.normpath(str(left or ""))) == os.path.normcase(
+            os.path.normpath(str(right or ""))
+        )
+
+
+def _recovery_member_rows(container: str, payload: dict) -> List[Tuple[str, str, str, str]]:
+    rows: List[Tuple[str, str, str, str]] = []
+    for row in list(payload.get("members") or []):
+        journal_original = str(row.get("original") or "").strip()
+        original = _runtime_recovery_path(journal_original)
+        child_name = str(row.get("child_name") or "")
+        staged = os.path.join(container, child_name) if child_name else ""
+        original_exists = bool(original and os.path.lexists(original))
+        staged_exists = bool(staged and os.path.lexists(staged))
+        if original and _same_path(original, container):
+            if staged_exists:
+                state = "CONTAINER_OCCUPIES_ORIGINAL; staged member present"
+            else:
+                state = "CONTAINER_OCCUPIES_ORIGINAL; staged member MISSING"
+        elif original_exists and staged_exists:
+            state = "BOTH original and staged copies exist"
+        elif original_exists:
+            state = "ORIGINAL_ONLY"
+        elif staged_exists:
+            state = "STAGED_ONLY"
+        else:
+            state = "MISSING from both original and staged locations"
+        rows.append((journal_original, original, staged, state))
+    return rows
+
+
+def _format_recovery_error(container: str, payload: Optional[dict], reason: str, *, dry_run: bool = False) -> str:
+    journal = os.path.join(container, JOURNAL_NAME)
+    lines = [
+        "Interrupted sibling-collection move requires recovery.",
+        f"Reason: {reason}",
+        f"Recovery container: {container}",
+        f"Recovery journal: {journal}",
+    ]
+    if isinstance(payload, dict):
+        logged_final_path = str(payload.get("final_path") or "").strip()
+        final_path = _runtime_recovery_path(logged_final_path)
+        if final_path:
+            lines.append(f"Planned final folder: {final_path}")
+            if logged_final_path and os.path.normpath(logged_final_path) != final_path:
+                lines.append(f"Journal path form: {logged_final_path}")
+        rows = _recovery_member_rows(container, payload)
+        if rows:
+            lines.append("Member state:")
+            for journal_original, original, staged, state in rows:
+                lines.append(f"  - original: {original}")
+                if journal_original and os.path.normpath(journal_original) != original:
+                    lines.append(f"    journal:  {journal_original}")
+                lines.append(f"    staged:   {staged}")
+                lines.append(f"    state:    {state}")
+    if dry_run:
+        lines.append("Dry Run is read-only, so it will not move folders to repair this state.")
+        lines.append("Run a normal (non-Dry-Run) inventory of this path to let TLO attempt automatic recovery first.")
+    else:
+        lines.append("TLO stopped rather than guessing about folder contents.")
+        lines.append("Close any program that may be using the listed folders and run Inventory again.")
+        lines.append("If the same error repeats, preserve the recovery container and journal; do not delete or merge them manually.")
+        lines.append("A BOTH or MISSING state needs review of the exact original/staged paths shown above before any manual move.")
+    return "\n".join(lines)
+
+
+def _read_recovery_journal(container: str) -> dict:
+    journal = os.path.join(container, JOURNAL_NAME)
+    with open(journal, "r", encoding="utf-8") as infile:
+        return json.load(infile)
+
+
 def assert_no_interrupted_sibling_consolidations(start_path: str) -> None:
     """Read-only guard used by Dry Run before ordinary traversal."""
     for current, dirs, files in os.walk(start_path, topdown=True, followlinks=False):
-        if os.path.basename(current).startswith(TEMP_PREFIX) or JOURNAL_NAME in files:
+        is_temp = os.path.basename(current).startswith(TEMP_PREFIX)
+        has_journal = JOURNAL_NAME in files
+        if is_temp or has_journal:
+            payload = None
+            reason = "recovery journal is present" if has_journal else "temporary collection folder exists without its recovery journal"
+            if has_journal:
+                try:
+                    payload = _read_recovery_journal(current)
+                except Exception as exc:
+                    reason = f"recovery journal cannot be read: {exc}"
             raise SiblingCollectionRecoveryError(
-                f"Dry Run cannot continue while an interrupted collection move requires recovery: {current}"
+                _format_recovery_error(current, payload, reason, dry_run=True)
             )
         dirs[:] = [name for name in dirs if not name.casefold().endswith("-ignoredir")]
 
@@ -416,12 +548,12 @@ def _write_json(path_name: str, payload: dict) -> None:
 
 def _validate_journal(container: str, payload: dict) -> bool:
     parent = os.path.dirname(os.path.normpath(container))
-    final_path = os.path.normpath(str(payload.get("final_path") or ""))
+    final_path = _runtime_recovery_path(str(payload.get("final_path") or ""))
     members = list(payload.get("members") or [])
     if payload.get("schema") != 1 or not final_path or os.path.dirname(final_path) != parent or not members:
         return False
     for row in members:
-        original = os.path.normpath(str(row.get("original") or ""))
+        original = _runtime_recovery_path(str(row.get("original") or ""))
         child_name = str(row.get("child_name") or "")
         if not original or os.path.dirname(original) != parent or os.path.basename(original) != child_name:
             return False
@@ -433,24 +565,52 @@ def _validate_journal(container: str, payload: dict) -> bool:
 def _rollback_container(container: str, payload: dict) -> bool:
     if not _validate_journal(container, payload):
         return False
+
+    # When the planned final path is itself one of the original collection
+    # members, a crash after temp->final rename leaves the recovery container
+    # occupying that member's original pathname.  Move the whole container
+    # aside first so that pathname can be restored like every other member.
+    self_member = any(
+        _same_path(_runtime_recovery_path(str(row.get("original") or "")), container)
+        for row in payload["members"]
+    )
+
     for row in payload["members"]:
-        original = os.path.normpath(row["original"])
+        original = _runtime_recovery_path(row["original"])
         child = os.path.join(container, row["child_name"])
-        if os.path.lexists(original) == os.path.lexists(child):
+        original_exists = os.path.lexists(original)
+        child_exists = os.path.lexists(child)
+        if _same_path(original, container):
+            if not child_exists:
+                return False
+            continue
+        if original_exists == child_exists:
             return False
-    for row in payload["members"]:
-        original = os.path.normpath(row["original"])
-        child = os.path.join(container, row["child_name"])
-        if os.path.lexists(child):
-            os.rename(child, original)
-    for generated in (payload.get("generated_info"), JOURNAL_NAME):
-        path_name = os.path.join(container, str(generated or ""))
-        if generated and os.path.isfile(path_name):
-            os.unlink(path_name)
+
+    if self_member:
+        parent = os.path.dirname(os.path.normpath(container))
+        recovery_container = os.path.join(
+            parent, f"{TEMP_PREFIX}recovery-{uuid.uuid4().hex}"
+        )
+        try:
+            os.rename(container, recovery_container)
+        except Exception as exc:
+            raise _SiblingCollectionRollbackFailure(container, f"could not move the colliding recovery container aside: {exc}") from exc
+        container = recovery_container
+
     try:
+        for row in payload["members"]:
+            original = _runtime_recovery_path(row["original"])
+            child = os.path.join(container, row["child_name"])
+            if os.path.lexists(child):
+                os.rename(child, original)
+        for generated in (payload.get("generated_info"), JOURNAL_NAME):
+            path_name = os.path.join(container, str(generated or ""))
+            if generated and os.path.isfile(path_name):
+                os.unlink(path_name)
         os.rmdir(container)
-    except OSError:
-        return False
+    except Exception as exc:
+        raise _SiblingCollectionRollbackFailure(container, str(exc)) from exc
     return True
 
 
@@ -459,27 +619,42 @@ def recover_interrupted_sibling_consolidations(
 ) -> int:
     recovered = 0
     for current, dirs, files in os.walk(start_path, topdown=True, followlinks=False):
-        if JOURNAL_NAME not in files:
+        is_temp = os.path.basename(current).startswith(TEMP_PREFIX)
+        has_journal = JOURNAL_NAME in files
+        if not has_journal:
+            if is_temp:
+                dirs[:] = []
+                raise SiblingCollectionRecoveryError(
+                    _format_recovery_error(
+                        current,
+                        None,
+                        "temporary collection folder exists without its recovery journal",
+                    )
+                )
             continue
         try:
-            with open(os.path.join(current, JOURNAL_NAME), "r", encoding="utf-8") as infile:
-                payload = json.load(infile)
+            payload = _read_recovery_journal(current)
         except Exception as exc:
-            _emit(emit, f"SIBLING_COLLECTION_RECOVERY_SKIPPED: {current} | unreadable journal: {exc}")
+            _emit(emit, f"SIBLING_COLLECTION_RECOVERY_FAILED: {current} | unreadable journal: {exc}")
             dirs[:] = []
-            if os.path.basename(current).startswith(TEMP_PREFIX):
-                raise SiblingCollectionRecoveryError(
-                    f"Cannot safely inventory while interrupted collection folder {current} has an unreadable journal"
-                ) from exc
-            continue
+            raise SiblingCollectionRecoveryError(
+                _format_recovery_error(
+                    current, None, f"recovery journal cannot be read: {exc}"
+                )
+            ) from exc
+        error_container = current
         try:
             success = _rollback_container(current, payload)
         except Exception as exc:
             success = False
-            _emit(emit, f"SIBLING_COLLECTION_RECOVERY_FAILED: {current} | {exc}")
+            error_container = str(getattr(exc, "container", current) or current)
+            _emit(emit, f"SIBLING_COLLECTION_RECOVERY_FAILED: {error_container} | {exc}")
+            reason = f"automatic rollback failed: {exc}"
+        else:
+            reason = "folder state is ambiguous or the recovery container could not be removed"
         if not success:
             raise SiblingCollectionRecoveryError(
-                f"Cannot safely inventory until interrupted collection move is resolved: {current}"
+                _format_recovery_error(error_container, payload, reason)
             )
         recovered += 1
         _emit(emit, f"SIBLING_COLLECTION_RECOVERED: {current}")
