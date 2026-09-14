@@ -1,4 +1,4 @@
-__version__ = "v458"
+__version__ = "v461"
 import argparse
 import sys
 import os
@@ -211,7 +211,8 @@ def build_inventory_parser() -> argparse.ArgumentParser:
 def parse_command_line():
     parser = build_inventory_parser()
     raw_args = sys.argv[1:]
-    if _looks_like_windows_multiprocessing_spawn_args(raw_args):
+    spawn_args = _looks_like_windows_multiprocessing_spawn_args(raw_args)
+    if spawn_args:
         parsed, unknown = parser.parse_known_args(raw_args)
         filtered_unknown = [arg for arg in unknown if not str(arg).startswith(("parent_pid=", "pipe_handle="))]
         if filtered_unknown:
@@ -223,6 +224,9 @@ def parse_command_line():
     except ValueError as exc:
         parser.error(str(exc))
 
+    if not spawn_args and not str(getattr(parsed, "search_path_override", "") or "").strip():
+        parser.error("--search-path is required for inventory.")
+
     if getattr(parsed, "search_path_slam_override", None) and not getattr(parsed, "search_path_override", ""):
         parser.error("--$slam is only valid when --search-path is also provided.")
     if getattr(parsed, "search_path_copy_override", None) and not getattr(parsed, "search_path_override", ""):
@@ -230,7 +234,7 @@ def parse_command_line():
     if getattr(parsed, "search_path_copy_delete_override", None) and not getattr(parsed, "search_path_override", ""):
         parser.error("--$copy-delete is only valid when --search-path is also provided.")
     if getattr(parsed, "search_path_copy_override", None) and getattr(parsed, "search_path_copy_delete_override", None):
-        parser.error("--$copy and --$copy-delete are mutually exclusive for a single --search-path.")
+        parser.error("--$copy and --$copy-delete are mutually exclusive for --search-path.")
 
     try:
         parsed.TLOHome = resolve_tlo_home(

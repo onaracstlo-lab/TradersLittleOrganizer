@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v458"
+__version__ = "v461"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -175,8 +175,8 @@ HELP_TEXT = (
     "  Current Storage --current-storage-volume STRING   (updater field default; overrides TLOCurrentStorage)\n\n"
     "Argument details:\n"
     "  --TLOHome DIR        Fully qualified existing writable directory path. Defaults from the TLOHome environment variable when present.\n"
-    "  --search-path STRING  Override toBeInventoried.txt and process a single search path. May be quoted or unquoted; may begin with [Volume] before the path.\n"
-    "                        In the native Windows GUI, drag a folder from File Explorer onto the Search Path field to fill it in.\n"
+    "  --search-path STRING  Required when Inventory starts. Accepts semicolon-separated path entries; each may use [Volume], --$slam, --$copy, and --$copy-delete. A .txt entry is read using the inventory-control-file format.\n"
+    "                        In the native Windows GUI, drag a folder or .txt control file from File Explorer onto the Search Path field to fill it in.\n"
     "  --tag-path STRING     Optional fully qualified tagger input path. Used only by the Tag workflow; inventory and updater do not use it.\n"
     "  -$slam STRING        Artist override paired with --search-path. Invalid by itself.\n"
     "  --silent             Suppress all console output.\n"
@@ -805,7 +805,7 @@ class App:
 
         ttk.Label(
             frm,
-            text="Search Path\n(optional/override)",
+            text="Search Path",
             justify="left",
             style="Main.TLabel",
         ).grid(row=row, column=0, sticky="w", padx=(4, 6), pady=0)
@@ -819,8 +819,8 @@ class App:
         ttk.Label(frm, text="Slam (optional)", style="Main.TLabel").grid(
             row=row, column=0, sticky="w", padx=(4, 6), pady=(0, 1)
         )
-        ttk.Entry(frm, textvariable=self.vars["search_path_slam_override"], width=66, style="Main.TEntry").grid(
-            row=row, column=1, columnspan=2, sticky="ew", padx=(6, 4), pady=(0, 1)
+        ttk.Entry(frm, textvariable=self.vars["search_path_slam_override"], width=33, style="Main.TEntry").grid(
+            row=row, column=1, sticky="w", padx=(6, 4), pady=(0, 1)
         )
         row += 1
 
@@ -2666,6 +2666,19 @@ class TaggerWindow:
             setlistfm_lookup=values["setlistfm_lookup"],
             setlistfm_upgrade=bool(values.get("setlistfm_upgrade", False)),
             thorough_setlist_matching=bool(values.get("thorough_setlist_matching", False)),
+            corrupt_files=CORRUPT_FILE_GUI_TO_POLICY.get(
+                getattr(getattr(self.parent_app, "vars", {}).get("corrupt_files"), "get", lambda: CORRUPT_FILE_GUI_VALUES["delete"])(), "delete"
+            ),
+            corrupt_folders=CORRUPT_FOLDER_GUI_TO_POLICY.get(
+                getattr(getattr(self.parent_app, "vars", {}).get("corrupt_folders"), "get", lambda: CORRUPT_FOLDER_GUI_VALUES["all"])(), "all"
+            ),
+            corrupt_folder_threshold=(
+                parse_percent_0_100(getattr(getattr(self.parent_app, "vars", {}).get("corrupt_folder_threshold"), "get", lambda: "100")())
+                if CORRUPT_FOLDER_GUI_TO_POLICY.get(
+                    getattr(getattr(self.parent_app, "vars", {}).get("corrupt_folders"), "get", lambda: CORRUPT_FOLDER_GUI_VALUES["all"])(), "all"
+                ) == "threshold"
+                else 100
+            ),
             rename_compliantly=values["rename_compliantly"],
             convert_shn=values["convert_shn"],
             artist_in_album=values["artist_in_album"],
@@ -2758,6 +2771,9 @@ class TaggerWindow:
                     setlistfm_lookup=bool(config.setlistfm_lookup),
                     setlistfm_upgrade=bool(getattr(config, "setlistfm_upgrade", False)),
                     thorough_setlist_matching=bool(getattr(config, "thorough_setlist_matching", False)),
+                    corrupt_files=str(getattr(config, "corrupt_files", "delete")),
+                    corrupt_folders=str(getattr(config, "corrupt_folders", "all")),
+                    corrupt_folder_threshold=int(getattr(config, "corrupt_folder_threshold", 100)),
                     debug=self.debug,
                     rename_compliantly=bool(config.rename_compliantly),
                     convert_shn=bool(config.convert_shn),

@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v458"
+__version__ = "v461"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -60,5 +60,5 @@ def test_build448_tag_copy_delete_wraps_and_last_checkbox_column_moves_left():
 def test_build448_search_path_and_slam_are_trimmed_again():
     source = _source()
     assert 'self.search_path_entry = ttk.Entry(frm, textvariable=self.vars["search_path_override"], width=66' in source
-    assert 'ttk.Entry(frm, textvariable=self.vars["search_path_slam_override"], width=66' in source
+    assert 'ttk.Entry(frm, textvariable=self.vars["search_path_slam_override"], width=33' in source
     assert 'width=74, style="Main.TEntry"' not in source

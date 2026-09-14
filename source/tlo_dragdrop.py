@@ -1,4 +1,4 @@
-__version__ = "v458"
+__version__ = "v461"
 
 """Native-Windows-only drag-and-drop helpers for the TLO Tk GUI.
 
@@ -97,6 +97,21 @@ def _first_folder_from_drop(widget, data: str) -> Optional[str]:
     return paths[0] if paths else None
 
 
+def _first_search_path_from_drop(widget, data: str) -> Optional[str]:
+    """Return a dropped Search Path value, preserving .txt control files."""
+    for path in split_dropped_paths(widget, data):
+        if os.path.isdir(path):
+            return path
+        if os.path.isfile(path):
+            if path.lower().endswith(".txt"):
+                return path
+            parent = os.path.dirname(path)
+            if parent and os.path.isdir(parent):
+                return parent
+    paths = split_dropped_paths(widget, data)
+    return paths[0] if paths else None
+
+
 def enable_folder_path_drop(
     entry_widget,
     string_var,
@@ -140,13 +155,31 @@ def enable_search_path_folder_drop(
     *,
     on_error: Optional[Callable[[str], None]] = None,
 ) -> DragDropStatus:
-    """Enable native-Windows folder drops on the Search Path entry."""
-    return enable_folder_path_drop(
-        entry_widget,
-        string_var,
-        field_label="Search Path",
-        on_error=on_error,
-    )
+    """Enable native-Windows Search Path drops.
+
+    Folders are used directly. A dropped .txt file is preserved so it can be
+    processed as an inventory-control file; other dropped files retain the
+    legacy behavior of using their containing folder.
+    """
+    if not is_drag_drop_platform():
+        return DragDropStatus(False, "Folder drag/drop is available only in native Windows.")
+
+    def handle_data(data: str) -> None:
+        value = _first_search_path_from_drop(entry_widget, data)
+        if not value:
+            if on_error:
+                on_error("Drop a folder or .txt control file onto the Search Path field.")
+            return
+        string_var.set(value)
+        try:
+            entry_widget.icursor("end")
+            entry_widget.focus_set()
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
+
+    entry_widget.drop_target_register(DND_FILES)
+    entry_widget.dnd_bind("<<Drop>>", lambda event: handle_data(getattr(event, "data", "")))
+    return DragDropStatus(True, provider="tkinterdnd2")
 
 
 def enable_tagging_path_folder_drop(

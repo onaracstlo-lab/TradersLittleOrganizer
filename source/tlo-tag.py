@@ -1,4 +1,4 @@
-__version__ = "v458"
+__version__ = "v461"
 
 import argparse
 import multiprocessing
@@ -8,7 +8,7 @@ from console_output_lib import console_emit
 if __name__ == "__main__":
     multiprocessing.freeze_support()
 
-from tlo_options import add_options_to_parser, parse_bool, validate_compliant_rename_exclusivity
+from tlo_options import add_options_to_parser, apply_lookup_dependency, parse_bool, validate_compliant_rename_exclusivity, validate_corruption_policy
 from tlo_path_inputs import strip_optional_quotes
 from tlo_tag_lib import build_tagger_config, resolve_tagging_path, run_tagger
 from tlo_run_settings import append_run_settings
@@ -25,6 +25,12 @@ def _parse_args(argv=None):
     add_options_to_parser(parser, fields=(
         "compliant",
         "etree_lookup",
+        "setlistfm_lookup",
+        "setlistfm_upgrade",
+        "thorough_setlist_matching",
+        "corrupt_files",
+        "corrupt_folders",
+        "corrupt_folder_threshold",
         "rename_compliantly",
         "convert_shn",
         "artist_in_album",
@@ -33,6 +39,9 @@ def _parse_args(argv=None):
     tagger_help = {
         "compliant": "Use the simplified compliant folder-name parsing rules. Mutually exclusive with --rename-compliantly.",
         "etree_lookup": "Use eTreeDB as a metadata and song-title fallback during tagging.",
+        "setlistfm_lookup": "Use setlist.fm as the enabled online fallback/evidence source during tagging. Requires --etree-lookup.",
+        "setlistfm_upgrade": "Use upgraded setlist.fm rate/daily limits when setlist.fm lookup is enabled.",
+        "thorough_setlist_matching": "Collect and compare additional local and enabled online setlist candidates during tagging.",
         "rename_compliantly": "Rename an identified folder using the resolved Show Name before tagging it in place. Mutually exclusive with --compliant.",
         "convert_shn": "Convert .shn/.shnf files in the selected tagging path to .flac; delete a source only after successful verified conversion.",
     }
@@ -50,6 +59,8 @@ def _parse_args(argv=None):
     args.tagPath = option_value or positional_value
     try:
         validate_compliant_rename_exclusivity(vars(args))
+        apply_lookup_dependency(vars(args), mode="strict")
+        validate_corruption_policy(vars(args), require_explicit_threshold=True)
     except ValueError as exc:
         parser.error(str(exc))
     return args
@@ -63,7 +74,12 @@ def main(argv=None) -> int:
             my_tlo=args.myTLO,
             compliant=bool(args.compliant),
             etree_lookup=bool(args.etree_lookup),
-            setlistfm_lookup=False,
+            setlistfm_lookup=bool(args.setlistfm_lookup),
+            setlistfm_upgrade=bool(args.setlistfm_upgrade),
+            thorough_setlist_matching=bool(args.thorough_setlist_matching),
+            corrupt_files=str(args.corrupt_files),
+            corrupt_folders=str(args.corrupt_folders),
+            corrupt_folder_threshold=int(getattr(args, "corrupt_folder_threshold", 100)),
             debug=bool(args.debug),
             rename_compliantly=bool(args.rename_compliantly),
             convert_shn=bool(args.convert_shn),
@@ -88,6 +104,12 @@ def main(argv=None) -> int:
             compliant=bool(args.compliant),
             tag_path=args.tagPath,
             etree_lookup=bool(args.etree_lookup),
+            setlistfm_lookup=bool(args.setlistfm_lookup),
+            setlistfm_upgrade=bool(args.setlistfm_upgrade),
+            thorough_setlist_matching=bool(args.thorough_setlist_matching),
+            corrupt_files=str(args.corrupt_files),
+            corrupt_folders=str(args.corrupt_folders),
+            corrupt_folder_threshold=int(getattr(args, "corrupt_folder_threshold", 100)),
             debug=bool(args.debug),
             rename_compliantly=bool(args.rename_compliantly),
             convert_shn=bool(args.convert_shn),

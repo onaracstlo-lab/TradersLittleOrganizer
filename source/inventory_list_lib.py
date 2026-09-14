@@ -1,4 +1,4 @@
-__version__ = "v458"
+__version__ = "v461"
 from tlo_diagnostics import debug_suppressed_exception
 import os
 import re
@@ -133,7 +133,7 @@ _PATH_DIRECTIVE_RE = re.compile(r"(?<!\S)(--?\$slam|--\$copy-delete|--\$copy)(?=
 
 
 def _split_path_and_directives(line_text):
-    """Parse one toBeInventoried.txt line.
+    """Parse one inventory-control entry.
 
     The physical path must come first.  Optional directives may follow in any
     order: --$slam / -$slam, --$copy, and --$copy-delete.  Directive values run
@@ -170,7 +170,7 @@ def _split_path_and_directives(line_text):
         values[key] = value
 
     if values["copy"] and values["copy_delete"]:
-        raise ValueError("--$copy and --$copy-delete are mutually exclusive on one toBeInventoried.txt line")
+        raise ValueError("--$copy and --$copy-delete are mutually exclusive on one inventory-control entry")
 
     return _strip_optional_quotes(path_part), values["slam"], values["copy"], values["copy_delete"]
 
@@ -199,7 +199,7 @@ def _split_optional_volume_prefix(path_text):
 
 
 def _is_comment_line(line_text):
-    """Return True for supported whole-line comments in toBeInventoried.txt."""
+    """Return True for supported whole-line comments in an inventory-control text file."""
     cleaned = str(line_text or "").lstrip("\ufeff").strip()
     lowered = cleaned.lower()
     return cleaned.startswith("#") or lowered == "rem" or lowered.startswith("rem ")
@@ -429,6 +429,151 @@ def _parse_inventory_file(file_path):
                 parsed_items.append((raw_path_entry, normalized_path, assoc_value, volume_label, copy_mode, copy_destination))
             else:
                 parsed_items.append((raw_path_entry, normalized_path, assoc_value, volume_label))
+
+    return parsed_items
+
+
+def _split_search_path_entries(value):
+    """Split the Search Path value on semicolons outside quoted strings.
+
+    Search Path is a required, semicolon-delimited inventory-control input.
+    Each direct entry uses the same path/directive grammar as one line of an
+    inventory-control text file. Quoted paths/directive values may contain a
+    literal semicolon without starting another entry.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return []
+
+    entries = []
+    current = []
+    quote = ""
+    for char in text:
+        if char in ('"', "'"):
+            if not quote:
+                quote = char
+            elif quote == char:
+                quote = ""
+            current.append(char)
+            continue
+
+        if char == ";" and not quote:
+            entry = "".join(current).strip()
+            if entry:
+                entries.append(entry)
+            current = []
+            continue
+
+        current.append(char)
+
+    if quote:
+        raise ValueError("Search Path contains an unmatched quote.")
+
+    entry = "".join(current).strip()
+    if entry:
+        entries.append(entry)
+    return entries
+
+
+def _looks_like_text_control_path(path_text):
+    return str(path_text or "").strip().lower().endswith(".txt")
+
+
+def parse_search_path_input(
+    search_path_text,
+    *,
+    slam_override="",
+    copy_override="",
+    copy_delete_override="",
+):
+    """Parse the required Search Path input into inventory candidate tuples.
+
+    The Search Path value may contain multiple semicolon-separated direct
+    entries. Each direct entry uses the same grammar as one line of the former
+    TLOHome/toBeInventoried.txt input: optional [Volume] prefix followed by a
+    path and optional --$slam / --$copy / --$copy-delete directives.
+
+    A Search Path entry whose physical path ends in .txt is instead treated as
+    an inventory-control text file. That file may have any name and is parsed
+    exactly like the former toBeInventoried.txt input file. Global CLI/GUI
+    per-path directive fields are intentionally rejected when a .txt control
+    file is present because the file itself can contain multiple independent
+    directives.
+    """
+    entries = _split_search_path_entries(search_path_text)
+    if not entries:
+        raise ValueError("Search Path is required.")
+
+    global_slam = _strip_optional_quotes(str(slam_override or "").strip())
+    global_copy = _strip_optional_quotes(str(copy_override or "").strip())
+    global_copy_delete = _strip_optional_quotes(str(copy_delete_override or "").strip())
+    if global_copy and global_copy_delete:
+        raise ValueError("--$copy and --$copy-delete are mutually exclusive for Search Path.")
+
+    parsed_items = []
+    text_control_files = []
+
+    for entry_number, raw_entry in enumerate(entries, start=1):
+        raw_path_entry, inline_slam, inline_copy, inline_copy_delete = _split_path_and_directives(raw_entry)
+        volume_label, raw_path = _split_optional_volume_prefix(raw_path_entry)
+        if not raw_path:
+            raise ValueError(f"Missing path in Search Path entry {entry_number}: {raw_entry}")
+
+        normalized_path = _normalize_input_path(raw_path)
+        is_text_control = _looks_like_text_control_path(raw_path)
+        if is_text_control:
+            if volume_label:
+                raise ValueError(
+                    f"A .txt Search Path entry is a control file and cannot have a [Volume] prefix: {raw_entry}"
+                )
+            if inline_slam or inline_copy or inline_copy_delete:
+                raise ValueError(
+                    f"Directives cannot be attached to a .txt Search Path control file; put them inside the file: {raw_entry}"
+                )
+            if not os.path.isfile(normalized_path):
+                raise FileNotFoundError(f"Search Path control file not found: {normalized_path}")
+            text_control_files.append(normalized_path)
+            file_items = _parse_inventory_file(normalized_path)
+            if not file_items:
+                raise ValueError(f"Search Path control file contains no usable paths: {normalized_path}")
+            parsed_items.extend(file_items)
+            continue
+
+        if inline_slam and global_slam:
+            raise ValueError(
+                f"Search Path entry {entry_number} contains --$slam while the separate Slam field/--$slam is also set."
+            )
+        if (inline_copy or inline_copy_delete) and (global_copy or global_copy_delete):
+            raise ValueError(
+                f"Search Path entry {entry_number} contains a copy directive while a separate --$copy/--$copy-delete option is also set."
+            )
+
+        slam_value = inline_slam or global_slam
+        copy_value = inline_copy or global_copy
+        copy_delete_value = inline_copy_delete or global_copy_delete
+        if copy_value and copy_delete_value:
+            raise ValueError(f"--$copy and --$copy-delete are mutually exclusive in Search Path entry {entry_number}.")
+
+        copy_mode = ""
+        copy_destination = ""
+        if copy_value:
+            copy_mode = "copy"
+            copy_destination = _normalize_copy_destination(copy_value, "--$copy")
+        elif copy_delete_value:
+            copy_mode = "copy-delete"
+            copy_destination = _normalize_copy_destination(copy_delete_value, "--$copy-delete")
+
+        if copy_mode and copy_destination:
+            parsed_items.append(
+                (raw_path_entry, normalized_path, slam_value, volume_label, copy_mode, copy_destination)
+            )
+        else:
+            parsed_items.append((raw_path_entry, normalized_path, slam_value, volume_label))
+
+    if text_control_files and (global_slam or global_copy or global_copy_delete):
+        raise ValueError(
+            "The separate Slam/--$slam and --$copy/--$copy-delete options cannot be combined with a .txt Search Path control file; put per-path directives inside the file."
+        )
 
     return parsed_items
 
@@ -872,38 +1017,14 @@ def prepare_inventory_items(config):
     return prepared
 
 def load_accessible_inventory_paths(config):
-    inventory_file = os.path.join(config.TLOHome, "toBeInventoried.txt")
-
-    if getattr(config, "search_path_override", ""):
-        raw_path_entry = _strip_optional_quotes(config.search_path_override)
-        volume_label, raw_path = _split_optional_volume_prefix(raw_path_entry)
-        assoc_value = _strip_optional_quotes(getattr(config, "search_path_slam_override", ""))
-        copy_value = _strip_optional_quotes(getattr(config, "search_path_copy_override", "") or "")
-        copy_delete_value = _strip_optional_quotes(getattr(config, "search_path_copy_delete_override", "") or "")
-        if copy_value and copy_delete_value:
-            raise ValueError("--$copy and --$copy-delete are mutually exclusive for a single --search-path.")
-        if not raw_path:
-            raise ValueError("--search-path was provided but no usable search path was found.")
-        normalized_path = _normalize_input_path(raw_path)
-        copy_mode = ""
-        copy_destination = ""
-        if copy_value:
-            copy_mode = "copy"
-            copy_destination = _normalize_copy_destination(copy_value, "--$copy")
-        elif copy_delete_value:
-            copy_mode = "copy-delete"
-            copy_destination = _normalize_copy_destination(copy_delete_value, "--$copy-delete")
-        if copy_mode and copy_destination:
-            candidate_items = [(raw_path_entry, normalized_path, assoc_value, volume_label, copy_mode, copy_destination)]
-        else:
-            candidate_items = [(raw_path_entry, normalized_path, assoc_value, volume_label)]
-        inventory_source = "command line --search-path"
-    else:
-        if not os.path.isfile(inventory_file):
-            raise FileNotFoundError(f"Inventory file not found: {inventory_file}")
-
-        candidate_items = _parse_inventory_file(inventory_file)
-        inventory_source = inventory_file
+    search_path_value = str(getattr(config, "search_path_override", "") or "").strip()
+    candidate_items = parse_search_path_input(
+        search_path_value,
+        slam_override=getattr(config, "search_path_slam_override", ""),
+        copy_override=getattr(config, "search_path_copy_override", ""),
+        copy_delete_override=getattr(config, "search_path_copy_delete_override", ""),
+    )
+    inventory_source = "Search Path"
 
     validation_issues = _collect_search_path_issues(candidate_items, inventory_source)
     candidate_items = _assign_volume_labels(candidate_items)

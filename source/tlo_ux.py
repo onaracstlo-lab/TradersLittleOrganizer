@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v458"
+__version__ = "v461"
 
 
 import copy
@@ -19,9 +19,9 @@ from typing import Iterable, Optional
 
 from inventory_list_lib import (
     _normalize_input_path,
-    _parse_inventory_file,
     _split_optional_volume_prefix,
     _strip_optional_quotes,
+    parse_search_path_input,
 )
 from tlo_media_rules import MEDIA_EXTENSIONS
 
@@ -131,14 +131,16 @@ def _path_without_volume_prefix(value: str) -> str:
 
 def validate_search_path(value: str, tlo_home: str) -> ValidationStatus:
     raw = str(value or "").strip()
-    if raw:
-        try:
-            physical = _path_without_volume_prefix(raw)
-            normalized = _normalize_input_path(physical)
-        except Exception as exc:
-            return ValidationStatus("error", str(exc))
+    try:
+        items = parse_search_path_input(raw)
+    except Exception as exc:
+        return ValidationStatus("error", str(exc))
+
+    normalized_paths = []
+    for item in items:
+        normalized = str(item[1] or "")
         if not os.path.isabs(normalized):
-            return ValidationStatus("error", "Search Path must be fully qualified.", normalized)
+            return ValidationStatus("error", f"Search Path must be fully qualified: {normalized}", normalized)
         if not os.path.exists(normalized):
             return ValidationStatus("error", f"Search Path does not exist: {normalized}", normalized)
         if not os.path.isdir(normalized):
@@ -147,21 +149,11 @@ def validate_search_path(value: str, tlo_home: str) -> ValidationStatus:
             os.listdir(normalized)
         except OSError as exc:
             return ValidationStatus("error", f"Search Path cannot be read: {exc}", normalized)
-        return ValidationStatus("ok", f"Search Path is ready: {normalized}", normalized)
+        normalized_paths.append(os.path.normpath(normalized))
 
-    home = str(tlo_home or "").strip()
-    if not home:
-        return ValidationStatus("error", "TLOHome is not set, so toBeInventoried.txt cannot be found.")
-    inventory_file = os.path.join(home, "toBeInventoried.txt")
-    if not os.path.isfile(inventory_file):
-        return ValidationStatus("error", f"Search Path is blank and inventory file is missing: {inventory_file}")
-    try:
-        items = _parse_inventory_file(inventory_file)
-    except Exception as exc:
-        return ValidationStatus("error", f"Inventory file is not valid: {exc}", inventory_file)
-    if not items:
-        return ValidationStatus("error", f"Inventory file contains no usable paths: {inventory_file}", inventory_file)
-    return ValidationStatus("ok", f"Using {len(items)} path(s) from {inventory_file}", inventory_file)
+    if len(normalized_paths) == 1:
+        return ValidationStatus("ok", f"Search Path is ready: {normalized_paths[0]}", normalized_paths[0])
+    return ValidationStatus("ok", f"Search Path is ready with {len(normalized_paths)} inventory roots.", raw)
 
 
 def validate_optional_destination(value: str, label: str) -> ValidationStatus:
@@ -273,10 +265,8 @@ def operation_review_lines(
     lines = [f"Operation: {operation_name}"]
     if path_text:
         lines.append(f"Path: {path_text}")
-    elif str(getattr(config, "search_path_override", "") or "").strip():
-        lines.append(f"Search Path: {getattr(config, 'search_path_override', '')}")
     else:
-        lines.append(f"Search Paths: {os.path.join(getattr(config, 'TLOHome', ''), 'toBeInventoried.txt')}")
+        lines.append(f"Search Path: {getattr(config, 'search_path_override', '')}")
 
     lines.extend(main_window_checkbox_review_lines(main_checkbox_source or config, dry_run=dry_run))
     checkbox_values = main_window_checkbox_values(main_checkbox_source or config, dry_run=dry_run)
@@ -330,23 +320,13 @@ def operation_review_lines(
 
 def _inventory_roots(config) -> list[tuple[str, str, str]]:
     """Return (root, copy_mode, copy_destination) without mutating inventory state."""
-    override = str(getattr(config, "search_path_override", "") or "").strip()
-    if override:
-        _volume, raw_path = _split_optional_volume_prefix(_strip_optional_quotes(override))
-        normalized = _normalize_input_path(raw_path)
-        copy_mode = ""
-        copy_destination = ""
-        if str(getattr(config, "search_path_copy_override", "") or "").strip():
-            copy_mode = "copy"
-            copy_destination = _normalize_input_path(str(getattr(config, "search_path_copy_override", "")))
-        elif str(getattr(config, "search_path_copy_delete_override", "") or "").strip():
-            copy_mode = "copy-delete"
-            copy_destination = _normalize_input_path(str(getattr(config, "search_path_copy_delete_override", "")))
-        return [(os.path.normpath(normalized), copy_mode, copy_destination)]
-
-    inventory_file = os.path.join(getattr(config, "TLOHome", ""), "toBeInventoried.txt")
     roots: list[tuple[str, str, str]] = []
-    for item in _parse_inventory_file(inventory_file):
+    for item in parse_search_path_input(
+        getattr(config, "search_path_override", ""),
+        slam_override=getattr(config, "search_path_slam_override", ""),
+        copy_override=getattr(config, "search_path_copy_override", ""),
+        copy_delete_override=getattr(config, "search_path_copy_delete_override", ""),
+    ):
         normalized = item[1]
         copy_mode = item[4] if len(item) > 4 else ""
         copy_destination = item[5] if len(item) > 5 else ""

@@ -12,7 +12,7 @@ import tlo_options as O
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v458"
+__version__ = "v461"
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -77,6 +77,7 @@ def test_build442_cli_threshold_requires_matching_folder_mode():
 def test_build442_main_cli_accepts_new_policy_and_rejects_old_option(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "argv", [
         "tlo-gi.py", "--TLOHome", str(tmp_path),
+        "--search-path", str(tmp_path),
         "--corrupt-files", "keep",
         "--corrupt-folders", "threshold",
         "--corrupt-folder-threshold", "75",

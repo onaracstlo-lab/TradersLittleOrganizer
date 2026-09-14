@@ -11,7 +11,13 @@ Q: Do I need to define TLOHome before I start?
 A: Yes. TLOHome is the root for the applications, databases, logs, setlists, and inventory output. Set it with the TLOHome environment variable or the documented --TLOHome command-line option. The Inventory and Search GUIs resolve it at startup and display it as a read-only label.
 
 Q: What else is required before the first run?
-A: A complete installation must contain TLOHome/TLO_DBs/artists.sqlite and TLOHome/TLO_DBs/venues.txt. You also need valid search paths or a valid toBeInventoried.txt file. Optional settings include TLOCurrentStorage for Add Shows and SETLISTFM_API_KEY for setlist.fm lookup.
+A: A complete installation must contain TLOHome/TLO_DBs/artists.sqlite and TLOHome/TLO_DBs/venues.txt. Full Inventory also requires Search Path. Search Path can contain one or more semicolon-separated direct roots, or the fully qualified path to any .txt control file using the supplied toBeInventoried.txt template format. TLOHome/toBeInventoried.txt is not read automatically. Optional settings include TLOCurrentStorage for Add Shows and SETLISTFM_API_KEY for setlist.fm lookup.
+
+Q: Is toBeInventoried.txt still used automatically?
+A: No. Build 461 keeps toBeInventoried.txt only as an example/template in COMPLETE installations. To use that format, explicitly put the full path to toBeInventoried.txt (or any other .txt control file) in Search Path.
+
+Q: Can Search Path contain more than one root?
+A: Yes. Separate direct Search Path entries with semicolons. Each direct entry may use the same optional [Volume], --$slam, --$copy, and --$copy-delete directives as a control-file line. A .txt Search Path entry is expanded using the same line/comment rules as the former toBeInventoried.txt input file.
 
 Q: How difficult is it to set the TLO-related environment variables?
 A: The Windows and macOS/Linux/WSL setup steps are described in Sections 4 through 6 of the User Manual.
@@ -43,6 +49,9 @@ A: Yes, when the release was explicitly built as a database-refresh update. Norm
 
 Q: Does TLO recognize same-month multi-day dates such as 1970-04-12-13?
 A: Yes. TLO accepts a first yyyy-mm-dd followed by one or two strictly ascending day values, using dashes or commas, for example 1970-04-12-13, 1970-04-12-13-14, 1970-04-12,13, and 1970-04-12,13,14. Textual equivalents such as 12-13 April 1970, April 12-13, 1970, and 1970 April 12-13 are also accepted. Every day must be valid for that month and year. The first day becomes the canonical TLO Date, while the complete original multi-day range is retained in PARENTHETICALS. A descending, repeated, or impossible range is rejected as a whole. Existing year-range rules are unchanged.
+
+Q: Can TLO handle a folder such as RTF Paris 7 March 76 flac16?
+A: Yes, beginning with Build 460, but only through a guarded non-compliant fallback. The artist prefix itself must resolve uniquely in artists.sqlite; TLO does not manufacture initials, so RTF must already be an alias/artist term in the database. The date uses the normal TLO date parser, and everything after the date must be recognized technical media/source text such as flac16, flac24, shn, wav, 16-bit, 24-bit, SBD, AUD, FM, matrix, soundboard, or audience. Strong state/country-anchored place text and exact venues.txt matches are used normally. A single unanchored word such as Paris is only retained if eTreeDB, selected setlist metadata, and setlist.fm do not provide stronger venue/location information. Unknown multi-word text is not promoted to a location.
 
 Q: Can Compliant and Rename Compliantly be selected together?
 A: No. They are mutually exclusive. In the main Inventory window, checking either one automatically unchecks the other. Tag and Add Shows inherit the resulting main-window values. On the inventory, GUI-launcher, and standalone-tagger command lines, using --compliant and --rename-compliantly together produces an argument error.
@@ -82,3 +91,6 @@ A: Yes. They are legitimate century-known partial dates. TLO requires the less-s
 
 Q: What does (pdupNN) mean in Add Shows?
 A: Beginning with Build 399, when Process New Shows has Check for Duplicates selected and every matching bootlist entry is on another storage partition, TLO assumes those existing folders are unavailable for comparison and keeps the incoming show with a potential-duplicate marker such as (pdup01), (pdup02), and so on. This is not a copy/alternate determination. If a matching entry is on the current partition, or TLO cannot determine the partition, the existing duplicate review and copy/alternate checks remain in effect. Rename Compliantly applies the pdup marker to the physical folder name; otherwise the folder name is left as supplied.
+
+Q: Does standalone tlo-tag use the same setlist.fm, Thorough Setlist Matching, and corruption controls as Inventory?
+A: Yes. Build 459 and later accept --setlistfm-lookup, --setlistfm-upgrade, --thorough-setlist-matching, --corrupt-files, --corrupt-folders, and --corrupt-folder-threshold in tlo-tag.py/tlo-tag.exe. setlist.fm still requires eTreeDB. The GUI Tag window reads the current main-window values when Tag is clicked. Corruption is checked before standalone tag mutation using the same fail-closed rules as Inventory.

@@ -1,4 +1,4 @@
-__version__ = "v458"
+__version__ = "v461"
 
 import argparse
 from dataclasses import dataclass
@@ -219,7 +219,11 @@ OPTIONS = [
     Option(
         "search_path_override", "--search-path", "text",
         default="", metavar="STRING", gui="entry", gui_label="Search Path",
-        help="Override toBeInventoried.txt and process a single search path. May be quoted or unquoted; may begin with [Volume] before the path.",
+        help=(
+            "Required inventory input. Accepts one or more semicolon-separated path entries using the same "
+            "optional [Volume], --$slam, --$copy, and --$copy-delete grammar as an inventory-control text file. "
+            "An entry ending in .txt is read as an inventory-control text file using the former toBeInventoried.txt format."
+        ),
     ),
     Option(
         "current_storage_volume", "--current-storage-volume", "text",

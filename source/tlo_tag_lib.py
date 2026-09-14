@@ -1,6 +1,6 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v458"
+__version__ = "v461"
 
 from tlo_diagnostics import debug_suppressed_exception
 import os
@@ -33,7 +33,7 @@ except Exception:  # pragma: no cover - optional fallback imports vary by mutage
 
 from inventory_parser_lib import Config
 from tlo_path_inputs import strip_optional_quotes, normalize_platform_input_path, resolve_tlo_home as resolve_tlo_home_common
-from tlo_options import validate_compliant_rename_exclusivity
+from tlo_options import validate_compliant_rename_exclusivity, validate_corruption_policy
 from logging_lib import ARTIST_SQLITE_DB_FILENAME, TLO_DBS_DIRNAME, VENUE_REFERENCE_DB_FILENAME, setup_logging
 from tlo_artist_db import load_artist_matcher
 from tlo_audio_tags import collect_group_flac_tag_info
@@ -498,6 +498,11 @@ def build_tagger_config(
     compliant: bool = False,
     etree_lookup: bool = False,
     setlistfm_lookup: bool = False,
+    setlistfm_upgrade: bool = False,
+    thorough_setlist_matching: bool = False,
+    corrupt_files: str = "delete",
+    corrupt_folders: str = "all",
+    corrupt_folder_threshold: int = 100,
     debug: bool = False,
     rename_compliantly: bool = False,
     convert_shn: bool = False,
@@ -513,6 +518,15 @@ def build_tagger_config(
         raise TaggerError(str(exc)) from exc
     if bool(setlistfm_lookup) and not bool(etree_lookup):
         raise TaggerError("setlist.fm lookup requires eTreeDB lookup.")
+    corruption_values = {
+        "corrupt_files": corrupt_files,
+        "corrupt_folders": corrupt_folders,
+        "corrupt_folder_threshold": corrupt_folder_threshold,
+    }
+    try:
+        validate_corruption_policy(corruption_values, require_explicit_threshold=False)
+    except ValueError as exc:
+        raise TaggerError(str(exc)) from exc
     resolved_home = resolve_tlo_home(tlo_home=tlo_home, my_tlo=my_tlo)
     config = Config(
         debug=bool(debug),
@@ -532,11 +546,25 @@ def build_tagger_config(
         rename_compliantly=bool(rename_compliantly),
         etree_lookup=bool(etree_lookup),
         setlistfm_lookup=bool(setlistfm_lookup),
+        setlistfm_upgrade=bool(setlistfm_upgrade),
+        thorough_setlist_matching=bool(thorough_setlist_matching),
+        corrupt_files=str(corruption_values["corrupt_files"]),
+        corrupt_folders=str(corruption_values["corrupt_folders"]),
+        corrupt_folder_threshold=int(corruption_values.get("corrupt_folder_threshold", 100) or 0),
         performance_mode="gentle",
         max_workers=1,
         convert_shn=bool(convert_shn),
         artist_in_album=bool(artist_in_album),
     )
+    if config.setlistfm_lookup and config.setlistfm_upgrade:
+        config.setlistfm_min_interval_seconds = 1.0 / 14.0
+        config.setlistfm_max_calls = 0
+        config.setlistfm_max_calls_per_day = 48000
+    else:
+        config.setlistfm_min_interval_seconds = 0.600
+        config.setlistfm_max_calls = 1400
+        config.setlistfm_max_calls_per_day = 0
+    config.standalone_tagger_corruption_enabled = True
     config.tlo_dbs_dir = os.path.join(config.TLOHome, TLO_DBS_DIRNAME)
     config.artist_sqlite_db_file = os.path.join(config.tlo_dbs_dir, ARTIST_SQLITE_DB_FILENAME)
     config.venue_reference_db_file = os.path.join(config.tlo_dbs_dir, VENUE_REFERENCE_DB_FILENAME)
@@ -5068,6 +5096,26 @@ def process_tagging_group(
         _problem(folder, f"metadata extraction failed: {exc}", emit)
         return stats
 
+    if bool(getattr(config, "standalone_tagger_corruption_enabled", False)):
+        from tlo_corruption import handle_group_corruption
+        corruption_outcome = handle_group_corruption(
+            config,
+            group,
+            record,
+            corrupt_files=str(getattr(config, "corrupt_files", "delete") or "delete"),
+            corrupt_folders=str(getattr(config, "corrupt_folders", "all") or "all"),
+            folder_threshold=int(getattr(config, "corrupt_folder_threshold", 100) or 0),
+        )
+        if corruption_outcome.show_removed:
+            stats["skipped"] += 1
+            _emit(emit, f"SKIP: {folder} | show removed by corruption policy")
+            return stats
+        if corruption_outcome.unverifiable:
+            stats["skipped"] += 1
+            detail = "; ".join(str(item[1]) for item in corruption_outcome.assessment.unverifiable_details if isinstance(item, (tuple, list)) and len(item) > 1)
+            _problem(folder, f"corruption status unverifiable; tagging skipped{': ' + detail if detail else ''}", emit)
+            return stats
+
     album = _album_for_record(config, record)
     metadata_problems = []
     if not compact_ws(getattr(record, "artist", "")):
@@ -5398,6 +5446,11 @@ def run_tagger(
     tag_path: str = "",
     etree_lookup: bool = False,
     setlistfm_lookup: bool = False,
+    setlistfm_upgrade: bool = False,
+    thorough_setlist_matching: bool = False,
+    corrupt_files: str = "delete",
+    corrupt_folders: str = "all",
+    corrupt_folder_threshold: int = 100,
     debug: bool = False,
     rename_compliantly: bool = False,
     convert_shn: bool = False,
@@ -5412,6 +5465,11 @@ def run_tagger(
         compliant=compliant,
         etree_lookup=etree_lookup,
         setlistfm_lookup=setlistfm_lookup,
+        setlistfm_upgrade=setlistfm_upgrade,
+        thorough_setlist_matching=thorough_setlist_matching,
+        corrupt_files=corrupt_files,
+        corrupt_folders=corrupt_folders,
+        corrupt_folder_threshold=corrupt_folder_threshold,
         debug=debug,
         rename_compliantly=rename_compliantly,
         convert_shn=convert_shn,
@@ -5432,7 +5490,7 @@ def run_tagger(
     tag_emit = _build_tag_log_emit(config, emit)
     artist_matcher = load_artist_matcher(config)
 
-    _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | setlist.fm fallback={'yes' if config.setlistfm_lookup else 'no'} | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | artist in album={'yes' if getattr(config, 'artist_in_album', True) else 'no'} | as-is artist name={'yes' if getattr(config, 'as_is_artist_name', False) else 'no'} | debug={'yes' if config.debug else 'no'}")
+    _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | setlist.fm fallback={'yes' if config.setlistfm_lookup else 'no'} | setlist.fm upgrade={'yes' if getattr(config, 'setlistfm_upgrade', False) else 'no'} | thorough setlist matching={'yes' if getattr(config, 'thorough_setlist_matching', False) else 'no'} | corrupt files={getattr(config, 'corrupt_files', 'delete')} | corrupt folders={getattr(config, 'corrupt_folders', 'all')} | corrupt folder threshold={getattr(config, 'corrupt_folder_threshold', 100)}% | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | artist in album={'yes' if getattr(config, 'artist_in_album', True) else 'no'} | as-is artist name={'yes' if getattr(config, 'as_is_artist_name', False) else 'no'} | debug={'yes' if config.debug else 'no'}")
     _emit(tag_emit, f"TLOHome: {config.TLOHome}")
     _emit(tag_emit, f"Tagging Path: {tagging_path}")
 

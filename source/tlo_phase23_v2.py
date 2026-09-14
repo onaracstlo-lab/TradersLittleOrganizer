@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v458"
+__version__ = "v461"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
@@ -67,6 +67,21 @@ TERMINAL_DASH_PERFORMANCE_QUALIFIER_RE = re.compile(
 TERMINAL_PAREN_PERFORMANCE_QUALIFIER_RE = re.compile(
     rf"^(?P<artist>.+?)\s*\(\s*(?P<qualifier>{TERMINAL_PERFORMANCE_QUALIFIER_TEXT})\s*\)\s*$",
     re.IGNORECASE,
+)
+# Build 460: a narrowly gated technical tail may follow a date in a
+# non-compliant folder whose order is Artist + place + Date + technical tail.
+# This is intentionally limited to familiar media/source tokens so ordinary
+# album/title text after a date does not activate the fallback.
+TRAILING_MEDIA_TECHNICAL_SUFFIX_RE = re.compile(
+    r"(?ix)^(?:"
+    r"flacs?|flac(?:16|24)|shns?|shnf|wav|wave|aiff?|ape|alac|mp3|m4a|aac|ogg|opus|wv|"
+    r"16\s*[-_ ]?\s*bit|24\s*[-_ ]?\s*bit|"
+    r"sbd|aud|fm|matrix|soundboard|audience"
+    r")(?:\s+(?:"
+    r"flacs?|flac(?:16|24)|shns?|shnf|wav|wave|aiff?|ape|alac|mp3|m4a|aac|ogg|opus|wv|"
+    r"16\s*[-_ ]?\s*bit|24\s*[-_ ]?\s*bit|"
+    r"sbd|aud|fm|matrix|soundboard|audience"
+    r"))*$"
 )
 MULTI_EXT_RE = re.compile(
     r"(?i)(?:\.(?:txt|docx?|rtf|nfo|md5|ffp|fpt|sfv|log|cue|m3u8?|pls|shn|shnf|flac|flac16|flac24|wav|mp3|m4a|aac|ogg|oga|opus|aiff?|ape|wv|alac|aucdtect))+$"
@@ -2079,6 +2094,124 @@ def _match_date_string3(text: str) -> Optional[Dict[str, str]]:
                 item[key] = date_match[key]
         return item
     return None
+
+
+def _match_artist_place_date_technical_suffix(
+    text: str, matcher: Optional[ArtistMatcher]
+) -> Tuple[Optional[Dict[str, object]], List[str]]:
+    """Match guarded ``Artist Place Date TechnicalSuffix`` folder text.
+
+    This is a narrow non-compliant fallback for traded-show names such as
+    ``RTF Paris 7 March 76 flac16``.  The artist prefix must resolve directly
+    and uniquely through the Artist DB; TLO does not construct or guess an
+    initialism.  Text between the artist and date is retained only as a
+    venue/location hint, and the text after the date must consist entirely of
+    recognized media/source technical tokens.
+    """
+    if matcher is None:
+        return None, []
+    cleaned = _clean_piece(text)
+    if not cleaned:
+        return None, []
+
+    for date_match in _find_date_matches(cleaned):
+        start = int(date_match.get("start", 0) or 0)
+        end = int(date_match.get("end", 0) or 0)
+        left = _clean_piece(cleaned[:start])
+        technical_suffix = _clean_piece(cleaned[end:])
+        if not left or not technical_suffix or not TRAILING_MEDIA_TECHNICAL_SUFFIX_RE.fullmatch(technical_suffix):
+            continue
+
+        token_matches = list(re.finditer(r"[A-Za-z][A-Za-z'&.+-]*", left))
+        if len(token_matches) < 2:
+            continue
+
+        # Longest artist prefix first, but always leave at least one token as
+        # the place/venue hint.  Each prefix is an ordinary exact/alias Artist
+        # DB lookup; no initialism is synthesized here.
+        for token in reversed(token_matches[:-1]):
+            raw_artist = _clean_piece(left[: token.end()])
+            place_hint = _clean_piece(left[token.end():])
+            if not raw_artist or not place_hint:
+                continue
+
+            detail, apostrophe_fallback = _lookup_artist_detail_with_apostrophe_fallback(
+                raw_artist, matcher
+            )
+            if detail["status"] == "collision":
+                return None, list(detail["masters"])
+            if detail["status"] != "matched" or len(detail["masters"]) != 1:
+                continue
+
+            item: Dict[str, object] = {
+                "artist_raw": raw_artist,
+                "artist_master": detail["masters"][0],
+                "place_hint": place_hint,
+                "technical_suffix": technical_suffix,
+                "date_raw": date_match["raw"],
+                "date_norm": date_match["normalized"],
+                "apostrophe_fallback": apostrophe_fallback,
+            }
+            for key in ("date_order", "needs_setlist_confirmation", "date_separator_repaired"):
+                if date_match.get(key):
+                    item[key] = date_match[key]
+            return item, []
+    return None, []
+
+
+def _known_venue_exact(config, value: str) -> str:
+    """Return the canonical venues.txt line for an exact hint, if available."""
+    hint = compact_ws(value)
+    if not hint:
+        return ""
+    venue_path = compact_ws(getattr(config, "venue_reference_db_file", "") or "")
+    if not venue_path:
+        db_dir = compact_ws(getattr(config, "tlo_dbs_dir", "") or "")
+        if db_dir:
+            venue_path = os.path.join(db_dir, "venues.txt")
+    if not venue_path or not os.path.isfile(venue_path):
+        return ""
+    target = normalized_compare_value(hint)
+    try:
+        with open(venue_path, "r", encoding="utf-8", errors="replace") as handle:
+            for raw in handle:
+                candidate = compact_ws(raw.lstrip("\ufeff"))
+                if not candidate or candidate.startswith("#") or candidate.lower().startswith("sep="):
+                    continue
+                if normalized_compare_value(candidate) == target:
+                    return candidate
+    except OSError:
+        return ""
+    return ""
+
+
+def _pre_date_place_hint_kind(config, place_hint: str) -> Tuple[str, Dict[str, str]]:
+    """Classify a guarded pre-date place hint without broad place guessing.
+
+    Strong state/country anchored text uses the existing String2 parser.  An
+    exact venues.txt entry is a venue.  Otherwise only a single plain word may
+    survive as a low-confidence display hint; multi-word unknown text is left
+    unused so album/title phrases are not turned into locations.
+    """
+    hint = _clean_piece(place_hint)
+    if not hint:
+        return "", {}
+    venue, city, region, country, extra = _parse_string2(hint)
+    if venue or city or region or country:
+        return "structured", {
+            "venue": venue, "city": city, "region": region, "country": country,
+            "extra_parenthetical": extra,
+        }
+    known_venue = _known_venue_exact(config, hint)
+    if known_venue:
+        return "venue", {"venue": known_venue}
+    if (
+        re.fullmatch(r"[A-Za-z][A-Za-z'.-]{1,44}", hint)
+        and not _detect_qualifier([hint])
+        and not TRAILING_MEDIA_TECHNICAL_SUFFIX_RE.fullmatch(hint)
+    ):
+        return "raw_single_word", {"location": hint}
+    return "", {}
 
 
 def _match_date_artist_venue_location(
@@ -5110,6 +5243,120 @@ def _apply_string2_to_record(record: ShowMetadata, match: Optional[Dict[str, str
         evidence.setdefault("country", []).append(Candidate(record.country, f"path_part:{match['part']}", 35))
 
 
+def _apply_artist_place_date_technical_suffix_path(
+    config,
+    group: dict,
+    record: ShowMetadata,
+    evidence: Dict[str, List[Candidate]],
+    conflicts: List[str],
+    observations: List[str],
+    matcher: Optional[ArtistMatcher],
+) -> Optional[Dict[str, object]]:
+    """Apply the first guarded Artist + place + Date + technical-tail component."""
+    for part, part_path in _candidate_path_parts(group.get("main_dir_path", "")):
+        match, collision_masters = _match_artist_place_date_technical_suffix(part, matcher)
+        if collision_masters:
+            conflicts.append(
+                _collision_note(
+                    f"artist query collision for Artist Place Date TechnicalSuffix: {part}",
+                    collision_masters,
+                )
+            )
+            return None
+        if not match:
+            continue
+
+        raw_artist = str(match["artist_raw"])
+        master_artist = str(match["artist_master"])
+        candidate_artist = _artist_output_name(config, raw_artist, master_artist)
+        if record.artist and not _metadata_values_equivalent(record.artist, candidate_artist):
+            # This fallback is deliberately non-disruptive. Stronger existing
+            # artist evidence wins rather than creating a new fallback conflict.
+            continue
+        if not record.artist:
+            record.artist = candidate_artist
+        if not record.date:
+            record.date = str(match["date_norm"])
+
+        evidence.setdefault("artist", []).append(
+            Candidate(record.artist, f"artist_place_date_technical_suffix:{part_path}", 74)
+        )
+        evidence.setdefault("date", []).append(
+            Candidate(str(match["date_norm"]), f"artist_place_date_technical_suffix:{part_path}", 67)
+        )
+        match["part"] = part
+        match["part_path"] = part_path
+        observations.append(
+            "guarded Artist Place Date TechnicalSuffix path pattern matched: "
+            f"{record.artist} | {match['place_hint']} | {match['date_norm']} | {match['technical_suffix']}"
+        )
+        if bool(match.get("apostrophe_fallback")):
+            observations.append(
+                "unique apostrophe-insensitive Artist DB match accepted for "
+                f"Artist Place Date TechnicalSuffix: {raw_artist} -> {master_artist}"
+            )
+        return match
+    return None
+
+
+def _apply_pre_date_place_hint_strong_fields(
+    config,
+    record: ShowMetadata,
+    match: Optional[Dict[str, object]],
+    evidence: Dict[str, List[Candidate]],
+    observations: List[str],
+) -> str:
+    """Apply only strongly classified pre-date place metadata; return hint kind."""
+    if not match:
+        return ""
+    hint = compact_ws(str(match.get("place_hint", "")))
+    kind, values = _pre_date_place_hint_kind(config, hint)
+    source = f"artist_place_date_technical_suffix:{match.get('part_path', '')}"
+    if kind == "structured":
+        for field, confidence in (("venue", 40), ("city", 35), ("region", 35), ("country", 35)):
+            value = compact_ws(values.get(field, ""))
+            if value and not compact_ws(getattr(record, field, "")):
+                setattr(record, field, value)
+                evidence.setdefault(field, []).append(Candidate(value, source, confidence))
+        if not record.location:
+            record.location = _join_location(record.city, record.region, record.country)
+        extra = compact_ws(values.get("extra_parenthetical", ""))
+        if extra:
+            record.parentheticals = _merge_parenthetical_items(record.parentheticals, f"({extra})")
+        observations.append(f"pre-date place text parsed as structured path venue/location: {hint}")
+    elif kind == "venue":
+        venue = compact_ws(values.get("venue", ""))
+        if venue and not record.venue:
+            record.venue = venue
+            evidence.setdefault("venue", []).append(Candidate(venue, source, 42))
+        observations.append(f"pre-date place text matched venues.txt exactly: {hint}")
+    return kind
+
+
+def _apply_pre_date_place_hint_last_resort(
+    record: ShowMetadata,
+    match: Optional[Dict[str, object]],
+    hint_kind: str,
+    evidence: Dict[str, List[Candidate]],
+    observations: List[str],
+) -> None:
+    """Use one unanchored place word only when every stronger source stayed blank."""
+    if not match or hint_kind != "raw_single_word":
+        return
+    if any(compact_ws(getattr(record, field, "")) for field in ("venue", "city", "region", "country", "location")):
+        return
+    hint = compact_ws(str(match.get("place_hint", "")))
+    if not hint:
+        return
+    record.location = hint
+    evidence.setdefault("location", []).append(
+        Candidate(hint, f"artist_place_date_technical_suffix_hint:{match.get('part_path', '')}", 20)
+    )
+    observations.append(
+        f"no stronger venue/location source resolved; retained single-word pre-date place hint as location text: {hint}"
+    )
+
+
 def _apply_date_artist_venue_location_path(
     config,
     group: dict,
@@ -5726,6 +5973,8 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
     deferred_tag_source = ""
     dash_album_match: Optional[Dict[str, str]] = None
     dash_album_mode = False
+    artist_place_date_technical_suffix_match: Optional[Dict[str, object]] = None
+    artist_place_date_technical_suffix_hint_kind = ""
     aggregate_album_name = compact_ws(group.get("aggregate_album_name", ""))
     if aggregate_album_name:
         observations.append(f"wrapper-suffixed related folders aggregated as album: {aggregate_album_name}")
@@ -5812,6 +6061,25 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                     "part": str(date_artist_venue_location_match["part"]),
                     "part_path": str(date_artist_venue_location_match["part_path"]),
                     "source": "date_artist_venue_location",
+                })
+
+        if not dash_album_match and len(conflicts) == 0 and not date_artist_venue_location_match:
+            artist_place_date_technical_suffix_match = _apply_artist_place_date_technical_suffix_path(
+                config,
+                group,
+                record,
+                evidence,
+                conflicts,
+                observations,
+                artist_matcher,
+            )
+            if artist_place_date_technical_suffix_match:
+                date_matches.append({
+                    "raw": str(artist_place_date_technical_suffix_match["date_raw"]),
+                    "normalized": str(artist_place_date_technical_suffix_match["date_norm"]),
+                    "part": str(artist_place_date_technical_suffix_match["part"]),
+                    "part_path": str(artist_place_date_technical_suffix_match["part_path"]),
+                    "source": "artist_place_date_technical_suffix",
                 })
 
         if not record.artist and not dash_album_match and len(conflicts) == 0:
@@ -5916,6 +6184,14 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
         if chosen_string2_match:
             _apply_string2_to_record(record, chosen_string2_match, evidence)
 
+        artist_place_date_technical_suffix_hint_kind = _apply_pre_date_place_hint_strong_fields(
+            config,
+            record,
+            artist_place_date_technical_suffix_match,
+            evidence,
+            observations,
+        )
+
         etree_success = False
         etree_lookup_key = None
         if not dash_album_mode and record.artist and record.date:
@@ -5953,6 +6229,14 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             etree_success, etree_lookup_key = _apply_setlistfm_only_after_etree_fallback(
                 config, record, evidence, observations, etree_success, etree_lookup_key
             )
+
+        _apply_pre_date_place_hint_last_resort(
+            record,
+            artist_place_date_technical_suffix_match,
+            artist_place_date_technical_suffix_hint_kind,
+            evidence,
+            observations,
+        )
 
         if not record.artist:
             date_string3_artist, date_string3_date, date_string3_raw = _resolve_artist_from_date_string3(group, artist_matcher, evidence, conflicts, config=config)
