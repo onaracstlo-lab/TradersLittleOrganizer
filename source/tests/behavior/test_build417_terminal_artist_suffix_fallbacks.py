@@ -1,6 +1,6 @@
 """Build 417 regressions for terminal artist-group suffix fallback."""
 
-__version__ = "v465"
+__version__ = "v467"
 
 import pytest
 
@@ -78,14 +78,14 @@ def test_build417_requirements_and_manual_document_new_suffix_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v465.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v467.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v465.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual = (root / "TLO_Inventory_User_Manual_v467.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v465 (v1.6 Build 465)." in req_text
+    assert "Current document version: v467 (v1.6 Build 467)." in req_text
     assert "Band or Group" in req_text
     assert "All Star Band / All-Star Band" in req_text
     assert "Build 407, 417, 418: Terminal Band/Group/All-Star-family Artist DB fallback" in req_text
-    assert "Version v1.6 Build 465" in manual
+    assert "Version v1.6 Build 467" in manual
     assert "terminal Band, Group, All Star/All-Star/All Stars/All-Stars" in manual
     assert "corresponding ... Band form" in manual

@@ -1,4 +1,4 @@
-__version__ = "v465"
+__version__ = "v467"
 
 import argparse
 import multiprocessing
@@ -34,6 +34,7 @@ def _parse_args(argv=None):
         "rename_compliantly",
         "convert_shn",
         "artist_in_album",
+        "delete_extra_tags",
         "as_is_artist_name",
     ))
     tagger_help = {
@@ -84,6 +85,7 @@ def main(argv=None) -> int:
             rename_compliantly=bool(args.rename_compliantly),
             convert_shn=bool(args.convert_shn),
             artist_in_album=bool(args.artist_in_album),
+            delete_extra_tags=bool(args.delete_extra_tags),
             as_is_artist_name=bool(args.as_is_artist_name),
         )
         review_config.tag_during_inventory = True
@@ -114,6 +116,7 @@ def main(argv=None) -> int:
             rename_compliantly=bool(args.rename_compliantly),
             convert_shn=bool(args.convert_shn),
             artist_in_album=bool(args.artist_in_album),
+            delete_extra_tags=bool(args.delete_extra_tags),
             as_is_artist_name=bool(args.as_is_artist_name),
             emit=lambda text: console_emit(str(text), end="" if str(text).endswith("\n") else "\n"),
         )

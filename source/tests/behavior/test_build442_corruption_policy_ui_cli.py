@@ -12,7 +12,7 @@ import tlo_options as O
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v465"
+__version__ = "v467"
 ROOT = Path(__file__).resolve().parents[2]
 
 

@@ -1,7 +1,7 @@
 """Folder-only reversal for logged TLO rename/copy/copy-delete operations."""
 from __future__ import annotations
 
-__version__ = "v465"
+__version__ = "v467"
 
 from dataclasses import dataclass
 from datetime import datetime

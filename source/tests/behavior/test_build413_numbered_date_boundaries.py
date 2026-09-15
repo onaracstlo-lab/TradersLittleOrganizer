@@ -9,7 +9,7 @@ pytestmark = pytest.mark.behavior
 from inventory_parser_lib import Config
 import tlo_tag_lib as T
 
-__version__ = "v465"
+__version__ = "v467"
 
 
 TADD_DAMERON_INFO = """TADD DAMERON BAND SOUND IMPROVED AND FLAMBAY PITCH FIXED re-seed
@@ -134,14 +134,14 @@ def test_build413_requirements_and_manual_document_date_boundary_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v465.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v467.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v465.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v467.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v465 (v1.6 Build 465)." in req_text
+    assert "Current document version: v467 (v1.6 Build 467)." in req_text
     assert "Build 413 numbered-date-boundary and continuity rule" in req_text
     assert "30.10.1948" in req_text
     assert "01, 02, 30, 31" in req_text
-    assert "Version v1.6 Build 465" in manual_text
+    assert "Version v1.6 Build 467" in manual_text
     assert "30.10.1948 - Royal Roost, NY - WMCA Radio broadcast" in manual_text
     assert "Confirmed large gaps remain valid" in manual_text

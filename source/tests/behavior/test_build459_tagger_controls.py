@@ -142,10 +142,10 @@ def test_embedded_tag_window_passes_all_four_control_families_to_run_tagger():
 def test_build459_documentation_covers_standalone_tag_option_parity():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v465.docx").paragraphs)
-    manual = (ROOT / "TLO_Inventory_User_Manual_v465.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v467.docx").paragraphs)
+    manual = (ROOT / "TLO_Inventory_User_Manual_v467.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8")
-    assert "Current document version: v465 (v1.6 Build 465)." in req
+    assert "Current document version: v467 (v1.6 Build 467)." in req
     assert "--setlistfm-upgrade" in req and "--corrupt-folder-threshold PERCENT" in req
     assert "Corruption is assessed before standalone Tag mutation" in manual
     assert "Does standalone tlo-tag use the same setlist.fm" in faq

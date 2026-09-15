@@ -11,7 +11,7 @@ from tlo_artist_db import ArtistMatcher
 import tlo_phase23_v2 as P
 import tlo_setlist_metadata_lookup as M
 
-__version__ = "v465"
+__version__ = "v467"
 
 
 INFO = """Great vintage stuff!!
@@ -154,14 +154,14 @@ def test_build416_requirements_and_manual_document_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v465.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v467.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v465.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v467.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v465 (v1.6 Build 465)." in req_text
+    assert "Current document version: v467 (v1.6 Build 467)." in req_text
     assert "Artist / Live at Venue" in req_text
     assert "AL DiMeola Group GROUP" in req_text
     assert "Gürzenich" in req_text
     assert "Build 416: Structured Live at setlist metadata precedence" in req_text
-    assert "Version v1.6 Build 465" in manual_text
+    assert "Version v1.6 Build 467" in manual_text
     assert "Artist followed by Live at Venue" in manual_text

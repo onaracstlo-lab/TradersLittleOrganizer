@@ -110,11 +110,15 @@ def test_distinct_alt_content_is_consolidated_and_ordered(tmp_path):
         _audio(folder, tuple(f"{i:02d} - {song}.flac" for i, song in enumerate(songs, 1))); _setlist(folder, songs)
     log = _complete_log(root)
     assert len(sibling.consolidate_sibling_collections(str(root), str(log))) == 1
-    assert (base / base.name).is_dir() and (base / alt1.name).is_dir() and (base / alt2.name).is_dir()
+    # Build 466 supersedes the original alt-family layout: the unsuffixed
+    # member becomes alt0 so TLO never creates .../Name/Name.
+    original = base / f"{base.name} (alt0)"
+    assert original.is_dir() and (base / alt1.name).is_dir() and (base / alt2.name).is_dir()
+    assert not (base / base.name).exists()
     groups = phase._build_groups_from_search_path(_phase_config(log), str(root))
     assert len(groups) == 1 and groups[0]["aggregation_reason"] == "consolidated_sibling_collection"
     ordered = [os.path.relpath(path, base) for path in taglib._rescan_group_audio_files(groups[0])]
-    assert ordered[0].startswith(base.name + os.sep) and ordered[2].startswith(alt1.name + os.sep) and ordered[4].startswith(alt2.name + os.sep)
+    assert ordered[0].startswith(original.name + os.sep) and ordered[2].startswith(alt1.name + os.sep) and ordered[4].startswith(alt2.name + os.sep)
 
 
 def test_same_or_shifted_alt_song_lists_remain_separate(tmp_path):

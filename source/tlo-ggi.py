@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v465"
+__version__ = "v467"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -165,7 +165,7 @@ HELP_TEXT = (
     "  Compliant        --compliant\n"
     "  As-Is Artist Name --as-is-artist-name\n"
     "  Tag in Place     --tag-during-inventory\n"
-    "  Tag Copy         --tag-copy-during-inventory\n  Destination      --tag-copy-destination DIR\n  Tag Copy/Delete Original --tag-copy-delete-original\n  Destination      --tag-copy-and-delete DIR   (command line only)\n  Rename Compliantly --rename-compliantly\n  Convert shn      --convert-shn\n"
+    "  Tag Copy         --tag-copy-during-inventory\n  Destination      --tag-copy-destination DIR\n  Tag Copy/Delete Original --tag-copy-delete-original\n  Destination      --tag-copy-and-delete DIR   (command line only)\n  Rename Compliantly --rename-compliantly\n  Convert shn      --convert-shn\n  Delete extra tags --delete-extra-tags\n"
     "  etreeDB          --etree-lookup\n"
     "  setlist.fm       --setlistfm-lookup\n"
     "  Performance Mode --performance-mode gentle|balanced|fast|extreme\n"
@@ -183,7 +183,7 @@ HELP_TEXT = (
     "  --compliant          Use the simplified compliant Phase 2/3 parsing rules. Mutually exclusive with --rename-compliantly.\n"
     "  --as-is-artist-name Preserve the artist name found in metadata instead of replacing a matched alias with the Artist DB master name.\n"
     "  --tag-during-inventory Tag in place during inventory-time tagging; mutually exclusive with Tag Copy and Tag Copy/Delete Original.\n"
-    "  --tag-copy-during-inventory Copy each music folder before tagging and tag the copy instead of the original.\n  --tag-copy-destination DIR Destination parent directory for Tag Copy. The GUI asks after Inventory is started.\n  --tag-copy-delete-original Enable Tag Copy/Delete Original. In the GUI, starting Inventory opens the destination and deletion-warning window.\n  --tag-copy-and-delete DIR Supply the Tag Copy/Delete Original destination on the command line; this also enables the mode.\n  --rename-compliantly Rename using the resolved Show Name. Mutually exclusive with --compliant. With no tag/copy mode in Full Inventory, rename the original folder in place without tagging.\n  --convert-shn        Convert .shn/.shnf files to .flac during Tag or inventory-time tagging, deleting originals only after successful conversion.\n"
+    "  --tag-copy-during-inventory Copy each music folder before tagging and tag the copy instead of the original.\n  --tag-copy-destination DIR Destination parent directory for Tag Copy. The GUI asks after Inventory is started.\n  --tag-copy-delete-original Enable Tag Copy/Delete Original. In the GUI, starting Inventory opens the destination and deletion-warning window.\n  --tag-copy-and-delete DIR Supply the Tag Copy/Delete Original destination on the command line; this also enables the mode.\n  --rename-compliantly Rename using the resolved Show Name. Mutually exclusive with --compliant. With no tag/copy mode in Full Inventory, rename the original folder in place without tagging.\n  --convert-shn        Convert .shn/.shnf files to .flac during Tag or inventory-time tagging, deleting originals only after successful conversion.\n  --delete-extra-tags Remove all tag fields except Artist, Album, Track Number, and Track Title when tagging.\n"
     "  --etree-lookup        Enable the GUI etreeDB / eTreeDB venue-location lookup option after artist and yyyy-mm-dd date are identified.\n"
     "  --setlistfm-lookup         If eTreeDB has no usable result, look up venue/location from setlist.fm. Requires --etree-lookup on the command line.\n"
     "  --debug [BOOL]      Command-line only. With no value, enables debug output; also accepts true/false, yes/no, y/n, 1/0. No Debug checkbox is shown in the GUI.\n"
@@ -536,6 +536,7 @@ def _parse_gui_command_line(argv=None):
         "rename_compliantly",
         "convert_shn",
         "artist_in_album",
+        "delete_extra_tags",
         "etree_lookup",
         "setlistfm_lookup",
         "corrupt_files",
@@ -906,6 +907,8 @@ class App:
                 checkbox_text = "Thorough Setlist\nMatching"
             elif option.config_field == "tag_copy_and_delete_enabled":
                 checkbox_text = "Tag Copy/Delete\nOriginal"
+            elif option.config_field == "delete_extra_tags":
+                checkbox_text = "Delete extra\ntags"
             else:
                 checkbox_text = option.gui_label
             checkbox_style = (
@@ -2256,6 +2259,7 @@ class App:
             rename_compliantly=rename_compliantly,
             convert_shn=self.bool_vars["convert_shn"].get(),
             artist_in_album=self.bool_vars["artist_in_album"].get(),
+            delete_extra_tags=bool(getattr(self.bool_vars.get("delete_extra_tags"), "get", lambda: False)()),
             etree_lookup=self.bool_vars["etree_lookup"].get(),
             setlistfm_lookup=self.bool_vars["setlistfm_lookup"].get(),
             setlistfm_upgrade=bool(getattr(self.bool_vars.get("setlistfm_upgrade"), "get", lambda: False)()),
@@ -2714,6 +2718,7 @@ class TaggerWindow:
             rename_compliantly=values["rename_compliantly"],
             convert_shn=values["convert_shn"],
             artist_in_album=values["artist_in_album"],
+            delete_extra_tags=bool(values.get("delete_extra_tags", False)),
         )
         if config.setlistfm_lookup and config.setlistfm_upgrade:
             config.setlistfm_min_interval_seconds = 1.0 / 14.0
@@ -2810,6 +2815,7 @@ class TaggerWindow:
                     rename_compliantly=bool(config.rename_compliantly),
                     convert_shn=bool(config.convert_shn),
                     artist_in_album=bool(config.artist_in_album),
+                    delete_extra_tags=bool(getattr(config, "delete_extra_tags", False)),
                     as_is_artist_name=bool(config.as_is_artist_name),
                     emit=self.queue.put,
                 )
@@ -3038,6 +3044,7 @@ class AddToInventoryWindow:
         self.config.rename_compliantly = values["rename_compliantly"]
         self.config.convert_shn = values["convert_shn"]
         self.config.artist_in_album = values["artist_in_album"]
+        self.config.delete_extra_tags = bool(values.get("delete_extra_tags", False))
         self.config.etree_lookup = values["etree_lookup"]
         self.config.setlistfm_lookup = values["setlistfm_lookup"]
         self.config.setlistfm_upgrade = bool(values.get("setlistfm_upgrade", False))

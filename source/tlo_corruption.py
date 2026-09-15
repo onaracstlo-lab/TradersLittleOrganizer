@@ -1,7 +1,7 @@
 """Pre-mutation audio corruption threshold handling for TLO."""
 from __future__ import annotations
 
-__version__ = "v465"
+__version__ = "v467"
 
 import ctypes
 import os
@@ -17,6 +17,11 @@ try:
     from mutagen.flac import FLAC
 except Exception:
     FLAC = None
+
+try:
+    from mutagen.mp3 import MP3
+except Exception:
+    MP3 = None
 
 TRASH_SUBPROCESS_TIMEOUT_SECONDS = 60.0
 
@@ -110,8 +115,11 @@ def classify_audio_paths(paths):
     for path in list(paths or []):
         try:
             _preflight_audio_read(path)
-            if str(path).lower().endswith(".flac") and FLAC is not None:
+            lowered = str(path).lower()
+            if lowered.endswith(".flac") and FLAC is not None:
                 FLAC(path)
+            elif lowered.endswith(".mp3") and MP3 is not None:
+                MP3(path)
             else:
                 audio = MutagenFile(path)
                 if audio is None:

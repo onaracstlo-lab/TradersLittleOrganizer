@@ -9,7 +9,7 @@ from tlo_options import GUI_CHECKBOX_OPTIONS, OPTIONS_BY_FIELD
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v465"
+__version__ = "v467"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -56,6 +56,7 @@ def test_build441_checkbox_internal_layout_is_unchanged():
         "as_is_artist_name": (2, 1),
         "tag_copy_and_delete_enabled": (2, 2),
         "thorough_setlist_matching": (3, 0),
+        "delete_extra_tags": (3, 3),
     }
     assert len(GUI_CHECKBOX_OPTIONS) == len(expected)
     for field, coordinates in expected.items():

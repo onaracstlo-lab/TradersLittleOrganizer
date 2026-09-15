@@ -10,7 +10,7 @@ import tlo_phase23_v2 as P
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v465"
+__version__ = "v467"
 
 
 def _matcher(*artists: str) -> ArtistMatcher:

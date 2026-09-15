@@ -1,6 +1,6 @@
 """Executable Tkinter behavior tests for layout and progress animation."""
 
-__version__ = "v465"
+__version__ = "v467"
 
 from pathlib import Path
 
@@ -58,6 +58,8 @@ def test_checkbox_grid_uses_registry_positions_and_dry_run_cell(tk_root, monkeyp
                 registry_text = "Thorough Setlist Matching"
             elif text == "Tag Copy/Delete\nOriginal":
                 registry_text = "Tag Copy/Delete Original"
+            elif text == "Delete extra\ntags":
+                registry_text = "Delete extra tags"
             else:
                 registry_text = text
             if registry_text in {option.gui_label for option in GUI_CHECKBOX_OPTIONS} | {"Dry run"}:

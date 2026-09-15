@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v465"
+__version__ = "v467"
 
 
 import copy
@@ -209,6 +209,7 @@ MAIN_WINDOW_CHECKBOX_SPECS = (
     ("convert_shn", "Convert shn"),
     ("as_is_artist_name", "As-Is Artist Name"),
     ("tag_copy_and_delete_enabled", "Tag Copy/Delete Original"),
+    ("delete_extra_tags", "Delete extra tags"),
     ("dry_run", "Dry run"),
 )
 
@@ -238,6 +239,7 @@ def main_window_checkbox_values(source, *, dry_run=None) -> dict[str, bool]:
         "convert_shn": bool(read("convert_shn", False)),
         "as_is_artist_name": bool(read("as_is_artist_name", False)),
         "tag_copy_and_delete_enabled": bool(copy_delete),
+        "delete_extra_tags": bool(read("delete_extra_tags", False)),
         "dry_run": bool(read("main_window_dry_run", False) if dry_run is None else dry_run),
     }
     return values

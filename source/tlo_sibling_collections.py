@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v465"
+__version__ = "v467"
 
 import json
 import ntpath
@@ -135,7 +135,8 @@ def _recovery_member_rows(container: str, payload: dict) -> List[Tuple[str, str,
         journal_original = str(row.get("original") or "").strip()
         original = _runtime_recovery_path(journal_original)
         child_name = str(row.get("child_name") or "")
-        staged = os.path.join(container, child_name) if child_name else ""
+        staged_name = str(row.get("staged_name") or child_name)
+        staged = os.path.join(container, staged_name) if staged_name else ""
         original_exists = bool(original and os.path.lexists(original))
         staged_exists = bool(staged and os.path.lexists(staged))
         if original and _same_path(original, container):
@@ -525,14 +526,33 @@ def discover_collection_plans(start_path: str, logged_media_paths: Sequence[str]
     return safe
 
 
+def _staged_member_name(plan: CollectionPlan, member: CollectionMember) -> str:
+    """Return the name used for a member inside the consolidated container.
+
+    An ``alt`` family can include an unsuffixed member whose pathname is also
+    the desired aggregate pathname.  Keeping that member's basename would
+    create ``.../Name/Name`` after consolidation.  Stage that original member
+    as ``(alt0)`` instead; numbered alternates keep their existing names and
+    natural ordering.
+    """
+    original_name = os.path.basename(member.path)
+    if plan.kind == "alt" and _same_path(member.path, plan.final_path):
+        return f"{plan.base_name} (alt0)"
+    return original_name
+
+
 def _journal_payload(plan: CollectionPlan, temp_path: str) -> dict:
     return {
-        "schema": 1,
+        "schema": 2,
         "temporary_path": os.path.normpath(temp_path),
         "final_path": os.path.normpath(plan.final_path),
         "generated_info": "info.txt",
         "members": [
-            {"original": os.path.normpath(member.path), "child_name": os.path.basename(member.path)}
+            {
+                "original": os.path.normpath(member.path),
+                "child_name": os.path.basename(member.path),
+                "staged_name": _staged_member_name(plan, member),
+            }
             for member in plan.members
         ],
     }
@@ -550,15 +570,22 @@ def _validate_journal(container: str, payload: dict) -> bool:
     parent = os.path.dirname(os.path.normpath(container))
     final_path = _runtime_recovery_path(str(payload.get("final_path") or ""))
     members = list(payload.get("members") or [])
-    if payload.get("schema") != 1 or not final_path or os.path.dirname(final_path) != parent or not members:
+    if payload.get("schema") not in {1, 2} or not final_path or os.path.dirname(final_path) != parent or not members:
         return False
+    staged_names = set()
     for row in members:
         original = _runtime_recovery_path(str(row.get("original") or ""))
         child_name = str(row.get("child_name") or "")
+        staged_name = str(row.get("staged_name") or child_name)
         if not original or os.path.dirname(original) != parent or os.path.basename(original) != child_name:
             return False
-        if os.path.sep in child_name or (os.path.altsep and os.path.altsep in child_name):
+        for name in (child_name, staged_name):
+            if not name or os.path.sep in name or (os.path.altsep and os.path.altsep in name):
+                return False
+        staged_key = os.path.normcase(staged_name)
+        if staged_key in staged_names:
             return False
+        staged_names.add(staged_key)
     return True
 
 
@@ -577,7 +604,7 @@ def _rollback_container(container: str, payload: dict) -> bool:
 
     for row in payload["members"]:
         original = _runtime_recovery_path(row["original"])
-        child = os.path.join(container, row["child_name"])
+        child = os.path.join(container, str(row.get("staged_name") or row["child_name"]))
         original_exists = os.path.lexists(original)
         child_exists = os.path.lexists(child)
         if _same_path(original, container):
@@ -601,7 +628,7 @@ def _rollback_container(container: str, payload: dict) -> bool:
     try:
         for row in payload["members"]:
             original = _runtime_recovery_path(row["original"])
-            child = os.path.join(container, row["child_name"])
+            child = os.path.join(container, str(row.get("staged_name") or row["child_name"]))
             if os.path.lexists(child):
                 os.rename(child, original)
         for generated in (payload.get("generated_info"), JOURNAL_NAME):
@@ -733,9 +760,9 @@ def _execute_plan(plan: CollectionPlan, complete_path_log: str) -> None:
     log_committed = False
     try:
         for member in plan.members:
-            child_name = os.path.basename(member.path)
-            os.rename(member.path, os.path.join(temp_path, child_name))
-            rewrites.append((member.path, os.path.join(final_path, child_name)))
+            staged_name = _staged_member_name(plan, member)
+            os.rename(member.path, os.path.join(temp_path, staged_name))
+            rewrites.append((member.path, os.path.join(final_path, staged_name)))
         if combined:
             with open(os.path.join(temp_path, "info.txt"), "w", encoding="utf-8", newline="\n") as outfile:
                 outfile.write(combined)
@@ -774,7 +801,7 @@ def consolidate_sibling_collections(
         result = {
             "parent": plan.final_path,
             "kind": plan.kind,
-            "children": [os.path.join(plan.final_path, os.path.basename(member.path)) for member in plan.members],
+            "children": [os.path.join(plan.final_path, _staged_member_name(plan, member)) for member in plan.members],
             "excluded_similar": list(plan.excluded_similar),
         }
         results.append(result)

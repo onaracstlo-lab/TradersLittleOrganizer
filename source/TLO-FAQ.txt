@@ -32,6 +32,9 @@ A: Yes. Rename Compliantly, Tag in Place, SHN-to-FLAC conversion, and Tag Copy/D
 Q: What should I do if Inventory says an interrupted sibling-collection move requires recovery?
 A: Build 465 normally recovers the journaled move automatically before scanning and then continues Inventory. This includes the case where the recovery container has the same pathname as one of the original collection members and the case where the journal was written with native-Windows paths (for example E:\boots\...) but recovery is running under WSL (/mnt/e/boots/...), or vice versa. TLO translates those equivalent path forms before applying the same strict parent/member validation. If automatic recovery cannot proceed, TLO prints the recovery container, journal, planned final folder, every original/staged member path with its current state, and the original journal path form when it differs. Close programs that may have those folders open and run a normal (non-Dry-Run) Inventory again. Do not delete the .tlo-sibling-consolidation.json journal or manually merge/delete the recovery folder; BOTH or MISSING states require review of the exact paths TLO reports. Dry Run never moves folders and will tell you to run a normal Inventory for recovery.
 
+Q: What happens when an alternate collection already has an unsuffixed folder with the same name as the collection?
+A: Build 466 no longer creates a nested Name\Name folder. TLO builds the aggregate in a new temporary sibling directory, moves the unsuffixed original member into it as Name (alt0), then moves alt1, alt2, and later accepted alternatives alongside it before finalizing the aggregate under the normal shared collection name. alt0 remains first for continuous collection-wide track numbering. If the transaction fails or is interrupted, the journal records both the original and staged names so rollback restores the exact original unsuffixed folder. Older Build 464/465 recovery journals remain supported.
+
 Q: What happens if I inventory the same drive again?
 A: For a named volume, TLO deterministically replaces, prunes, or appends the affected scope according to whether the new path is the same as, a parent of, a child of, or separate from the stored paths. It does not ask a Skip/Re-inventory question. Blank-volume runs append to the shared blank-volume logs and can create duplicate inventory entries if the same content is scanned again.
 
@@ -101,3 +104,9 @@ A: Beginning with Build 399, when Process New Shows has Check for Duplicates sel
 
 Q: Does standalone tlo-tag use the same setlist.fm, Thorough Setlist Matching, and corruption controls as Inventory?
 A: Yes. Build 459 and later accept --setlistfm-lookup, --setlistfm-upgrade, --thorough-setlist-matching, --corrupt-files, --corrupt-folders, and --corrupt-folder-threshold in tlo-tag.py/tlo-tag.exe. setlist.fm still requires eTreeDB. The GUI Tag window reads the current main-window values when Tag is clicked. Corruption is checked before standalone tag mutation using the same fail-closed rules as Inventory.
+
+Q: Can TLO tag MP3 files and handle corrupt MP3 files like FLAC?
+A: Yes. Build 467 treats MP3 as a first-class taggable format. MP3 files use the same Artist, Album, Track Number, and Title assignment flow as FLAC and participate in the same corruption population, percentage calculation, individual-file Keep/Delete policy, and folder Never/100%/threshold policy. Unverifiable MP3 reads fail closed just like FLAC.
+
+Q: What does Delete extra tags do?
+A: Delete extra tags is a main-window checkbox that defaults off and is also available as --delete-extra-tags. When selected, TLO clears tag metadata on files it tags and keeps only Artist, Album, Track Number, and Track Title. Other metadata, including comments and embedded tag artwork where supported, is removed. When the checkbox is off, TLO preserves unrelated metadata under the established tagging rules.

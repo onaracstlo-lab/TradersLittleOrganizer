@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v465"
+__version__ = "v467"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
@@ -4010,6 +4010,7 @@ def _format_switches_log_line(config, action: str = "Full Inventory") -> str:
         f"Rename Compliantly: {_yes_no(getattr(config, 'rename_compliantly', False))}",
         f"Convert shn: {_yes_no(getattr(config, 'convert_shn', False))}",
         f"Artist in Album: {_yes_no(getattr(config, 'artist_in_album', True))}",
+        f"Delete extra tags: {_yes_no(getattr(config, 'delete_extra_tags', False))}",
         f"As-Is Artist Name: {_yes_no(_as_is_artist_name(config))}",
         f"etreeDB: {_yes_no(getattr(config, 'etree_lookup', False))}",
         f"setlist.fm: {_yes_no(getattr(config, 'setlistfm_lookup', False))}",

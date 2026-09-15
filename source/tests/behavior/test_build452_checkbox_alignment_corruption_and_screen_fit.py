@@ -8,7 +8,7 @@ from tlo_gui_shortcuts import bounded_initial_window_size
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v465"
+__version__ = "v467"
 
 ROOT = Path(__file__).resolve().parents[2]
 

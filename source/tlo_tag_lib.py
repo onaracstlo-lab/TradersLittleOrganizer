@@ -1,6 +1,6 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v465"
+__version__ = "v467"
 
 from tlo_diagnostics import debug_suppressed_exception
 import os
@@ -507,6 +507,7 @@ def build_tagger_config(
     rename_compliantly: bool = False,
     convert_shn: bool = False,
     artist_in_album: bool = True,
+    delete_extra_tags: bool = False,
     as_is_artist_name: bool = False,
 ) -> Config:
     try:
@@ -555,6 +556,7 @@ def build_tagger_config(
         max_workers=1,
         convert_shn=bool(convert_shn),
         artist_in_album=bool(artist_in_album),
+        delete_extra_tags=bool(delete_extra_tags),
     )
     if config.setlistfm_lookup and config.setlistfm_upgrade:
         config.setlistfm_min_interval_seconds = 1.0 / 14.0
@@ -2554,7 +2556,7 @@ def _corrupt_flacs_log_path(config: Config) -> str:
 
 
 def ensure_corrupt_flacs_log(config: Config) -> None:
-    """Create TLOHome/CorruptFlacs.txt if TLOHome is available.
+    """Create TLOHome/CorruptFlacs.txt if TLOHome is available (historical filename).
 
     This file is an operator-friendly list of FLAC files that failed during
     tagging because the file could not be opened or written successfully.
@@ -2573,7 +2575,7 @@ def ensure_corrupt_flacs_log(config: Config) -> None:
 
 
 def record_corrupt_flac(config: Config, path_name: str) -> None:
-    """Append one full FLAC path to TLOHome/CorruptFlacs.txt.
+    """Append one full FLAC/MP3 path to TLOHome/CorruptFlacs.txt.
 
     Only FLAC paths are recorded.  Duplicates are allowed because repeated
     failures across runs are useful evidence that the file still needs repair
@@ -2724,14 +2726,66 @@ def _mp4_tags_match_target(path_name: str, artist: str, album: str, track_number
     )
 
 
-def _audio_tags_already_match(path_name: str, artist: str, album: str, track_number: object, title: str) -> bool:
+def _easy_audio_tags_exact_cleanup_target(audio, artist: str, album: str, track_number: object, title: str) -> bool:
+    if not _easy_audio_tags_match_target(audio, artist, album, track_number, title):
+        return False
+    allowed = {"artist", "album", "title", "tracknumber"}
+    return {str(key).casefold() for key in getattr(audio, "keys", lambda: [])()} == allowed
+
+
+def _flac_tags_exact_cleanup_target(path_name: str, artist: str, album: str, track_number: object, title: str) -> bool:
+    if FLAC is None:
+        return False
+    try:
+        audio = FLAC(path_name)
+    except Exception:
+        return False
+    if not _easy_audio_tags_match_target(audio, artist, album, track_number, title):
+        return False
+    allowed = {"artist", "album", "title", "tracknumber"}
+    if {str(key).casefold() for key in audio.keys()} != allowed:
+        return False
+    return not bool(getattr(audio, "pictures", []))
+
+
+def _id3_tags_exact_cleanup_target(path_name: str, artist: str, album: str, track_number: object, title: str) -> bool:
+    if not _id3_tags_match_target(path_name, artist, album, track_number, title):
+        return False
+    try:
+        tags = ID3(path_name)
+    except Exception:
+        return False
+    allowed = {"TPE1", "TALB", "TIT2", "TRCK"}
+    return all(str(getattr(frame, "FrameID", "")).upper() in allowed for frame in tags.values())
+
+
+def _mp4_tags_exact_cleanup_target(path_name: str, artist: str, album: str, track_number: object, title: str) -> bool:
+    if not _mp4_tags_match_target(path_name, artist, album, track_number, title):
+        return False
+    try:
+        audio = MP4(path_name)
+    except Exception:
+        return False
+    return set(audio.keys()) == {"\xa9ART", "\xa9alb", "\xa9nam", "trkn"}
+
+
+def _audio_tags_already_match(path_name: str, artist: str, album: str, track_number: object, title: str, delete_extra_tags: bool = False) -> bool:
     """Return True only when a tag write would make no requested metadata change."""
     ext = os.path.splitext(path_name)[1].lower()
+    if delete_extra_tags and ext == ".mp3":
+        return _id3_tags_exact_cleanup_target(path_name, artist, album, track_number, title)
+    if delete_extra_tags and ext == ".flac":
+        return _flac_tags_exact_cleanup_target(path_name, artist, album, track_number, title)
+    if delete_extra_tags and ext in {".m4a", ".mp4", ".aac", ".alac"}:
+        return _mp4_tags_exact_cleanup_target(path_name, artist, album, track_number, title)
     if ext in {".m4a", ".mp4", ".aac", ".alac"}:
         return _mp4_tags_match_target(path_name, artist, album, track_number, title)
     try:
         audio = MutagenFile(path_name, easy=True)
-        if _easy_audio_tags_match_target(audio, artist, album, track_number, title):
+        if delete_extra_tags:
+            if _easy_audio_tags_exact_cleanup_target(audio, artist, album, track_number, title):
+                return True
+        elif _easy_audio_tags_match_target(audio, artist, album, track_number, title):
             return True
     except Exception as exc:  # noqa: BLE001 - read-only optimization boundary
         debug_suppressed_exception(__name__, exc)
@@ -2796,7 +2850,85 @@ def _write_mp4_tags(path_name: str, artist: str, album: str, track_number: objec
     audio.save()
 
 
-def write_audio_tags(path_name: str, artist: str, album: str, track_number: object, title: str, total_tracks: int = 0) -> bool:
+def _write_clean_id3_tags(path_name: str, artist: str, album: str, track_number: object, title: str) -> None:
+    if ID3 is None:
+        raise TaggerError("ID3 fallback unavailable")
+    try:
+        tags = ID3(path_name)
+    except ID3NoHeaderError:
+        tags = ID3()
+    tags.clear()
+    tags.add(TPE1(encoding=3, text=[artist]))
+    tags.add(TALB(encoding=3, text=[album]))
+    tags.add(TIT2(encoding=3, text=[title]))
+    tags.add(TRCK(encoding=3, text=[str(track_number)]))
+    tags.save(path_name)
+
+
+def _write_clean_flac_tags(path_name: str, artist: str, album: str, track_number: object, title: str) -> None:
+    if FLAC is None:
+        raise TaggerError("FLAC fallback unavailable")
+    audio = FLAC(path_name)
+    audio.clear()
+    clear_pictures = getattr(audio, "clear_pictures", None)
+    if callable(clear_pictures):
+        clear_pictures()
+    audio["artist"] = artist
+    audio["album"] = album
+    audio["title"] = title
+    audio["tracknumber"] = str(track_number)
+    audio.save()
+
+
+def _write_clean_mp4_tags(path_name: str, artist: str, album: str, track_number: object, title: str) -> None:
+    if MP4 is None:
+        raise TaggerError("MP4 fallback unavailable")
+    audio = MP4(path_name)
+    if getattr(audio, "tags", None) is None:
+        audio.add_tags()
+    audio.tags.clear()
+    audio["\xa9ART"] = [artist]
+    audio["\xa9alb"] = [album]
+    audio["\xa9nam"] = [title]
+    audio["trkn"] = [(int(str(track_number).lstrip("0") or "0"), 0)]
+    audio.save()
+
+
+def _write_clean_easy_tags(path_name: str, artist: str, album: str, track_number: object, title: str) -> None:
+    audio = MutagenFile(path_name, easy=True)
+    if audio is None:
+        raise TaggerError("mutagen could not identify audio type")
+    if getattr(audio, "tags", None) is None:
+        audio.add_tags()
+    clear = getattr(audio, "clear", None)
+    if callable(clear):
+        clear()
+    elif getattr(audio, "tags", None) is not None and hasattr(audio.tags, "clear"):
+        audio.tags.clear()
+    else:
+        raise TaggerError("audio tag container cannot be cleared")
+    audio["artist"] = [artist]
+    audio["album"] = [album]
+    audio["title"] = [title]
+    audio["tracknumber"] = [str(track_number)]
+    audio.save()
+
+
+def _write_cleanup_tags(path_name: str, artist: str, album: str, track_number: object, title: str) -> None:
+    ext = os.path.splitext(path_name)[1].lower()
+    if ext == ".mp3":
+        _write_clean_id3_tags(path_name, artist, album, track_number, title)
+        return
+    if ext == ".flac":
+        _write_clean_flac_tags(path_name, artist, album, track_number, title)
+        return
+    if ext in {".m4a", ".mp4", ".aac", ".alac"}:
+        _write_clean_mp4_tags(path_name, artist, album, track_number, title)
+        return
+    _write_clean_easy_tags(path_name, artist, album, track_number, title)
+
+
+def write_audio_tags(path_name: str, artist: str, album: str, track_number: object, title: str, total_tracks: int = 0, delete_extra_tags: bool = False) -> bool:
     """Write requested tags only when the file would actually change.
 
     Returns True when a save occurred and False when the existing requested
@@ -2809,8 +2941,14 @@ def write_audio_tags(path_name: str, artist: str, album: str, track_number: obje
     artist = standard_ascii_text(artist, fallback="Unknown") or "Unknown"
     album = standard_ascii_text(album, fallback="Unknown") or "Unknown"
     title = normalize_tag_title_printable(title) or "unknown"
-    if _audio_tags_already_match(path_name, artist, album, track_number, title):
+    if _audio_tags_already_match(path_name, artist, album, track_number, title, delete_extra_tags=bool(delete_extra_tags)):
         return False
+    if delete_extra_tags:
+        try:
+            _write_cleanup_tags(path_name, artist, album, track_number, title)
+            return True
+        except Exception as cleanup_exc:
+            raise TaggerError(_normalize_tag_write_error(path_name, cleanup_exc)) from cleanup_exc
     try:
         _write_easy_tags(path_name, artist, album, track_number, title)
         return True
@@ -5063,7 +5201,13 @@ def tag_group_with_record(
             _emit(emit, _format_tag_file_error_line(audio_path, error_text))
             continue
         try:
-            changed = write_audio_tags(audio_path, artist, album, tag_track_number, title, total_tracks=len(tracks))
+            if bool(getattr(config, "delete_extra_tags", False)):
+                changed = write_audio_tags(
+                    audio_path, artist, album, tag_track_number, title,
+                    total_tracks=len(tracks), delete_extra_tags=True,
+                )
+            else:
+                changed = write_audio_tags(audio_path, artist, album, tag_track_number, title, total_tracks=len(tracks))
             stats["tagged"] += 1
             if changed is False:
                 stats["unchanged"] += 1
@@ -5455,6 +5599,7 @@ def run_tagger(
     rename_compliantly: bool = False,
     convert_shn: bool = False,
     artist_in_album: bool = True,
+    delete_extra_tags: bool = False,
     as_is_artist_name: bool = False,
     emit: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, int]:
@@ -5474,6 +5619,7 @@ def run_tagger(
         rename_compliantly=rename_compliantly,
         convert_shn=convert_shn,
         artist_in_album=artist_in_album,
+        delete_extra_tags=delete_extra_tags,
         as_is_artist_name=as_is_artist_name,
     )
     ensure_corrupt_flacs_log(config)
@@ -5490,7 +5636,7 @@ def run_tagger(
     tag_emit = _build_tag_log_emit(config, emit)
     artist_matcher = load_artist_matcher(config)
 
-    _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | setlist.fm fallback={'yes' if config.setlistfm_lookup else 'no'} | setlist.fm upgrade={'yes' if getattr(config, 'setlistfm_upgrade', False) else 'no'} | thorough setlist matching={'yes' if getattr(config, 'thorough_setlist_matching', False) else 'no'} | corrupt files={getattr(config, 'corrupt_files', 'delete')} | corrupt folders={getattr(config, 'corrupt_folders', 'all')} | corrupt folder threshold={getattr(config, 'corrupt_folder_threshold', 100)}% | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | artist in album={'yes' if getattr(config, 'artist_in_album', True) else 'no'} | as-is artist name={'yes' if getattr(config, 'as_is_artist_name', False) else 'no'} | debug={'yes' if config.debug else 'no'}")
+    _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | setlist.fm fallback={'yes' if config.setlistfm_lookup else 'no'} | setlist.fm upgrade={'yes' if getattr(config, 'setlistfm_upgrade', False) else 'no'} | thorough setlist matching={'yes' if getattr(config, 'thorough_setlist_matching', False) else 'no'} | corrupt files={getattr(config, 'corrupt_files', 'delete')} | corrupt folders={getattr(config, 'corrupt_folders', 'all')} | corrupt folder threshold={getattr(config, 'corrupt_folder_threshold', 100)}% | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | artist in album={'yes' if getattr(config, 'artist_in_album', True) else 'no'} | delete extra tags={'yes' if getattr(config, 'delete_extra_tags', False) else 'no'} | as-is artist name={'yes' if getattr(config, 'as_is_artist_name', False) else 'no'} | debug={'yes' if config.debug else 'no'}")
     _emit(tag_emit, f"TLOHome: {config.TLOHome}")
     _emit(tag_emit, f"Tagging Path: {tagging_path}")
 

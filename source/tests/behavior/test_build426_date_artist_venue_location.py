@@ -10,7 +10,7 @@ import tlo_phase23_v2 as P
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v465"
+__version__ = "v467"
 
 
 def _matcher(*, genesis_collision=False):
@@ -166,17 +166,17 @@ def test_build426_requirements_and_manual_document_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v465.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v467.docx")
     requirements_text = "\n".join(paragraph.text for paragraph in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v465.rtf").read_text(
+    manual_text = (root / "TLO_Inventory_User_Manual_v467.rtf").read_text(
         encoding="utf-8", errors="ignore"
     )
 
-    assert "Current document version: v465 (v1.6 Build 465)." in requirements_text
+    assert "Current document version: v467 (v1.6 Build 467)." in requirements_text
     assert "Date Artist Venue Location" in requirements_text
     assert "1997-04-05 Genesis Old Pub London England" in requirements_text
     assert "a venue must remain after removing the artist" in requirements_text.lower()
-    assert "Version v1.6 Build 465" in manual_text
+    assert "Version v1.6 Build 467" in manual_text
     assert "Date Artist Venue Location" in manual_text
     assert "1997-04-05 Genesis Old Pub London England" in manual_text
     assert "a venue must remain after removing the artist" in manual_text.lower()

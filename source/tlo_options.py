@@ -1,4 +1,4 @@
-__version__ = "v465"
+__version__ = "v467"
 
 import argparse
 from dataclasses import dataclass
@@ -186,6 +186,11 @@ OPTIONS = [
             "is enabled without setlist.fm upgrade, thorough coverage remains constrained by the normal setlist.fm "
             "rate/call limits; enable setlist.fm upgrade for broader/faster setlist.fm evidence collection."
         ),
+    ),
+    Option(
+        "delete_extra_tags", "--delete-extra-tags", "flag",
+        gui="checkbox", gui_label="Delete extra tags", gui_row=3, gui_col=3,
+        help="When tagging, remove all metadata except Artist, Album, Track Number, and Track Title. Default off.",
     ),
     Option(
         "corrupt_files", "--corrupt-files", "choice",

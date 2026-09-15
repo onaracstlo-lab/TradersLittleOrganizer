@@ -1,4 +1,4 @@
-__version__ = "v465"
+__version__ = "v467"
 import argparse
 import sys
 import os
@@ -60,6 +60,7 @@ class Config:
     rename_compliantly: bool = False
     convert_shn: bool = False
     artist_in_album: bool = True
+    delete_extra_tags: bool = False
     etree_lookup: bool = False
     setlistfm_lookup: bool = False
     setlistfm_upgrade: bool = False
@@ -191,6 +192,7 @@ def build_inventory_parser() -> argparse.ArgumentParser:
         "rename_compliantly",
         "convert_shn",
         "artist_in_album",
+        "delete_extra_tags",
         "etree_lookup",
         "setlistfm_lookup",
         "setlistfm_upgrade",
@@ -283,6 +285,7 @@ def build_config():
         rename_compliantly=bool(values.get("rename_compliantly", False)),
         convert_shn=bool(values.get("convert_shn", False)),
         artist_in_album=bool(values.get("artist_in_album", True)),
+        delete_extra_tags=bool(values.get("delete_extra_tags", False)),
         etree_lookup=bool(values.get("etree_lookup", False)),
         setlistfm_lookup=bool(values.get("setlistfm_lookup", False)),
         setlistfm_upgrade=bool(values.get("setlistfm_upgrade", False)),

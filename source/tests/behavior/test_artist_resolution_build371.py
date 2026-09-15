@@ -1,6 +1,6 @@
 """Build 375 regressions for non-compliant artist/path evidence precedence."""
 
-__version__ = "v465"
+__version__ = "v467"
 
 import os
 from types import SimpleNamespace

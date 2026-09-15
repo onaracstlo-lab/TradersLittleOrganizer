@@ -1,6 +1,6 @@
 """Build 405 cancellation/log-token and CI display regressions."""
 
-__version__ = "v465"
+__version__ = "v467"
 
 from pathlib import Path
 from types import SimpleNamespace
