@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v469"
+__version__ = "v470"
 
 
 import copy
@@ -892,6 +892,11 @@ def classify_issue_line(line: str) -> Optional[RunIssue]:
     if not text:
         return None
     upper = text.upper()
+    # unidentifiedShows.txt is a normal persistent housekeeping output.  Do not
+    # turn its postprocess creation/update status into an "Unidentified show"
+    # warning merely because the filename contains the word UNIDENTIFIED.
+    if upper.startswith("POSTPROCESS:") and "UNIDENTIFIEDSHOWS.TXT" in upper:
+        return None
     severity = "warning"
     category = "Warning"
     if upper.startswith("ERROR:") or "_ERROR:" in upper or upper.startswith("TAG_FILE_ERROR:"):
