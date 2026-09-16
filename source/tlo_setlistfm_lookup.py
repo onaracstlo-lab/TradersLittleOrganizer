@@ -29,7 +29,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from tlo_network_io import MAX_ERROR_RESPONSE_BYTES, MAX_METADATA_RESPONSE_BYTES, ResponseTooLargeError, read_bounded_text
 
-__version__ = "v467"
+__version__ = "v469"
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 MIN_REQUEST_INTERVAL_SECONDS = 0.600
@@ -110,6 +110,11 @@ def convert_date_for_api(date_text: str) -> str:
     except ValueError as exc:
         raise ValueError(f"date must be yyyy-mm-dd, got: {date_text!r}") from exc
     return parsed.strftime("%d-%m-%Y")
+
+
+def api_key_available() -> bool:
+    """Return whether a non-empty setlist.fm API key is available in the environment."""
+    return bool(os.environ.get(ENV_API_KEY, "").strip())
 
 
 def get_api_key() -> str:

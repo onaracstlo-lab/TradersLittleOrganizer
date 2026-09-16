@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v467"
+__version__ = "v469"
 
 
 import copy
@@ -283,13 +283,14 @@ def operation_review_lines(
 
     operation_folded = operation_name.casefold()
     if operation_folded.startswith("tag"):
-        lines.append("Standalone Tag behavior: tags the selected path directly; inventory copy modes are not used.")
+        lines.append("Tag behavior: uses the master Search Path(s) and current main-window settings; no separate Tag window is opened.")
     elif operation_folded.startswith("add shows"):
         lines.append("Add Shows behavior: inventory copy modes are reported but are not used by Add Shows.")
-    else:
+
+    if not operation_folded.startswith("add shows"):
         lines.append(
             f"Performance: {getattr(config, 'performance_mode', 'balanced')} / "
-            f"max workers {getattr(config, 'max_workers', 0)}"
+            f"Max Workers ceiling {getattr(config, 'max_workers', 0)}"
         )
         corrupt_files = str(getattr(config, "corrupt_files", "delete") or "delete")
         corrupt_folders = str(getattr(config, "corrupt_folders", "all") or "all")
@@ -339,7 +340,12 @@ def _inventory_roots(config) -> list[tuple[str, str, str]]:
 def _preview_actions(config, *, copy_mode: str = "", tagger: bool = False, shn_count: int = 0) -> tuple[str, ...]:
     actions: list[str] = []
     if tagger:
-        actions.append("write audio tags")
+        if str(getattr(config, "tag_copy_and_delete_path", "") or "").strip():
+            actions.append("move folder on the same partition; otherwise copy, verify, remove original, then tag destination")
+        elif bool(getattr(config, "tag_copy_during_inventory", False)):
+            actions.append("copy folder and tag copy")
+        else:
+            actions.append("write audio tags in place")
     elif bool(getattr(config, "tag_during_inventory", False)):
         actions.append("write audio tags in place")
     elif bool(getattr(config, "tag_copy_during_inventory", False)):
@@ -444,6 +450,7 @@ def preview_operation(
     *,
     operation: str,
     tag_path: str = "",
+    tag_jobs=None,
     sample_limit: Optional[int] = None,
     cancel_check=None,
 ) -> PreviewResult:
@@ -456,7 +463,23 @@ def preview_operation(
     started = time.monotonic()
     result = PreviewResult(operation=operation)
     tagger = operation.casefold().startswith("tag")
-    if tagger:
+    tag_job_map = {}
+    if tagger and tag_jobs is not None:
+        roots = []
+        for job in list(tag_jobs or []):
+            path_name = os.path.normpath(str(job.get("path") or ""))
+            status = validate_tag_path(path_name)
+            if not status.valid:
+                result.issues.append(RunIssue("Invalid path", status.message, path_name, "error", "preview"))
+                continue
+            copy_mode = str(job.get("copy_mode") or "")
+            copy_destination = str(job.get("copy_destination") or "")
+            roots.append((status.normalized, copy_mode, copy_destination))
+            tag_job_map[os.path.normcase(os.path.normpath(status.normalized))] = dict(job)
+        if not roots and result.issues:
+            result.elapsed_seconds = time.monotonic() - started
+            return result
+    elif tagger:
         status = validate_tag_path(tag_path)
         if not status.valid:
             result.issues.append(RunIssue("Invalid path", status.message, tag_path, "error", "preview"))
@@ -487,6 +510,20 @@ def preview_operation(
                 complete_path_file = os.path.join(temp_dir, "compP.log")
                 Path(complete_path_file).touch()
                 preview_config = _preview_config_for_root(config, root, complete_path_file, result)
+                if tagger and tag_jobs is not None:
+                    job = tag_job_map.get(os.path.normcase(os.path.normpath(root)), {})
+                    preview_config.current_slam = str(job.get("slam") or "").strip()
+                    global_mode_selected = bool(
+                        getattr(config, "tag_during_inventory", False)
+                        or getattr(config, "tag_copy_during_inventory", False)
+                        or str(getattr(config, "tag_copy_and_delete_path", "") or "").strip()
+                    )
+                    if not global_mode_selected:
+                        if copy_mode == "copy":
+                            preview_config.tag_copy_during_inventory = True
+                            preview_config.tag_copy_destination = _copy_destination
+                        elif copy_mode == "copy-delete":
+                            preview_config.tag_copy_and_delete_path = _copy_destination
                 initial_dir_walk(preview_config, root)
                 groups = _build_groups_from_search_path(preview_config, root)
                 try:
@@ -962,11 +999,11 @@ class RunMonitor:
             self.snapshot.stage = line.split(":", 1)[1].strip().capitalize()
         elif lower.startswith("cleanup, aggregation"):
             self.snapshot.stage = "Finalizing"
-        elif lower.startswith("starting tlo tagger"):
+        elif lower.startswith("starting tlo tagger") or lower.startswith("starting tlo tag"):
             self.snapshot.stage = "Starting tagger"
-        elif lower.startswith("tagging path:"):
+        elif lower.startswith("tagging path:") or lower.startswith("tag search path"):
             self.snapshot.stage = "Scanning tagging path"
-            self.snapshot.current_item = line.split(":", 1)[1].strip()
+            self.snapshot.current_item = line.split(":", 1)[1].strip() if ":" in line else line
         elif lower.startswith("complete: folders="):
             self.snapshot.stage = "Complete"
             self.snapshot.completed = True

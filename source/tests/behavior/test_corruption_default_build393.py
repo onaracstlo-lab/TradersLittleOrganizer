@@ -1,6 +1,6 @@
 """Historical corruption defaults superseded by the Build 442 split policy."""
 
-__version__ = "v467"
+__version__ = "v468"
 
 import pytest
 

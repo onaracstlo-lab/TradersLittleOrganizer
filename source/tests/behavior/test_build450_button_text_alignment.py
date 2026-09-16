@@ -1,6 +1,6 @@
 """Build 450: GUI button labels are centered horizontally and vertically."""
 
-__version__ = "v467"
+__version__ = "v468"
 
 from pathlib import Path
 

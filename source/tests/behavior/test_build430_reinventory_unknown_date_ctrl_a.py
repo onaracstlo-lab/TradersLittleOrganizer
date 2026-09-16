@@ -11,7 +11,7 @@ import tlo_gui_shortcuts as shortcuts
 import tlo_postprocess as post
 import tlo_sibling_collections as sibling
 
-__version__ = "v467"
+__version__ = "v468"
 
 pytestmark = [pytest.mark.behavior, pytest.mark.gui]
 

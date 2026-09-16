@@ -1,6 +1,6 @@
 """Build 407 artist-suffix and Research-results GUI behavior."""
 
-__version__ = "v467"
+__version__ = "v468"
 
 import importlib.util
 from pathlib import Path

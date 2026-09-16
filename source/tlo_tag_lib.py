@@ -1,6 +1,6 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v467"
+__version__ = "v469"
 
 from tlo_diagnostics import debug_suppressed_exception
 import os
@@ -3806,7 +3806,7 @@ def _coerce_tracks_to_expected_count(
             continue
         if nums == list(range(first_num, first_num + expected)):
             if start_idx or len(rows) > expected:
-                _emit(emit, f"WARN: {folder} | selected {expected} contiguous setlist track row(s) from {len(rows)} parseable row(s); ignored likely header/footer rows")
+                _emit(emit, f"INFO: {folder} | selected {expected} contiguous setlist track row(s) from {len(rows)} parseable row(s); ignored likely header/footer rows")
             return _renormalize_track_rows(candidate)
 
     # Handle multi-disc lists with track numbers reset to 1.  Trust this only
@@ -3830,7 +3830,7 @@ def _coerce_tracks_to_expected_count(
             selected.append(row)
             last = num
             if len(selected) == expected:
-                _emit(emit, f"WARN: {folder} | selected {expected} reset-aware setlist track row(s) from {len(rows)} parseable row(s); ignored likely header/footer rows")
+                _emit(emit, f"INFO: {folder} | selected {expected} reset-aware setlist track row(s) from {len(rows)} parseable row(s); ignored likely header/footer rows")
                 return _renormalize_track_rows(selected)
         else:
             if num in (0, 1):
@@ -4236,7 +4236,7 @@ def _local_setlist_fallback_tracks(
     candidate comparison has already identified an exact-count alternative.
     """
     if _has_convincing_numbered_setlist_evidence(setlist_file):
-        _emit(emit, f"WARN: {folder} | numbered song-sequence evidence found; not using unnumbered prose fallback")
+        _emit(emit, f"INFO: {folder} | numbered song-sequence evidence found; not using unnumbered prose fallback")
         return [], ""
     candidates = _exact_count_unnumbered_candidates(setlist_file, expected_count)
     if not candidates:
@@ -4984,7 +4984,7 @@ def _select_tracks_for_tagging(
         if tracks and len(tracks) == len(audio_files):
             return tracks, "setlist", None
         if tracks and _has_strong_numbered_track_run(tracks):
-            _emit(emit, f"WARN: {folder} | found a strong numbered setlist run with {len(tracks)} row(s) for {len(audio_files)} audio file(s); not using unnumbered prose fallback")
+            _emit(emit, f"INFO: {folder} | found a strong numbered setlist run with {len(tracks)} row(s) for {len(audio_files)} audio file(s); not using unnumbered prose fallback")
         else:
             explicit_candidate = _explicit_unnumbered_track_section_candidate(setlist_file)
             if explicit_candidate and len(explicit_candidate) != len(audio_files):
@@ -5284,7 +5284,15 @@ def process_tagging_group(
             metadata_problems=metadata_problems,
         )
 
-    if bool(getattr(config, "tag_copy_during_inventory", False)) or bool(getattr(config, "rename_compliantly", False)):
+    if str(getattr(config, "tag_copy_and_delete_path", "") or "").strip():
+        try:
+            group, record = prepare_inventory_copy_delete_target(config, group, record, emit=emit)
+            folder = _folder_label(group)
+        except Exception as exc:
+            stats["errors"] += 1
+            _problem(folder, f"tag copy/delete target preparation failed: {exc}", emit)
+            return stats
+    elif bool(getattr(config, "tag_copy_during_inventory", False)) or bool(getattr(config, "rename_compliantly", False)):
         try:
             group, record = prepare_inventory_tagging_target(config, group, record, emit=emit)
             folder = _folder_label(group)
@@ -5581,6 +5589,120 @@ def _build_tag_log_emit(config: Config, emit: Optional[Callable[[str], None]]) -
         for log_line in (line.rstrip("\r\n").splitlines() or [""]):
             _append_tag_log_line(config, log_line)
     return tag_emit
+
+
+def run_tagger_jobs(config: Config, jobs, emit: Optional[Callable[[str], None]] = None) -> Dict[str, int]:
+    """Run GUI Tag against one or more master Search Path jobs.
+
+    Each job is a mapping containing at least ``path`` and optionally ``slam``,
+    ``volume_label``, ``copy_mode`` and ``copy_destination``.  Main-window tag
+    mode selections are treated as global.  When no global tag mode is selected,
+    an inline Search Path copy directive may supply the mode for that one job.
+    """
+    clear_cancel_request()
+    ensure_corrupt_flacs_log(config)
+    validate_required_databases(config)
+    setup_logging(config)
+    artist_matcher = load_artist_matcher(config)
+    tag_emit = _build_tag_log_emit(config, emit)
+
+    job_list = list(jobs or [])
+    if not job_list:
+        raise TaggerError("Tag requires at least one Search Path.")
+
+    global_in_place = bool(getattr(config, "tag_during_inventory", False))
+    global_copy = bool(getattr(config, "tag_copy_during_inventory", False))
+    global_copy_destination = str(getattr(config, "tag_copy_destination", "") or "").strip()
+    global_copy_delete_destination = str(getattr(config, "tag_copy_and_delete_path", "") or "").strip()
+    global_mode_selected = bool(global_in_place or global_copy or global_copy_delete_destination)
+
+    _emit(
+        tag_emit,
+        "Starting TLO Tag | paths=%d | compliant=%s | etreeDB=%s | setlist.fm=%s | "
+        "setlist.fm upgrade=%s | thorough setlist matching=%s | tag mode=%s | "
+        "rename compliantly=%s | convert shn=%s | delete extra tags=%s"
+        % (
+            len(job_list),
+            "yes" if config.compliant else "no",
+            "yes" if config.etree_lookup else "no",
+            "yes" if config.setlistfm_lookup else "no",
+            "yes" if getattr(config, "setlistfm_upgrade", False) else "no",
+            "yes" if getattr(config, "thorough_setlist_matching", False) else "no",
+            "copy-delete" if global_copy_delete_destination else ("copy" if global_copy else "in-place"),
+            "yes" if config.rename_compliantly else "no",
+            "yes" if config.convert_shn else "no",
+            "yes" if getattr(config, "delete_extra_tags", False) else "no",
+        ),
+    )
+    _emit(tag_emit, f"TLOHome: {config.TLOHome}")
+
+    totals = empty_tag_stats()
+    group_number = 0
+    for job_index, job in enumerate(job_list, start=1):
+        wait_if_paused(config)
+        if is_cancel_requested():
+            _emit(tag_emit, "Tag cancelled.")
+            break
+
+        tagging_path = _validate_existing_directory(str(job.get("path") or ""), "Search Path")
+        job_copy_mode = str(job.get("copy_mode") or "").strip().lower()
+        job_copy_destination = str(job.get("copy_destination") or "").strip()
+
+        # Global main-window modes win.  Otherwise, preserve any per-path copy
+        # directive embedded in the master Search Path/control file.
+        config.tag_during_inventory = global_in_place
+        config.tag_copy_during_inventory = global_copy
+        config.tag_copy_destination = global_copy_destination
+        config.tag_copy_and_delete_path = global_copy_delete_destination
+        if not global_mode_selected:
+            if job_copy_mode == "copy":
+                config.tag_copy_during_inventory = True
+                config.tag_copy_destination = job_copy_destination
+            elif job_copy_mode == "copy-delete":
+                config.tag_copy_and_delete_path = job_copy_destination
+
+        config.current_search_path = os.path.normpath(tagging_path)
+        config.current_search_index = job_index
+        config.current_slam = str(job.get("slam") or "").strip()
+        config.current_volume_label = str(job.get("volume_label") or "").strip()
+        config.current_volume_key = str(job.get("volume_key") or "").strip()
+        config.current_log_token = "T"
+        config.logs.start_search_path(
+            config.current_search_path,
+            config.current_search_index,
+            log_token=config.current_log_token,
+            volume_label=config.current_volume_label,
+            log_mode="w" if job_index == 1 else "a",
+        )
+        _emit(tag_emit, f"Tag Search Path {job_index}/{len(job_list)}: {tagging_path}")
+
+        groups = _groups_from_inventory_discovery(config, tagging_path)
+        if not groups:
+            _emit(tag_emit, f"INFO: {tagging_path} | no folders with audio files were found")
+            continue
+        for group in groups:
+            wait_if_paused(config)
+            if is_cancel_requested():
+                _emit(tag_emit, "Tag cancelled.")
+                break
+            group_number += 1
+            group["group_number"] = group_number
+            subtotal = process_tagging_group(config, group, artist_matcher, emit=tag_emit)
+            merge_tag_stats(totals, subtotal)
+        if is_cancel_requested():
+            break
+
+    # Restore the global mode values so completion/review code sees the user's
+    # actual main-window selection rather than the final per-path override.
+    config.tag_during_inventory = global_in_place
+    config.tag_copy_during_inventory = global_copy
+    config.tag_copy_destination = global_copy_destination
+    config.tag_copy_and_delete_path = global_copy_delete_destination
+
+    emit_tag_fallback_summary(totals, tag_emit)
+    emit_tag_problem_summary(config, tag_emit)
+    _emit(tag_emit, f"Complete: folders={totals['groups']} tagged_files={totals['tagged']} skipped_folders={totals['skipped']} file_errors={totals['errors']}")
+    return totals
 
 
 def run_tagger(

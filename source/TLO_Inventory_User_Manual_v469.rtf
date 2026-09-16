@@ -69,7 +69,7 @@
 {\s70\sbasedon42\snext70\loch\sl240\slmult1\sb240\sa0 index heading;}
 {\s71\sbasedon1\snext0\loch\sl240\slmult1\sb480\sa0 TOC Heading;}
 {\s72\snext72\rtlch\af12\afs17\alang1033 \ltrch\lang1033\langfe1033\hich\af8\loch\sl276\slmult1\ql\widctlpar\hyphpar0\li360\lin360\ri144\rin144\sb40\sa80\ltrpar\cf0\f8\fs17\lang1033\kerning0\dbch\af13\langfe1033 Code;}
-}{\*\generator LibreOffice/25.2.3.2$Linux_X86_64 LibreOffice_project/520$Build-2}{\info{\title TLO Inventory User Manual v467}{\subject TLO v1.6 Build 467 end-user manual}{\keywords TLO, Inventory, User, Manual, v1.6, Build, 452, setlist.fm, Thorough, Setlist, Matching}{\doccomm Current Build 467 adds first-class MP3 tagging/corruption handling and optional Delete extra tags cleanup while preserving all established inventory, collection, and recovery behavior.}{\author Jay Scarano}{\creatim\yr2026\mo5\dy30\hr18\min47}{\revtim\yr2026\mo6\dy22\hr22\min2}{\printim\yr0\mo0\dy0\hr0\min0}}{\*\userprops{\propname AppVersion}\proptype30{\staticval 16.0000}{\propname OOXMLCorePropertyCategory}\proptype30{\staticval TLO}}\deftab720\deftab720\deftab720
+}{\*\generator LibreOffice/25.2.3.2$Linux_X86_64 LibreOffice_project/520$Build-2}{\info{\title TLO Inventory User Manual v469}{\subject TLO v1.6 Build 469 end-user manual}{\keywords TLO, Inventory, User, Manual, v1.6, Build, 452, setlist.fm, Thorough, Setlist, Matching}{\doccomm Current Build 469 integrates GUI Tag into the main window, tightens corruption/setlist.fm controls, fixes Issues scrolling and benign tag warnings, and makes Max Workers a ceiling.}{\author Jay Scarano}{\creatim\yr2026\mo5\dy30\hr18\min47}{\revtim\yr2026\mo6\dy22\hr22\min2}{\printim\yr0\mo0\dy0\hr0\min0}}{\*\userprops{\propname AppVersion}\proptype30{\staticval 16.0000}{\propname OOXMLCorePropertyCategory}\proptype30{\staticval TLO}}\deftab720\deftab720\deftab720
 \hyphauto1\viewscale100\formshade\nobrkwrptbl\paperh15840\paperw12240\margl936\margr936\margt720\margb720\sectd\sbknone\sftnnar\saftnnrlc\sectunlocked1\pgwsxn12240\pghsxn15840\marglsxn936\margrsxn936\margtsxn864\headery720\margbsxn864\footery720{\header\pard\plain \s48\loch\sl240\slmult1\tqc\tx4680\tqr\tx9360\sb0\sa0\sl240\slmult1\hich\af7\loch\f7\loch
 
 \par }{\footer\pard\plain \s49\loch\sl240\slmult1\tqc\tx4680\tqr\tx9360\sb0\sa0\sl240\slmult1{\hich\af7\af7\loch\f7\f7
@@ -96,7 +96,7 @@ Traders Little Organizer\u8482\'99}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl252\slmult1\qc\sb0\sa80{\loch
 TLO Inventory User Manual}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl252\slmult1\qc\sb0\sa80{\loch
-Version v1.6 Build 467}
+Version v1.6 Build 469}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1\loch
 
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl252\slmult1\sb0\sa80\loch
@@ -156,7 +156,7 @@ The full inventory function scans configured music roots, identifies core show m
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl240\slmult1\fi-259\li360\lin360\sb0\sa40{\loch
 - Add Shows adds new content to an existing inventory without rerunning the full scan.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl240\slmult1\fi-259\li360\lin360\sb0\sa40{\loch
-- Standalone Tag and inventory-time Tag in Place write audio metadata when you choose to tag files. Tag Copy and Tag Copy/Delete Original are Full Inventory modes, not standalone Tagger functions.}
+- GUI Tag and inventory-time tagging write audio metadata when you choose to tag files. GUI Tag uses the selected main Tag in Place, Tag Copy, or Tag Copy/Delete Original mode. Standalone tlo-tag remains a direct-path command-line tagger and does not use the GUI copy modes.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl240\slmult1\fi-259\li360\lin360\sb0\sa40{\loch
 - The included Search app searches the completed bootlist and setlist files after the distribution is extracted into TLOHome.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1\fi-259\li360\lin360\sb0\sa40{\loch
@@ -2788,7 +2788,7 @@ af0000002874455874646174653a74696d657374616d7000323032362d30392d31315430313a3330
 }
 }
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1\qc{\loch
-Figure 1. Current v1.6 Build 467 Main Inventory window. Checkbox rows are compact and Thorough Setlist Matching follows setlist.fm upgrade at the same vertical row spacing as the other first-column checkboxes. One-line checkbox labels are vertically even with their indicators, while wrapped checkbox labels keep first-line alignment. Delete extra tags appears as a two-line checkbox in the far-right fourth-row cell. Corruption Handling is one horizontal label/control strip beneath the checkbox area, and the Corrupt files drop-down remains wide enough that its longest label is not clipped. TLOHome remains on the compact title row, the required Search Path field is labeled Path(s), Slam is labeled Slam (optional) and its entry is approximately half the previous width, and button labels remain centered horizontally and vertically. The lower output console is non-wrapping and includes both vertical and horizontal scrollbars.}
+Figure 1. Current v1.6 Build 469 Main Inventory window. Checkbox rows are compact and Thorough Setlist Matching follows setlist.fm upgrade at the same vertical row spacing as the other first-column checkboxes. One-line checkbox labels are vertically even with their indicators, while wrapped checkbox labels keep first-line alignment. Delete extra tags appears as a two-line checkbox in the far-right fourth-row cell. Corruption Handling is one horizontal label/control strip beneath the checkbox area, and the Corrupt files drop-down remains wide enough that its longest label is not clipped. TLOHome remains on the compact title row, the required Search Path field is labeled Path(s), Slam is labeled Slam (optional) and its entry is approximately half the previous width, and button labels remain centered horizontally and vertically. The lower output console is non-wrapping and includes both vertical and horizontal scrollbars.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1{\loch
 First-run safety: Dry run performs metadata and tag planning but does not write tags, convert SHN files, rename folders, copy or delete content, or replace inventory output.}
 \par \pard\plain \s1\rtlch\af12\afs32\ab \ltrch\hich\af4\loch\sl240\slmult1\keep\sb480\sa0\keepn\cf17\f4\fs32\b\dbch\af9\sl240\slmult1{\loch
@@ -2798,7 +2798,7 @@ The release process can provide complete packages, update packages, or both for 
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1{\loch
 The source bundle contains the current requirements DOCX, the current RTF user manual, TLO application source, tests, and application distribution utilities. It contains no GitHub Build Process artifacts; that independently versioned process is distributed separately. Complete distributions include the current RTF user manual, FAQ, required databases, starter files, release information, checksums, and malware-scan receipts. Update distributions always omit inventory, setlists, logs, staged folders, and other user-created output. An update normally leaves TLO_DBs unchanged, but a release may explicitly include artists.sqlite and venues.txt when a database refresh is intended; the updater reports that before you apply the ZIP.}
 \par \pard\plain \s72\rtlch\af12\afs17\alang1033 \ltrch\lang1033\langfe1033\hich\af8\loch\sl276\slmult1\ql\widctlpar\hyphpar0\li360\lin360\ri144\rin144\sb40\sa80\ltrpar\cf0\f8\fs17\lang1033\kerning0\dbch\af13\langfe1033\sl276\slmult1\fi0\li360\lin360\ri144\rin144\sb60\sa120{\loch
-TLOHome/\line   apps/\line     Windows/\line       tlo-ggi.exe\line       tlo-gi.exe\line       tlo-research.exe\line       tlo-reverse.exe\line       tlo-tag.exe\line       tlo-deleteDupes.cmd\line       tlo-gsi.exe\line       search-artist-db.exe\line       _internal/              Windows onedir package only\line     macOS/\line       tlo-ggi\line       tlo-gi\line       tlo-research\line       tlo-reverse\line       tlo-tag\line       tlo-deleteDupes\line       tlo-gsi\line       search-artist-db\line     Linux/\line       tlo-ggi\line       tlo-gi\line       tlo-research\line       tlo-reverse\line       tlo-tag\line       tlo-deleteDupes\line       tlo-gsi\line       search-artist-db\line   TLO_DBs/\line     artists.sqlite\line     venues.txt\line   debug/  dups/  logs/  readyForXfer/  setlists/  staged/\line   README_FIRST.txt\line   TLO-FAQ.txt\line   TLO_Inventory_User_Manual_v467.rtf\line   toBeInventoried.txt}
+TLOHome/\line   apps/\line     Windows/\line       tlo-ggi.exe\line       tlo-gi.exe\line       tlo-research.exe\line       tlo-reverse.exe\line       tlo-tag.exe\line       tlo-deleteDupes.cmd\line       tlo-gsi.exe\line       search-artist-db.exe\line       _internal/              Windows onedir package only\line     macOS/\line       tlo-ggi\line       tlo-gi\line       tlo-research\line       tlo-reverse\line       tlo-tag\line       tlo-deleteDupes\line       tlo-gsi\line       search-artist-db\line     Linux/\line       tlo-ggi\line       tlo-gi\line       tlo-research\line       tlo-reverse\line       tlo-tag\line       tlo-deleteDupes\line       tlo-gsi\line       search-artist-db\line   TLO_DBs/\line     artists.sqlite\line     venues.txt\line   debug/  dups/  logs/  readyForXfer/  setlists/  staged/\line   README_FIRST.txt\line   TLO-FAQ.txt\line   TLO_Inventory_User_Manual_v469.rtf\line   toBeInventoried.txt}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1{\loch
 Every complete distribution includes tlo-gsi, tlo-research, tlo-reverse, search-artist-db, TLO_DBs/artists.sqlite, and TLO_DBs/venues.txt. The generic Linux applications are also used under WSL. The Windows onedir package places the seven PyInstaller executables directly in apps/Windows with one shared apps/Windows/_internal folder, plus tlo-deleteDupes.cmd and its private runtime; keep that folder with the executables and replace the whole apps/Windows folder when switching between onefile and onedir layouts.}
 \par \trowd\trqc\ltrrow\trkeep\trpaddft3\trpaddt0\trpaddfl3\trpaddl0\trpaddfb3\trpaddb0\trpaddfr3\trpaddr0\clpadft3\clpadt108\clpadfr3\clpadr108\clcbpat23\cellx8640\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa20{\loch
@@ -2817,7 +2817,7 @@ Do not run inside the ZIP: Always extract the installation ZIP first. Windows an
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl240\slmult1\fi-259\li360\lin360\sb0\sa40{\loch
 - Use visible and unique volume names for search roots. They are strongly recommended, especially with external drives, backup drives, WSL paths, or drives that may get different letters over time.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl240\slmult1\fi-259\li360\lin360\sb0\sa40{\loch
-- If setlist.fm lookup will be used, obtain a setlist.fm API key and set SETLISTFM_API_KEY before enabling setlist.fm lookup.}
+- If setlist.fm lookup will be used, obtain a setlist.fm API key and set SETLISTFM_API_KEY before starting the GUI. When the variable is missing or blank, the setlist.fm and setlist.fm upgrade checkboxes are unchecked and greyed out.}
 \par \trowd\trqc\ltrrow\trkeep\trpaddft3\trpaddt0\trpaddfl3\trpaddl0\trpaddfb3\trpaddb0\trpaddfr3\trpaddr0\clpadft3\clpadt108\clpadfr3\clpadr108\clcbpat23\cellx8640\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa20{\loch
 Installation contents: The installation ZIP installs the application files and support folders under TLOHome. Pre-installation setup is limited to choosing a writable TLOHome location, preparing environment variables, and making sure mounted drives will be visible.}\cell\row\pard \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl252\slmult1\sb0\sa80\loch
 
@@ -4456,9 +4456,9 @@ Optional artist override for direct Search Path entries. Use only when every dir
 Performance Mode}\cell\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
 gentle, balanced, fast, or extreme. GUI default is balanced.}\cell\row\pard \trowd\trql\trleft82\ltrrow\trkeep\trpaddft3\trpaddt0\trpaddfl3\trpaddl0\trpaddfb3\trpaddb0\trpaddfr3\trpaddr0\clbrdrt\brdrs\brdrw10\brdrcf1\clbrdrl\brdrs\brdrw10\brdrcf1\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf1\clbrdrr\brdrs\brdrw10\brdrcf1\clpadfr3\clpadr108\cellx5253\clbrdrt\brdrs\brdrw10\brdrcf1\clbrdrl\brdrs\brdrw10\brdrcf1\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf1\clbrdrr\brdrs\brdrw10\brdrcf1\clpadfr3\clpadr108\cellx10424\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
 Max Workers}\cell\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
-Maximum path workers. Blank or 0 means use the selected mode default; positive values impose a cap.}\cell\row\pard \trowd\trql\trleft82\ltrrow\trpaddft3\trpaddt0\trpaddfl3\trpaddl0\trpaddfb3\trpaddb0\trpaddfr3\trpaddr0\clpadft3\clpadt108\clpadfr3\clpadr108\cellx5253\clpadft3\clpadt108\clpadfr3\clpadr108\cellx10424\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
+Maximum worker ceiling. The GUI starts at the machine CPU count unless a positive launcher value is supplied. Performance Mode and runtime rules may use fewer workers; the ceiling does not force that many workers.}\cell\row\pard \trowd\trql\trleft82\ltrrow\trpaddft3\trpaddt0\trpaddfl3\trpaddl0\trpaddfb3\trpaddb0\trpaddfr3\trpaddr0\clpadft3\clpadt108\clpadfr3\clpadr108\cellx5253\clpadft3\clpadt108\clpadfr3\clpadr108\cellx10424\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
 Corruption Handling}\cell\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
-Grouped controls for proven corruption: Corrupt files chooses Keep and report or Delete corrupt files; Folder removal chooses Never, 100% corrupt only, or At threshold; Folder corruption threshold is 0-100 and is enabled only for At threshold. The Corrupt files drop-down is only slightly wider than the compact control and is sized to avoid clipping the end of Delete corrupt files; the Folder removal drop-down remains compact, the threshold label is single-line, and the % sign sits immediately beside the threshold value box. Defaults are Delete corrupt files and 100% corrupt only.}\cell\row\pard \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1{\loch
+Grouped controls for proven corruption: Corrupt files chooses Keep and report or Delete corrupt files; Folder removal chooses Never, 100% corrupt only, or At threshold; Folder corruption threshold is 0-100. When Keep and report is selected, Folder removal is effectively Never and both folder-removal controls are greyed out. With Delete corrupt files selected, Folder removal is available and the threshold value is enabled only for At threshold. The Corrupt files drop-down is only slightly wider than the compact control and is sized to avoid clipping the end of Delete corrupt files; the Folder removal drop-down remains compact, the threshold label is single-line, and the % sign sits immediately beside the threshold value box. Defaults are Delete corrupt files and 100% corrupt only.}\cell\row\pard \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1{\loch
 Corruption Handling separates folder decisions from individual-file decisions. TLO first scans the original audio population and classifies each path as healthy, proven corrupt, or unverifiable. Folder removal is evaluated first from that untouched snapshot: Never removes no folder because of corruption; 100% corrupt only removes a logical show or direct music folder only when its evaluated audio population is entirely corrupt; At threshold removes it when the proven-corruption percentage is greater than or equal to Folder corruption threshold. Only content that remains then reaches Corrupt files: Keep and report leaves proven-corrupt files in place and logs them, while Delete corrupt files moves the remaining corrupt files to the OS Trash/Recycle Bin. A failed folder Trash does not override Keep and report. Missing, locked, unreadable, disconnected, resource-failed, or validator-infrastructure-failed files are unverifiable, suppress corruption-driven Trash, and fail closed before later mutation. MP3 files are treated exactly like FLAC files for corruption handling: they are validated as audio, counted in the same corruption percentage and folder population, and follow the same Keep/Delete and Never/100%/threshold decisions.}
 \par \pard\plain \s2\rtlch\af12\afs26\ab \ltrch\hich\af4\loch\sl240\slmult1\keep\sb200\sa0\keepn\cf18\f4\fs26\b\dbch\af9\sl240\slmult1{\loch
 Checkboxes}
@@ -4472,7 +4472,7 @@ Try eTreeDB venue/location lookup after artist and yyyy-mm-dd date are known. It
 Compliant}\cell\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
 Switches metadata extraction to compliant folder-name rules. Mutually exclusive with Rename Compliantly. See Section 10.}\cell\row\pard \trowd\trql\trleft82\ltrrow\trkeep\trpaddft3\trpaddt0\trpaddfl3\trpaddl0\trpaddfb3\trpaddb0\trpaddfr3\trpaddr0\clbrdrt\brdrs\brdrw10\brdrcf15\clbrdrl\brdrs\brdrw10\brdrcf15\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf15\clbrdrr\brdrs\brdrw10\brdrcf15\clpadfr3\clpadr108\cellx5253\clbrdrt\brdrs\brdrw10\brdrcf15\clbrdrl\brdrs\brdrw10\brdrcf15\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf15\clbrdrr\brdrs\brdrw10\brdrcf15\clpadfr3\clpadr108\cellx10424\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
 Tag in Place}\cell\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
-Writes audio tags in the original folders during Full Inventory and supported Add Shows processing. Standalone Tag always tags its selected Tagging Path directly; this value is still reported in Review Operation.}\cell\row\pard \trowd\trql\trleft82\ltrrow\trkeep\trpaddft3\trpaddt0\trpaddfl3\trpaddl0\trpaddfb3\trpaddb0\trpaddfr3\trpaddr0\clbrdrt\brdrs\brdrw10\brdrcf15\clbrdrl\brdrs\brdrw10\brdrcf15\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf15\clbrdrr\brdrs\brdrw10\brdrcf15\clpadfr3\clpadr108\cellx5253\clbrdrt\brdrs\brdrw10\brdrcf15\clbrdrl\brdrs\brdrw10\brdrcf15\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf15\clbrdrr\brdrs\brdrw10\brdrcf15\clpadfr3\clpadr108\cellx10424\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
+Writes audio tags in the original folders during Full Inventory and supported Add Shows processing. GUI Tag follows the main-window tag mode and master Path(s). Standalone tlo-tag continues to tag its own selected tag path directly.}\cell\row\pard \trowd\trql\trleft82\ltrrow\trkeep\trpaddft3\trpaddt0\trpaddfl3\trpaddl0\trpaddfb3\trpaddb0\trpaddfr3\trpaddr0\clbrdrt\brdrs\brdrw10\brdrcf15\clbrdrl\brdrs\brdrw10\brdrcf15\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf15\clbrdrr\brdrs\brdrw10\brdrcf15\clpadfr3\clpadr108\cellx5253\clbrdrt\brdrs\brdrw10\brdrcf15\clbrdrl\brdrs\brdrw10\brdrcf15\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf15\clbrdrr\brdrs\brdrw10\brdrcf15\clpadfr3\clpadr108\cellx10424\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
 Artist in Album Tag}\cell\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
 Checked by default. Album tags begin with Artist followed by the resolved album/show metadata. Clear it to omit the artist-name prefix.}\cell\row\pard \trowd\trql\trleft82\ltrrow\trkeep\trpaddft3\trpaddt0\trpaddfl3\trpaddl0\trpaddfb3\trpaddb0\trpaddfr3\trpaddr0\clbrdrt\brdrs\brdrw10\brdrcf15\clbrdrl\brdrs\brdrw10\brdrcf15\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf15\clbrdrr\brdrs\brdrw10\brdrcf15\clpadfr3\clpadr108\cellx5253\clbrdrt\brdrs\brdrw10\brdrcf15\clbrdrl\brdrs\brdrw10\brdrcf15\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf15\clbrdrr\brdrs\brdrw10\brdrcf15\clpadfr3\clpadr108\cellx10424\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
 setlist.fm}\cell\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
@@ -4500,7 +4500,7 @@ Buttons}
 Control}\cell\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch\b\loch
 What it does}\cell\row\pard \trowd\trql\trleft82\ltrrow\trkeep\trpaddft3\trpaddt0\trpaddfl3\trpaddl0\trpaddfb3\trpaddb0\trpaddfr3\trpaddr0\clbrdrt\brdrs\brdrw10\brdrcf1\clbrdrl\brdrs\brdrw10\brdrcf1\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf1\clbrdrr\brdrs\brdrw10\brdrcf1\clpadfr3\clpadr108\cellx5253\clbrdrt\brdrs\brdrw10\brdrcf1\clbrdrl\brdrs\brdrw10\brdrcf1\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf1\clbrdrr\brdrs\brdrw10\brdrcf1\clpadfr3\clpadr108\cellx10424\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
 Tag}\cell\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
-Opens the TLO Tagger window. Uses TLOHome/readyForXfer by default, or --tag-path if supplied. It reads current main-window settings when Tag is clicked and shows them in Review Operation. Disabled while inventory or Add Shows is active.}\cell\row\pard \trowd\trql\trleft82\ltrrow\trkeep\trpaddft3\trpaddt0\trpaddfl3\trpaddl0\trpaddfb3\trpaddb0\trpaddfr3\trpaddr0\clbrdrt\brdrs\brdrw10\brdrcf1\clbrdrl\brdrs\brdrw10\brdrcf1\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf1\clbrdrr\brdrs\brdrw10\brdrcf1\clpadfr3\clpadr108\cellx5253\clbrdrt\brdrs\brdrw10\brdrcf1\clbrdrl\brdrs\brdrw10\brdrcf1\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf1\clbrdrr\brdrs\brdrw10\brdrcf1\clpadfr3\clpadr108\cellx10424\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
+Runs Tag in the main Inventory window using the master Path(s), Slam, selected tag mode, and current main-window settings. Shows Review Operation first, then uses the main Current Operation/progress/output area. Disabled while Inventory or Add Shows is active.}\cell\row\pard \trowd\trql\trleft82\ltrrow\trkeep\trpaddft3\trpaddt0\trpaddfl3\trpaddl0\trpaddfb3\trpaddb0\trpaddfr3\trpaddr0\clbrdrt\brdrs\brdrw10\brdrcf1\clbrdrl\brdrs\brdrw10\brdrcf1\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf1\clbrdrr\brdrs\brdrw10\brdrcf1\clpadfr3\clpadr108\cellx5253\clbrdrt\brdrs\brdrw10\brdrcf1\clbrdrl\brdrs\brdrw10\brdrcf1\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf1\clbrdrr\brdrs\brdrw10\brdrcf1\clpadfr3\clpadr108\cellx10424\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
 Add Shows (incremental)}\cell\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
 Opens the incremental updater for readyForXfer, dups, and staged processing. Add Shows keeps only its action-specific Check for Duplicates checkbox and reads current main-window settings when an action is clicked.}\cell\row\pard \trowd\trql\trleft82\ltrrow\trkeep\trpaddft3\trpaddt0\trpaddfl3\trpaddl0\trpaddfb3\trpaddb0\trpaddfr3\trpaddr0\clbrdrt\brdrs\brdrw10\brdrcf1\clbrdrl\brdrs\brdrw10\brdrcf1\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf1\clbrdrr\brdrs\brdrw10\brdrcf1\clpadfr3\clpadr108\cellx5253\clbrdrt\brdrs\brdrw10\brdrcf1\clbrdrl\brdrs\brdrw10\brdrcf1\clpadft3\clpadt108\clbrdrb\brdrs\brdrw10\brdrcf1\clbrdrr\brdrs\brdrw10\brdrcf1\clpadfr3\clpadr108\cellx10424\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
 Research}\cell\pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\intbl\sl276\slmult1\sb0\sa200{\loch
@@ -4527,7 +4527,7 @@ Search-path worker count is capped by the number of search paths queued for that
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl240\slmult1\fi-259\li360\lin360\sb0\sa40{\loch
 - fast: higher normal throughput, usually up to the CPU count by default.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl240\slmult1\fi-259\li360\lin360\sb0\sa40{\loch
-- extreme: speed-first for inventory traversal. Search-path worker dispatch has no performance-mode worker cap unless Max Workers is set to a positive value. Postprocess still uses a bounded thread pool and honors Max Workers when set. Extreme does not skip non-compliant tag checks.}
+- extreme: speed-first for inventory traversal. It may request the most parallel work, but Max Workers remains the ceiling and physical-drive, work-group, and correctness constraints may still reduce the actual worker count. Postprocess remains bounded. Extreme does not skip non-compliant tag checks.}
 \par \pard\plain \s1\rtlch\af12\afs32\ab \ltrch\hich\af4\loch\sl240\slmult1\keep\sb480\sa0\keepn\cf17\f4\fs32\b\dbch\af9\sl240\slmult1{\loch
 10. Compliant versus non-compliant mode}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl252\slmult1\sb0\sa80\loch
@@ -4624,553 +4624,20 @@ Command-line rule: --compliant and --rename-compliantly cannot be used together;
 \par \pard\plain \s1\rtlch\af12\afs32\ab \ltrch\hich\af4\loch\sl240\slmult1\keep\sb480\sa0\keepn\cf17\f4\fs32\b\dbch\af9\sl240\slmult1{\loch
 12. Tagging functions}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1{\loch
-The tagging window is used when you want TLO to write tags to audio files. Its title bar uses the installed application version (v1.6 Build 467 in this manual). Inside the window, the single bold heading is Traders Little Helper\u8482\'99 Tagger App; there is no second in-window version heading. The exact layout may vary slightly by platform, but the main choices and actions are the same.}
+Use the Tag button on the main Inventory window when you want TLO to write tags to audio files without running a full inventory. Build 469 no longer opens a separate Tag window. GUI Tag uses the master Path(s), Slam, selected Tag in Place / Tag Copy / Tag Copy/Delete Original mode, and all current main-window lookup, corruption, tagging, Dry run, Performance Mode, and Max Workers settings. Progress and output stay in the main window. The standalone tlo-tag command-line application remains available for direct command-line tagging.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1\qc{
-{\pict{\*\picprop{\sp{\sn wzDescription}{\sv }}{\sp{\sn wzName}{\sv }}}\picscalex66\picscaley66\piccropl0\piccropr0\piccropt0\piccropb0\picw850\pich620\picwgoal12750\pichgoal9300\pngblip
-89504e470d0a1a0a0000000d49484452000003520000026c080200000078430539000084d649444154789ceddd7b5c4ce9e307f067ba5f74a1cb7e434b1ba648
-35a93672494bae6d8475a9ac4ba1a4a5b59b95dbee8addd5bab65fec2222c52a12c965c975b1927b29a494482953baa8697e7f9cdf9edffca6e674669a84f379
-ffe1359df39ce73ccf73ce99f9389719defdfbf709000000007ce854daba0100000000f03620f6010000007002621f000000002720f6010000007002621f0000
-00002720f6010000007002621f000000002720f6010000007002621f000000002720f6010000007002621f000000002720f6010000007002621f000000002720
-f6010000007002621f000000002720f6010000007042f3b12f2424842fc3a953a794d58ef4f474aaceab57af2aab4e59366dda44ad4b241249cddab871a39393
-d3f2e5cbe5ad73f6ecd97c3eff8b2fbe504a632e5dba24d76828bc76f6468d1ae5faaf3ffef863dab46993264da266252727bbbaba5ebb764d6a91b7b3e7bc05
-6fdebce9d3a70fd5f2eddbb7b775730000001484b37dffcfad5bb78442e1f5ebd7e9293367cee4f3f955555592c59a9cf8613b7af4e8c68d1b8d8d8d2f5ebc18
-1010505656969b9b9b93934308494a4a1289446fdebc69eb36b6963367ce545656f2783c42c8912347daba390000000a526bb6c49a356b7efae92742c8debd7b
-d7ac5943083973e68ca1a121214453535359eda03e53dbdccf3fff7ce5ca15814040fdf9e2c58bbffffe5baa4c931339c8ddddfdd8b163262626e5e5e59d3b77
-6e5ce0edec396f0115f5468c18919a9a7aefdebd478f1e7df2c9276ddd28000000b9357fb64f5353534747474747475d5d9d9aa2adad4d4d51555525ff5e614c
-4b4b3b7bf6ece8d1a37bf6ec499d047afaf4e99a356bbcbcbc9c9c9cfaf4e9e3eded7de0c001bada868686a8a8a8010306d8dadafaf8f83c7dfab4f1aa2f5dba
-f4e5975f3a3a3adadada8e1b374ef2448bac95debb772f3030b05fbf7ebd7bf71e3468d082050beeddbbc77e38162f5ebc60c182afbefa8a10929e9eeee3e343
-5d7b1508047c3e3f3c3cbcc9894d56c5d078c5b0af901a9ce8e8e8e4e4e4cf3efbac77efde13264cb871e306cbda648dad142a061d3f7e7ce4c8910d0d0d8d0b
-34bbe734bb876cdcb8b17ffffeb6b6b67e7e7ed9d9d99f7efaa9e485ef660b28a59b95959567cf9e25848c1933c6cece8e10929c9c2cd768b3d91c0000006f41
-f367fb58dab973e7d5ab57a93cd4be7d7b428848248a8e8e6e6868303737afaeaebe7bf76e7878b8aaaaead8b16309219b366dfaef7fff4b08e1f178e9e9e999
-999952151e3f7efcabafbe128bc59f7cf2898e8ece9d3b77befefaeb57af5ef9f8f8c85ae9ebd7afa74e9d5a5151d1be7dfbae5dbbe6e7e7a7a4a4f8fbfb2bd6
-a3cb972f57575753af7bf4e8a1a2a2d2b163c72627365e964de3a554555551618810525b5bdbf20ab76ddb565a5aaaa1a1f1e6cd9b5bb76ecd9831e3c8912354
-6b1518dbc6f577eedc59575777fbf6ed7bf6ec512cd432ef213b76ecf8edb7dfa892fffcf38f8f8f8f5028945cbcd9024ae9e68913276a6b6b757474faf6ed9b
-9d9d9d919171f4e851ea3f069218469b6501000080d6a6b47bfbfefefb6f6b6beb55ab56eddcb993faf83437375fb76edd850b174e9e3c79e6cc190b0b0b42c8
-f1e3c7092175757531313184104b4bcb73e7ce656464b8bbbb4bd626168b7ffae927b1583c7af4e863c78e2524248484841042366dda247962496aa50f1f3eac
-a8a820848487872727275fbb766df7eeddbd7af552ac4773e7cea523e3be7dfb929292e6ce9ddbe444a90559365e8aa3a3a3e05f73e6cc697985252525515151
-b76edddabc793321e4f5ebd7fbf6ed635f5be30daaa2a2a2a1a141cdd5d0d0505151f1f4f4ecd2a58ba9a9a98686069d59d963d843442211f5f0448f1e3d2e5e
-bc78fdfaf5fefdfb4b2edb6c0185bb29854ab4fdfbf7d7d0d01832640821242f2fefd6ad5b2c479b7d01000080d6a6b4b37deddab5dbb56b57bb76ed24270e1b
-36acbebebeacac4c2412595a5ae6e6e63e7bf68c10929b9b5b59594908993a75aaa9a9292124202040f2da597e7e3e75d9b7a4a4847aaef6c58b178490b2b2b2
-172f5e7cf4d1474daed4c2c2424f4fafa2a2222c2cece4c99353a74e757676565607d963d9f8d6aeb053a74e544c717777efdab5ebe3c78fefdcb9c3beb6c61b
-542010fcf9e79fd46bea45d7ae5da74e9d4a08898f8f97b75314597bc8b367cf5ebe7c49089932658ab1b1312164ce9c39292929f482cd1650b89b924a4b4b2f
-5fbe4c8d2121c4c2c2c2c2c2223737373939d9d6d656b2a4acd1665f000000a0b5292df675edda55eab3f3dcb9731b376ebc77ef9ee4579388c5624208754e8e
-1062666646bda0c21f8dfa4427845cbe7c99fadca5d5d4d4c85aa99e9edece9d3b972f5f7ee7ce9de3c78f1f3f7edccdcd6dddba753a3a3a2def207b2c1b2fe5
-debd7bf409b34b972e4d9f3ebd85154a9ebb3236367efcf83135ec8a8d6d6b60d843a8884608a1f399d41ed26c01a574332525856adba2458b162d5a24397dd1
-a245922738658d36fb02000000ad4d69b14fea1a5f5151516060607d7dbd9595d5975f7e696c6cbc6ddbb62b57ae5073e90f5afac3bbbcbc5c72f10e1d3a502f
-2223233d3d3d59ae9410626363939090f0cf3fff6cdfbefdcc9933696969bffffefbfcf9f315ee97025836beb52b2c2e2ea65f53e3aca7a7c7be36052edaca85
-790f313232a25e949696522fa44252b30594d24d59f72c9694945cb972a55fbf7ef41459a3cdbe000000406b6badefedcbcbcbabafaf27847cf5d557dededefd
-faf5a3cfbe10422c2c2ca833707bf6ec292f2fafafaf8f8e8e965cfce38f3fa6be13243a3a9a4e842f5ebc68fc9dc0928a8b8bfff9e79f8686062727a72d5bb6
-50a712cbcaca64957ff3e64dedbfeaeaea1a17d0d6d6a65e646767d3553539b1e58d67a0f0681c3a744824121d3f7e3c2f2f8f10423d88aaf4e62986790f3133
-33d3d7d72784ecdbb7eff5ebd762b178efdebd928b375ba0e5dd2c2c2ca49eb70d0d0dfde75f57af5ea5d62b9508658d36fb02000000ad4d6967fba474ebd64d
-5353b3b6b6f6871f7e387af4e8eddbb725cf76686868f8f8f8fcf1c71f9999997dfbf6555151a1bece8dc6e3f1962f5f3e67ce9cbb77ef0e1a34c8dcdcbca2a2
-a2b8b8d8cbcbcbd1d151d64a9f3c79e2ebebababab4b3d195a545444087173739355dedede9e7efdf1c71f9f3c7952aa007dffd6c48913b5b4b45c5c5cb66edd
-dae4c496379e816215aaabab8785857df7dd77d4130cfafafad4ef6a28bd798a61de43d4d4d4a64d9bb671e3c6dbb76f3b3b3bababab4b9d966bb640cbbb49df
-6ceae1e141453d4afffefd5352524e9c38b162c50afa191759a34d6bb6000000406b6badb37dc6c6c6ebd7afefdebd7b4949c9e5cb97fbf5ebf7e79f7f4a7e27
-f382050be6cc99636464a4aeaefee9a79feedbb7af7bf7ee92350c1c3870fffefd1e1e1ebababa8f1e3daaacacecd3a78f878707c34acdccccdcdcdcd4d4d4b2
-b3b3cbcbcb0502c1860d1b060f1eac702facacac962e5d6a6161a1a1a1a1a7a7479d9e6972a214051acf4c810afbf6edbb68d1222323230d0d8d3e7dfaecdab5
-8bbefb4de9cd5340b37bc89c397366ce9cd9a14307555555070787152b5648d5d06c811676933a9f676e6e4e3d624ca3fe23515151919696464f64186d960500
-00005a1beffefdfb6ddd0650b2d9b367a7a5a5d9dbdb7f485f1172f6ecd959b3661142fefcf34fa9a76859166825cd8ef607b9390000e07d84dfe4fd60518fc4
-bebfce9c39939f9f4fbd6e6868a02eb96a686874ebd68d6581b7a9d9d17edf370700007c005aebde3e80168a8f8f4f4b4b3336363635352d2b2ba3eed49c3367
-0efd753ccd160000000049887df08e1a3c78f0cb972f1f3f7e7cfffe7d4d4d4d81403069d2a43163c6b02f0000000092706f1f0000000027e0de3e000000004e
-40ec03000000e004c43e000000004e40ec03000000e004c43e000000004e40ec03000000e004c43e000000004e40ec03000000e004c43e000000004e40ec0300
-0000e084e663df175f7cc197e1d1a3476fa18952c2c3c3db6ad5ef4803285e5e5ef6f6f6adbd96167656b2916bd7aeeddfbf7f5e5e9ed21a275bcbb7d1e1c387
-2577f5ab57af2a50c9dbd9466fc1dbdc760000d07a9a8f7d63c68c090808080808f0f2f22284f4ead52be05f868686addd3e9148e4e2e272ead4a9d65ed15bf6
-6ef6eb2db48ac7e329bdced668b6878747545494baba7a870e1db66ddbe6e0e0d04a2b7a47b0e95a6b6c3b797dc09b0000e02d506bb6c4942953a817376edc48
-4a4ab2b7b75fb870612bb7eafffcfdf7df6565656f6d756fcdbbd9af566d556868686868686bd4dc1acdd6d2d21a3a74a89a9a9a8181c18001035a6f45ef08e6
-aeb5deb693d707bc090000de8296dedb575656b666cd1a4f4f4f8140e0e2e2326bd6ac070f1e48163870e0808787878d8dcd881123929393232222e8cb5e5959
-598181812e2e2e7676761e1e1ecb962d7bfdfab5e4b23b77ee0c0a0a2284cc9d3b97cfe70f1c38909ef5ecd9337f7f7f7b7bfbbe7dfb868484141515492e9891
-91316dda340707873e7dfa04070717141434d9788606b0ac814de18c8c8c8080002727277b7bfbd1a347a7a6a6caea17733d090909c3860db3b1b119366cd8f1
-e3c7b5b4b49a6c4c7878b8abab6b7e7efecc9933ededed9d9d9d972e5d4af78b617b293cda2c1b2975e1353c3c7cf8f0e1b5b5b58b162d727070983973a67207
-933661c2046b6beb67cf9ed153ce9d3bc7e7f357ac5821ab174d6a7645ccdd2784a4a7a74f9f3eddc1c1412010f8f8f89c3f7f5eaa6bb23adeec914208090f0f
-7777777ff4e851404080bdbdbd8b8b4b4848c8d3a74fd934a0d9ae35de760cebf2f2f2ead5abd7ab57afe8c52f5cb8c0e7f37ffcf1c7667bca5cb3ac76320c6c
-e3ddac25fb43e3dd8f4d03641d8fcada330100d86bfe6c1f337575f5a4a4247777f72953a6141414444747e7e6e6a6a6a6aaaaaa12424e9e3c191e1e6e626232
-6ddab4dadada952b5752d309217575755f7ef9a5babafaac59b3b4b5b57372729e3c79a2abab2b59b9adaded8811230e1d3ae4efef6f6b6b2bf921ba70e1c27e
-fdfa858484dcbe7d3b2525a5b8b8383e3e9e9a959191e1ebeb6b6a6a3a7ffefceaeaeaad5bb7fafafa262727ebe9e94956ced0009635b059dde5cb9767cc98a1
-a5a5357af4683d3dbd7bf7ee191a1a9a9a9a36ee17733d8989898b172f3635350d080878f3e6cd0f3ffcf0e6cd1b591ba5a4a4c4c7c7a77ffffe414141172f5e
-dcbf7f7f5151d1b66ddb98b79762a32d49ae4612420a0a0ae6cf9f7ff7eedda143875a5b5b2b7130254d9c38f1d6ad5b478e1cf1f7f7a7a61c3d7a94103276ec
-5886b635c6303e6cba4f35dec0c060c28409eaeaeac78e1d0b0808888c8c1c3d7a3473c7d91c2994c2c2423f3f3f2727a7b973e7debe7dfbf8f1e3925b8aa101
-cd764dae758d1b372e2222e2d8b16393264da20a2727271342bcbdbd997bda6ccd4db693796049a3ddac5dbb768aed0f4dee7e6c1a20eb7854d69e0900c05e4b
-635fbb76edd2d2d2d4d4feb79ea74f9fa6a4a4e4e7e75b58581042366fdeaca2a2121313f3c9279f1042c68f1fefe5e545bd591716169697978f1a356ac68c19
-b22a777070c8c8c8208408048221438648ce1a3e7cf8b265cba8d745454519191942a1505f5f9f1012191929168ba3a3a3bb76ed4a083135355db468514242c2
-b469d3246b606800cb1ad8148e8c8c148944bb76edeaddbbb7e4528dfbc55ccfd6ad5b793c5e747474b76edd08219e9e9e5e5e5edadadab2866eecd8b1d45539
-7f7fff8913279e3f7f3e2b2bcbcaca8a617b2936da92e46d645d5d5d6969696a6aaa8e8e8e720753d2a851a356af5e4d650542486d6deda953a72c2d2dedecec
-6435ac490ce3c3a6fbbffcf28b582cdebd7b373537202060c89021ab57af1e316284aaaa2a43c7d91c29b4a14387d2e78a264e9c28b9a5181ad06cd7e45a97a7
-a7e72fbffc929c9c4cc5be9a9a9a93274ff2f9fc5ebd7a11760797ac9a9b6c27f3c09246bb597575b562fb83acddafd9061019c7a3b2f64c0000f694f0052e74
-862084506fe5d4cd37f5f5f5999999d6d6d654e62384f0f97c2a0e1242cccdcdadadad8f1e3d3a7bf6ec0b172e88c562b9563a74e850fa359fcf278414171713
-426a6a6ad2d3d3bb75eb666a6a5a55555555552510080821376fde94aa415603d8d7d06ce1eaeaeadbb76f5b5959497d4ec85b8f50287cfcf8b1959515f5b942
-08b1b2b2ead2a50b438583060da25ea8a8a80c1f3e9c1072fbf66d6a8aacedc540d6684b52a0918490a0a0203af3296b30a5686b6b7b7a7ae6e4e46466661242
-ce9e3d5b5959499d795222e6ee575656debb77cfdada9a9e6b60603078f0e0929292ecec6ce68ecb75a40c1b368c7e6d656545fedd52cc0d50accbb2d6d5be7d
-fbc18307a7a7a7531767fffaebafd7af5f8f1b378eb03eb864d5dc18cb7e49ee668aed0fb2763f960d68f2787c3b7b260080a4969eedcbcbcbdbb265cbb56bd7
-4a4b4bebeaea4422112184fa642a2d2d6d6868303232922c6f6c6c4cdd19a6aaaa1a1b1bfbfbefbfefddbb372d2dcdd2d272e1c285eeeeee2cd76b6c6c4cbfa6
-fe4b4dadb4acac4c2c16dfbf7f9ffa38a155545448d520ab01ec6b687675549c32313169b63bccf550ff4ad563646424ebb3901022792aae43870e8410a15048
-18b7170359a3ddb8a972359210626e6e4ebf56d660363669d2a4b8b8b8a4a4242a3fa9aaaa528fa52b1173f78542a1582c6e7c2c10424a4b4b0d0d0d193a2ed7
-91226b4b313740b12e33ec15dedede274e9c387af4684040c0e1c387d5d4d43c3d3d09ebc393cdfe4661d92fc9dd8c28b43fc8dafd583640d6f1f816f64c0000
-492d8a7d55555593274faeaaaa0a0d0db5b3b3d3d3d3dbb56b177d2f51870e1d783c5e7979b9e42292efefbababa0b162c080a0a4a4949898c8c0c0e0e4e4e4e
-b6b4b464b36afaea8914ea6e1b2b2b2bfaa224a5f11549590de8d8b123fb1a9857d7ae5d3b42c8cb972f9bed0e9b7aa4cec935194369922b2d2929a1aa62de5e
-0c648db624051a49feff7782286b301bb3b2b2b2b5b53d7af4687070705a5a9aababab62f1910173f7a963412a6051dbc5d0d0b0d99d96fd91226b4b31378075
-2f59ad8b103270e0406363e39494948913275eb87061f0e0c154d6617978b2d9df282cfb25f5d5330aec0fb2763f960d68f27854ac2500002dd1a2d897939353
-5a5aeaeded3d75ea546a8ae4bb9bbaba7ab76eddeedebd5b5454646666460879fefcf9c3870fa5ded3353535c78e1d5b5151111111f1f8f163a90f334d4d4d42
-48656525cb26696b6b0b0482acac2c3333332ac035ab7103d8d7c0bc3a7d7d7d0b0b8bccccccececec1e3d7a30f48bb91e0303037373f37bf7ee3d79f2843a6f
-515858f8e8d1230d0d0d590d3b75ead4a79f7e4a08118944d47de2767676ccdbab71abe4a24023a5286b309b3469d2a4c58b176fdebcb9a6a686bae048292c2c
-ccc9c9193060009ba8c1b022e6ee6b6969393a3aa6a7a73f7cf890dac38542e19933670c0d0dadacacd4d4d4d8ec72cc470a33e60630774d01aaaaaa63c68cd9
-b66ddb810307eaebebe90b970a1c9e52a4dad96cbf6491b53f34343488c5e2c63b83acdd8f65039a3c1e156b0900404bb428f675e9d2454343e3ca952be7cf9f
-d7d2d23a7dfaf4a54b97240b040606868686faf9f97df1c517229128313151434383bab09893931316163668d0a0ce9d3bbf7efd3a2626465757d7d6d6566a15
-d45b67545454797979656565707070b3ad0a0b0bf3f3f31b3f7ebcb7b7b7a9a9a95028bc75eb96bfbfbfb3b3b364318606b0ac81cdea424242162c58e0ebeb3b
-76ec585d5ddd9c9c9c7efdfa4d9e3cb971bf98ebf1f7f75fbe7cb99f9fdfb871e34422515252928181417575b5ac41484c4c2c2f2fefdebdfbf9f3e7333333dd
-dcdc7af4e8515e5ecebcbd14186d49f236b2f506b371cd23478e5cb56a556c6cacbebebee415d29090903b77eefcfaebaff47397949a9a9a4b972ed5d7d70b85
-c28b172f7efae9a76a6a6acc2b62ee7e5858988f8f0f3557434323393959281446444450b75a32749ce591c2666c191ad0c24ddf98b7b7f7b66ddbb66fdf6e6c
-6c4cdfd9c6dc5336d53679e030f44b1659fbc377df7d77e8d0a1f8f878a9cbd044f6eec7a6014d1e8f0ab7040040612d7aa4c3d0d070fdfaf53a3a3a8181815f
-7df5557575754c4c8c648151a346514fe46dd8b0e1e0c18373e7cea51fef303232eadcb9737c7cfcd2a54b376fdedcb56bd71d3b7634bec0e1e8e8386fde3c91
-48b476edda3367ceb069954020d8bf7fbf40203870e0c04f3ffd141b1baba5a5d5a95327a9620c0d6059039bd58d1c3972cb962d969696f1f1f13b76ec282828
-e8debd7b93fd62ae67d2a4492b56ac505757dfb2654b6a6aeac2850bc78c19c33008ebd7af2f2a2a8a8a8aba7ffffea44993d6ad5b47586c2f05465b92bc8d6c
-4c5983d998b6b6f6e79f7f5e5d5d3d7af468c91390d6d6d6fafafad4a32d924e9c38111818483d043a63c68cebd7af37bb22e6eef7eedd3b2e2ecec6c6262e2e
-ee8f3ffe3034348c8a8a1a3f7e7cb31d6779a4348bb9012ddcf48d514fa49694947cfef9e792a7ace43ab81a6bdc4ee67ec9226b7fb877ef9eb1b17193cfd2ca
-dafdd834a0c9e351e1960000288c77fffefdb7b93e0f0f8f57af5e5db972e56dae9453c2c3c30f1c38909a9a4a3f340d9488888898989803070ec8fb2c307c90
-1aef0fd5d5d57dfaf4f1f3f3fbeebbef94b51636c7e3db6909000051ca17b830a8afaf97fc333737b7a0a040ae7b924031f27e21ce07afacacece0c183363636
-c87c4064ec0fb76fdf6e6868f0f1f151faea188ec7b7dc1200e0b8967e810bb33ffef8e3ecd9b32e2e2ed44d3cb1b1b1229188fe192e80b7e0e4c9934f9e3c49
-4c4cacaaaa0a0b0b6bebe6401b63d81f9c9d9db3b2b238d81200e08ed68d7d7dfaf4b972e5cafefdfb5fbd7aa5aeae6e6565b57cf9f2cf3efbac55570a202925
-25e5c489131616169b366d62f9dc007cc0de9dfde1dd69090070c7dbbeb70f00000000da44ebdedb0700000000ef08c43e000000004e40ec03000000e004c43e
-000000004e40ec03000000e004c43e000000004e40ec6b9a979797bdbd3d9b92e1e1e17c3effd1a347addc2242083977ee9cb7b7b79d9d9d939393d4cfe92ad0
-30f67d548ae9d3a7f3f9fce7cf9fd353d2d3d3f97cfef0e1c3258bedd9b387cfe7efdbb78fbcddb1a5e4e4e42c59b264c89021b6b6b6fdfaf59b3c79f2ae5dbb
-dedada95a5a1a1212e2e6ecc98310281c0d9d979cc98316bd7aeadaaaa22ff0eef9f7ffe29b588a3a3e3e0c183a9d7541981405054542459e6d4a9537c3efff0
-e1c38dd7b876eddafefdfbe7e5e5b54e87fecfdbdf259af4968f1d00006541ec7bab4422918b8bcba953a71458b6aaaa2a2424e4c99327414141b367cf767171
-517af35a15d5e0ab57afd253ce9f3f4f08c9cdcd7df2e4093d912ad0b76fdfb7de4072fcf8f171e3c625262676efdeddd7d7d7d5d5f5c58b17d7af5f7ffb2d69
-16f38ef4f3cf3faf58b1a2aeae6ec2840943870e5555554d4e4ed6d2d2926b155555552b56ac906b111e8f2757f9b6d292c31000e0bdd6babfd20152fefefbef
-b2b232c5967dfcf8717575f5b871e366cf9eaddc56bd1d54ecfbe79f7f3c3d3da929e7cf9fefd2a54b5e5edeb973e7e89f1fbd76ed5ac78e1d3ffef8e3b7dcbc
-274f9e848585a9ababc7c6c6d2bf8e2a168ba99364ef1ae61d69dfbe7d26262609090974d4abaeae565191efff783d7bf64c4b4b4b494919397264b385434343
-434343e5aabf0db5e430040078afb1fa24080f0f777777cfc9c9993a75aaadadad8b8bcb8a152b6a6b6b6362623c3c3c6c6d6d478d1a75ecd831c945d2d3d3a7
-4f9feee0e02010087c7c7ca8f33a84102f2faf5ebd7abd7af58a2e79e1c2053e9fffe38f3f527f6664644c9b36cdc1c1a14f9f3ec1c1c10505052c7b226b8d54
-fb870f1f5e5b5bbb68d122070787267f1438212161d8b061363636c3860d3b7efcb8d4a911b95a25abf0ce9d3b838282082173e7cee5f3f903070e645f797474
-74404000f9f702dce4c9939bedb512fbd8e400666565050606bab8b8d8d9d97978782c5bb6ecf5ebd70c6bb7b1b1d1d3d3a3cff6959595ddbb776fe4c8912626
-2667cf9ea5263e7cf8b0b4b454ea54dfb367cffcfdfdedededfbf6ed1b12122275e591b9d9eeeeee8f1e3d0a0808b0b7b777717109090979faf46993cddbb367
-4f7575754040009df908213c1e4f575797fe93791f6358574b76fbc6832f6b47a288c5e2baba3a353535c9edabadaddd64af198486866a696945444448365b16
-a96baf6cf60d86324a39dce8b90101014e4e4ef6f6f6a3478f4e4d4d55ec30643e7664292b2b5bb3668da7a7a7402070717199356bd683070f9a2cc9301a0c7b
-ddecd9b3f97cbe64845db870219fcf2f2c2ca4fe94f5d6d77858d80c02007c00d89eed2b2c2c9c3e7dfac08103fbf7ef9f929212171777e3c68de2e2e2091326
-a8a8a8c4c4c47cfdf5d75656561616168490cb972fcf9831c3c0c060c28409eaeaeac78e1d0b0808888c8c1c3d7af4b871e32222228e1d3b3669d224aae6e4e4
-644288b7b73721242323c3d7d7d7d4d474fefcf9d5d5d55bb76ef5f5f54d4e4ed6d3d3636e1ec31aa902050505f3e7cfbf7bf7eed0a143adadada5164f4c4c5c
-bc78b1a9a9694040c09b376f7ef8e187376fded073e56a1543615b5bdb1123461c3a74c8dfdfdfd6d696fae4605979efdebda74e9dba76ed5a7777f73163c6b4
-6fdf9e4daf95d847a901acababfbf2cb2fd5d5d567cd9aa5adad9d9393f3e4c913c984d498aaaaaa9393d3e9d3a74b4a4a8c8d8d2f5cb8d0d0d0e0ecec5c5454
-949a9a5a5b5baba9a9d9e415de850b17f6ebd72f2424e4f6eddb292929c5c5c5f1f1f12c9b5d5858e8e7e7e7e4e43477eedcdbb76f1f3f7e5c727149d4a7e9f8
-f1e365b5bfd9d16658570b777ba9c16f7247a2f1783c5757d7b367cf2e5fbe7cfefcf9d4aea2006363e3c0c0c075ebd6fdfcf3cfab56ad62bf209b7d83a18cb2
-0e37f2ef26d3d2d21a3d7ab49e9edebd7bf70c0d0d4d4d4de53d0c998f1d06eaeaea494949eeeeee53a64c292828888e8ececdcd4d4d4d55555565391a721de3
-4d6afcd6d7e4b0c83bf200f09e92e322afa7a767585818f5c2cdcd2d3333f3d0a143d4fb88bebefe4f3ffd74f5ea552af6fdf2cb2f62b178f7eeddddba752384
-0404040c193264f5ead523468cf0f4f4fce5975f929393a9cfbf9a9a9a93274ff2f9fc5ebd7a1142222323c56271747474d7ae5d0921a6a6a68b162d4a484898
-366d1a73db18d648bdc3d6d5d5959696a6a6a6eae8e8345e7cebd6ad3c1e2f3a3a9a5adcd3d3d3cbcb8b3e412257ab180a3b383864646410420402c1902143e4
-aadcd1d1514d4d8d10d2b56bd761c386b1ecb512fb2835808f1f3f2e2f2f1f356ad48c193398378d24171797d3a74ffff3cf3f23468c387ffebc9696569f3e7d
-4a4b4b0f1d3a74f5ead5010306fcf3cf3fe4dfcbc1b4e1c3872f5bb68c7a5d545494919121140af5f5f5598eded0a143e97bd4264e9c28b9b8a4a2a2226d6d6d
-636363598d6733dab2d6d5c2ddbef1dedb7847921411113177eedcf8f8f883070f7a7a7a0604045035d3962c59b264c912a9a5a43eddebeaeafcfdfd0f1f3e9c
-9090f0f9e79fb3bf97b4b0b0b0d97d83a18cb20e376aae4824dab56b97e4195cd2d4e831d7c37cec3068d7ae5d5a5a1a75e412429e3e7d9a9292929f9f4fbd4f
-b2190db98ef12635de79640d8bc26fbf00f01e91e3761ffa413f3333331d1d9d8f3efa883e6dd6bd7b77424849490921a4b2b2f2debd7bd6d6d6d4fb1421c4c0
-c060f0e0c1252525d9d9d9eddbb71f3c78707a7a3a75fdebafbffe7afdfaf5b871e30821353535e9e9e9ddba75333535adaaaaaaaaaa12080484909b376f3237
-8c798d74b1a0a0a026339f50287cfcf8b1959515bdb8959555972e5da8d772b54ade2e28dc65f6bd56621f2507d0dcdcdcdadafae8d1a3b367cfbe70e182582c
-6eb6c1e4dfd37857ae5c118bc5172f5e747676d6d4d41c3060808a8acab973e7082157af5eb5b4b4343131915c6ae8d0a1f46b3e9f4f08292e2e66df6c3a2553
-bda6179722168b199e486039dab2d6d5f2dd5ed6dedb24131393fdfbf76fdebcd9d6d6f6c0810323478edcb973a764017777f7e0ff4f434343aa928686063535
-b5efbfff9ec7e32d5bb6aca6a686e5dd816cf60d59659478b8555757dfbe7ddbcaca4a2adcc85b0ff3b1d32c3af31142a838d5f8b64259a321d731ce4072e791
-352c2d792f0280f7881c67fb24af16a9aaaa4afe497d1e34343410428442a1582c363232925c963a89525a5a4a08f1f6f63e71e2c4d1a3470302020e1f3eaca6
-a646dde35f565626168befdfbf4fbdddd02a2a2a981bd6ec1a29e6e6e64d2e4ed52f15358c8c8ca80f6cb95a256f1714ee3261dd6bc90a5bd847c9015455558d
-8d8dfdfdf7dff7eedd9b9696666969b970e142777777e63677efdeddc8c8283d3d3d3b3bbba4a464c0800184104343431b1b9b8b172fe6e7e7bf78f142323949
-768a5e2f2184fa5c64d96c598b4b313131c9cfcf2f2f2fa72e78496139da0ceb6ae16e2f6bef65e0eeeeeeeeee7eeddab5f9f3e7af5ebdba6fdfbe5468a6664d
-983041b2b0acefa9717272f2f6f64e4848888a8a6279c28fcdbe21ab8c120f372a5d49edf34d62ae87f9d861969797b765cb966bd7ae959696d6d5d5894422d2
-d4ee276b34e43ac629b242b664671b7787b4ecbd0800de2372c43e96d7143a74e8c0e3f1a4de95a81381d407eac081038d8d8d535252264e9c78e1c285c18307
-77e8d0819e6b6565455fd1a334be1e27ef1a29b2cee5b46bd78e34fa2f38fd662757abe4ed82c25d26ac7b4d514a1fa50650575777c182054141412929299191
-91c1c1c1c9c9c99696960c6de6f178cececec78f1fa79ee1a0efa61f3060c06fbffd76e6cc19d2d457b7c8daf158369be57eebecec9c9f9f7fe4c8115f5fdfc6
-73598e36c3ba5ab8db2bfcdd288e8e8eb367cf5eb972e5eddbb7e9d827976fbffdf6afbffedab16387a9a929cb45d8ec1b4d96e9d8b12351d2e146edf32f5fbe
-6cb6b56cea9175ec30a8aaaa9a3c79725555556868a89d9d9d9e9edeae5dbb9abcaf94c8188d4e9d3a31ef75d45e2119f59a8c83923b8fac6169c97b1100bc47
-94ff052e5a5a5a8e8e8ee9e9e90f1f3ea4dee88542e19933670c0d0da9cb5eaaaaaa63c68cd9b66ddb810307eaebeba9bbda0921dadada0281202b2bcbcccc8c
-7af797d2d0d020168b1b7fb236bb4666060606e6e6e6f7eedd7bf2e409f5dfe2c2c2c2478f1e5197bd9a6d95a4660b6b6a6a12422a2b2b5996672057af95d8c7
-c63d1a3b766c4545454444c4e3c78f2d2d2d0b0b0b737272060c18d06406eadbb7efb163c7a88f34fa86332af6252626aaa8a8383b3bb35c754b9addd8e4c993
-131313376fde3c60c080c697f05ab88f9116ecf64d92da9124555757d7d5d5497e5a3f7cf890102275d2883d4343c36fbffd76f1e2c59b366d926bc1c6fb069b
-32ca3adcf4f5f52d2c2c323333b3b3b37bf4e821b552c2fa30643e7688ecf7a59c9c9cd2d2526f6fefa953a752539acda08d478379afa34edae5e7e753ff85a8
-a8a8b871e306f32a640d8b728f26007867b5caf7f6858585f9f8f8f8f9f98d1b374e4343233939592814464444d0b7b9787b7b6fdbb66dfbf6edc6c6c683060d
-925cd0cfcf6ffcf8f1dededea6a6a642a1f0d6ad5bfefefe5414f8eebbef0e1d3a141f1f2f751982cd1a99f9fbfb2f5fbe9c5a5c2412252525191818545757b3
-6955e3963014a6deaca3a2a2cacbcb2b2b2b838383e5aabc25bd56621f092139393961616183060deadcb9f3ebd7af6362627475756d6d6d092121212177eedc
-f9f5d75f9b7cd890ba50989d9d4d7f070d21c4cececec0c0202b2bcbc6c646aeb30b2d193d29363636a1a1a1919191d4134be6e6e6af5fbfcecdcdb5b5b5fdfa
-ebaf498bf731a2e86edfa4c63b123daba0a060ecd8b18e8e8e5dbb766dd7ae5d6666e6850b177af6ecd9bf7f7f79c744b2e5070f1ea41eb86916c3bec1a68c12
-0fb7909090050b16f8fafa8e1d3b56575737272787fae515790f43e66347d6fb52972e5d343434ae5cb9423dbd74faf4e94b972ec93b62cc7bdd800103f6efdf
-bf7cf9f2c0c0c09a9a9a3d7bf650d79199c91a16251e4d00f0ce6a95d8d7bb77efb8b8b80d1b36c4c5c5bd79f3c6cacaea9b6fbe91bc31dfd2d2d2ceceeee6cd
-9b3366cc90fc5fb24020d8bf7fff6fbffd76e0c001a150686060e0e4e4d4a953276aeebd7bf78c8d8dedecec145823b349932689c5e21d3b766cd9b2c5dcdc7c
-e1c28577eedc898b8b63d32a29cc851d1d1de7cd9b979090b076eddaeeddbb070707cb55794b7aadc43e12428c8c8c3a77ee1c1f1fffead52b0303835ebd7a45
-464652e71eacadadf3f3f3a51e1da575e9d2a563c78e4f9f3ea56eeca3a8a8a8b8babaa6a4a4c8fbd3232d19bdc6020202acadad77efde7dfdfaf553a74e6968
-6874ebd6cdc6c6869adbc27d8c28badb37a9f18e44cf323535f5f6f6be7cf9f2cd9b37c56271e7ce9de7cd9b376dda3475757539c7e3fff078bcefbfffdecbcb
-abaeaeaed9c20cfb069b324a3cdc468e1ca9adadfdfbefbfc7c7c7f3783c0b0b0beae133790f43e66347d6fb92a1a1e1faf5ebd7ad5b171818a8afafefe1e111
-1313439fe565391acc7b9d8787477878f89e3d7bbef9e61b2323a351a3468d193386fe324859640d8b728f26007837f1eedfbfdfd66d60a5bababa4f9f3e7e7e
-7edf7df75d5bb705008010bc2f01c0fbe6bdf94ddedbb76f373434d03fe10500d0e6f0be0400ef97f7e66c1f00000000b4c47b73b60f000000005a02b10f0000
-00801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801358c5be868686b8b8b83163c608040267
-67e73163c6ac5dbbb6aaaa8a10b267cf1e3e9fffe79f7f4a2de2e8e83878f060ea355546201014151549963975ea149fcf3f7cf870e335ae5dbbb67ffffe7979
-798af4e9fde7e5e5656f6faff46ac3c3c3f97cfea3478f945bedb973e7bcbdbdedecec9c9c9c626262945b799394d8116ae79472fefc79227bdf96346fde3c3e
-9f2feb5750737272962c593264c8105b5b5bead7ee77eddad5f236bf535aef506df33781c60d90dad55bd8c2563acc010018b08a7d3ffffcf38a152beaeaea26
-4c983074e8505555d5e4e4642d2d2db9d6545555b562c50ab916e1f178729587b7afaaaa2a2424e4c99327414141b367cf7671711189442e2e2ea74e9d52d62a
-945e6163eeeeee81123efef863364b9597979f3973465353f3c8912375757552738f1f3f3e6edcb8c4c4c4eeddbbfbfafababababe78f1e2faf5ebadd0fcb6d7
-7a876a9bbf09d00d68bcab4b15000078f7a9b129b46fdf3e1313938484043aea555757aba8c87781b867cf9e69696929292923478e6cb6706868686868a85cf5
-439b78fcf8717575f5b871e366cf9e4d4db970e1425959991257f1f7df7f2bb7c2c6860e1deaeded2def52c9c9c97575758181819b376f3e7dfaf4b061c3e859
-4f9e3c090b0b5357578f8d8dedddbb3735512c1653e7c83f24ad77a8b6f99b8054031aefea6dde42000079351fddc462715d5d9d9a9a9ae4e93d6d6d6d79d714
-1a1aaaa5a5151111f1ead5ab660b4b5dc5cbcaca0a0c0c747171b1b3b3f3f0f058b66cd9ebd7af1b2f327cf8f0dadada458b16393838cc9c39939a9e9191316d
-da340707873e7dfa040707171414482ee2eeee9e93933375ea545b5b5b171797152b56d4d6d6c6c4c4787878d8dada8e1a35ead8b163926b494f4f9f3e7dba83
-83834020f0f1f1a1ae061242bcbcbc7af5ea25d9b50b172e485efe6368062124212161d8b061363636c3860d3b7efc38c39954590da0bbf3e8d1a38080007b7b
-7b171797909090a74f9f3659cf840913acadad9f3d7b464f3977ee1c9fcf6f7c46b6acac6ccd9a359e9e9e0281c0c5c565d6ac590f1e3ca06645474707040490
-7faf874e9e3c79e7ce9d4141418490b973e7f2f9fc810307b2d90a4d6e388aac0a0921cf9e3df3f7f7b7b7b7efdbb76f484888d42d04cc03ae14898989262626
-b366cdd2d2d23a78f0a0e4ac3d7bf6545757070404d0998f10c2e3f17475759bac2a2323232020c0c9c9c9dede7ef4e8d1a9a9a9d4748537774b76c826b788ac
-63b0f1057765eda2f2be0928bdcb920d68bcab37d977651de60000ada4f9d8c7e3f15c5d5d8b8a8a962f5fde92932ec6c6c68181812525253ffffcb35c0bd6d5
-d57df9e597b76fdf9e356bd6a2458bfaf7ef5f5454d4e4c7674141c1fcf9f32f5dba3474e8d001030610423232327c7d7df3f2f2e6cf9f3f6bd6ac4b972ef9fa
-fa565454d08b1416164e9f3ebd73e7cec1c1c1fff9cf7fe2e2e2264e9cb865cb96112346cc9c39f3d9b3675f7ffd756e6e2e55f8f2e5cb7e7e7e59595913264c
-f0f1f179f6ec594040c09123470821e3c68dabafaf97cc88c9c9c98410ea1c127333121313172f5e5c55551510103064c8901f7ef841d65d6b0c0da0bbe3e7e7
-a7abab3b77ee5c6767e7e3c78fcb3a1b3171e2c4868606c9658f1e3d4a08193b76ac54497575f5a4a4248140f0edb7df8e1b37eec2850b81818122918810d2bb
-77efa953a71242dcdddd376edcb860c1025b5bdb1123461042fcfdfd376edc487de236bb151a6f385a931552162e5c686868181212e2e2e272fcf8f1050b16d0
-b39a5d63cb656767dfbb776fe4c8913a3a3aeeeeeee7ce9d2b2929a1e7525967fcf8f16caaba7cf9b28f8f4f7a7afa8811237c7c7c4c4c4c0c0d0d49cb36774b
-7648d2688bb03f0695b88b4a62d300e57659aa018d77f5c68d54d6610e00d07a585de48d8888983b776e7c7cfcc183073d3d3d030202ba76ed2a5960c992254b
-962c915a4a4f4f4ff2cfbaba3a7f7fffc3870f2724247cfef9e7f49d31cd2a2c2c2c2f2f1f356ad48c1933984bd6d5d5959696a6a6a6eae8e85053222323c562
-71747434d5605353d3458b162524244c9b368d5ecad3d3332c2c8c7ae1e6e696999979e8d0216b6b6b4288bebefe4f3ffd74f5ea550b0b0b42c82fbffc22168b
-77efdeddad5b374208f5f6bd7af5ea112346787a7afef2cb2fc9c9c993264d2284d4d4d49c3c7992cfe7f7ead5abd9666cddba95c7e345474753d57a7a7a7a79
-7935793e95a101aaaaaa5499a14387d267ec264e9c98919121140af5f5f5a5aa1a356ad4ead5ab0f1d3ae4efef4f08a9adad3d75ea94a5a5a59d9d9d54c976ed
-daa5a5a5a9a9fdefaef2f4e9d3949494fcfc7c0b0b0b4747476a7ad7ae5de94b9c191919841081403064c810965ba1f186a339383834ae90327cf8f065cb9651
-af8b8a8a247bca66bb4b3a79f2647e7e3ef55a4d4d2d3838b8c9629212121208219f7ffe3921c4d3d3332525e5f0e1c3f42e5a5454a4adad6d6c6cdc6c3d546b
-4522d1ae5dbb244f0d92966dee96ec90a4d11679fcf831cb635089bba824366f02caedb29426777529ca3acc01005a0fabfbf34c4c4cf6efdfbf79f3665b5bdb
-03070e8c1c3972e7ce9d9205dcdddd83ff3f0d0d0da94a1a1a1ad4d4d4befffe7b1e8fb76cd9b29a9a1a9677079a9b9b5b5b5b1f3d7a74f6ecd9172e5c108bc5
-0c85838282e877ed9a9a9af4f4f46eddba999a9a56555555555509040242c8cd9b372517a19f38363333d3d1d1f9e8a38fa8cc4708e9debd3b21843a8b535959
-79efde3d6b6b6bea5d9b106260603078f0e0929292ecececf6eddb0f1e3c383d3d9dba62f5d75f7fbd7efd7adcb871cd364328143e7efcd8caca8aaed6cacaaa
-4b972e8dbbc6dc00ba98e4679295951521a4b8b8b8716ddadada9e9e9e3939399999998490b367cf565656cababf8dce7c8410ea238dfd795f965b4172c3b134
-74e850fa359fcf27fff694e51a259d3e7d7af3bfb66edddaecaa452251727272d7ae5d6d6c6c082103070e3434344c4c4ca40b88c5629677fa575757dfbe7ddb
-caca4a2af3b570732bbc43d224b708cb6350b9bba824360d506e97e5a5acc31c00a055b13adb47717777777777bf76eddafcf9f357af5eddb76f5feab3969a35
-61c204c9c2b2bea8c2c9c9c9dbdb3b2121212a2a8ae5093f5555d5d8d8d8df7fff7defdebd6969699696960b172e7477776fb2b0b9b939fdbaacac4c2c16dfbf
-7f9f7affa5495dec6bdfbebde4ba24ffa48269434303214428148ac562232323c965a9d339a5a5a584106f6fef13274e1c3d7a342020e0f0e1c36a6a6a9e9e9e
-cd3683fad7c4c4447296919151e30fc2661b203985ee0e2144d687f4a44993e2e2e2929292a80f545555552f2fafc6c5f2f2f2b66cd972eddab5d2d2d2baba3a
-eaf22e73f896c4722b486e389664f594e51a25ad5ebd5aae473ad2d2d24a4b4b4b4b4be9438010525e5e7ef7ee5deadc928989497e7e7e79793975b9960115a0
-a57600a28ccdadd80e4993dc222c8f41a5efa2f23640895d9697b20e730080562547eca3383a3ace9e3d7be5ca95b76fdf96fccc63efdb6fbffdebafbf76ecd8
-616a6aca72115d5ddd050b16040505a5a4a44446460607072727275b5a5a362e29798a85fac4b5b2b2a22f0552a42e27d1d79e9875e8d081c7e3497e7a917f4f
-04522b1a3870a0b1b1714a4acac489132f5cb83078f0e00e1d3a34db8c76edda914627cf9a0c28cd3640aeee504db2b5b53d7af4687070705a5a9aabab6be3f0
-5155553579f2e4aaaaaad0d0503b3b3b3d3dbd5dbb76c5c7c7b35c0561bd1514f8160c593d65b9c696a04eecf9f9f9a9abab53535ebe7c79e8d0a1c4c4442af6
-393b3be7e7e71f3972c4d7d797b92a6a0778f9f2a5d4f4966f6ec576489ad41661730c2a7d1795b701caedb25c9475980300b4aae6635f7575755d5d9de4fbe3
-c3870f092152ffa767cfd0d0f0db6fbf5dbc78f1a64d9be45a50535373ecd8b11515151111118f1f3f6e32f649d2d6d61608045959596666661d3b7654acb534
-2d2d2d4747c7f4f4f4870f1f52ab160a8567ce9c313434a42e54a9aaaa8e193366dbb66d070e1ca8afafa7cf1e3137c3c0c0c0dcdcfcdebd7b4f9e3ca14e3614
-16163e7af4a8f155f2661ba0804993262d5ebc78f3e6cd353535d4e53029393939a5a5a5dededed4fdeca4a98022455353931052595949fdd9f2ad205561b394
-bbdd1b7bf9f2655a5a5aefdebd25ef67158944172e5c3872e4c8a2458bd4d5d5274f9e9c9898b879f3e6010306305fcbd3d7d7b7b0b0c8ccccccceceeed1a307
-3dbde59b5bb11d9219f331d81abba85c0d688d2eb3d4c2c3bcb0b030272767c080018a65620000969a8f7d05050563c78e757474ecdab56bbb76ed3233332f5c
-b8d0b367cffefdfb2bbc566f6fef83070ffef3cf3f6c0ae7e4e48485850d1a34a873e7ceaf5fbf8e8989d1d5d5b5b5b565b36c5858989f9fdff8f1e3bdbdbd4d
-4d4d8542e1ad5bb7fcfdfd9d9d9d1568765858988f8f8f9f9fdfb871e33434349293938542614444047deb9bb7b7f7b66ddbb66fdf6e6c6c3c68d02096cdf0f7
-f75fbe7c3955ad48244a4a4a323030a8aeae56a001f21a3972e4aa55ab626363f5f5f59bbc6edea54b170d0d8d2b57ae9c3f7f5e4b4bebf4e9d3972e5d62ae93
-fa808f8a8a2a2f2fafacac0c0e0e6ee156685c61b38b2871bb9f387142f26718060e1c989999595f5f3f66cc18c962aaaaaa9e9e9ed1d1d1d417f8d9d8d88486
-8646464652cf09999b9bbf7efd3a3737d7d6d6f6ebafbf965a454848c882050b7c7d7dc78e1dababab9b939343fda447cb37b7623b6463ec8f41a5efa2f23640
-595d56404b0ef39090903b77eefcfaebafa3478f56567b00001a6bfebdd8d4d4d4dbdbfbf2e5cb376fde148bc59d3b779e376fdeb469d3e8cb5b0ae0f178df7f
-ffbd979757e3df3668ccc8c8a873e7cef1f1f1af5ebd323030e8d5ab57646464e3cb914d120804fbf7efffedb7df0e1c3820140a0d0c0c9c9c9c3a75eaa458b3
-7bf7ee1d1717b761c386b8b8b8376fde5859597df3cd37920f16504fc2debc7973c68c1992ff6b676ec6a44993c462f18e1d3bb66cd9626e6ebe70e1c23b77ee
-c4c5c529d00079696b6b7ffef9e77bf7ee1d3b766ce3f38b84104343c3f5ebd7af5bb72e3030505f5fdfc3c323262686f936384747c779f3e6252424ac5dbbb6
-7bf7eec1c1c12ddc0a8d2b6c7611256ef773e7ce9d3b778efe535f5fffe8d1a36a6a6aa3468d922a3966cc98e8e8e883070f528f2c040404585b5befdebdfbfa
-f5eba74e9dd2d0d0e8d6ad1bf50888949123476a6b6bfffefbeff1f1f13c1ecfc2c2827a96a8e59b5bb11db231f6c7a0d27751791ba0ac2e2ba02587b9b5b575
-7e7ebed437240000281deffefdfb6ddd06684b111111313131070e1c907a92140000003e30f2fdc01a7c60cacaca0e1e3c68636383cc070000f0c16bd10d37f0
-fe3a79f2e493274f121313abaaaaa86fab060000800f1b621f47a5a4a49c3871c2c2c262d3a64d4abcab1d000000de59b8b70f0000008013706f1f0000000027
-20f6010000007002621f000000002720f6010000007002621f000000002720f6010000007002621f000000002720f6010000007002621f000000002720f60100
-00007002621f000000002720f6010000007002621f000000002720f6010000007002621f0000000027a8b57503e07fa5a5a5b57513000000e0fde6e6e6c63017
-b1ef1d326bd6acb66e02000000bcaf8a8a8a2a2a2a180ae0222f000000002720f6010000007002621f000000002720f6010000007002621f000000002720f601
-0000007002621f0000000027341ffbbef8e20bbe0c8f1e3d6abd96ad5dbbb67ffffe7979794aaf79cf9e3d74176c6d6d478c18b17efdfaeaea6ac56a0b0f0f6f
-bda1f0f7f75753537bf6ec99bfbf3f8fc7cbcaca6a8db5288c6e5e1baebd6bd7ae3c19b2b2b2a2a2a2783cdeb66ddb645572f1e2c50913267cfcf1c75a5a5a9d
-3a75f2f4f43c79f2a464015935181a1a76eddab535fac5d2db1c7c7b7bfb76edda355b8c1a2b29a9a9a90aac71c78e1d3c1e6ff6ecd99213b76fdfcee3f1c2c3
-c3a93f8f1d3bd6a74f1f1d1d9df6eddb6fd8b04181b50000704df35fd73c66cc186767674248717171525252af5ebdfaf5eb47cd3234346cd5c61142783c5e2b
-d5eceeeedeb367cf972f5f5eb87061f3e6cd191919bb76ed6a76299148e4eaeaba72e5ca214386b452c368353535070e1c18366cd87ffef39fd65e9702dab679
-f4da478d1a959f9f4f0879faf4e9eeddbb1d1c1c860e1d4a9531323262ae242a2aeaabafbed2d6d6f6f4f4fcf8e38f9f3f7f9e9c9c7ce4c891e5cb97af58b1a2
-b5bbd012eff2bee1e9e9696b6b4bff696969a940253366cc888d8dfde38f3fa64f9feee2e24208292d2d5db468518f1e3d962e5d4a08a9acac1c3f7ebca6a6e6
-d2a54bd5d4d4dcdddd95d57e00800f58f3b16fca9429d48b1b376e242525d9dbdb2f5cb8b0955b450821a1a1a1a1a1a1ad57bfbbbbfb8409130821f5f5f51326
-4cb87cf9724646864020605eeaefbfff2e2b2b6bbd56493a74e8d0ab57afbefcf2cbb7b33a79b56df3e8b57ff1c517d494cb972fefdebdbb6fdfbe3ffdf4139b
-1a6edebcb960c1828e1d3b5eb870a14b972ed4c4d2d2523737b7efbfff7ed0a04183070f6eadd6b7d8bbbc6f787b7b4f9b36ade5f5fcfefbefbd7bf70e0c0cbc
-76ed9aaaaa6a5858586969e9810307b4b4b408213939395555553366ccf8eebbef5abe2e00008e68e9bd7d6565656bd6acf1f4f41408042e2e2eb366cd7af0e0
-81648103070e787878d8d8d88c1831223939392222c2dede9ecd5ca98ba7e1e1e1eeeeee8f1e3d0a0808b0b7b777717109090979faf429fb75c9a2a6a63670e0
-40420875d288a1473b77ee0c0a0a2284cc9d3b97cfe7534b51a8ebb0f6f6f67dfbf60d0909292a2aa2672d59b2c4c9c9e9ce9d3b6cc7f45fbb76ed323030f8fc
-f3cfe92905050523468cd0d5d53535359d3061c293274f24cb5fb87061e8d0a1fafafa7a7a7a03070e94bcb8e6efef6f616171e7ce1d7777776d6d6d131393a0
-a0a09a9a9a8d1b3776efde5d5b5bbb57af5efbf7ef97acedd2a54b43860cd1d7d7373030f0f6f6cecdcd6568dee8d1a3793c5e4949093dd7d7d797c7e33d7efc
-98faf3e6cd9b9f7ffeb98989898e8e4e8f1e3d66cf9e4dff7a0cc38afcfdfdadacac6a6a6aa64d9ba6afaf3f7cf87086c191d77ffffbdffafafac58b17d3998f
-10626464f4e38f3f1242366dda24576d6d38f8b24689a1929292926fbffdd6d6d6564f4fcfc4c464d4a851f7eedd93ac7fc78e1d7c3e5f535393cfe727242468
-6b6b53d33ffdf4535555d5828202bae4b163c7783c5e6060600b87a871172c2d2dbffffefb1b376e6cdab4e9d2a54b3b76ecf0f7f71f3468102164eddab52347
-8e24ff5e56eedfbf7fb35d66d8970000b8a3a5bfc9abaeae9e9494e4eeee3e65ca94828282e8e8e8dcdcdcd4d45455555542c8c99327c3c3c34d4c4ca64d9b56
-5b5bbb72e54a6a3a85796e638585857e7e7e4e4e4e73e7cebd7dfbf6f1e3c78b8b8be3e3e315ab4d12151f4d4c4c987b44dd0878e8d0217f7f7f5b5b5beaac03
-65e1c285fdfaf50b0909b97dfb764a4a8a64c3b2b2b28442615e5e9e8d8d0dfb817df6ecd9c9932767ce9c29b9161f1f9f214386fcf0c30ffffcf3cfbe7dfb9e
-3e7d7af1e2456ad6e9d3a7870d1bd6be7d7b7f7f7f0d0d8dfdfbf78f1c3932363676f2e4c95481c78f1f7b78780c1f3edcc3c363dfbe7d9b376ffefbefbf9f3e
-7deaefefafa2a2b271e3461f1f1f3b3b3b3e9f4f08f9fbefbfdddcdc3a76ecb872e5cad7af5faf5ebd7ad0a041b76fdf36303060689e2c6fdebcf9ecb3cf3434
-34162d5aa4abab7be7ce9d478f1ee9e9e9b159516e6eee175f7c71fdfaf5b163c7d2215eaeb5cb72faf469420875c657d2e79f7faeaeae7eead429b9aa6adbc1
-6f3c4acc95686868ecd9b3c7d3d333303030373777eddab5f7efdfcfcaca5253532384ecdcb973e6cc991d3b760c0b0babadad0d0e0eaea9a9a156346bd6acab
-57afeeddbbf7db6fbfa5a650fb79b3a7f79a1da22637746868e8be7dfb962d5bd6b973e7fffce73f6bd6aca1a63b39398584842c5ebcd8d3d373ead4a9c6c6c6
-6cc6adc9550000704a4b635fbb76edd2d2d2a84f0b42c8d3a74f535252f2f3f32d2c2c08219b376f565151898989f9e4934f0821e3c78ff7f2f2a23fab98e736
-69e8d0a1f44d5713274eccc8c8100a85fafafa8ad52612894a4a4a8e1e3d7ae4c811333333272727e61e3938386464641042040281d4bd7dc3870f5fb66c19f5
-baa8a848b261ebd6adcbcece767373633ba6841042626363452291d455bc09132644454551aff3f3f32f5dba545e5e4edd61f9edb7df363434a4a5a5f5ecd993
-fad3d2d2323434f48b2fbea0e3ef94295322232309213e3e3e1f7ffcf18d1b37323232a8cfbff6eddb7ffdf5d767cf9ea59247585898582c3e71e2448f1e3d08
-211d3b769c366dda8e1d3b162c58c0d03c591e3f7e5c5a5a3a69d2a4afbffe5a6a56b32b7af3e64d717171565696e4230572ad5d96a74f9f6a6b6b538941928a
-8a4aa74e9d1e3f7e5c595949af34202020202040aa247d6f6b9b0f7ee35162ae445f5f3f2f2f4f5d5d9d2a9c9f9fbf6fdfbe870f1f520d58bd7a358fc73b79f2
-24d59d2953a6d8dbdbebeaea1242264d9a141a1aba7bf76e2af6d5d4d41c3a74c8dadafad34f3fa51b939898489f205757575fbe7c399b216a7243abaaaa6ed9
-b2c5c9c929333373efdebd74801b306000d5f81e3d7a8c1f3f9e4d9765ad0200805394f0052e7442228450cf365277bfd5d7d76766665a5b5b53398c10c2e7f3
-a938d8ec5c59860d1b46bfb6b2b222841417172b56db92254b7af6ec3970e0c09f7ffed9ccccecb7df7ea33f0565f58801fd1801b56aba6184107373f3cf3efb
-8cfda9474a4c4c4cb76edde8a7672863c78ea55f5377cd53e7298542e1f5ebd7050201f5994a08e9d0a183a7a7e7b367cf6edfbe4d2f327af468ba49eddab5eb
-d4a9137dcea357af5e8410eab1d0eaeaea0b172ef4ecd9b363c78e9595959595957dfbf625845cb97285b979b2585a5adadbdbc7c7c78f1e3dfac4891362b198
-9ace66458490a54b974a7d4ecbb57606cc0f0c49cef5f4f45cfeff696a6a52b3de91c1971c253695d07b3b21a47bf7ee8410ea1a7d7979797676b69d9d1ddd1d
-3b3bbb6eddba51af7575757d7c7ceedcb973e3c60d42484a4a8a5028943ad547dd5f4159bd7a35fb216abca10921f469d7b4b434229bc2fb120000a7b4f46c5f
-5e5ede962d5bae5dbb565a5a5a57572712890821d4e77a696969434383d4d394c6c6c6d47d6fcc7365913c3743052936eb6a92bbbbbb8d8d8d9e9e9ea5a5a58b
-8b0b1dcb187aa440c31473e3c68d5bb76efdf0c30f52d3251fdba4b26943430321a4bcbc5c2c169b9a9a4a16fee8a38f8844fa24ff5ec5a61bd9b8cd546d2525
-2562b1f8d6ad5bd47558daab57af989b2789aa8aaefcdcb9733ffdf4d3e6cd9b8f1e3d6a6d6dfdf3cf3f7b7a7a36bb220a1de5d9af9d8d8e1d3b3e78f0e0c58b
-1792c34208118944858585fafafad4f92dcae79f7feeefef2f596cfdfaf5d48b7764f02547a9d94a1e3c7810111171fefcf9e2e2e2376fded4d7d7937ff7d8f2
-f27242889999995477e84369f6ecd99b376fdebd7b3715e5555555fdfcfc240b4747474b0541964324b5a109210f1f3efce1871f860f1f6e6060f0c71f7ff8f8
-f848de502b49b17d0900806b5a14fbaaaaaa264f9e5c5555151a1a6a6767a7a7a7b76bd72efa9eb60e1d3af0783cea538446dfc8cf3c571659e7cc14a88d7e92
-977d8f14689862626262783c9ed4a729c35a4c4c4c783cdef3e7cf2527527f76e8d041de46528bd8d9d9d1179429eddbb797d53ceac49864d295fc382784e8e9
-e94544442c5dba74dfbe7d61616163c78ebd7dfbf6c71f7fccbc22c9ca69b206475e6e6e6e0f1e3cf8f3cf3fa9c77468870e1daaababf3f4f464594f9b0f3e45
-7294982ba9acac747575adacac5cb56a958b8b8b8181c1faf5ebb76edd4a95a1ee4c907c3a87fc9b0529767676cececef1f1f1cb972f3f72e48887878754466c
-8ce510353ef93a67ce1cb1581c1515a5adad7df4e8d18080809b376f3679e746b3e3266b1500009cd2a2d8979393535a5aeaeded3d75ea546acacb972fe9b9ea
-eaeaddba75bb7bf76e515111f5c1f0fcf9f3870f1f529f7fcc73e5a5acda987b4408a12eed555656b2afb3b0b030272767c080012c1b535f5fbf77efde810307
-b2ff36606d6ded0103065cb87081bad24d08292f2f3f72e4889191919d9d1dfba652747575fbf6ed7bebd62d737373c9a75c199a478df9c3870fa9735aaf5ebd
-ba7cf972e39ab5b4b4befcf2cb57af5e7df5d557d9d9d9d6d6d60c2b6a920283234b6060607474f4ead5ab478f1e4d055042486969e9b265cb783c5e484808cb
-7ada7cf0e5ade4eeddbbc5c5c5d3a64dfbeaabafa8292f5ebca0e776e8d0e1934f3eb97efdfaa3478fa873638f1f3fbe7fff3e7d519b10327bf6ec993367ae5c
-b9b2baba7afaf4e9cd764ab121dab56bd7a953a7befffe7bea9bff56ac58b170e1c21f7ffc31222242de2e030000a545b1af4b972e1a1a1a57ae5c397ffebc96
-96d6e9d3a72f5dba2459203030303434d4cfcfef8b2fbe1089448989891a1a1ad465d366e7ca4b29b535db23ea86c2a8a8a8f2f2f2cacacae0e0e066eb0c0909
-b973e7ceafbffe4adfddc5ecf8f1e3cf9f3fa76e8a622f323272e0c0816e6e6e3366ccd0d4d4dcbb776f5959d9b66ddb246fe162efd75f7f7573737376769e3e
-7d7ac78e1dcbcacaae5ebdfacd37dfb8b9b935d9bce1c387fff1c71f73e6cc090f0fafaeae8e8a8aa2ae1b52eedebdfbe5975f8e1831c2c2c2a2b2b272c3860d
-7a7a7ad4778033aca8c986293638920f191042468c183168d0200707875f7ffd75c1820536363663c68c3137377ff6ec59525252696929f5bd7deceb6fdbc197
-b7926eddba696a6aa6a5a5a5a6a6eae8e81c3e7c58eab1e56fbffd76ce9c395477eaebeb77efdeddbe7dfbaaaa2abac0a44993162c58f0db6fbfb56fdf9ee577
-e8c83b442525255f7ffd75f7eeddc3c2c2a8295f7df5d5ce9d3bd7ac593371e244c9af8366d365362d0400e08216c53e4343c3f5ebd7af5bb72e3030505f5fdf
-c3c3232626c6dbdb9b2e306ad428a150b87dfbf60d1b3674ead469eedcb9b1b1b13939396ce6ca4b29b535db234747c779f3e6252424ac5dbbb67bf7ee6c629f
-b5b5757e7e3efbb3533131313a3a3af4f3892c3939395dbc7871e9d2a59b376faeadadb5b3b34b4c4c947c04442e7dfbf6bd7cf9f20f3ffcb07dfbf6b2b2b20e
-1d3a0c1a3488ea4293cdf3f6f65ebf7efd6fbffde6e7e7676a6a3a79f2e4a953a7ce9b378f9a6b6a6adab56bd7ad5bb7be7cf9b243870e7dfaf4898d8da54e10
-32aca8498a0dceb163c78e1d3b46ff69686848a5baafbefa4a20106cd8b0e1cc9933c5c5c5c6c6c6fdfaf59b376f9ee4033a6cb4ede0cb5b899191d1be7dfb96
-2c59e2e5e5656868386edcb8d3a74f3b3a3ad2cbce9e3dbba1a1e1d75f7f5db56ad5279f7cf2f3cf3f5fbb766dcb962d74011d1d1d5f5fdffffef7bfd3a64d93
-3c0bc840de215ab060416969e9debd7be9fad5d4d47efbedb7418306f9fbfbfffdf7df727519000028bcfbf7efbfcdf5797878bc7af54aeaf13a967395bbae77
-4d5a5adaac59b3daba1500accc9f3f7fc3860d57af5ea5bef6080000de05454545cc0f3628e10b5c18485ee92384e4e6e6161414d0bfd1c93c57b9eb02006529
-2929d9b973a7a3a323321f00c0fba5a55fe0c2ec8f3ffe387bf6ac8b8b8ba9a9a95028a4be6676e6cc996ce62a775d00d072070f1e7cf4e851747474656525fd
-9b190000f0be68ddd8d7a74f9f2b57aeecdfbfffd5ab57eaeaea565656cb972fffecb3cfd8cc55eeba00a0e5f6eddb97989848fd502f1e95000078efbced7bfb
-4016dcdb070000002dd1c6f7f601000000c03b02b10f00000080135af7de3e900bf3ef1103000000b404eeed03000000e0045ce405000000e004c43e00000000
-4e40ec03000000e004c43e000000004e40ec03000000e004c43e000000004e40ec03000000e004c43e000000004e40ec03000000e004c43e000000004e40ec7b
-175dbf7e3d2424c4cdcdad77efde03060c983367cec58b17250becd9b387cfe7fff9e79ff494dcdc5c2727a7c1830797949430d4fcc5175ff06578f4e8516bf5
-8790b56bd7f6efdf3f2f2f4fe935534341b1b5b51d3162c4faf5ebababab15ab2d3c3c9cfd50b45ea75ac2cbcbcbdede5e2955858787f7ecd9b3a4a444ae6179
-6be8e6b5e1da070f1ecc7040353e4ea52870a4531c1d1d070f1edc2a1d63e76d0e3ecb5d5af2ad8076fefc7905d6989090c0e7f3972d5b2639f1c081037c3e7f
-ddba75d49fe7ce9df3f6f6b6b3b37372728a898951602d006d42adad1b00d2f6ecd9131111a1a9a9e9eeee6e6666565a5a7afaf4e93367ce040707cf9b37afc9
-45cacaca66cd9a25168b7ffffd7763636386cac78c19e3ecec4c08292e2e4e4a4aead5ab57bf7efda859868686caee8a341e8fd74a35bbbbbbf7ecd9f3e5cb97
-172e5cd8bc79734646c6ae5dbb9a5d4a2412b9babaae5cb972c890210aafbaf53ad5b66a6b6b8f1f3fdebf7f7fe63daaadb46df3e8b5bbb9b93d7dfa94287440
-2970a4bf23dee57dc3dddd9dcfe7d37f7efcf1c70a54326edcb8c3870fefdfbfdfdbdb9b4a9ce5e5e59191915dbb760d0a0a2284545555858484a8abab070505
-a9aaaabab8b828a9f900ad0eb1efdd929595b56ad52a5353d3b8b8b88e1d3b5213cbcbcb7d7d7da3a2a29c9d9d3ffdf453a945debc793377eedca74f9f6edbb6
-ad7bf7eeccf54f9932857a71e3c68da4a4247b7bfb850b172abd178d858686868686b65efdeeeeee13264c2084d4d7d74f9830e1f2e5cb19191902818079a9bf
-fffebbacac4ce195b676a7dad6a953a72a2a2ac68e1ddbd60d695adb368f5efb881123a829f21e500a1ce9ef8e7779df183a74a8b7b777cbebf9f1c71f3d3d3d
-57ac58919090a0aaaaba66cd9af2f2f28d1b376a6a6a12421e3f7e5c5d5d3d6edcb8d9b367b77c5d006f132ef2be5bf6eedd2b1289e6cc99437f1210420c0d0d
-e7cf9f4f08d9bd7b77e345162f5e9c9e9efee38f3ff6eddb979eb864c9122727a73b77eec8b5f6b2b2b2356bd6787a7a0a040217179759b3663d78f040b2c081
-03073c3c3c6c6c6c468c18919c9c1c11112179f18561aed455c2f0f0707777f7478f1e050404d8dbdbbbb8b884848450674d58ae4b163535b58103071242f2f3
-f3997bb473e74eea3fee73e7cee5f3f9d4529467cf9ef9fbfbdbdbdbf7eddb372424a4a8a8a8c97549752a2b2b2b3030d0c5c5c5cececec3c363d9b265af5fbf
-6ebcc8f0e1c36b6b6b172d5ae4e0e03073e64c6a7a4646c6b469d31c1c1cfaf4e9131c1c5c5050402fd2ec4649484818366c988d8dcdb061c38e1f3faea5a545
-4d9f306182b5b5f5b367cfe892e7ce9de3f3f92b56ac202cf69083070feae9e9b9bbbbb31c96f4f4f4e9d3a73b38380804021f1f1fc98b6bd4e6cec9c9993a75
-aaadadad8b8bcb8a152b6a6b6b6362623c3c3c6c6d6d478d1a75ecd831c9da1806a471f366cf9ecde7f32513fcc2850bf97c7e616161b39b866145b236569383
-232f058e74066d38f8efce2edd92216adc858f3ffe78debc799999997bf6ecc9c8c84848489830610275a9243a3a3a202080fc7b5979f2e4c9cd7699615f0278
-cb70b6efdd72f9f26542c8f0e1c3a5a6bbbbbbaba9a95dba74496a7a545454727272505090d47f70b3b2b28442615e5e9e8d8d0dfbb5ababab272525b9bbbb4f
-9932a5a0a0203a3a3a3737373535555555951072f2e4c9f0f07013139369d3a6d5d6d6ae5cb9929a4e619edb586161a19f9f9f9393d3dcb9736fdfbe7dfcf8f1
-e2e2e2f8f878c56a9344c547131313e61e5137021e3a74c8dfdfdfd6d696fe6821842c5cb8b05fbf7e212121b76fdf4e4949916c982c7575755f7ef9a5babafa
-ac59b3b4b5b57372729e3c79a2ababdbb8644141c1fcf9f3efdebd3b74e8506b6b6b4248464686afafafa9a9e9fcf9f3abababb76eddeaebeb9b9c9caca7a7c7
-dc0542486262e2e2c58b4d4d4d030202debc79f3c30f3fbc79f3865ad1c489136fddba75e4c8117f7f7f6acad1a3470921d4491ae63da4a4a4e4d2a54be3c78f
-a7ce6d343b2c972f5f9e3163868181c1840913d4d5d58f1d3b161010101919397af468aa406161e1f4e9d3070e1cd8bf7fff949494b8b8b81b376e1417174f98
-30414545252626e6ebafbfb6b2b2b2b0b068764064354f814dd3ec8a1a6f2c79d72e8bbc473a73556d3bf8efc82edd92216a72434f9f3e3d252565c3860dfff9
-cf7f8c8d8dbffdf65b6a7aefdebda74e9dba76ed5a7777f73163c6b46fdf9ecdb835b90a80b70fb1efdd525c5caca5a545bd8f48525151f9e8a38f0a0b0babaa
-aa747474a889c78e1dbb78f1a2baba3afddf4ddaba75ebb2b3b3dddcdce45a7bbb76edd2d2d2d4d4fe77af78faf4694a4a4a7e7e3ef579b079f366ea43e2934f
-3e21848c1f3fdecbcb8b4e4bcc739b3474e850fabfe913274eccc8c8100a85fafafa8ad52612894a4a4a8e1e3d7ae4c811333333272727e61e39383864646410
-42040281d4bd7dc3870fa7efe62e2a2a926c982c858585e5e5e5a3468d9a316306433142485d5d5d6969696a6a2abd1d232323c56271747474d7ae5d0921a6a6
-a68b162d4a484898366d1a731708215bb76ee5f178d1d1d1ddba752384787a7a7a7979696b6b1342468d1ab57af56a2ad712426a6b6b4f9d3a65696969676747
-9adb430e1f3e2c1289a43e4d1986e5975f7e118bc5bb77efa69a1110103064c890d5ab578f183182ceeb9e9e9e616161d40b3737b7cccccc43870e519f7ffafa
-fa3ffdf4d3d5ab57a94e310f88ace6c9c2b0699a5d51e38d25efda6591eb485fb264c992254ba44ad279a2cd07ff1dd9a529274f9ea4cef41342d4d4d4828383
-d90c51931b5a5555f5871f7e18376edcc3870f7ffdf5577ac01d1d1da9c677edda75d8b0616cba2c6b15006f1f2ef2be73981f11909c7bf1e2c5be7dfbd6d5d5
-7df7dd7752c5cccdcd3ffbec33f667c868f47b3121847affa2ae9dd5d7d76766665a5b5b53398c10c2e7f3a9b7e966e7ca42bf631242acacac0821c5c5c58ad5
-b664c9929e3d7b0e1c38f0e79f7f363333fbedb7dfd4d5d5997bc460e8d0a1f46beaf670aa610ccccdcdadadad8f1e3d3a7bf6ec0b172e88c56286c2414141f4
-5b7f4d4d4d7a7a7ab76edd4c4d4dabaaaaaaaaaaa85b126fdebc499797d505a150f8f8f1632b2b2beac38c10626565d5a54b17eab5b6b6b6a7a7674e4e4e6666
-2621e4ecd9b3959595f45961e63de4d0a1435dba7491ba3952d6b0545656debb77cfdada9a6e86818101f55079767636bd08fde4a99999998e8ece471f7d449f
-f3a0ee49a51e0b6533204d364f16599b86cd8ac8ffdf580aac9d01fb23dddddd3df8ffd3d0d0a066bd2383ff2eecd294d3a74f6ffed7d6ad5bd90f51e30d4d08
-a14fbb5ebd7a95c8a6f0be04f0f6e16cdfbbc5d4d4342f2fefe5cb971d3a74909c2e12899e3f7fdeae5d3bea7fbd94a0a0a09090107f7fff0b172eecddbb977e
-5c43617979795bb66cb976ed5a6969695d5d9d48242284501f93a5a5a50d0d0d46464692e58d8d8da91bbc98e7ca22f91820953fd8acab49eeeeee3636367a7a
-7a9696962e2e2e749a61e891020d63a0aaaa1a1b1bfbfbefbfefddbb372d2dcdd2d272e1c285b2eefd323737a75f97959589c5e2fbf7ef4b7d8e56545434db05
-aa0c75399b6664644487d4499326c5c5c525252551b9475555d5cbcb8bb9238490ccccccfbf7ef7ff5d55752d3650d8b5028148bc58db71721a4b4b4949e2279
-664b555555f24f15151542484343039b0191d53c4992db4bd6a669764514c98dc572ed6cc875a4d34f2cd1e807d5df91c17f7776e9d5ab574b0541964324b5a1
-0921f9f9f9bffdf6db800103f4f4f4f6efdfefe9e9495d43684cb17d09a04d20f6bd5b9c9d9df3f2f2525353a532dca953a7eaebebe9ef86a074ecd891c7e3fd
-f4d34f9e9e9ebffcf24bbf7efda8ff372ba6aaaa6af2e4c9555555a1a1a17676767a7a7abb76eda26fdeead0a1038fc72b2f2f975c847e53639e2b8bac534d0a
-d4d6f873b1d91e29d03066bababa0b162c080a0a4a4949898c8c0c0e0e4e4e4eb6b4b46c5c52f2440ef5351f565656525f12465d3c65ee42bb76ed48a3939792
-03656565656b6b7bf4e8d1e0e0e0b4b434575757a90fd4261d3a7488c7e3350e88ccdb4bf21394fc7bf648f24b4c588e2af38034d93c6a3c25a39e54639adc34
-d4b3140c2b92ac9c266b70e425d791cea0cd079ff22eefd22c87a8f1c9d7e5cb978bc5e265cb96696969a5a5a52d59b2e4f0e1c34dded0d9ecb8c95a05c0db87
-d8f76e993c79726262e2d6ad5bdddcdc24bfd661e3c68d3c1ecfcfcfaff1222626262b57ae9c3b77eeb7df7e1b171747bdbf171616e6e4e40c1830807d82c9c9
-c9292d2df5f6f69e3a752a35e5e5cb97f45c7575f56eddbaddbd7bb7a8a8c8cccc8c10f2fcf9f3870f1f52f533cf9597b26a63ee1121847a07afacac54a091b2
-686a6a8e1d3bb6a2a2222222e2f1e3c74dc63e49dadada0281202b2bcbcccc4cf2a14e0a73170c0c0ccccdcdefddbbf7e4c913ea44426161e1a3478fe82b8084
-904993262d5ebc78f3e6cd353535e3c68da3a7cbda434422d19123479c9c9c3a75eac4b2cb5a5a5a8e8e8ee9e9e90f1f3ea4fa2b140acf9c39636868485dbb97
-0bf38034d93cea833f3f3f9f3a7356515171e3c68dc63537de340c2b6a920283238b02477a93da7cf0e5ada4f5766959141ba283070f5eba7429242484fae6bf
-79f3e6fdfcf3cffffdef7f172c58206f9701de29887def965ebd7a2d5ab468d5aa55a3478f1e3264889999d98b172ffefaebaff2f2f2909010eaeb031a1b3264
-c8840913fefcf3cfad5bb7525f4a12121272e7ce9d5f7ffd957e54ad595dba74d1d0d0b872e5caf9f3e7b5b4b44e9f3e2df538616060606868a89f9fdf175f7c
-211289121313353434a80b34cdce9597526a6bb647d49b7e54545479797965652575f7b762727272c2c2c2060d1ad4b973e7d7af5fc7c4c4e8eaeadadadab259
-362c2ccccfcf6ffcf8f1dededea6a6a642a1f0d6ad5bfefefececececd76c1dfdf7ff9f2e57e7e7ee3c68d138944494949060606923f523272e4c855ab56c5c6
-c6eaebeb4b5e7496b5879c3f7fbea4a444deef230c0b0bf3f1f1a19aa1a1a1919c9c2c140a232222246fe192ab365903d264f3060c18b07ffffee5cb97070606
-d6d4d4ecd9b347725761d8340c2b6ab2618a0dce891327247fca65e0c081cecece8a1de9b286ab0d075fde4a5a6f97666e8f5c43545656f6d34f3f75e9d285fa
-a21642c8975f7e999898b86ddbb69123474a7e1d349b2eb36921c05b83d8f7ce993a75aab5b5754c4ccc952b574a4b4bdbb76fefe0e0e0ebebebeaeacab05478
-78f8d5ab57a3a2a2060e1c686363636d6d9d9f9f2fd7355f4343c3f5ebd7af5bb72e3030505f5fdfc3c323262646f22e9951a3460985c2eddbb76fd8b0a153a7
-4e73e7ce8d8d8dcdc9c96133575e4aa9add91e393a3ace9b372f212161eddab5ddbb776f49ec333232eadcb9737c7cfcab57af0c0c0c7af5ea151919c9e68a2a
-21442010ecdfbfffb7df7e3b70e0805028343030a04fa834db8549932689c5e21d3b766cd9b2c5dcdc7ce1c28577eedc898b8ba30b686b6b7ffef9e77bf7ee1d
-3b76ace42913597bc8a14387b4b5b51b7fb108b3debd7bc7c5c56dd8b0212e2eeecd9b37565656df7cf38de4232072611890269be7e1e1111e1ebe67cf9e6fbe
-f9c6c8c868d4a85163c68cf9f1c71fa9b90c9b8661454d526c70ce9d3b77eedc39fa4f7d7d7d2a0a2876a437d6b6832f6f25adb74b3390778856ad5a555e5efe
-ebafbfd2f5abaaaa2e5fbedcd7d7373c3c7cdfbe7d727519e09dc2bb7fff7e5bb701de571e1e1eaf5ebdba72e58a027395bb2e6010111111131373e0c081debd
-7bb7755b009400bb3480c2f0052ec0567d7dbde49fb9b9b9050505f4bd6bcc7395bb2e60afacacece0c183363636f880840f0376698096c0455e60eb8f3ffe38
-7bf6ac8b8b0b75e74a6c6cac4824a27f658879ae72d7056c9c3c79f2c99327898989555555d457f502bcd7b04b03b41c621fb0d5a74f9f2b57aeecdfbfffd5ab
-57eaeaea565656cb972fffecb3cfd8cc55eeba808d94949413274e5858586cdab409f795c30700bb3440cbe1de3e000000004ec0bd7d000000009c80d8070000
-00c009887d000000009c80d807000000c009887d000000009c80d807000000c009887d000000009c80d807000000c009887d000000009c80d807000000c00988
-7d000000009c80d807000000c009887d000000009ca0c63cbb478f1e6fa71d1f86ececec66cb6048e58221553a36430a00001fa466621fc187046bfbf6ed9b38
-71229b9218529630a44ac77e480100e0c3838bbc000000009c80d807000000c009887d000000009c80d807000000c009887d000000009c80d807000000c00988
-7d000000009c80d807000000c009887d000000009cd0fcaf74bc1d5f7cf1c5cd9b379b9c75ecd8b14f3ef9e42db7e77df1fcf9f3bcbc3ceab58a8a8a86864687
-0e1d3a76eca8a28240af7cd7af5fdfb973e7ad5bb74a4b4b0d0d0d7bf5eae5e7e7e7eaeacabe86b56bd7262626c6c6c676e9d2a5f5da090000d0a47725f68d19
-33c6d9d99910525c5c9c9494d4ab57af7efdfa51b30c0d0ddbb265ef83f6eddbebe8e8d4d5d50985c2a74f9f5656565a5959b575a33e347bf6ec898888d0d4d4
-7477773733332b2d2d3d7dfaf4993367828383e7cd9b2757553c1e8f7a2112895c5d5d57ae5c3964c8905668320000c0fff3aec4be2953a6502f6edcb8919494
-646f6fbf70e1c2b66dd27bc4d0d0d0c4c4841022168befddbb27140a2b2a2af4f4f4daba5d1f8eacacac55ab56999a9ac6c5c575ecd8919a585e5eeeebeb1b15
-15e5ececfce9a79fb2a927343434343494fef3efbfff2e2b2b6b951603000034f27e5c0a2c2b2b5bb3668da7a7a7402070717199356bd683070f240b1c3870c0
-c3c3c3c6c666c48811c9c9c9111111f6f6f66dd4d8b6c4e3f10c0c0c0821b5b5b58490fafafa274f9edcbe7dfbdab56bd7af5fcfceceaeaeaea60b6767675fbd
-7ab5bebe9e9ef2f0e1c3ab57af52cb1242aaaaaa727272ae5fbf7eeddab59b376f3e7efc58241251b32a2b2bb3b2b2d2d3d3d3d3d3737272e8453e547bf7ee15
-894473e6cca1331f21c4d0d070fefcf98490ddbb77535366cf9ecde7f32593dcc2850bf97c7e616121f5677878389fcf7ff4e8112164e7ce9d4141418490b973
-e7f2f9fc810307beadde00000047bd2b67fb98a9abab272525b9bbbb4f9932a5a0a0203a3a3a3737373535555555951072f2e4c9f0f07013139369d3a6d5d6d6
-ae5cb9929ace4d54025357572784f078bc929292f6eddb7ff4d147b5b5b5cf9e3daba9a9b1b5b565538f582ccecacae2f1781d3b76e4f178353535353535d4c0
-565454646565a9abab77ead4a9a1a1a1a8a8283333b377efde1ff0b05fbe7c9910327cf870a9e9eeeeee6a6a6a972e5d52a04e5b5bdb1123461c3a74c8dfdfdf
-d6d6564b4b4b090d05000090edfd887deddab54b4b4b5353fbdfd63e7dfa342525253f3fdfc2c28210b279f366151595989818eac98ff1e3c77b797971ed4354
-2c16d7d5d5bd7cf9f2e5cb971a1a1afafafa84105555557b7b7bfa4eb2dadada972f5fd6d4d4b0199cdadadafafa7a2323a3fffce73f52b30a0a0ac462b19595
-15558f8686c6a3478f5ebc78d1b8e407a3b8b8584b4bab7dfbf652d35554543efae8a3c2c2c2aaaa2a1d1d1db9ea747070c8c8c82084080402dcdb0700006fc1
-fb11fb082174e6238474edda9510525656666161515f5f9f9999696d6d4d3fedcbe7f32d2c2c8a8a8adaa49d6d223737373737977aada9a9d9ad5b373aead12f
-0821dadada8410c9abba0c3435357574744a4b4b4522d1471f7d445d3b2684343434545454e8e8e86868683434341042dab56b4708a9acac545e87de45922329
-ef5c00008077c1fb11fbf2f2f2b66cd972eddab5d2d2d2baba3aea0e33b1584c08292d2d6d6868303232922c6f6c6ccca9d8d7be7d7b5d5d5d1515156d6d6d3a
-9f11426a6a6a8a8a8a2a2a2aeaeaeac462313562d4bfcde2f178d6d6d6454545cf9f3f2f2f2fd7d6d6eedcb973fbf6eda9d458555575edda35c9f2f46d7f1f24
-5353d3bcbcbc972f5f76e8d04172ba48247afefcb9bebe3e15a91b6339da0000006fc17b10fbaaaaaa264f9e5c5555151a1a6a6767a7a7a7b76bd7aef8f8786a
-6e870e1d783c5e7979b9e4221515156dd0d0b6433fc92ba9a1a1213333b3a1a1a173e7cebababa6a6a6acf9e3d2b2e2e962a26994beaeaea2467a9aaaa76eedc
-b963c78e2f5fbe7cf2e4c983070f6c6c6c34353509213a3a3a52df3cf701dfd84708717676cecbcb4b4d4da51f39a79c3a75aabebebe6fdfbed49fd4393fc921
-2d2d2d7d9bed04000060f01e3cc99b9393535a5a3a62c488a953a7dad9d97df2c9272f5fbea4e7aaabab77ebd6edeeddbbf4e9bde7cf9f3f7cf8b08d1afb0ea9
-aaaaaaababebd0a1c3471f7dd4ae5d3b2d2d2da9cbbbd4631ff443b82291a8c90bb52a2a2ac6c6c666666662b1b8a6a6464545454f4fafa6a6465353534f82bc
-77b6bd5f264f9eacaaaaba75ebd6a74f9fd213cbcbcb376edcc8e3f1e82c4885effcfc7ceacf8a8a8a1b376e30544b65e80ffefa380000bc23de83b37d5dba74
-d1d0d0b872e5caf9f3e7b5b4b44e9f3e2df5e0646060606868a89f9fdf175f7c2112891213133534343eec6b8e6c686969a9a8a80885c257af5ea9a8a8949595
-bd7af54ab2808181c18b172f1e3f7edcb163c7868686e7cf9f4bceadaaaa7af4e851fbf6ed353535ebebeb9f3f7faeaaaa4addc6d7b973e7acacacbb77ef1a1b
-1bababab8b44a2d7af5f9b99997dc0df14d8ab57af458b16ad5ab56af4e8d143860c3133337bf1e2c55f7ffd555e5e1e1212e2e2e242151b3060c0fefdfb972f
-5f1e1818585353b367cf1ee6fd90fa56eda8a8a8f2f2f2cacacae0e0e0b7d1190000e0aaf7e06c9fa1a1e1faf5eb757474020303bffaeaabeaeaea989818c902
-a3468d5ab162052164c3860d070f1e9c3b772e7ecc8d10a2a6a6666969a9a2a2929d9dfde0c1838686066b6b6bc9021d3a74e8d2a58b48247af4e851414181be
-bebeb9b9393d575d5d5d4b4babb8b8383737b7a8a8484b4b8bcfe7532708f5f4f47af6ecd9ae5dbb172f5e3c79f2a4b8b898c7e3696868bced1ebe5d53a74edd
-bd7bb7ababeb952b57fef8e38f8484849a9a9addbb77cf9d3b972ee3e1e1111e1e5e5d5dfdcd37dfac5fbffed34f3f0d0b0b63a8d3d1d171debc79229168edda
-b567ce9c69fd4e000000a7f1eedfbfcf30bb478f1ed9d9d96fad35cae2e1e1f1ead5ab2b57aebccd95eedbb76fe2c489cd167b4f87b44dbcb3432a168bbffdf6
-dbc3870f8f1d3b76d5aa55efd12f20b31c520000f820bd0717799b555f5f2ff9f52eb9b9b9050505dcfc950e783b783cdeead5abcbcaca0e1e3c480879bf921f
-000070d68710fbfef8e38fb367cfbab8b8989a9a0a85c2d8d85891483473e6ccb66e177cc8d4d4d4366ddab473e7cefafafaacacac9e3d7bb6758b0000009af1
-21c4be3e7dfa5cb97265fffefdaf5ebd525757b7b2b25abe7cf9679f7dd6d6ed820f9cb6b6766060605bb702000080ad0f21f6393b3b3b3b3bb7752b00000000
-de69b82109000000801310fb000000003801b10f000000801310fb000000003801b10f00000080139a7f9277dfbe7d6fa11d9c8221553a0c29000040b39af971
-3600000000f830e0222f000000002720f6010000007002621f000000002720f6010000007002621f000000002720f6010000007002621f000000002720f60100
-00007002621f000000002720f6010000007002621f0000000027a8b570f99c9c9c5dbb765dbe7cb9b8b8b85dbb765dba74193e7cf8975f7ea994c6bd4dd7af5f
-dfb973e7ad5bb74a4b4b0d0d0d7bf5eae5e7e7e7eaeadad6edfa3f6bd7ae4d4c4c8c8d8dedd2a54b5bb705000000de3f2d3adb77fcf8f171e3c625262676efde
-ddd7d7d7d5d5f5c58b17d7af5f5756e394452412b9b8b89c3a754a56813d7bf6f8f8f89c3b77cec1c161ead4a9aeaeaed7af5f9f3163c6a64d9bde663b25c96a
-338fc76b93f6000000c0fb4ef1b37d4f9e3c090b0b5357578f8d8dedddbb3735512c1657555529a96d4af3f7df7f979595c99a9b9595b56ad52a5353d3b8b8b8
-8e1d3b5213cbcbcb7d7d7da3a2a29c9d9d3ffdf4d3b7d5d2ffd3b8cda1a1a1a1a1a16fbf25000000f06150fc6cdf9e3d7baaabab030202e8cc4708e1f178baba
-bad4ebd9b367f3f97cc9ecb270e1423e9f5f585848fd191e1e3e7cf8f0dadada458b16393838cc9c3953d64442484646c6b469d31c1c1cfaf4e9131c1c5c5050
-40571b1e1eeeeeeefee8d1a38080007b7b7b171797909090a74f9f527377eedc1914144408993b772e9fcf1f3870a05447f6eedd2b1289e6cc9943673e4288a1
-a1e1fcf9f30921bb77efa6d7e2eaea9a9f9f3f73e64c7b7b7b6767e7a54b97be7efd9a5e84b9858d3b555656b666cd1a4f4f4f8140e0e2e2326bd6ac070f1e30
-b4393c3c9ccfe73f7af488ae363d3d7dfaf4e90e0e0e0281c0c7c7e7fcf9f32cc7040000003848f1b37d54c8183f7e7c4b565f5050307ffefcbb77ef0e1d3ad4
-dada5ad6c48c8c0c5f5f5f5353d3f9f3e75757576fddbad5d7d7373939594f4f8f5aa4b0b0d0cfcfcfc9c969eedcb9b76fdf3e7efc787171717c7c3c21c4d6d6
-76c48811870e1df2f7f7b7b5b5d5d2d2926ac3e5cb970921c3870f979aeeeeeeaea6a676e9d2257a4a4949898f8f4ffffefd8382822e5ebcb87ffffea2a2a26d
-dbb6b16961e34ea9abab272525b9bbbb4f9932a5a0a0203a3a3a3737373535555555b5d93653cd9e3163868181c1840913d4d5d58f1d3b161010101919397af4
-e866c7040000003848f1d8575454a4adad6d6c6cdc92d5d7d5d5959696a6a6a6eae8e8304c8c8c8c148bc5d1d1d15dbb762584989a9a2e5ab428212161dab469
-f45243870e5db16205f57ae2c48919191942a1505f5fdfc1c12123238310221008860c19d2b80dc5c5c55a5a5aeddbb7979aaea2a2f2d1471f151616565555d1
-2d193b762c75a5d5dfdf7fe2c489e7cf9fcfcacab2b2b26ab6858d3bd5ae5dbbb4b43435b5ffdd044f9f3e4d4949c9cfcfb7b0b068b6cd84905f7ef9452c16ef
-debdbb5bb76e8490808080214386ac5ebd7ac48811aaaaaacc63226b73000000c007ac99d8b76fdfbe26a74f9c38512c162be5f182a0a020c9ccd778624d4d4d
-7a7a7a8f1e3d4c4d4da91b0705020121e4e6cd9b928b0c1b368c7e6d656575e3c68de2e262961187b9239273070d1a44bd505151193e7cf8ad5bb76edfbeddb5
-6b57362d6cdc533af31142a8bc585656666161d16c832b2b2befddbbd7b3674f2af311420c0c0c060f1e9c9494949d9d4d9f37953526b2362b000000bcd7264e
-9cc830b7f9b37d4b972e6d3c313b3bdbc4c4243f3fbfbcbcdcd0d0906553c46271e389e6e6e6cc13cbcacac462f1fdfbf7a92c45aba8a890fc53f2bc2375baab
-c9d535666a6a9a9797f7f2e5cb0e1d3a484e178944cf9f3f6fd7ae9db6b6363d51324752e5854221cb164af5342f2f6fcb962dd7ae5d2b2d2dadabab138944ec
-db2c140ac562b1919191e4446a044a4b4ba5a65024c7a4c96d0a000000efbbecec6c86b9ac2ef2365985b3b3737e7efe9123477c7d7d9b5c8a3a492699632413
-895431868954acb4b2b25ab66c996419a93379f4954d79393b3be7e5e5a5a6a64e99324572faa953a7eaebebfbf5eb2739f1e5cb97f4eb929212aa192c5b28d9
-a9aaaaaac99327575555858686dad9d9e9e9e9eddab58bfd8d771d3a74e0f17852e349b5473285cb1a13e67d02000000de3bfbf6ed6bf6b48ee2f7f64d9e3c39
-313171f3e6cd03060c68f20b844d4c4c0821f9f9f9d459b18a8a8a1b376e28b0226d6d6d814090959565666626f9b02d7b9a9a9a8490cacaca26e7521dd9ba75
-ab9b9b9be417b86cdcb891c7e3f9f9f949163e75ea14f57d2e2291e8e8d1a384103b3b3b055a989393535a5aeaeded3d75ea546a8a64a06cb6cd5a5a5a8e8e8e
-e9e9e90f1f3eb4b4b424840885c23367ce181a1a5a5959b16900000000708de2b1cfc6c6263434343232d2d3d3d3cdcdcddcdcfcf5ebd7b9b9b9b6b6b65f7ffd
-352164c08001fbf7ef5fbe7c796060604d4dcd9e3d7ba8eb980a080b0bf3f3f31b3f7ebcb7b7b7a9a9a95028bc75eb96bfbfbfb3b3339bc5a924141515555e5e
-5e5959191c1c2c39b757af5e8b162d5ab56ad5e8d1a3870c19626666f6e2c58bbffefaabbcbc3c2424446a15898989e5e5e5ddbb773f7ffe7c6666a69b9b5b8f
-1e3d146861972e5d343434ae5cb972fefc792d2dadd3a74f4b3e32dc6c9ba935faf8f8f8f9f98d1b374e434323393959281446444448de2f08000000406bd1af
-740404046cdfbebd6fdfbed7af5f8f8e8e3e74e8d0ebd7af6d6c6ca8b91e1e1ee1e1e1d5d5d5df7cf3cdfaf5eb3ffdf4d3b0b030c556241008f6efdf2f10080e
-1c38f0d34f3fc5c6c66a696975ead489e5e28e8e8ef3e6cd1389446bd7ae3d73e64ce30253a74eddbd7bb7ababeb952b57b66fdf7efefc790707871d3b76cc9d
-3b57aae4faf5eb8b8a8aa2a2a2eedfbf3f69d2a475ebd629d6424343c3f5ebd7ebe8e80406067ef5d557d5d5d531313172b5b977efde7171713636367171717f
-fcf187a1a1615454540bbf4f070000003e60bcfbf7ef33cca6ae13e3563042487878f8810307525353d93c690b000000f036b1c96c2d3adbc7412c9fb4050000
-0078d720f6010000007002621f000000002720f6b115111171fffefd4f3ef9a4ad1b02000000a008c43e000000004e40ec03000000e004c43e000000004e40ec
-03000000e004c43e000000004e40ec03000000e004c43e000000004e40ec03000000e004c43e000000004e40ec03000000e004c43e000000004e40ec03000000
-e004c43e000000004e40ec03000000e004c43e000000004e6851ecdbb3670fff5fb6b6b6c3860dfbe5975f8442a1b21a27c5cbcbcbdedebe952a07000080b749
-3245d0ce9f3f4f08090f0fe7f3f98f1e3d6aeb36fe1ff621242d2d6dfcf8f1f6f6f6aeaeae2b57aeacaeae56b8b05c55b1a1d6c2e509216e6e6ed6d6d6e5e5e5
-57ae5cd9be7dfb952b57f6efdfafaaaadaf29a010000e0c346a508facf8f3ffeb80d1bd37257af5e0d0a0aead8b1a3bfbf7f7e7efeeeddbb9f3e7dfadffffe57
-81c27255c5921262df902143264c9840081189443e3e3e191919e9e9e9cecece2daf190000003e6c748af830fcf6db6f3c1e6ff7eedd66666684106d6dedf8f8
-f89b376fdad9d9c95b58aeaa5852e6bd7daaaaaa7dfbf62584141515d113333232a64d9be6e0e0d0a74f9fe0e0e08282027a565959d99a356b3c3d3d0502818b
-8bcbac59b31e3c782059614242c2b061c36c6c6c860d1b76fcf8712d2d2d6afa840913acadad9f3d7b46973c77ee1c9fcf5fb1628512bb03000000ef02e6c010
-1e1eeeeaea9a9f9f3f73e64c7b7b7b6767e7a54b97be7efd9a9a9b9595151818e8e2e2626767e7e1e1b16cd9327a16434421b243082164c992254e4e4e77eedc
-916ae79b376fae5dbbd6a74f1f2aa811423c3d3d0921a74f9f6ebc2073e166ab528c12cef6497afcf83121e4a38f3ea2feccc8c8f0f5f53535359d3f7f7e7575
-f5d6ad5b7d7d7d939393f5f4f40821eaeaea494949eeeeee53a64c292828888e8ececdcd4d4d4da52e102726262e5ebcd8d4d4342020e0cd9b373ffcf0c39b37
-6fa86a274e9c78ebd6ad23478ef8fbfb53538e1e3d4a08193b76ac72bb03000000adeae5cb97797979d46b1e8fd7e4455ee6c04008292929f1f1f1e9dfbf7f50
-50d0c58b17f7efdf5f5454b46ddbb6bababa2fbffc525d5d7dd6ac59dadada3939394f9e3cd1d5d525cd451486104208c9caca120a8579797936363692ed7cf2
-e4497d7dfd279f7c424fb1b4b42484d021557241e6c2cd56a51825c43e6a83bd7af52a2d2dedd8b163cecece4e4e4ed4acc8c848b1581c1d1dddb56b574288a9
-a9e9a2458b121212a64d9b460869d7ae5d5a5a9a9adaffb6e1e9d3a7292929f9f9f91616168490ad5bb7f278bce8e8e86eddba11423c3d3dbdbcbcb4b5b50921
-a3468d5abd7af5a14387a8d8575b5b7bead4294b4bcb969cf604000080b76feddab56bd7aea55eabaaaadebb77af7119e6c040193b766c68682821c4dfdf7fe2
-c489e7cf9fcfcacad2d2d22a2f2f1f356ad48c1933a4ea648e280c218410b26eddbaecec6c373737a93aa9a75aa9e048d1d7d72784949797375e90b970b35529
-4609b14f7283797b7b7ff7dd7754faaea9a9494f4fefd1a387a9a9695555152144201010426edebcf97fab57fbbf0650e35e565666616121140a1f3f7e6c6d6d
-4d0d3721c4cacaaa4b972ec5c5c584106d6d6d4f4fcfb8b8b8cccc4c6b6bebb367cf565656060606b6bc2f000000f0364d9e3c99ba438c10c2e3f16415931518
-e88983060da25ea8a8a80c1f3efcd6ad5bb76fdff6f6f6b6b6b63e7af4e8ebd7affdfcfc5c5d5da955304714e61042083137373737376fdc48b158dc64e35554
-541a2fc85cb8d9aa14a384d8476db0ebd7afefdcb9b37bf7ee541a258494959589c5e2fbf7ef534349aba8a8a05ee4e5e56dd9b2e5dab56ba5a5a57575752291
-88fcdb4faa8c898989e482464646f4884f9a34292e2e2e292989da9caaaaaa5e5e5e2def0b000000bc4dbd7af51a366c18731986c040a3e30721a443870e8410
-a150a8aaaa1a1b1bfbfbefbfefddbb372d2dcdd2d272e1c285eeeeeecc11a5d910228b81810191c839a4a993762c0bcb55157b4a887dd4061b3264c8e5cb9737
-6cd8f0d9679f75e9d285106268684808b1b2b25ab66c9964796ac35455554d9e3cb9aaaa2a3434d4cece4e4f4f6fd7ae5df1f1f1549976edda1142cacaca2417
-94ecbc959595adadedd1a347838383d3d2d25c5d5da5360f0000007c00980303ede5cb97f4eb929212f26fded0d5d55db060415050504a4a4a64646470707072
-7272c78e1d89ec88d26c0891e5e38f3fd6d0d078f8f0213d857a4d9f35645f58aeaad853da93bcaaaaaa2b56aca8adad5db2640915c0b5b5b50502415e5e9e99
-99591f09ddbb772784e4e4e49496968e183162ead4a97676769f7cf289e406333030303737bf77efde93274fa829858585525fdb3869d2a4e2e2e2cd9b37d7d4
-d48c1b374e591d0100008077077360a09d3a758a7a211289a8073d25eff8d7d4d41c3b76ececd9b34522d1e3c78f99234ab321a4b0b0302d2d8d3ae928495d5d
-ddd5d5f5faf5ebf4579a1c39728410d2bf7fffc60b32176eb62ac528f3495e8140307efcf83ffffc333e3e7ef2e4c98490b0b0303f3fbff1e3c77b7b7b9b9a9a
-0a85c25bb76ef9fbfb3b3b3b77e9d2454343e3ca952be7cf9fd7d2d23a7dfaf4a54b97246bf3f7f75fbe7cb99f9fdfb871e3442251525292818181e4f7538f1c
-3972d5aa55b1b1b1fafafaeeeeee4aec08000000bc1d274e9ca09fe425848c1f3f9eba758fd66c60a024262696979777efdefdfcf9f39999996e6e6e3d7af4c8
-c9c9090b0b1b346850e7ce9d5fbf7e1d1313a3abab6b6b6b4b18230a692e84848484dcb973e7d75f7f1d3d7ab45433828282ce9f3f3f75ead43163c6e4e7e71f
-3a74c8d5d595fe3263a905990b33cf558c927f93f79b6fbe69dfbefd9a356ba8702a1008f6efdf2f10080e1c38f0d34f3fc5c6c66a696975ead48910626868b8
-7efd7a1d1d9dc0c0c0afbefaaababa3a262646b2aa499326ad58b1425d5d7dcb962da9a9a90b172e1c33668c64016d6dedcf3fffbcbaba7af4e8d11a1a1acaed
-08000000bc05e7ce9dfb43027d828dd66c60a0ac5fbfbea8a8282a2aeafefdfb93264d5ab76e1d21c4c8c8a873e7cef1f1f14b972eddbc7973d7ae5d77ecd841
-dd15c61051487321c4dada5a5f5f5f2a9e526c6d6d7ffffd77030383ad5bb75ebc7871f2e4c91b376e94b5207361e6b98ae1ddbf7f9f61f6be7dfb962e5d9a9d
-9dddc2d5b49288888898989803070ef4eeddbbaddb020000006d203c3cfcc08103a9a9a9920ff672109bcca6e4b37d6f535959d9c183076d6c6c90f900000038
-4ed6379e802425ff4ac7db71f2e4c9274f9e242626565555858585b5757300000000de03ef65ec4b49493971e2848585c5a64d9b5a786f230000000047bc97b1
-8fba4f13000000202222222222a2ad5bf17e788fefed0300000000f610fb000000003801b10f000000801310fb000000003801b10f000000801310fb00000000
-3801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f
-000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f00000080
-1310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb00
-0000003801b10f000000801310fb0000000038414db1c5b66ddba6dc7600000000004bfefefe0a2ca560ec2384d80ff2547859363e36e0b56afd00000000efa3
-fefdfb6767672bb0a0e2b18f10127bf45c4b1667907fef9fcd2b17b652e5000000001c847bfb000000003801b10f000000801310fb000000003801b10f000000
-801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb
-000000003801b10f0000008013d45ab270febd7f94d50e0000000068558ac7be29a3064c193540894d0100000080d6a360ecf3f7f7cfcece566e5300000000a0
-f5e0de3e000000004e40ec03000000e004c43e000000004e40ec03000000e004c43e000000004e60f524efbe7dfb5abb1d00000000d0aa58c5bea54b97b6763b
-00000000a055f1eedfbfdfd66d000000008056877bfb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f00000080
-1310fb000000003801b10f000000801310fb000000003881d58fb301000000401bdab76f1f9b6213274e6498db7cec4b4b4b63d92000000000503a3737374288
-4020909c989191213565f4e8d1d9d9d90cf5b03adb376bd62cb91b08000000002d565454545151213571f4e8d1191919f256857bfb00000000de3f13274e9437
-f921f601000000bc4f468f1e4dbd60be93af31c43e00000080f70c7d0f9f5c27fc10fb00000000de1bf4a93e8a5c27fc10fb00000000de27528febb23fe187d8
-07000000f07e903ad547617fc20fb10f000000e0bdd1e437f3b13ce187d807000000f01e68f2541f85e5093ffc381b000000c0fbe1c71f7f6498cb900b29887d
-00000000ef8123478e48fd1a9bbc10fb00000000de03cd9ecc6b16621f000000c0fba1c9e73928fbf6ed5bba7429f3e278a403000000801310fb000000003801
-b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f0000
-00801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310
-fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000
-003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b1
-0f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000
-801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb
-000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb00000000
-3801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f
-000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f00000080
-1310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb00
-0000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb0000000038
-01b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f00
-0000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f0000008013
-10fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb0000
-00003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801
-b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f0000
-00801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310
-fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000
-003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b1
-0f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000
-801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb
-000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb00000000
-3801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f
-000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f00000080
-1310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb00
-0000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f000000801310fb000000003801b10f0000008013d4daba01000000
-00c0cabe7dfb5ab238621f000000c07be0c891230281a0253520f601000000bc07468f1eddc21a10fb00000000de03478e1ce9d1a34793b3a88bbf4b972e65ae
-018f7400000000bc1f64c53e42089bebbf887d00000000ef8723478e349ec8fe390fc43e00000080f7469327fc583eea81d807000000f0de903ae127d757ba20
-f601000000bc4fa44ef8b1ff5617c43e00000080f7097dc24fde6f6f46ec0300000078cfd027fce4fa02677c6f1f000000c07be6c89123191919f22ec52af615
-1515c9df1e000000006845f2fe565bf3b1cfcdcdada2a242d1f600000000801248fd389b02bfd5c6bb7fffbef2da0300000000ef283cd201000000c009887d00
-0000009c80d807000000c009887d000000009c80d807000000c009887d000000009c80d807000000c009887d000000009c80d807000000c009ff038723251e6b
-aa48ef0000000049454e44ae426082}
+
 }
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1\qc{\loch\fs18\i\loch
-Figure 3. Tag window. Tagging options are inherited from the main window and reported in Review Operation.}
+}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1{\loch
-The standalone and GUI Tagger write tags directly to the selected Tagging Path unless the main-window Dry run checkbox is selected. FLAC and MP3 are both first-class taggable formats and use the same metadata/title/track assignment flow. The Tag window has no option checkboxes copied from the main window and no separate inherited-settings notice. It contains the Tagging Path plus Tag, Pause or Resume, and Quit controls. When Tag is clicked, it reads the current main-window values for Compliant, etreeDB, setlist.fm, setlist.fm upgrade, Thorough Setlist Matching, Corrupt files, Folder removal, Folder corruption threshold, Rename Compliantly, Convert shn, Artist in Album Tag, As-Is Artist Name, Delete extra tags, and Dry run. The standalone CLI accepts the corresponding setlist.fm, upgrade, thoroughness, corruption, and --delete-extra-tags switches. Corruption is assessed before standalone Tag mutation with the same fail-closed rules as Inventory; MP3 corruption participates in the same counts and Keep/Delete/folder decisions as FLAC, removed shows are not tagged, and unverifiable corruption skips mutation for that group. The inventory Tag in Place, Tag Copy, and Tag Copy/Delete Original values are also reported in Review Operation, but standalone Tag always tags the selected path directly and never copies or moves folders. When Dry run is on, clicking Tag resolves the show metadata and track titles without writing tags, converting SHN, renaming, or deleting files. The output lists each applicable audio file with the exact Artist, Album, Track, and Title values that would be written, the title source, planned SHN-to-FLAC targets, and any reason a file would be skipped.}
+GUI Tag runs directly from the main Inventory window. It uses every parsed master Path(s) job, the master Slam, and current main-window settings. Select Tag in Place, Tag Copy, or Tag Copy/Delete Original before clicking Tag. Tag Copy and Tag Copy/Delete Original use the same destination prompt, capacity checks, verification, and source-retention/removal safeguards as Inventory. FLAC and MP3 are both first-class taggable formats and use the same metadata/title/track assignment flow. Corruption is assessed before mutation with the same fail-closed rules as Inventory. When Dry run is selected, Tag resolves metadata, track titles, copy/move/rename plans, and SHN conversion targets without changing files. The main Current Operation panel, Pause/Resume controls, output console, and completion summary are reused for Tag. Standalone tlo-tag remains available and tags its command-line tag path directly.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1{\loch
-Before an actual tag save, TLO compares the exact normalized Artist, Album, Title, and Track Number it intends to write with the current file. With Delete extra tags unchecked, when those values already match and no stale TRACKTOTAL, DISCNUMBER, or DISCTOTAL metadata needs removal, the file is reported unchanged and is not rewritten; unrelated existing metadata is preserved. With Delete extra tags checked, TLO clears tag metadata and writes back only Artist, Album, Track Number, and Title, removing Album Artist, date/year, genre, comments, encoder fields, disc/total fields, and embedded tag artwork where supported. In that mode, a file is unchanged only when the four retained fields already match and there is no other tag metadata or artwork to remove. Rename Compliantly uses the same no-op principle: Full Inventory, Add Shows, and the Tagger do not call the filesystem rename operation when the final compliant folder name is already the effective current name.}
+Before an actual tag save, TLO compares the exact normalized Artist, Album, Title, and Track Number it intends to write with the current file. With Delete extra tags unchecked, when those values already match and no stale TRACKTOTAL, DISCNUMBER, or DISCTOTAL metadata needs removal, the file is reported unchanged and is not rewritten; unrelated existing metadata is preserved. With Delete extra tags checked, TLO clears tag metadata and writes back only Artist, Album, Track Number, and Title, removing Album Artist, date/year, genre, comments, encoder fields, disc/total fields, and embedded tag artwork where supported. In that mode, a file is unchanged only when the four retained fields already match and there is no other tag metadata or artwork to remove. Rename Compliantly uses the same no-op principle: Full Inventory, Add Shows, GUI Tag, and standalone tlo-tag do not call the filesystem rename operation when the final compliant folder name is already the effective current name.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1{\loch
-The Tagger does not copy folders and does not delete music content. The only exception is Convert shn: after a replacement FLAC is successfully created and verified, TLO deletes the source .shn or .shnf file. Failed conversions leave the source file in place.}
+Standalone tlo-tag does not copy or move show folders; its only source-file replacement is verified Convert shn. GUI Tag follows the selected main tag mode: Tag in Place mutates the source, Tag Copy creates and verifies a separate copy, and Tag Copy/Delete Original safely moves or verified-copies the show before removing the source. Failed SHN conversions leave the source file in place.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1{\loch
-On native Windows installations, drag a folder from File Explorer and drop it onto the Tagging Path field in the tagger window. The dropped folder replaces the Tagging Path value. If a file is dropped, TLO uses the containing folder. This tagger drag-and-drop support is not enabled for WSL, Linux, or macOS.}
+On native Windows installations, GUI Tag uses the same main Path(s) drag-and-drop behavior as Inventory. Multiple dropped folders or .txt control files are appended under the normal Path(s) rules. There is no separate GUI Tagging Path field.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1{\loch
 Track-title safety: when a numbered setlist begins with a bare track number such as 01 and the next meaningful numbered song row confirms 02, TLO keeps track 01 with Title Unknown and continues the numbered list. A short numeric-only row cannot start an unstructured unnumbered-title block; numeric song names such as 69 and 1999 remain valid when embedded inside an established song block. Compact personnel credits such as Gary Burton(vib) or Chick Corea (p), and duration summaries such as min 38:24 are not unnumbered song titles. A convincing run of at least three consecutive numbered song rows still blocks arbitrary later prose from being scavenged merely because its line count matches the audio files. Before a shorter numbered candidate is padded with Unknown titles, however, TLO now checks for a plausible unnumbered song-list candidate whose count exactly matches the audio files. If numbered and unnumbered candidates both match the audio count, matching audio filenames and existing Title tags only reinforce a candidate; missing or unrelated filename/tag values are neutral. A short numbered block embedded in surrounding collector prose may lose an otherwise unsupported equal-count tie to a contiguous unnumbered song block. For an explicit Setlist:, Songs:, or Tracks: section containing one song per line, Notes: and other track-list terminators end the song section before later numbered collector notes can be interpreted as tracks. Legitimate titles beginning with Thank remain valid; prose such as Thanks to the taper remains a terminator. E:, Enc:, and Encore: prefixes are removed from an encore song title. Multi-disc filenames that include both disc and track tokens, including punctuation-separated forms such as CJM-Disc01,Track01.flac, are ordered by disc first and track second so disc 1 completes before disc 2 and written Track Number tags do not alternate odd/even between discs. The same ordering applies to validated multipart release folders named Parent (1) through Parent (N): the parenthesized part number is ordered first and each folder's filename track number second, so part 1 completes before part 2 and written Track Number tags do not stripe all track 01 files across the parts. Explicit Set 1, Disc 1, Disk 1, CD 1, Setlist 1, Set List 1, Track List 1, Songs:, and Tracks: headings mark the beginning of an unnumbered song region. When one is present, artist/venue/lineage text above the first boundary is not eligible as song titles just because adding those lines would make the count match the audio files. Blank lines, later Set/Disc/Disk/CD boundaries, and a bare Encore heading can continue the same ordered region. A date-labelled filler divider such as on July 7, 1967: is skipped as a title while following songs remain eligible. Notes/source/checksum/technical markers and decorative separators end the region. Valid date-prefixed broadcast/show dividers with trailing context, for example 30.10.1948 - Royal Roost, NY - WMCA Radio broadcast, are section boundaries and are not track 30. In an established numbered run, if TLO provisionally sees a higher number but the next numbered row resumes the exact number that was expected, the higher row is discarded as a false positive; 01-07, a date-like 30 row, then 08 therefore continues with track 08. Confirmed large gaps remain valid when later numbering reinforces them, such as 01, 02, 30, 31. Artist/header safety: a DB artist word embedded only as the trailing city of a longer path location such as Washington, DC is not used as generic path artist evidence, although an exact artist directory named Washington remains valid. Structured unlabeled headers may contain Artist / room-or-hall / named Venue / Location / Date; TLO keeps the first line as artist and the deeper named venue as Venue. A collaboration such as Chick Corea and Herbie Hancock may be accepted without a combined Artist DB row only when every component resolves uniquely in the Artist DB. Bare-number title safety: when one contiguous bare-number block exactly matches the audio-file count, the numbers are treated as track positions and the Titles are Unknown; the numeric values themselves are never written as song titles.\line The tagger also creates CorruptFlacs.txt in TLOHome. If a FLAC or MP3 file cannot be opened or written during tagging, TLO appends the complete file path to that file so bad audio files can be reviewed separately from other tagging errors. The historical filename is retained for compatibility. Exact placeholder titles Title, Titled, or Titles become Unknown after normal cleanup, including numbered forms such as 01. Title; longer legitimate titles containing those words are left unchanged. Machine-generated extraction/analysis tables are never accepted as song lists merely because their rows form a clean numeric sequence. Exact Audio Copy (EAC) TOC/extraction rows and other timestamp/sector-style multi-column records are technical data, and EAC markers start a technical tail that is not mined for titles. An explicit Songs: or Tracks: block is still retained as real local list evidence even when its count differs from the audio-file count; TLO reports the mismatch instead of truncating, shifting, or inventing a one-to-one mapping. When an apostrophe-style duration is accidentally joined to a valid dated subsection heading because of a lost newline, TLO can retain the song row while removing the attached dated-divider text.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1\loch
@@ -5622,7 +5089,7 @@ a3000000002036484601000000406c908c0200000080d820190500000000b141320a000000006283
 00101b24a3000000002036484601000000406c908c0200000080d820190500000000b1f97f57168488b6e40d790000000049454e44ae426082}
 }
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1\qc{\loch\fs18\i\loch
-Figure 4. Add Shows window. Dry run and shared settings come from the main Inventory window.}
+Figure 3. Add Shows window. Dry run and shared settings come from the main Inventory window.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1\fi-259\li360\lin360\sb0\sa40{\loch
 - Enter a nonblank Current Backup/Storage Drive and Volume. The TLOCurrentStorage environment variable or --current-storage-volume can prepopulate it.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1\fi-259\li360\lin360\sb0\sa40{\loch
@@ -5975,4 +5442,9 @@ Linux/macOS example: tlo-research --TLOHome /path/to/TLOHome 1977-05-08}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl240\slmult1\sb0\sa160{\loch\fs22\b0\loch
 If no matching metadata records are found, Research prints a zero-match result rather than treating that as an error. Missing TLOHome/logs, invalid TLOHome, or empty input are reported as errors. Ctrl-C stops the standalone app with cancellation status 130.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl240\slmult1\sb0\sa160\rtlch\afs22\ab0 \ltrch\loch\fs22\b0\loch
+\page\par\b Build 468 behavior update\b0\par
+Build 468 - historical Tag-window cancellation and main-window recovery. In Build 468, if Quit was selected while the then-existing GUI Tag window was actively processing, TLO requested cooperative cancellation and closed that Tag window. Tag, Add Shows, and Inventory remain disabled only while the existing tag worker is still stopping. When the worker exits, the main window automatically recalculates its action states and returns to normal idle operation. No additional Inventory run is required solely to restore the controls.\par
+\page\par
+\b Build 469 behavior update\b0\par
+Build 469 - Main-window Tag and control cleanup. GUI Tag no longer opens a separate Tag window; it uses the main Path(s), Slam, selected tag mode, and current main-window settings, with progress/output in the main Inventory window. Keep and report now greys/disables Folder removal and Folder corruption threshold and uses effective folder removal Never. If SETLISTFM_API_KEY is missing or blank, setlist.fm and setlist.fm upgrade are unchecked and disabled. Max Workers is an independent ceiling rather than a forced worker count; phases may use fewer workers because of Performance Mode, physical-drive serialization, work-group counts, or correctness constraints. The View Issues horizontal scrollbar now has real overflow for long Explanation/Path values. Successful parser-selection decisions are informational rather than tagging warnings; consequential warnings and errors remain visible.\par
 }
