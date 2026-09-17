@@ -1,6 +1,6 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v470"
+__version__ = "v471"
 
 from tlo_diagnostics import debug_suppressed_exception
 import os
@@ -60,6 +60,7 @@ from tlo_wrapper_rules import (
     split_wrapper_part_suffix,
 )
 from tlo_tree_compare import has_exact_tree_match_in_family
+from tlo_folder_rename import folder_name_write_needed, rename_folder_exact_case, same_existing_entry
 
 
 TAGGER_TITLE = "Traders Little Helper™ Tagger App"
@@ -3049,13 +3050,8 @@ def _compliant_rename_show_name_from_record(record) -> str:
 
 
 def _folder_name_write_needed(source_root: str, target_name: str) -> bool:
-    """Return True only when Rename Compliantly would write a different folder name."""
-    source = os.path.normpath(str(source_root or ""))
-    target = str(target_name or "").strip()
-    if not source or not target:
-        return False
-    intended = os.path.normpath(os.path.join(os.path.dirname(source), target))
-    return os.path.normcase(intended) != os.path.normcase(source)
+    """Return True when Rename Compliantly would change spelling or capitalization."""
+    return folder_name_write_needed(source_root, target_name)
 
 def _unique_destination_path(parent_dir: str, folder_name: str, source_root: str = "") -> str:
     """Allocate a collision-safe destination classified as copy or alt.
@@ -3355,9 +3351,13 @@ def prepare_inventory_tagging_target(
         if not _folder_name_write_needed(source_root, target_name):
             _emit(emit, f"RENAME_COMPLIANTLY_UNCHANGED: {source_root}")
             return group, record
-        destination_root = _unique_destination_path(parent_dir, target_name, source_root)
+        direct_target = os.path.normpath(os.path.join(parent_dir, target_name))
+        if os.path.lexists(direct_target) and not same_existing_entry(source_root, direct_target):
+            destination_root = _unique_destination_path(parent_dir, target_name, source_root)
+        else:
+            destination_root = direct_target
         try:
-            os.rename(source_root, destination_root)
+            rename_folder_exact_case(source_root, destination_root)
             _emit(emit, f"RENAME_COMPLIANTLY: {source_root} -> {destination_root}")
             _rewrite_group_paths(group, source_root, destination_root, mutate=True)
             _rewrite_record_paths(record, source_root, destination_root, mutate=True)

@@ -1,4 +1,4 @@
-__version__ = "v470"
+__version__ = "v471"
 
 import csv
 import json
@@ -43,6 +43,7 @@ from tlo_postprocess import (
 from tlo_setlist_file_selection import find_setlist_files_for_music_dir
 from tlo_text_utils import normalized_compare_value
 from tlo_version import versioned_title
+from tlo_folder_rename import folder_name_write_needed, rename_folder_exact_case, same_existing_entry
 
 
 BOOTLIST_HEADER = ["Show", "VolumePath"]
@@ -654,12 +655,7 @@ def _rewrite_record_dict_paths(record_dict: Dict[str, str], old_root: str, new_r
 
 
 def _folder_name_write_needed(source_root: str, target_leaf: str) -> bool:
-    source = os.path.normpath(str(source_root or ""))
-    target = str(target_leaf or "").strip()
-    if not source or not target:
-        return False
-    intended = os.path.normpath(os.path.join(os.path.dirname(source), target))
-    return os.path.normcase(intended) != os.path.normcase(source)
+    return folder_name_write_needed(source_root, target_leaf)
 
 def _rename_add_shows_folder_compliantly(config, folder_path: str, record_dict: Dict[str, str]) -> str:
     """Rename an Add Shows source folder in place when Rename Compliantly is enabled."""
@@ -677,9 +673,12 @@ def _rename_add_shows_folder_compliantly(config, folder_path: str, record_dict: 
     direct_target = os.path.normpath(os.path.join(parent_dir, target_leaf))
     if not _folder_name_write_needed(source_root, target_leaf):
         return source_root
-    destination = direct_target if not os.path.exists(direct_target) else _unique_destination_path(parent_dir, target_leaf)
+    if os.path.lexists(direct_target) and not same_existing_entry(source_root, direct_target):
+        destination = _unique_destination_path(parent_dir, target_leaf)
+    else:
+        destination = direct_target
     try:
-        os.rename(source_root, destination)
+        rename_folder_exact_case(source_root, destination)
     except Exception as exc:
         raise InventoryUpdateError(f"Rename Compliantly failed for {source_root}: {exc}") from exc
     _rewrite_record_dict_paths(record_dict, source_root, destination)

@@ -1,6 +1,6 @@
 """Build 469 regressions for main-window Tag and related control semantics."""
 
-__version__ = "v470"
+__version__ = "v471"
 
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path

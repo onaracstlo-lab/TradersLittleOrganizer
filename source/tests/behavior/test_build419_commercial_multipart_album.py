@@ -182,14 +182,14 @@ def test_build419_documentation_contract():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    doc = Document(root / "TLO_Inventory_Requirements_Working_v470.docx")
+    doc = Document(root / "TLO_Inventory_Requirements_Working_v471.docx")
     req = "\n".join(p.text for p in doc.paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v470.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual = (root / "TLO_Inventory_User_Manual_v471.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v470 (v1.6 Build 470)." in req
+    assert "Current document version: v471 (v1.6 Build 471)." in req
     assert "Parent/Parent (1)" in req
     assert "use ALBUM_NAME as the base Album value" in req
     assert "Build 419: Commercial multipart releases and ALBUM_NAME behavior" in req
-    assert "Version v1.6 Build 470" in manual
+    assert "Version v1.6 Build 471" in manual
     assert "Parent/Parent (1)" in manual
     assert "ALBUM_NAME" in manual

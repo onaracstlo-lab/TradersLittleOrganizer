@@ -134,14 +134,14 @@ def test_build413_requirements_and_manual_document_date_boundary_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v470.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v471.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v470.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v471.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v470 (v1.6 Build 470)." in req_text
+    assert "Current document version: v471 (v1.6 Build 471)." in req_text
     assert "Build 413 numbered-date-boundary and continuity rule" in req_text
     assert "30.10.1948" in req_text
     assert "01, 02, 30, 31" in req_text
-    assert "Version v1.6 Build 470" in manual_text
+    assert "Version v1.6 Build 471" in manual_text
     assert "30.10.1948 - Royal Roost, NY - WMCA Radio broadcast" in manual_text
     assert "Confirmed large gaps remain valid" in manual_text

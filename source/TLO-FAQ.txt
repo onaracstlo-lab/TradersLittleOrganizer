@@ -120,3 +120,6 @@ A: If SETLISTFM_API_KEY is missing or blank when the Inventory GUI starts, Build
 
 Q: What does Max Workers mean?
 A: Max Workers is a ceiling, not a request to create that many workers. The GUI initializes it to the machine CPU count unless a positive launcher value is supplied. Performance Mode and processing constraints decide how many workers a phase actually uses, and TLO may use fewer because paths share a physical drive, there are fewer parallel work groups, or a phase must serialize work for correctness.
+
+Q: Will Rename Compliantly fix capitalization-only differences in a folder name?
+A: Yes. Build 471 treats exact spelling and capitalization as part of the compliant folder name. If TLO resolves the canonical artist as Dave Van Ronk, a folder named dave van ronk 1978-02-17 Main Point Bryn Mawr, PA is renamed to Dave Van Ronk 1978-02-17 Main Point Bryn Mawr, PA. On case-insensitive filesystems TLO uses a temporary sibling rename when necessary so the exact capitalization is applied without treating the same folder as a collision or creating an alternate/copy suffix. The rule applies to Full Inventory/GUI or standalone Tag and Add Shows.
