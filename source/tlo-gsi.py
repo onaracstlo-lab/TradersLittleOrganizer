@@ -14,7 +14,7 @@ Tkinter GUI that:
 
 from __future__ import annotations
 
-__version__ = "v471"
+__version__ = "v472"
 
 import csv
 import os
@@ -39,12 +39,14 @@ from tlo_gui_shortcuts import configure_centered_ttk_button_text
 try:
     from tlo_github_updates import (
         check_for_updates,
+        download_update,
         is_auto_update_enabled,
         set_auto_update_enabled,
         should_auto_check,
     )
 except ImportError:
     check_for_updates = None
+    download_update = None
     is_auto_update_enabled = None
     set_auto_update_enabled = None
     should_auto_check = None
@@ -456,7 +458,7 @@ class BootlistSearchApp:
         if enabled:
             messagebox.showinfo(
                 "TLO Auto update",
-                "Auto update is enabled. TLO will check GitHub at startup and download newer release ZIPs to your Downloads folder.",
+                "Auto update is enabled. TLO will check GitHub at startup and ask before downloading a newer release ZIP to your Downloads folder.",
             )
             self._start_update_check(manual=False)
 
@@ -483,7 +485,7 @@ class BootlistSearchApp:
             return
 
         def worker() -> None:
-            result = check_for_updates(self.paths.tlohome, manual=manual)
+            result = check_for_updates(self.paths.tlohome, manual=manual, download=manual)
             try:
                 self.root.after(0, lambda: self._finish_update_check(result, manual))
             except tk.TclError:
@@ -492,7 +494,67 @@ class BootlistSearchApp:
         self._update_check_thread = threading.Thread(target=worker, daemon=True)
         self._update_check_thread.start()
 
+    def _ask_auto_update_download(self, result) -> bool:
+        decision = {"download": False}
+        dialog = tk.Toplevel(self.root)
+        dialog.title("TLO update available")
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+        frame = ttk.Frame(dialog, padding=14)
+        frame.grid(sticky="nsew")
+        ttk.Label(frame, text=result.message, justify="left", wraplength=520).grid(
+            row=0, column=0, columnspan=2, sticky="w", padx=4, pady=(0, 14)
+        )
+
+        def close(download: bool) -> None:
+            decision["download"] = bool(download)
+            try:
+                dialog.grab_release()
+            except tk.TclError:
+                pass
+            dialog.destroy()
+
+        ttk.Button(frame, text="Yes", command=lambda: close(True)).grid(
+            row=1, column=0, sticky="e", padx=(4, 6)
+        )
+        ttk.Button(frame, text="Skip", command=lambda: close(False)).grid(
+            row=1, column=1, sticky="w", padx=(6, 4)
+        )
+        dialog.protocol("WM_DELETE_WINDOW", lambda: close(False))
+        try:
+            dialog.grab_set()
+            dialog.focus_force()
+            self.root.wait_window(dialog)
+        except tk.TclError:
+            return False
+        return bool(decision["download"])
+
+    def _start_auto_update_download(self, available_result) -> None:
+        if download_update is None:
+            return
+        thread = getattr(self, "_update_download_thread", None)
+        if thread is not None and thread.is_alive():
+            return
+
+        def worker() -> None:
+            result = download_update(available_result, self.paths.tlohome)
+            try:
+                self.root.after(0, lambda: self._finish_auto_update_download(result))
+            except tk.TclError:
+                pass
+
+        self._update_download_thread = threading.Thread(target=worker, daemon=True)
+        self._update_download_thread.start()
+
+    def _finish_auto_update_download(self, result) -> None:
+        if result.status == "error":
+            messagebox.showerror(result.title, result.message)
+
     def _finish_update_check(self, result, manual: bool) -> None:
+        if not manual and result.status == "available":
+            if self._ask_auto_update_download(result):
+                self._start_auto_update_download(result)
+            return
         if manual or result.status in {"downloaded", "already_downloaded", "no_asset", "error"}:
             if result.status == "error":
                 messagebox.showerror(result.title, result.message)

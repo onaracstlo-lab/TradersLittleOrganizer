@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from tlo_diagnostics import debug_suppressed_exception
 
-__version__ = "v471"
+__version__ = "v472"
 
 import datetime as _dt
 import hashlib
@@ -56,6 +56,9 @@ class UpdateCheckResult:
     platform_key: str = ""
     packaging_mode: str = ""
     databases_included: bool | None = None
+    asset_url: str = ""
+    asset_size: int = 0
+    asset_digest: str = ""
 
 
 def _utc_now() -> _dt.datetime:
@@ -560,18 +563,95 @@ def _update_download_settings(
     return ""
 
 
+def download_update(
+    available: UpdateCheckResult,
+    tlo_home: str | os.PathLike[str] | None,
+) -> UpdateCheckResult:
+    """Download and validate an update previously returned with status ``available``."""
+    if available.status != "available" or available.latest_build is None:
+        return UpdateCheckResult(
+            status="error",
+            title="TLO update download failed",
+            message="No pending TLO update is available to download.",
+        )
+    try:
+        asset = {
+            "name": available.asset_name,
+            "browser_download_url": available.asset_url,
+            "size": available.asset_size,
+            "digest": f"sha256:{available.asset_digest}" if available.asset_digest else "",
+        }
+        if not available.asset_name or not available.asset_url or not available.asset_digest:
+            raise ValueError("The pending TLO update is missing required verified asset metadata.")
+        destination = _downloads_dir() / _safe_asset_filename(available.asset_name)
+        downloaded = _download_asset(asset, destination)
+        package_info = _inspect_downloaded_package(
+            destination,
+            expected_kind=available.package_kind,
+            expected_platform_key=available.platform_key,
+            expected_build=available.latest_build,
+        )
+        databases_included = bool(package_info["databases_included"])
+        packaging_mode = str(package_info["packaging_mode"] or "")
+        settings_warning = _update_download_settings(
+            tlo_home, available.latest_build, available.asset_name, destination, available.package_kind,
+            platform_key=available.platform_key, packaging_mode=packaging_mode,
+            databases_included=databases_included,
+        )
+        kind_text, extra = _package_message(available.package_kind, databases_included)
+        if downloaded:
+            title = "TLO update downloaded"
+            lead = f"TLO v{PUBLIC_VERSION} Build {available.latest_build} {kind_text} was downloaded to:"
+            status = "downloaded"
+        else:
+            title = "TLO update already downloaded"
+            lead = f"TLO v{PUBLIC_VERSION} Build {available.latest_build} {kind_text} is already available at:"
+            status = "already_downloaded"
+        return UpdateCheckResult(
+            status=status,
+            title=title,
+            message=f"{lead}\n\n{destination}\n\n{extra}" + (f"\n\n{settings_warning}" if settings_warning else ""),
+            latest_build=available.latest_build,
+            path=str(destination),
+            asset_name=available.asset_name,
+            package_kind=available.package_kind,
+            platform_key=available.platform_key,
+            packaging_mode=packaging_mode,
+            databases_included=databases_included,
+        )
+    except urllib.error.HTTPError as exc:
+        return UpdateCheckResult(
+            status="error", title="TLO update download failed",
+            message=f"GitHub returned HTTP {exc.code} while downloading the update.",
+            latest_build=available.latest_build,
+        )
+    except urllib.error.URLError as exc:
+        return UpdateCheckResult(
+            status="error", title="TLO update download failed",
+            message=f"Could not contact GitHub while downloading the update: {exc.reason}",
+            latest_build=available.latest_build,
+        )
+    except Exception as exc:  # noqa: BLE001 - GUI-safe boundary
+        return UpdateCheckResult(
+            status="error", title="TLO update download failed", message=str(exc),
+            latest_build=available.latest_build,
+        )
+
+
 def check_for_updates(
     tlo_home: str | os.PathLike[str] | None,
     *,
     manual: bool = True,
+    download: bool = True,
     owner: str = DEFAULT_REPO_OWNER,
     repo: str = DEFAULT_REPO_NAME,
 ) -> UpdateCheckResult:
-    """Check the latest GitHub Release and download the preferred ZIP if newer.
+    """Check the latest GitHub Release and optionally download the preferred ZIP.
 
-    Manual and automatic checks share the same safe behavior: download only.
-    The caller decides whether to show all statuses or suppress quiet auto-check
-    statuses such as up-to-date.
+    Manual checks retain the historic direct-download behavior. Auto Update uses
+    ``download=False`` to discover a newer exact-match package without downloading
+    it; the GUI then asks the user with Yes / Skip before calling
+    :func:`download_update`.
     """
     try:
         release = _fetch_latest_release(owner, repo)
@@ -612,6 +692,29 @@ def check_for_updates(
             )
 
         asset_name = _asset_name(asset)
+        if not download:
+            settings_warning = _write_last_check(tlo_home, latest_build)
+            kind_text = "update" if package_kind == "update" else "complete distribution"
+            message = (
+                f"Installed: {DISPLAY_VERSION}\n"
+                f"Latest: v{PUBLIC_VERSION} Build {latest_build}\n\n"
+                f"A matching {kind_text} is available. Download it to your Downloads folder?"
+            )
+            if settings_warning:
+                message += f"\n\n{settings_warning}"
+            return UpdateCheckResult(
+                status="available",
+                title="TLO update available",
+                message=message,
+                latest_build=latest_build,
+                asset_name=asset_name,
+                package_kind=package_kind,
+                platform_key=platform_key,
+                asset_url=_asset_download_url(asset),
+                asset_size=_declared_asset_size(asset),
+                asset_digest=_expected_digest(asset),
+            )
+
         destination = _downloads_dir() / _safe_asset_filename(asset_name)
         downloaded = _download_asset(asset, destination)
         package_info = _inspect_downloaded_package(

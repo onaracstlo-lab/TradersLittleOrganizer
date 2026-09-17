@@ -179,14 +179,14 @@ def test_build418_requirements_and_manual_document_restored_suffix_and_review_li
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    req = Document(root / "TLO_Inventory_Requirements_Working_v471.docx")
+    req = Document(root / "TLO_Inventory_Requirements_Working_v472.docx")
     req_text = "\n".join(p.text for p in req.paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v471.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual = (root / "TLO_Inventory_User_Manual_v472.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v471 (v1.6 Build 471)." in req_text
+    assert "Current document version: v472 (v1.6 Build 472)." in req_text
     assert "restore the exact terminal suffix text" in req_text
     assert "TLOHome/artistsNotInDatabase.txt" in req_text
     assert "Build 407, 417, 418: Terminal Band/Group/All-Star-family Artist DB fallback" in req_text
-    assert "Version v1.6 Build 471" in manual
+    assert "Version v1.6 Build 472" in manual
     assert "restores the exact removed suffix" in manual
     assert "artistsNotInDatabase.txt" in manual

@@ -1,4 +1,4 @@
-__version__ = "v471"
+__version__ = "v472"
 import re
 
 NON_MAIN_DIR_PATTERNS = [

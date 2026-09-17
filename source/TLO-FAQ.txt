@@ -52,6 +52,9 @@ A: Yes. TLO captures trailing parenthetical items before it cleans the folder na
 Q: How does Check for updates choose a package if a release has only updates or only complete installs?
 A: TLO uses only the exact package for the installed operating system and package layout. It prefers that platform/layout's update ZIP. If the release has no matching update ZIP, it may download the exact matching complete ZIP instead. It never substitutes the source bundle, a generic ZIP, another operating system, or the other Windows onefile/onedir layout. After the SHA-256 check, TLO also validates the package manifest before reporting a successful download.
 
+Q: What does Auto update do when it finds a newer build?
+A: Auto update now asks before downloading. The prompt has Yes and Skip buttons. Yes downloads the verified exact-match ZIP to your Downloads folder and returns; TLO does not install or extract it. Skip closes the prompt and downloads nothing. The automatic check is still limited to at most once per day, so Skip does not cause another prompt on every startup during that interval. Manual Check for updates keeps its direct-download behavior.
+
 Q: Can an update ZIP include the TLO databases?
 A: Yes, when the release was explicitly built as a database-refresh update. Normal update ZIPs still omit TLO_DBs. A database-refresh update contains exactly TLO_DBs/artists.sqlite and TLO_DBs/venues.txt and omits your inventory, setlists, logs, staged folders, and other user-created output. Check for updates reads the package manifest and ZIP contents and tells you whether the downloaded update includes those databases; applying such an update replaces those two master database files.
 

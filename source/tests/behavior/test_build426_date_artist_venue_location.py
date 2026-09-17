@@ -166,17 +166,17 @@ def test_build426_requirements_and_manual_document_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v471.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v472.docx")
     requirements_text = "\n".join(paragraph.text for paragraph in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v471.rtf").read_text(
+    manual_text = (root / "TLO_Inventory_User_Manual_v472.rtf").read_text(
         encoding="utf-8", errors="ignore"
     )
 
-    assert "Current document version: v471 (v1.6 Build 471)." in requirements_text
+    assert "Current document version: v472 (v1.6 Build 472)." in requirements_text
     assert "Date Artist Venue Location" in requirements_text
     assert "1997-04-05 Genesis Old Pub London England" in requirements_text
     assert "a venue must remain after removing the artist" in requirements_text.lower()
-    assert "Version v1.6 Build 471" in manual_text
+    assert "Version v1.6 Build 472" in manual_text
     assert "Date Artist Venue Location" in manual_text
     assert "1997-04-05 Genesis Old Pub London England" in manual_text
     assert "a venue must remain after removing the artist" in manual_text.lower()

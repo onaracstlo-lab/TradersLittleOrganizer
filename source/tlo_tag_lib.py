@@ -1,6 +1,6 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v471"
+__version__ = "v472"
 
 from tlo_diagnostics import debug_suppressed_exception
 import os

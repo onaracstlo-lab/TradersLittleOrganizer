@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v471"
+__version__ = "v472"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -51,6 +51,7 @@ from tlo_gui_shortcuts import install_global_ctrl_a
 from tlo_gui_shortcuts import configure_centered_ttk_button_text, bounded_initial_window_size
 from tlo_github_updates import (
     check_for_updates,
+    download_update,
     is_auto_update_enabled,
     set_auto_update_enabled,
     should_auto_check,
@@ -1346,7 +1347,7 @@ class App:
         if enabled:
             messagebox.showinfo(
                 "TLO Auto update",
-                "Auto update is enabled. TLO will check GitHub at startup and download newer release ZIPs to your Downloads folder.",
+                "Auto update is enabled. TLO will check GitHub at startup and ask before downloading a newer release ZIP to your Downloads folder.",
                 parent=self.root,
             )
             self._start_update_check(manual=False)
@@ -1373,7 +1374,7 @@ class App:
             tlo_home = ""
 
         def worker():
-            result = check_for_updates(tlo_home, manual=manual)
+            result = check_for_updates(tlo_home, manual=manual, download=manual)
             try:
                 self.root.after(0, lambda: self._finish_update_check(result, manual))
             except tk.TclError:
@@ -1384,7 +1385,74 @@ class App:
         self._update_check_thread = threading.Thread(target=worker, daemon=True)
         self._update_check_thread.start()
 
+    def _ask_auto_update_download(self, result) -> bool:
+        decision = {"download": False}
+        dialog = tk.Toplevel(self.root)
+        dialog.title("TLO update available")
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+        frame = ttk.Frame(dialog, padding=14)
+        frame.grid(sticky="nsew")
+        ttk.Label(frame, text=result.message, justify="left", wraplength=520).grid(
+            row=0, column=0, columnspan=2, sticky="w", padx=4, pady=(0, 14)
+        )
+
+        def close(download: bool) -> None:
+            decision["download"] = bool(download)
+            try:
+                dialog.grab_release()
+            except tk.TclError:
+                pass
+            dialog.destroy()
+
+        ttk.Button(frame, text="Yes", command=lambda: close(True), style="Main.TButton").grid(
+            row=1, column=0, sticky="e", padx=(4, 6)
+        )
+        ttk.Button(frame, text="Skip", command=lambda: close(False), style="Main.TButton").grid(
+            row=1, column=1, sticky="w", padx=(6, 4)
+        )
+        dialog.protocol("WM_DELETE_WINDOW", lambda: close(False))
+        try:
+            dialog.grab_set()
+            dialog.focus_force()
+            self.root.wait_window(dialog)
+        except tk.TclError:
+            return False
+        return bool(decision["download"])
+
+    def _start_auto_update_download(self, available_result) -> None:
+        thread = getattr(self, "_update_download_thread", None)
+        if thread is not None and thread.is_alive():
+            return
+        try:
+            tlo_home = self._resolve_update_tlo_home(require_existing=False)
+        except Exception:
+            tlo_home = ""
+
+        def worker():
+            result = download_update(available_result, tlo_home)
+            try:
+                self.root.after(0, lambda: self._finish_auto_update_download(result))
+            except tk.TclError:
+                pass
+
+        self._update_download_thread = threading.Thread(target=worker, daemon=True)
+        self._update_download_thread.start()
+
+    def _finish_auto_update_download(self, result) -> None:
+        if result.status == "error":
+            messagebox.showerror(result.title, result.message, parent=self.root)
+            return
+        try:
+            self.queue.put(result.title + "\n")
+        except Exception as exc:  # noqa: BLE001 - best-effort boundary
+            debug_suppressed_exception(__name__, exc)
+
     def _finish_update_check(self, result, manual):
+        if not manual and result.status == "available":
+            if self._ask_auto_update_download(result):
+                self._start_auto_update_download(result)
+            return
         if manual or result.status in {"downloaded", "already_downloaded", "no_asset", "error"}:
             icon = "error" if result.status == "error" else "info"
             if icon == "error":
