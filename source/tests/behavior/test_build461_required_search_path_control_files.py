@@ -19,7 +19,7 @@ def _touch_music(root: Path, name: str = "01.flac") -> Path:
     return root
 
 
-def test_build461_semicolon_search_path_uses_inventory_line_grammar(tmp_path):
+def test_build476_semicolon_search_path_uses_inventory_line_grammar(tmp_path):
     one = _touch_music(tmp_path / "one")
     two = _touch_music(tmp_path / "two")
     copies = tmp_path / "copies"
@@ -90,13 +90,15 @@ def test_build461_global_directives_are_rejected_with_txt_control_file(tmp_path)
         IL.parse_search_path_input(str(control), slam_override="Artist")
 
 
-def test_build461_quoted_semicolon_inside_path_is_not_a_separator(tmp_path):
-    path_with_semicolon = _touch_music(tmp_path / "one;two")
+def test_build476_comma_inside_path_is_not_a_separator_and_quotes_are_optional(tmp_path):
+    path_with_comma = _touch_music(tmp_path / "one,two")
 
-    parsed = IL.parse_search_path_input(f'"{path_with_semicolon}"')
+    parsed_unquoted = IL.parse_search_path_input(str(path_with_comma))
+    parsed_quoted = IL.parse_search_path_input(f'"{path_with_comma}"')
 
-    assert len(parsed) == 1
-    assert parsed[0][1] == str(path_with_semicolon)
+    assert len(parsed_unquoted) == 1
+    assert parsed_unquoted[0][1] == str(path_with_comma)
+    assert parsed_quoted[0][1] == str(path_with_comma)
 
 
 def test_build461_tlohome_template_is_never_automatic_input(tmp_path):
@@ -165,8 +167,8 @@ def test_build461_main_gui_label_and_slam_width_contract():
 
     assert 'text="Path(s)"' in source
     assert 'text="Search Path\\n(optional/override)"' not in source
-    assert 'textvariable=self.vars["search_path_slam_override"], width=33' in source
-    assert 'textvariable=self.vars["search_path_slam_override"], width=66' not in source
+    assert 'text="Slam (optional)"' not in source
+    assert 'textvariable=self.vars["search_path_slam_override"]' not in source[source.index("    def _build(self):"):source.index("    def _enable_search_path_drag_drop")]
 
 
 def test_build461_runtime_loader_expands_required_search_path_not_tlohome_template(tmp_path):

@@ -13,7 +13,7 @@ pytestmark = pytest.mark.behavior
 
 def _asset(build: int) -> dict:
     return {
-        "name": f"TLO_V1.6Build{build}_update_Linux.zip",
+        "name": f"TLO_V1.7Build{build}_update_Linux.zip",
         "browser_download_url": "https://github.com/example/TLO/releases/download/test/update.zip",
         "size": 123,
         "digest": "sha256:" + ("a" * 64),
@@ -23,8 +23,8 @@ def _asset(build: int) -> dict:
 def test_auto_discovery_returns_available_without_downloading(monkeypatch, tmp_path):
     build = updates.BUNDLE_BUILD + 1
     release = {
-        "tag_name": f"v1.6-build{build}",
-        "name": f"TLO v1.6 Build {build}",
+        "tag_name": f"v1.7-build{build}",
+        "name": f"TLO v1.7 Build {build}",
         "assets": [_asset(build)],
     }
     monkeypatch.setattr(updates.sys, "platform", "linux")
@@ -54,7 +54,7 @@ def test_yes_path_downloads_pending_verified_asset(monkeypatch, tmp_path):
         title="TLO update available",
         message="available",
         latest_build=build,
-        asset_name=f"TLO_V1.6Build{build}_update_Linux.zip",
+        asset_name=f"TLO_V1.7Build{build}_update_Linux.zip",
         package_kind="update",
         platform_key="linux",
         asset_url="https://github.com/example/TLO/releases/download/test/update.zip",

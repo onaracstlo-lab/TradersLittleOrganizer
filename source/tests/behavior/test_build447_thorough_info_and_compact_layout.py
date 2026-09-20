@@ -73,5 +73,5 @@ def test_build447_checkbox_block_and_columns_shift_farther_left():
 def test_build447_search_path_and_slam_are_shorter():
     source = _source()
     assert 'self.search_path_entry = ttk.Entry(frm, textvariable=self.vars["search_path_override"], width=66' in source
-    assert 'ttk.Entry(frm, textvariable=self.vars["search_path_slam_override"], width=33' in source
+    assert 'text="Slam (optional)"' not in source
     assert 'width=86, style="Main.TEntry"' not in source

@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v472"
+__version__ = "v476"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -111,7 +111,22 @@ from tlo_inventory_update import (
     review_paths_for_duplicate,
     updater_delete_script_path,
 )
-from tlo_dragdrop import create_tk_root, enable_search_path_folder_drop, enable_tagging_path_folder_drop
+from tlo_dragdrop import (
+    create_tk_root,
+    enable_folder_path_drop,
+    enable_search_path_folder_drop,
+    enable_tagging_path_folder_drop,
+    enable_single_folder_or_txt_drop,
+    enable_leaf_folder_drop,
+)
+from tlo_manual_updates import (
+    ManualUpdateError,
+    apply_folder_manual_update,
+    apply_manual_updates_file,
+    apply_unidentified_manual_update,
+    manual_update_source_kind,
+    parse_manual_updates_file,
+)
 from tlo_run_settings import append_run_settings
 from tlo_runtime_control import (
     clear_cancel_request,
@@ -190,11 +205,11 @@ HELP_TEXT = (
     "  --etree-lookup        Enable the GUI etreeDB / eTreeDB venue-location lookup option after artist and yyyy-mm-dd date are identified.\n"
     "  --setlistfm-lookup         If eTreeDB has no usable result, look up venue/location from setlist.fm. Requires --etree-lookup on the command line.\n"
     "  --debug [BOOL]      Command-line only. With no value, enables debug output; also accepts true/false, yes/no, y/n, 1/0. No Debug checkbox is shown in the GUI.\n"
-    "  --current-storage-volume STRING  Prepopulate the Add Shows (incremental) Current Backup/Storage Drive and Volume field. Overrides TLOCurrentStorage.\n"
+    "  --current-storage-volume STRING  Prepopulate the Add New Shows Current Backup/Storage Drive and Volume field. Overrides TLOCurrentStorage.\n"
     "\n"
     "GUI buttons:\n"
     "  Tag               Tag the current master Search Path(s) directly using the current main-window settings; no separate Tag window is opened.\n"
-    "  Add Shows (incremental)  Open the updater workflow for readyForXfer/staged/dups processing. The updater inherits all applicable main-window options, including Dry run, and validates the storage volume before processing.\n"
+    "  Add New Shows  Open the updater workflow for readyForXfer/staged/dups processing. The updater inherits all applicable main-window options, including Dry run, and validates the storage volume before processing.\n"
     "  Research          Search TLOHome comp/meta logs.\n"
     "  Quit              Close the GUI. If a run is still active, active workers are stopped and active search-path logs are removed before exit; displayed in the middle.\n"
     "  Inventory (full)  Validate the form and show Review Operation. When Dry run is checked, scan and report planned work without changing files; otherwise run the full inventory job.\n"
@@ -203,7 +218,7 @@ HELP_TEXT = (
     "  ☰ > Donate        Shows Venmo and Check donation details.\n"
     "  ☰ > Help          Opens the upper-right hamburger menu, then Help > About or Help > FAQ.\n\n"
     "Run experience:\n"
-    "  Inventory and Tag validate the master Path(s) when clicked. Tag uses the master Path(s), Slam, and current main-window options; no separate Tag window opens.\n"
+    "  Inventory and Tag validate the master Path(s) when clicked. Tag uses the master Path(s) and current main-window options; no separate Tag window opens.\n"
     "  Review Operation shows every main-window checkbox value in the same order for Inventory, Tag, and Add Shows, followed by action-specific details and whether original files may be changed. After Start is selected, the same lines are appended to TLOHome/logs/runSettings.log with the action, date, and time.\n"
     "  Dry run is controlled by the main-window checkbox and inherited by Inventory, Add Shows, and Tag. It is non-destructive. Inventory resolves the resulting show name for each show. When tagging applies, Inventory or Tag also lists each file and the Artist, Album, Track, and Title values that would be written.\n"
     "  Current Operation shows the live stage, current item, counts, warnings, errors, and elapsed time while a run is active.\n"
@@ -591,10 +606,12 @@ class App:
         self._validation_after_id = None
         self.active_updater_window = None
         self.active_tagger_window = None
+        self.active_manual_updates_window = None
         self.tag_button = None
         self.add_shows_button = None
         self.inventory_button = None
         self.research_button = None
+        self.manual_tweaks_button = None
         self.pause_button = None
         self.resume_button = None
         self.progress_bar = None
@@ -668,6 +685,7 @@ class App:
         try:
             style.configure("Main.TLabel", font=self.main_font)
             style.configure("Main.TButton", font=self.main_font, padding=(8, 7), anchor="center", justify="center")
+            style.configure("Main.Compact.TButton", font=self.main_font, padding=(3, 7), anchor="center", justify="center")
             style.configure("Main.TEntry", font=self.main_font)
             style.configure("Main.TCombobox", font=self.main_font)
             for checkbox_style in ("Main.Large.TCheckbutton", "Main.Multiline.TCheckbutton"):
@@ -809,7 +827,7 @@ class App:
         self.hamburger_button = ttk.Menubutton(
             header_frame,
             text="☰",
-            style="Main.TButton",
+            style="Main.Compact.TButton",
         )
         self.hamburger_menu = tk.Menu(self.hamburger_button, tearoff=False)
         self.donate_menu = tk.Menu(self.hamburger_menu, tearoff=False)
@@ -844,14 +862,6 @@ class App:
             row=row, column=1, columnspan=2, sticky="ew", padx=(6, 4), pady=0
         )
         self.search_path_drop_status = self._enable_search_path_drag_drop()
-        row += 1
-
-        ttk.Label(frm, text="Slam (optional)", style="Main.TLabel").grid(
-            row=row, column=0, sticky="w", padx=(4, 6), pady=(0, 1)
-        )
-        ttk.Entry(frm, textvariable=self.vars["search_path_slam_override"], width=33, style="Main.TEntry").grid(
-            row=row, column=1, sticky="w", padx=(6, 4), pady=(0, 1)
-        )
         row += 1
 
         options_frame = ttk.Frame(frm)
@@ -1014,7 +1024,7 @@ class App:
         button_frame.columnconfigure(1, weight=1)
         button_frame.columnconfigure(2, weight=1)
 
-        main_button_style = "Main.TButton"
+        main_button_style = "Main.Compact.TButton"
         left_button_group = ttk.Frame(button_frame)
         left_button_group.grid(row=0, column=0, sticky="w")
         self.tag_button = ttk.Button(
@@ -1026,7 +1036,7 @@ class App:
         self.tag_button.grid(row=0, column=0, padx=4, sticky="nsw")
         self.add_shows_button = ttk.Button(
             left_button_group,
-            text="Add Shows\n(incremental)",
+            text="Add New\nShows",
             command=self._open_add_to_inventory,
             style=main_button_style,
         )
@@ -1038,6 +1048,13 @@ class App:
             style=main_button_style,
         )
         self.research_button.grid(row=0, column=2, padx=4, sticky="nsw")
+        self.manual_tweaks_button = ttk.Button(
+            left_button_group,
+            text="Manual\nTweaks",
+            command=self._open_manual_updates,
+            style=main_button_style,
+        )
+        self.manual_tweaks_button.grid(row=0, column=3, padx=4, sticky="nsw")
         ttk.Button(
             button_frame,
             text="Quit",
@@ -1791,13 +1808,16 @@ class App:
         inventory_active = self._inventory_is_running()
         tag_active = self._tag_is_running()
         updater_open = self._updater_is_open()
+        manual_open = self._manual_updates_is_open()
         try:
             if self.tag_button is not None:
-                self.tag_button.configure(state=("disabled" if inventory_active or updater_open or tag_active else "normal"))
+                self.tag_button.configure(state=("disabled" if inventory_active or updater_open or manual_open or tag_active else "normal"))
             if self.add_shows_button is not None:
-                self.add_shows_button.configure(state=("disabled" if inventory_active or tag_active else "normal"))
+                self.add_shows_button.configure(state=("disabled" if inventory_active or manual_open or tag_active else "normal"))
             if self.inventory_button is not None:
-                self.inventory_button.configure(state=("disabled" if updater_open or tag_active or inventory_active else "normal"))
+                self.inventory_button.configure(state=("disabled" if updater_open or manual_open or tag_active or inventory_active else "normal"))
+            if self.manual_tweaks_button is not None:
+                self.manual_tweaks_button.configure(state=("disabled" if inventory_active or updater_open or manual_open or tag_active else "normal"))
             if self.pause_button is not None:
                 self.pause_button.configure(state=("normal" if (inventory_active or tag_active) else "disabled"))
             if self.resume_button is not None:
@@ -1819,6 +1839,22 @@ class App:
             exists = False
         if not exists:
             self.active_updater_window = None
+        return exists
+
+    def _manual_updates_is_open(self):
+        manual = getattr(self, "active_manual_updates_window", None)
+        if manual is None:
+            return False
+        window = getattr(manual, "window", None)
+        if window is None:
+            self.active_manual_updates_window = None
+            return False
+        try:
+            exists = bool(window.winfo_exists())
+        except tk.TclError:
+            exists = False
+        if not exists:
+            self.active_manual_updates_window = None
         return exists
 
     def _tagger_is_open(self):
@@ -2006,6 +2042,30 @@ class App:
         self.worker = threading.Thread(target=target, daemon=True)
         self.worker.start()
 
+    def _open_manual_updates(self):
+        if self._main_operation_is_running() or self._updater_is_open():
+            messagebox.showwarning(
+                "tlo-ggi",
+                "Manual Tweaks cannot be opened while Inventory, Tag, or Add New Shows is active.",
+                parent=self.root,
+            )
+            return
+        if self._manual_updates_is_open():
+            try:
+                self.active_manual_updates_window.window.lift()
+                self.active_manual_updates_window.window.focus_force()
+            except tk.TclError:
+                pass
+            return
+        try:
+            config = self._build_config(for_add_shows=True)
+        except _InventoryStartCancelled:
+            return
+        except Exception as exc:
+            messagebox.showerror("tlo-ggi", str(exc), parent=self.root)
+            return
+        ManualUpdatesWindow(self, config)
+
     def _open_add_to_inventory(self):
         if self._tag_is_running():
             messagebox.showwarning(
@@ -2074,7 +2134,7 @@ class App:
             except tk.TclError:
                 pass
             alert.destroy()
-            # Abort only cancels the Add Shows (incremental) launch.
+            # Abort only cancels the Add New Shows launch.
             # The main tlo-ggi application remains open.
             try:
                 self.root.focus_force()
@@ -3262,6 +3322,285 @@ class TaggerWindow:
             self.window.after(100, self._drain)
         except tk.TclError:
             pass
+
+
+class ManualUpdatesWindow:
+    """User-directed folder-name and inventory corrections."""
+
+    def __init__(self, parent_app, config):
+        self.parent_app = parent_app
+        self.config = config
+        self._processing = False
+        self.window = tk.Toplevel(parent_app.root)
+        self.window.title("Manual Updates")
+        parent_app.active_manual_updates_window = self
+        parent_app._update_main_action_states()
+        self.window.protocol("WM_DELETE_WINDOW", self._quit)
+        self._build()
+
+    def _build(self):
+        frm = ttk.Frame(self.window, padding=10)
+        frm.grid(sticky="nsew")
+        self.window.columnconfigure(0, weight=1)
+        self.window.rowconfigure(0, weight=1)
+        frm.columnconfigure(1, weight=1)
+
+        title_font = getattr(self.parent_app, "title_font", None) or tkfont.Font(size=12, weight="bold")
+        header = ttk.Frame(frm)
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        header.columnconfigure(0, weight=1)
+        ttk.Label(header, text="Traders Little Organizer™ Manual Updates", font=title_font).grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text=f"TLOHome: {self.config.TLOHome}").grid(row=0, column=1, sticky="e", padx=(12, 0))
+
+        self.original_var = tk.StringVar(value="")
+        self.new_name_var = tk.StringVar(value="")
+        self.status_var = tk.StringVar(value="Ready")
+
+        ttk.Label(frm, text="Original (to be edited)").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.original_entry = ttk.Entry(frm, textvariable=self.original_var, width=66)
+        self.original_entry.grid(row=1, column=1, sticky="ew", pady=4)
+
+        ttk.Label(frm, text="New Name").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.new_name_entry = ttk.Entry(frm, textvariable=self.new_name_var, width=66)
+        self.new_name_entry.grid(row=2, column=1, sticky="ew", pady=4)
+
+        buttons = ttk.Frame(frm)
+        buttons.grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 4))
+        self.save_button = ttk.Button(buttons, text="Save", command=self._save)
+        self.save_button.grid(row=0, column=0, padx=(0, 6))
+        self.quit_button = ttk.Button(buttons, text="Quit", command=self._quit)
+        self.quit_button.grid(row=0, column=1, padx=6)
+        ttk.Label(frm, textvariable=self.status_var, justify="left", wraplength=900).grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
+
+        self.original_var.trace_add("write", self._original_changed)
+        self._original_drop = enable_single_folder_or_txt_drop(
+            self.original_entry,
+            self.original_var,
+            field_label="Original",
+            on_error=lambda msg: messagebox.showwarning("Manual Updates", msg, parent=self.window),
+        )
+        self._new_drop = enable_leaf_folder_drop(
+            self.new_name_entry,
+            self.new_name_var,
+            enabled_callback=self._new_name_drop_enabled,
+            field_label="New Name",
+            on_error=lambda msg: messagebox.showwarning("Manual Updates", msg, parent=self.window),
+        )
+        self._original_changed()
+
+    def _new_name_drop_enabled(self):
+        value = self.original_var.get().strip()
+        return bool(value and os.path.isdir(normalize_platform_input_path(value)))
+
+    def _original_changed(self, *_args):
+        value = self.original_var.get().strip()
+        is_txt = value.lower().endswith(".txt")
+        try:
+            self.new_name_entry.configure(state=("disabled" if is_txt else "normal"))
+        except tk.TclError:
+            pass
+        if is_txt:
+            self.new_name_var.set("")
+
+    def _set_processing(self, active: bool):
+        self._processing = active
+        state = "disabled" if active else "normal"
+        try:
+            self.save_button.configure(state=state)
+            self.quit_button.configure(state=state)
+            self.original_entry.configure(state=state)
+            if not self.original_var.get().strip().lower().endswith(".txt"):
+                self.new_name_entry.configure(state=state)
+        except tk.TclError:
+            pass
+
+    def _prompt_unidentified_destination(self, new_name: str):
+        result = {"path": ""}
+        dialog = tk.Toplevel(self.window)
+        dialog.title("Where is the unidentified show going?")
+        dialog.transient(self.window)
+        dialog.grab_set()
+        frame = ttk.Frame(dialog, padding=10)
+        frame.grid(sticky="nsew")
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(0, weight=1)
+        frame.columnconfigure(1, weight=1)
+
+        title_font = getattr(self.parent_app, "title_font", None) or tkfont.Font(size=12, weight="bold")
+        header = ttk.Frame(frame)
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        header.columnconfigure(0, weight=1)
+        ttk.Label(
+            header,
+            text="Traders Little Organizer™ Where is the unidentified show going?",
+            font=title_font,
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text=f"TLOHome: {self.config.TLOHome}").grid(
+            row=0, column=1, sticky="e", padx=(12, 0)
+        )
+
+        path_var = tk.StringVar(value="")
+        ttk.Label(frame, text="Path").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        path_entry = ttk.Entry(frame, textvariable=path_var, width=66)
+        path_entry.grid(row=1, column=1, sticky="ew", pady=4)
+        ttk.Label(
+            frame,
+            text=(
+                f"Drop or enter either the destination parent folder or the already-renamed '{new_name}' folder. "
+                "TLO will not move or rename anything."
+            ),
+            justify="left",
+            wraplength=760,
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 8))
+
+        enable_folder_path_drop(
+            path_entry,
+            path_var,
+            field_label="Path",
+            on_error=lambda msg: messagebox.showwarning(
+                "Where is the unidentified show going?", msg, parent=dialog
+            ),
+        )
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=3, column=0, columnspan=2, sticky="e", pady=(6, 0))
+
+        def close(accept=False):
+            if accept:
+                value = path_var.get().strip()
+                if not value:
+                    messagebox.showerror(
+                        "Where is the unidentified show going?",
+                        "Path is required.",
+                        parent=dialog,
+                    )
+                    return
+                result["path"] = value
+            try:
+                dialog.grab_release()
+            except tk.TclError:
+                pass
+            dialog.destroy()
+
+        ttk.Button(buttons, text="Continue", command=lambda: close(True)).grid(row=0, column=0, padx=4)
+        ttk.Button(buttons, text="Cancel", command=lambda: close(False)).grid(row=0, column=1, padx=4)
+        dialog.protocol("WM_DELETE_WINDOW", lambda: close(False))
+        dialog.wait_visibility()
+        path_entry.focus_set()
+        dialog.wait_window()
+        return result["path"]
+
+    def _collect_unidentified_destinations_for_file(self, path_name: str):
+        destinations = {}
+        for item in parse_manual_updates_file(path_name):
+            kind = manual_update_source_kind(self.config.TLOHome, item.original_path)
+            if kind != "unidentified":
+                continue
+            destination = self._prompt_unidentified_destination(item.new_name)
+            if not destination:
+                return None
+            destinations[item.line_number] = destination
+        return destinations
+
+    def _save(self):
+        if self._processing:
+            return
+        original = self.original_var.get().strip()
+        if not original:
+            messagebox.showerror("Manual Updates", "Original is required.", parent=self.window)
+            return
+        is_file = original.lower().endswith(".txt")
+        new_name = self.new_name_var.get().strip()
+        if not is_file and not new_name:
+            messagebox.showerror("Manual Updates", "New Name is required for a folder update.", parent=self.window)
+            return
+        unidentified_destinations = {}
+        unidentified_destination = ""
+        try:
+            if is_file:
+                collected = self._collect_unidentified_destinations_for_file(original)
+                if collected is None:
+                    return
+                unidentified_destinations = collected
+            else:
+                source_kind = manual_update_source_kind(self.config.TLOHome, original)
+                if source_kind == "unidentified":
+                    unidentified_destination = self._prompt_unidentified_destination(new_name)
+                    if not unidentified_destination:
+                        return
+        except Exception as exc:
+            messagebox.showerror("Manual Updates", str(exc), parent=self.window)
+            return
+
+        self._set_processing(True)
+        self.status_var.set("Applying manual inventory update...")
+
+        def worker():
+            result = None
+            error = None
+            try:
+                if is_file:
+                    result = apply_manual_updates_file(
+                        self.config,
+                        original,
+                        unidentified_destinations=unidentified_destinations,
+                    )
+                elif unidentified_destination:
+                    result = apply_unidentified_manual_update(
+                        self.config, original, new_name, unidentified_destination
+                    )
+                else:
+                    result = apply_folder_manual_update(self.config, original, new_name)
+            except Exception as exc:  # noqa: BLE001 - report at GUI boundary
+                error = exc
+            try:
+                self.window.after(0, lambda: self._finish_save(is_file, result, error))
+            except tk.TclError:
+                pass
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finish_save(self, is_file, result, error):
+        self._set_processing(False)
+        if error is not None:
+            self.status_var.set("Manual update failed.")
+            messagebox.showerror("Manual Updates", str(error), parent=self.window)
+            return
+        if is_file:
+            updated = int((result or {}).get("updated", 0))
+            errors = list((result or {}).get("errors", []) or [])
+            if errors:
+                detail = "\n".join(
+                    f"Line {item.get('line')}: {item.get('error')}" for item in errors[:12]
+                )
+                self.status_var.set(f"Updated {updated}; {len(errors)} failed.")
+                messagebox.showwarning(
+                    "Manual Updates",
+                    f"Updated {updated} folder(s); {len(errors)} failed.\n\n{detail}",
+                    parent=self.window,
+                )
+            else:
+                self.status_var.set(f"Updated {updated} folder(s).")
+                messagebox.showinfo("Manual Updates", f"Updated {updated} folder(s).", parent=self.window)
+        else:
+            new_path = (result or {}).get("new_path", "")
+            self.status_var.set(f"Updated inventory: {new_path}")
+            self.original_var.set(str(new_path or ""))
+            self.new_name_var.set("")
+            messagebox.showinfo("Manual Updates", "Folder and inventory updated.", parent=self.window)
+
+    def _quit(self):
+        if self._processing:
+            return
+        if getattr(self.parent_app, "active_manual_updates_window", None) is self:
+            self.parent_app.active_manual_updates_window = None
+        try:
+            self.window.destroy()
+        except tk.TclError:
+            pass
+        self.parent_app._update_main_action_states()
 
 
 class AddToInventoryWindow:

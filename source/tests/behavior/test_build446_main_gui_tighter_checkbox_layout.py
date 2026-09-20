@@ -35,5 +35,5 @@ def test_build446_checkbox_columns_use_tighter_horizontal_spacing():
 def test_build446_main_path_entries_are_narrower_to_reduce_natural_window_width():
     source = _source()
     assert 'self.search_path_entry = ttk.Entry(frm, textvariable=self.vars["search_path_override"], width=66' in source
-    assert 'ttk.Entry(frm, textvariable=self.vars["search_path_slam_override"], width=33' in source
+    assert 'text="Slam (optional)"' not in source
     assert 'width=92, style="Main.TEntry"' not in source

@@ -1,4 +1,4 @@
-__version__ = "v472"
+__version__ = "v476"
 from dataclasses import dataclass, field
 from typing import Dict, List
 
@@ -32,6 +32,8 @@ class ShowMetadata:
     qualifier: str = ""
     parentheticals: str = ""
     album_name: str = ""
+    descriptor: str = ""
+    descriptor_source: str = ""
     is_24_bit: bool = False
     show_name: str = ""
     show_in_conflict: bool = False

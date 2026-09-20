@@ -1,4 +1,4 @@
-__version__ = "v472"
+__version__ = "v476"
 from tlo_diagnostics import debug_suppressed_exception
 import os
 import re
@@ -434,12 +434,13 @@ def _parse_inventory_file(file_path):
 
 
 def _split_search_path_entries(value):
-    """Split the Search Path value on semicolons outside quoted strings.
+    """Split Path(s) entries on semicolons outside quoted strings.
 
-    Search Path is a required, semicolon-delimited inventory-control input.
-    Each direct entry uses the same path/directive grammar as one line of an
-    inventory-control text file. Quoted paths/directive values may contain a
-    literal semicolon without starting another entry.
+    Build 476 restores semicolon-separated entries in the single-line GUI
+    field. Commas are ordinary path/directive characters and never act as
+    Path(s) separators. Matching single/double quotes remain accepted around
+    entries or values, but are not required merely because a value contains a
+    comma.
     """
     text = str(value or "").strip()
     if not text:
@@ -488,8 +489,8 @@ def parse_search_path_input(
 ):
     """Parse the required Search Path input into inventory candidate tuples.
 
-    The Search Path value may contain multiple semicolon-separated direct
-    entries. Each direct entry uses the same grammar as one line of the former
+    The Path(s) value may contain multiple semicolon-separated direct entries.
+    Each direct entry uses the same grammar as one line of the former
     TLOHome/toBeInventoried.txt input: optional [Volume] prefix followed by a
     path and optional --$slam / --$copy / --$copy-delete directives.
 

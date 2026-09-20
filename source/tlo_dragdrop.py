@@ -1,4 +1,4 @@
-__version__ = "v472"
+__version__ = "v476"
 
 """Native-Windows-only drag-and-drop helpers for the TLO Tk GUI.
 
@@ -131,10 +131,7 @@ def _search_path_values_from_drop(widget, data: str) -> list[str]:
 
 def _format_search_path_drop_value(path: str) -> str:
     """Format one dropped path for the semicolon-delimited Search Path field."""
-    value = str(path or "").strip()
-    if ";" in value:
-        return f'"{value}"'
-    return value
+    return str(path or "").strip()
 
 
 def _append_search_path_drop_values(existing: str, values: list[str]) -> str:
@@ -245,3 +242,77 @@ def enable_tagging_path_folder_drop(
         field_label="Tagging Path",
         on_error=on_error,
     )
+
+
+
+def enable_single_folder_or_txt_drop(
+    entry_widget,
+    string_var,
+    *,
+    field_label: str = "Original",
+    on_error: Optional[Callable[[str], None]] = None,
+    on_value: Optional[Callable[[str], None]] = None,
+) -> DragDropStatus:
+    """Enable a drop target that accepts exactly one folder or one .txt file."""
+    if not is_drag_drop_platform():
+        return DragDropStatus(False, "Drag/drop is available only in native Windows.")
+
+    def handle_drop(event):
+        paths = split_dropped_paths(entry_widget, getattr(event, "data", ""))
+        if len(paths) != 1:
+            if on_error:
+                on_error(f"Drop exactly one folder or one .txt file onto {field_label}.")
+            return "refuse_drop"
+        path = paths[0]
+        if not (os.path.isdir(path) or (os.path.isfile(path) and path.lower().endswith(".txt"))):
+            if on_error:
+                on_error(f"{field_label} accepts one folder or one .txt file.")
+            return "refuse_drop"
+        string_var.set(path)
+        if on_value:
+            on_value(path)
+        try:
+            entry_widget.icursor("end")
+            entry_widget.focus_set()
+        except Exception as exc:  # noqa: BLE001
+            debug_suppressed_exception(__name__, exc)
+        return _accepted_drop_action(event)
+
+    entry_widget.drop_target_register(DND_FILES)
+    entry_widget.dnd_bind("<<Drop:DND_Files>>", handle_drop)
+    return DragDropStatus(True, provider="tkinterdnd2")
+
+
+def enable_leaf_folder_drop(
+    entry_widget,
+    string_var,
+    *,
+    enabled_callback: Optional[Callable[[], bool]] = None,
+    field_label: str = "New Name",
+    on_error: Optional[Callable[[str], None]] = None,
+) -> DragDropStatus:
+    """Accept exactly one folder and write only its leaf folder name."""
+    if not is_drag_drop_platform():
+        return DragDropStatus(False, "Drag/drop is available only in native Windows.")
+
+    def handle_drop(event):
+        if enabled_callback is not None and not enabled_callback():
+            if on_error:
+                on_error(f"{field_label} drag/drop is enabled only when Original contains one folder.")
+            return "refuse_drop"
+        paths = split_dropped_paths(entry_widget, getattr(event, "data", ""))
+        if len(paths) != 1 or not os.path.isdir(paths[0]):
+            if on_error:
+                on_error(f"Drop exactly one folder onto {field_label}.")
+            return "refuse_drop"
+        string_var.set(os.path.basename(os.path.normpath(paths[0])))
+        try:
+            entry_widget.icursor("end")
+            entry_widget.focus_set()
+        except Exception as exc:  # noqa: BLE001
+            debug_suppressed_exception(__name__, exc)
+        return _accepted_drop_action(event)
+
+    entry_widget.drop_target_register(DND_FILES)
+    entry_widget.dnd_bind("<<Drop:DND_Files>>", handle_drop)
+    return DragDropStatus(True, provider="tkinterdnd2")

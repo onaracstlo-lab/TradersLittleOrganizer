@@ -99,15 +99,15 @@ def test_ray_price_folder_resolves_structured_partial_date_show():
 
 
 def test_build424_documentation_integrates_partial_boundary_date_rule():
-    requirements = Document(ROOT / "TLO_Inventory_Requirements_Working_v472.docx")
+    requirements = Document(ROOT / "TLO_Inventory_Requirements_Working_v476.docx")
     requirements_text = "\n".join(paragraph.text for paragraph in requirements.paragraphs)
-    manual_text = (ROOT / "TLO_Inventory_User_Manual_v472.rtf").read_text(
+    manual_text = (ROOT / "TLO_Inventory_User_Manual_v476.rtf").read_text(
         encoding="utf-8", errors="ignore"
     )
 
-    assert "Current document version: v472 (v1.6 Build 472)." in requirements_text
+    assert "Current document version: v476 (v1.7 Build 476)." in requirements_text
     assert "supported normalized partial date when it occurs at the beginning or end of String2" in requirements_text
     assert "Ray Price 1981-xx-xx Gilley's Pasadena, TX" in requirements_text
-    assert "Version v1.6 Build 472" in manual_text
+    assert "Version v1.7 Build 476" in manual_text
     assert "a supported partial date when that date is at the beginning or end of String2" in manual_text
     assert "Ray Price 1981-xx-xx Gilley's Pasadena, TX" in manual_text

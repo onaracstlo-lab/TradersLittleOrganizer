@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v472"
+__version__ = "v476"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
@@ -43,6 +43,7 @@ from tlo_constants import (
     LOCATION_CONNECTIVE_WORDS,
 )
 from tlo_models import Candidate, ShowMetadata
+from tlo_show_descriptor import extract_fallback_descriptor
 from tlo_text_utils import compact_ws, normalized_compare_value, standard_ascii_text
 from tlo_etree_lookup import ETreeDBError, lookup_venue_and_location
 from tlo_setlistfm_lookup import SetlistFMError, collect_setlists_by_performance as collect_setlistfm_setlists_by_performance, is_us_country, lookup_venue_and_location as lookup_setlistfm_venue_and_location
@@ -3131,7 +3132,7 @@ def _build_compliant_string2_show_name(record: ShowMetadata) -> str:
     if not record.artist or not record.date:
         return ""
     return _append_parentheticals_to_show_name(
-        compact_ws(" ".join(part for part in [record.artist, record.date, record.venue] if part)),
+        compact_ws(" ".join(part for part in [record.artist, record.date, record.venue, record.descriptor] if part)),
         record.parentheticals,
     )
 
@@ -3260,7 +3261,10 @@ def _apply_string_dash_album_to_record(record: ShowMetadata, dash_match: Optiona
 def _build_compliant_string_date_show_name(record: ShowMetadata) -> str:
     if not record.artist or not record.date:
         return ""
-    return _append_parentheticals_to_show_name(compact_ws(f"{record.artist} {record.date}"), record.parentheticals)
+    return _append_parentheticals_to_show_name(
+        compact_ws(" ".join(part for part in [record.artist, record.date, record.descriptor] if part)),
+        record.parentheticals,
+    )
 
 
 def _etree_lookup_is_usable(record: ShowMetadata) -> bool:
@@ -3867,10 +3871,43 @@ def _apply_selected_day_range_parenthetical(
         return
 
 
+
+def _apply_unknown_date_descriptor_fallback(record: ShowMetadata, observations: List[str]) -> bool:
+    """Attach a conservative non-geographic descriptor for unknown-date material.
+
+    This is deliberately not venue/location inference.  It is only eligible
+    when the canonical date placeholder is present and both venue and location
+    are blank.  The descriptor may describe a collection, release, broadcast,
+    session, rehearsal, demo, or other identifying material found in the
+    selected setlist/header, setlist filename, or stripped folder residue.
+    """
+    if compact_ws(getattr(record, "date", "")).casefold() != "xxxx-xx-xx":
+        return False
+    if compact_ws(getattr(record, "venue", "")) or compact_ws(getattr(record, "location", "")):
+        return False
+    if compact_ws(getattr(record, "descriptor", "")):
+        return True
+
+    candidate = extract_fallback_descriptor(
+        setlist_file=getattr(record, "setlist_file", ""),
+        setlist_files=getattr(record, "setlist_files", []) or [],
+        artist=getattr(record, "artist", ""),
+        main_dir_name=getattr(record, "main_dir_name", ""),
+    )
+    if candidate is None:
+        return False
+
+    record.descriptor = compact_ws(candidate.value)
+    record.descriptor_source = compact_ws(candidate.source)
+    observations.append(
+        f"unknown-date descriptor fallback used {record.descriptor_source}: {record.descriptor}"
+    )
+    return True
+
 def _build_show_name(record: ShowMetadata) -> str:
     if not record.artist or not record.date:
         return ""
-    parts = [part for part in [record.artist, record.date, record.venue, record.location] if part]
+    parts = [part for part in [record.artist, record.date, record.venue, record.location, record.descriptor] if part]
     show_name = " ".join(parts)
     qualifier = compact_ws(record.qualifier)
     if qualifier and qualifier.casefold() not in show_name.casefold() and qualifier.casefold() not in compact_ws(record.parentheticals).casefold():
@@ -3882,7 +3919,7 @@ def _normalize_record_ascii_for_output(record: ShowMetadata) -> ShowMetadata:
     """Normalize user-facing metadata fields before logs, bootlist, folders and tags use them."""
     for attr in (
         "artist", "date", "venue", "city", "region", "country", "location",
-        "parentheticals", "album_name", "qualifier", "show_name",
+        "parentheticals", "album_name", "descriptor", "descriptor_source", "qualifier", "show_name",
     ):
         try:
             value = getattr(record, attr, "")
@@ -4063,6 +4100,8 @@ def _format_show_metadata_log_lines(record: ShowMetadata, date_matches: List[Dic
     lines.append(f"QUALIFIER: {record.qualifier}")
     lines.append(f"PARENTHETICALS: {record.parentheticals}")
     lines.append(f"ALBUM_NAME: {getattr(record, 'album_name', '')}")
+    lines.append(f"DESCRIPTOR: {getattr(record, 'descriptor', '')}")
+    lines.append(f"DESCRIPTOR_SOURCE: {getattr(record, 'descriptor_source', '')}")
     lines.append(f"IS_24_BIT: {'yes' if record.is_24_bit else 'no'}")
     if getattr(record, "setlistfm_setlist_candidates", None):
         lines.append(f"SETLISTFM_SETLISTS_JSON: {json.dumps(record.setlistfm_setlist_candidates, ensure_ascii=False)}")
@@ -5838,6 +5877,7 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
     if not record.artist and not (compliant_folder_name_show_match or compliant_mp3_year_show_match):
         unresolved_reasons.append("unable to identify artist")
     _apply_selected_day_range_parenthetical(record, date_matches, observations)
+    _apply_unknown_date_descriptor_fallback(record, observations)
     if compliant_dash_match:
         record.show_name = _build_compliant_dash_show_name(record)
     elif compliant_string_date_match:
@@ -6359,6 +6399,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
     else:
         if not record.date and not any("date conflict" in conflict.lower() for conflict in conflicts):
             record.date = "xxxx-xx-xx"
+        _apply_unknown_date_descriptor_fallback(record, observations)
         if record.artist and record.date:
             record.show_name = _build_show_name(record)
     record.show_name = _append_parentheticals_to_show_name(record.show_name, record.parentheticals)

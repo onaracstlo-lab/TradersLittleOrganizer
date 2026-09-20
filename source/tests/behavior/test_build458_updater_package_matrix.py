@@ -131,10 +131,10 @@ def test_build458_manifest_platform_mismatch_is_rejected(tmp_path):
 
 def test_build458_check_for_updates_reports_database_refresh(monkeypatch, tmp_path):
     available_build = BUNDLE_BUILD + 1
-    name = f"TLO_V1.6Build{available_build}_update_Linux.zip"
+    name = f"TLO_V1.7Build{available_build}_update_Linux.zip"
     release = {
-        "tag_name": f"v1.6-build{available_build}",
-        "name": f"TLO v1.6 Build {available_build}",
+        "tag_name": f"v1.7-build{available_build}",
+        "name": f"TLO v1.7 Build {available_build}",
         "assets": [_asset(name)],
     }
     monkeypatch.setattr(U.sys, "platform", "linux")
@@ -157,10 +157,10 @@ def test_build458_check_for_updates_reports_database_refresh(monkeypatch, tmp_pa
 def test_build458_current_documentation_describes_package_matrix():
     root = Path(__file__).resolve().parents[2]
     from docx import Document
-    req_text = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v472.docx").paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v472.rtf").read_text(encoding="utf-8", errors="ignore")
+    req_text = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v476.docx").paragraphs)
+    manual = (root / "TLO_Inventory_User_Manual_v476.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = (root / "TLO-FAQ.txt").read_text(encoding="utf-8")
-    assert "Current document version: v472 (v1.6 Build 472)." in req_text
+    assert "Current document version: v476 (v1.7 Build 476)." in req_text
     assert "exact matching complete ZIP" in req_text
     assert "databases_included" in req_text
     assert "only the four complete ZIPs" in manual

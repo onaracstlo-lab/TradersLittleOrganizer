@@ -158,15 +158,15 @@ def test_build409_requirements_and_manual_document_numbered_setlist_safety_rule(
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v472.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v476.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v472.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v476.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v472 (v1.6 Build 472)." in req_text
+    assert "Current document version: v476 (v1.7 Build 476)." in req_text
     assert "Build 409 numbered-setlist safety rule" in req_text
     assert "short number is more likely to be a bare track number" in req_text
     assert "titles such as 69 and 1999 must remain valid" in req_text
     assert "Gary Burton(vib) and Chick Corea (p)" in req_text
     assert "convincing run of at least three consecutive numbered song rows" in req_text
-    assert "Version v1.6 Build 472" in manual_text
+    assert "Version v1.7 Build 476" in manual_text
     assert "Gary Burton(vib) or Chick Corea (p)" in manual_text

@@ -31,7 +31,7 @@ Notes for the new schema:
 
 from __future__ import annotations
 
-__version__ = "v472"
+__version__ = "v476"
 
 import argparse
 import os

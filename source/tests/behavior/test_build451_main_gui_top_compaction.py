@@ -39,11 +39,10 @@ def test_build451_search_path_is_single_line_label_with_no_helper_row():
     assert 'row=row, column=1, columnspan=2, sticky="ew", padx=(6, 4), pady=0' in block
 
 
-def test_build451_slam_optional_is_inline_and_has_no_helper_row():
+def test_build474_slam_control_is_removed_from_main_gui():
     block = _build_block()
-    assert 'text="Slam (optional)"' in block
-    assert 'ttk.Label(frm, text="(optional/override)"' not in block
-    assert 'textvariable=self.vars["search_path_slam_override"], width=33' in block
+    assert 'text="Slam (optional)"' not in block
+    assert 'textvariable=self.vars["search_path_slam_override"]' not in block
 
 
 def test_build451_top_controls_use_compact_vertical_padding():

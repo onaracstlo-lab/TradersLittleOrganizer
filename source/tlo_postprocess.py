@@ -1,6 +1,6 @@
 """Postprocess metadata logs into setlist files, bootlist.csv, duplicate/group outputs, and summary/unidentified-show files."""
 
-__version__ = "v472"
+__version__ = "v476"
 import csv
 import json
 import os
@@ -114,7 +114,7 @@ def _metadata_record_to_postprocess_dict(record) -> Dict[str, str]:
     else:
         fields = (
             "show_name", "setlist_file", "volume_label", "artist", "artist_not_in_database", "date",
-            "venue", "location", "parentheticals", "album_name",
+            "venue", "location", "parentheticals", "album_name", "descriptor", "descriptor_source",
             "show_in_conflict", "main_dir_path", "original_main_dir_path", "setlist_files", "music_dirs",
         )
         data = {field: getattr(record, field, "") for field in fields}
@@ -141,6 +141,8 @@ def _metadata_record_to_postprocess_dict(record) -> Dict[str, str]:
         "location": str(data.get("location") or ""),
         "parentheticals": str(data.get("parentheticals") or ""),
         "album_name": str(data.get("album_name") or ""),
+        "descriptor": str(data.get("descriptor") or ""),
+        "descriptor_source": str(data.get("descriptor_source") or ""),
         "show_in_conflict": str(show_in_conflict or "no"),
         "main_dir_path": str(data.get("main_dir_path") or ""),
         "original_main_dir_path": str(data.get("original_main_dir_path") or ""),
@@ -172,6 +174,8 @@ def _normalize_metadata_records_for_postprocess(records) -> List[Dict[str, str]]
                 "location": "",
                 "parentheticals": "",
                 "album_name": "",
+                "descriptor": "",
+                "descriptor_source": "",
                 "show_in_conflict": "yes",
                 "main_dir_path": str(record),
                 "original_main_dir_path": "",
@@ -195,6 +199,8 @@ def _parse_show_metadata_logs(tlo_home: str, tokens: Sequence[str] | None = None
             "location": "",
             "parentheticals": "",
             "album_name": "",
+            "descriptor": "",
+            "descriptor_source": "",
             "show_in_conflict": "no",
             "main_dir_path": "",
             "original_main_dir_path": "",
@@ -220,6 +226,8 @@ def _parse_show_metadata_logs(tlo_home: str, tokens: Sequence[str] | None = None
                         "location": "",
                         "parentheticals": "",
                         "album_name": "",
+                        "descriptor": "",
+                        "descriptor_source": "",
                         "show_in_conflict": "no",
                         "main_dir_path": "",
                         "original_main_dir_path": "",
@@ -254,6 +262,10 @@ def _parse_show_metadata_logs(tlo_home: str, tokens: Sequence[str] | None = None
                     current["parentheticals"] = value.strip()
                 elif key == "ALBUM_NAME":
                     current["album_name"] = value.strip()
+                elif key == "DESCRIPTOR":
+                    current["descriptor"] = value.strip()
+                elif key == "DESCRIPTOR_SOURCE":
+                    current["descriptor_source"] = value.strip()
                 elif key == "SHOW_IN_CONFLICT":
                     current["show_in_conflict"] = value.strip().lower()
                 elif key == "CONFLICT":
@@ -512,6 +524,7 @@ def _setlist_base_from_record(record: Dict[str, str], fallback: str = "Show") ->
     date = _sanitize_setlist_component(date_raw, keep_dash=True)
     venue = _sanitize_setlist_component(record.get("venue", ""))
     album_name = _sanitize_setlist_component(record.get("album_name", ""))
+    descriptor = _sanitize_setlist_component(record.get("descriptor", ""))
     venue_dash_safe = _sanitize_dash_album_component(record.get("venue", ""))
     album_name_dash_safe = _sanitize_dash_album_component(record.get("album_name", ""))
     location = _sanitize_setlist_component(record.get("location", ""))
@@ -547,7 +560,7 @@ def _setlist_base_from_record(record: Dict[str, str], fallback: str = "Show") ->
     if _date_like_component_matches_date(record.get("venue", ""), date):
         venue = ""
 
-    base = "".join([artist, date, venue, location, parentheticals])
+    base = "".join([artist, date, venue, location, descriptor, parentheticals])
     if base:
         base = _prefer_show_name_when_it_preserves_parentheticals(base, record, fallback=fallback)
         return _append_main_dir_parenthetical_suffix(base, record)
@@ -835,13 +848,14 @@ def _write_text_file(path_name: str, text: str) -> None:
 
 
 def _adjust_show_name_for_output(record: Dict[str, str]) -> str:
-    for key in ("artist", "date", "venue", "location", "parentheticals", "album_name", "show_name"):
+    for key in ("artist", "date", "venue", "location", "parentheticals", "album_name", "descriptor", "descriptor_source", "show_name"):
         if record.get(key):
             record[key] = standard_ascii_text(record.get(key, ""))
     artist = (record.get("artist") or "").strip()
     date = (record.get("date") or "").strip()
     venue = (record.get("venue") or "").strip()
     location = (record.get("location") or "").strip()
+    descriptor = (record.get("descriptor") or "").strip()
     parentheticals = (record.get("parentheticals") or "").strip()
     show_name = (record.get("show_name") or "").strip()
     conflicted = (record.get("show_in_conflict") or "").strip().casefold() == "yes"
@@ -855,7 +869,7 @@ def _adjust_show_name_for_output(record: Dict[str, str]) -> str:
         date = "xxxx-xx-xx"
         record["date"] = date
     if not show_name and artist and date:
-        show_name = " ".join(part for part in [artist, date, venue, location] if part).strip()
+        show_name = " ".join(part for part in [artist, date, venue, location, descriptor] if part).strip()
     if show_name and parentheticals and not show_name.endswith(parentheticals):
         show_name = f"{show_name} {parentheticals}".strip()
     record["show_name"] = show_name
