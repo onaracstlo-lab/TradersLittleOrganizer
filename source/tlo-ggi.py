@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v476"
+__version__ = "v478"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -3354,6 +3354,7 @@ class ManualUpdatesWindow:
 
         self.original_var = tk.StringVar(value="")
         self.new_name_var = tk.StringVar(value="")
+        self.update_tags_var = tk.BooleanVar(value=True)
         self.status_var = tk.StringVar(value="Ready")
 
         ttk.Label(frm, text="Original (to be edited)").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
@@ -3364,14 +3365,17 @@ class ManualUpdatesWindow:
         self.new_name_entry = ttk.Entry(frm, textvariable=self.new_name_var, width=66)
         self.new_name_entry.grid(row=2, column=1, sticky="ew", pady=4)
 
+        self.update_tags_check = ttk.Checkbutton(frm, text="Update Tags", variable=self.update_tags_var)
+        self.update_tags_check.grid(row=3, column=1, sticky="w", pady=(4, 2))
+
         buttons = ttk.Frame(frm)
-        buttons.grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 4))
+        buttons.grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 4))
         self.save_button = ttk.Button(buttons, text="Save", command=self._save)
         self.save_button.grid(row=0, column=0, padx=(0, 6))
         self.quit_button = ttk.Button(buttons, text="Quit", command=self._quit)
         self.quit_button.grid(row=0, column=1, padx=6)
         ttk.Label(frm, textvariable=self.status_var, justify="left", wraplength=900).grid(
-            row=4, column=0, columnspan=2, sticky="w", pady=(6, 0)
+            row=5, column=0, columnspan=2, sticky="w", pady=(6, 0)
         )
 
         self.original_var.trace_add("write", self._original_changed)
@@ -3392,7 +3396,10 @@ class ManualUpdatesWindow:
 
     def _new_name_drop_enabled(self):
         value = self.original_var.get().strip()
-        return bool(value and os.path.isdir(normalize_platform_input_path(value)))
+        # New Name accepts one dropped folder independently of Original.
+        # It is disabled only for batch .txt Manual Updates, where New Name
+        # comes from each control-file line instead of this entry.
+        return not value.lower().endswith(".txt")
 
     def _original_changed(self, *_args):
         value = self.original_var.get().strip()
@@ -3411,6 +3418,7 @@ class ManualUpdatesWindow:
             self.save_button.configure(state=state)
             self.quit_button.configure(state=state)
             self.original_entry.configure(state=state)
+            self.update_tags_check.configure(state=state)
             if not self.original_var.get().strip().lower().endswith(".txt"):
                 self.new_name_entry.configure(state=state)
         except tk.TclError:
@@ -3518,6 +3526,7 @@ class ManualUpdatesWindow:
             return
         unidentified_destinations = {}
         unidentified_destination = ""
+        update_tags = bool(self.update_tags_var.get())
         try:
             if is_file:
                 collected = self._collect_unidentified_destinations_for_file(original)
@@ -3546,13 +3555,17 @@ class ManualUpdatesWindow:
                         self.config,
                         original,
                         unidentified_destinations=unidentified_destinations,
+                        update_tags=update_tags,
                     )
                 elif unidentified_destination:
                     result = apply_unidentified_manual_update(
-                        self.config, original, new_name, unidentified_destination
+                        self.config, original, new_name, unidentified_destination,
+                        update_tags=update_tags,
                     )
                 else:
-                    result = apply_folder_manual_update(self.config, original, new_name)
+                    result = apply_folder_manual_update(
+                        self.config, original, new_name, update_tags=update_tags
+                    )
             except Exception as exc:  # noqa: BLE001 - report at GUI boundary
                 error = exc
             try:
@@ -3571,6 +3584,7 @@ class ManualUpdatesWindow:
         if is_file:
             updated = int((result or {}).get("updated", 0))
             errors = list((result or {}).get("errors", []) or [])
+            tag_warnings = list((result or {}).get("tag_warnings", []) or [])
             if errors:
                 detail = "\n".join(
                     f"Line {item.get('line')}: {item.get('error')}" for item in errors[:12]
@@ -3581,15 +3595,32 @@ class ManualUpdatesWindow:
                     f"Updated {updated} folder(s); {len(errors)} failed.\n\n{detail}",
                     parent=self.window,
                 )
+            elif tag_warnings:
+                detail = "\n".join(str(item) for item in tag_warnings[:12])
+                self.status_var.set(f"Updated {updated}; tag update warnings: {len(tag_warnings)}.")
+                messagebox.showwarning(
+                    "Manual Updates",
+                    f"Updated {updated} folder(s); tag updates reported {len(tag_warnings)} warning(s).\n\n{detail}",
+                    parent=self.window,
+                )
             else:
                 self.status_var.set(f"Updated {updated} folder(s).")
                 messagebox.showinfo("Manual Updates", f"Updated {updated} folder(s).", parent=self.window)
         else:
             new_path = (result or {}).get("new_path", "")
+            tag_warnings = list((result or {}).get("tag_warnings", []) or [])
             self.status_var.set(f"Updated inventory: {new_path}")
             self.original_var.set(str(new_path or ""))
             self.new_name_var.set("")
-            messagebox.showinfo("Manual Updates", "Folder and inventory updated.", parent=self.window)
+            if tag_warnings:
+                detail = "\n".join(str(item) for item in tag_warnings[:12])
+                messagebox.showwarning(
+                    "Manual Updates",
+                    f"Folder and inventory updated, but tag updating reported {len(tag_warnings)} warning(s).\n\n{detail}",
+                    parent=self.window,
+                )
+            else:
+                messagebox.showinfo("Manual Updates", "Folder and inventory updated.", parent=self.window)
 
     def _quit(self):
         if self._processing:

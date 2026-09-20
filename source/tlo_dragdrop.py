@@ -1,4 +1,4 @@
-__version__ = "v476"
+__version__ = "v478"
 
 """Native-Windows-only drag-and-drop helpers for the TLO Tk GUI.
 
@@ -298,7 +298,7 @@ def enable_leaf_folder_drop(
     def handle_drop(event):
         if enabled_callback is not None and not enabled_callback():
             if on_error:
-                on_error(f"{field_label} drag/drop is enabled only when Original contains one folder.")
+                on_error(f"{field_label} drag/drop is currently disabled.")
             return "refuse_drop"
         paths = split_dropped_paths(entry_widget, getattr(event, "data", ""))
         if len(paths) != 1 or not os.path.isdir(paths[0]):

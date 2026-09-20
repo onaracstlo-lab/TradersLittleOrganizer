@@ -37,7 +37,7 @@ def test_every_test_module_has_exactly_one_category_marker_and_traits_are_used()
 
 
 def test_requirements_authoritative_range_has_no_numbered_heading_above_20():
-    doc=Document(ROOT/"TLO_Inventory_Requirements_Working_v476.docx")
+    doc=Document(ROOT/"TLO_Inventory_Requirements_Working_v478.docx")
     numbered=[]
     for p in doc.paragraphs:
         if p.style.name == "Heading 1":
@@ -55,7 +55,7 @@ def test_no_stale_per_module_version_summary_metadata_remains():
 
 
 def test_manual_keywords_and_version_are_current():
-    text=(ROOT/"TLO_Inventory_User_Manual_v476.rtf").read_text(encoding="utf-8", errors="ignore")
+    text=(ROOT/"TLO_Inventory_User_Manual_v478.rtf").read_text(encoding="utf-8", errors="ignore")
     import tlo_version as V
     assert "Build,, ,373" not in text
     assert f"Version {V.DISPLAY_VERSION}" in text

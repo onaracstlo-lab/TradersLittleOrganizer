@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v476"
+__version__ = "v478"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
@@ -3560,6 +3560,33 @@ def _has_complete_local_venue_location(record: ShowMetadata) -> bool:
     return bool(record.venue and record.city and (record.region or record.country or record.location))
 
 
+def _apply_case_only_online_corroboration(
+    record: ShowMetadata,
+    evidence: Dict[str, List[Candidate]],
+    observations: List[str],
+    *,
+    field: str,
+    candidate_value: str,
+    source_label: str,
+    confidence: int,
+) -> bool:
+    """Adopt authoritative display case without changing metadata identity."""
+    existing = compact_ws(getattr(record, field, "") or "")
+    candidate = compact_ws(candidate_value or "")
+    if not existing or not candidate or existing == candidate:
+        return False
+    if existing.casefold() != candidate.casefold():
+        return False
+    setattr(record, field, candidate)
+    evidence.setdefault(field, []).append(
+        Candidate(candidate, f"{source_label}_case_corroboration", confidence)
+    )
+    observations.append(
+        f"{source_label} corrected capitalization for {field}: {existing} -> {candidate}"
+    )
+    return True
+
+
 def _apply_online_fields_fill_blanks(
     record: ShowMetadata,
     evidence: Dict[str, List[Candidate]],
@@ -3572,10 +3599,12 @@ def _apply_online_fields_fill_blanks(
     online_country: str,
     online_location: str,
 ) -> bool:
-    """Apply a lookup source only to blank metadata fields.
+    """Apply a lookup source to blanks plus case-only corroboration.
 
     Lookup sources may complete missing venue/location parts, but they must not
-    replace any nonblank field already identified by an earlier source.  In
+    substantively replace a nonblank field identified by an earlier source.
+    When the text is identical except for capitalization, the online spelling
+    may improve display case without changing metadata identity.  In
     non-compliant mode the order is path, eTreeDB, selected setlist metadata,
     then setlist.fm.  Differences are logged unless the values are equivalent
     or one is a token-boundary subset of the other.
@@ -3587,14 +3616,26 @@ def _apply_online_fields_fill_blanks(
         evidence.setdefault("venue", []).append(Candidate(record.venue, source_label, confidence))
         applied = True
     elif record.venue and online_venue:
-        _observe_online_disagreement(observations, source_label, "venue", record.venue, online_venue)
+        if _apply_case_only_online_corroboration(
+            record, evidence, observations, field="venue", candidate_value=online_venue,
+            source_label=source_label, confidence=confidence,
+        ):
+            applied = True
+        else:
+            _observe_online_disagreement(observations, source_label, "venue", record.venue, online_venue)
 
     if not record.city and online_city:
         record.city = online_city
         evidence.setdefault("city", []).append(Candidate(record.city, source_label, confidence))
         applied = True
     elif record.city and online_city:
-        _observe_online_disagreement(observations, source_label, "city", record.city, online_city)
+        if _apply_case_only_online_corroboration(
+            record, evidence, observations, field="city", candidate_value=online_city,
+            source_label=source_label, confidence=confidence,
+        ):
+            applied = True
+        else:
+            _observe_online_disagreement(observations, source_label, "city", record.city, online_city)
 
     # Region/country are mutually exclusive in normal TLO display: US locations
     # use region; non-US locations use country.  Fill whichever is blank only
@@ -3605,20 +3646,38 @@ def _apply_online_fields_fill_blanks(
             evidence.setdefault("region", []).append(Candidate(record.region, source_label, confidence))
             applied = True
         elif record.region:
-            _observe_online_disagreement(observations, source_label, "region", record.region, online_region)
+            if _apply_case_only_online_corroboration(
+                record, evidence, observations, field="region", candidate_value=online_region,
+                source_label=source_label, confidence=confidence,
+            ):
+                applied = True
+            else:
+                _observe_online_disagreement(observations, source_label, "region", record.region, online_region)
     if online_country:
         if not record.country and not record.region:
             record.country = online_country
             evidence.setdefault("country", []).append(Candidate(record.country, source_label, confidence))
             applied = True
         elif record.country:
-            _observe_online_disagreement(observations, source_label, "country", record.country, online_country)
+            if _apply_case_only_online_corroboration(
+                record, evidence, observations, field="country", candidate_value=online_country,
+                source_label=source_label, confidence=confidence,
+            ):
+                applied = True
+            else:
+                _observe_online_disagreement(observations, source_label, "country", record.country, online_country)
 
     if not record.location and (record.city or record.region or record.country):
         record.location = online_location or _join_location(record.city, record.region, record.country)
         applied = True
     elif record.location and online_location:
-        _observe_online_disagreement(observations, source_label, "location", record.location, online_location)
+        if _apply_case_only_online_corroboration(
+            record, evidence, observations, field="location", candidate_value=online_location,
+            source_label=source_label, confidence=confidence,
+        ):
+            applied = True
+        else:
+            _observe_online_disagreement(observations, source_label, "location", record.location, online_location)
 
     return applied
 

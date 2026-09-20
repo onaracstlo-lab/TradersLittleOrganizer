@@ -158,14 +158,14 @@ def test_build412_requirements_and_manual_document_explicit_track_region_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v476.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v478.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v476.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v478.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v476 (v1.7 Build 476)." in req_text
+    assert "Current document version: v478 (v1.7 Build 478)." in req_text
     assert "Build 412 explicit track-region boundary rule" in req_text
     assert "Reverend Gary Davis 1967-07-08" in req_text
     assert "Setlist 1" in req_text and "Track List 1" in req_text
-    assert "Version v1.7 Build 476" in manual_text
+    assert "Version v1.7 Build 478" in manual_text
     assert "on July 7, 1967:" in manual_text
     assert "on July 7, 1967:" in manual_text

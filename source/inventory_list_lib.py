@@ -1,4 +1,4 @@
-__version__ = "v476"
+__version__ = "v478"
 from tlo_diagnostics import debug_suppressed_exception
 import os
 import re
@@ -436,11 +436,11 @@ def _parse_inventory_file(file_path):
 def _split_search_path_entries(value):
     """Split Path(s) entries on semicolons outside quoted strings.
 
-    Build 476 restores semicolon-separated entries in the single-line GUI
-    field. Commas are ordinary path/directive characters and never act as
-    Path(s) separators. Matching single/double quotes remain accepted around
-    entries or values, but are not required merely because a value contains a
-    comma.
+    Build 476 restored semicolon-separated entries in the single-line GUI
+    field. Build 478 treats commas and apostrophes as ordinary path/directive
+    characters. Matching double quotes remain accepted around entries or
+    values, but are optional. Single quotes are always ordinary input text, so
+    names such as ``Tito Puente's`` cannot create an unmatched-quote error.
     """
     text = str(value or "").strip()
     if not text:
@@ -450,7 +450,7 @@ def _split_search_path_entries(value):
     current = []
     quote = ""
     for char in text:
-        if char in ('"', "'"):
+        if char == '"':
             if not quote:
                 quote = char
             elif quote == char:

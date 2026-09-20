@@ -1,6 +1,6 @@
 """Exact recursive directory-tree comparison and copy/alternate collision helpers."""
 
-__version__ = "v476"
+__version__ = "v478"
 
 import hashlib
 import os

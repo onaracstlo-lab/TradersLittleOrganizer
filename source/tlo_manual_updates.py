@@ -1,6 +1,6 @@
 """Manual folder-name corrections with coordinated bootlist/setlist updates."""
 
-__version__ = "v476"
+__version__ = "v478"
 
 import ntpath
 import os
@@ -9,6 +9,8 @@ from typing import Dict, List, Sequence, Tuple
 
 from tlo_folder_rename import rename_folder_exact_case, same_existing_entry
 from tlo_inventory_update import (
+    _build_single_folder_group,
+    _record_namespace_from_dict,
     create_or_replace_generated_setlist,
     identify_folder_dict,
     infer_setlist_paths_for_show,
@@ -248,7 +250,54 @@ def _delete_paths(paths: Sequence[str]) -> None:
             pass
 
 
-def apply_folder_manual_update(config, original_path: str, new_name: str) -> Dict[str, str]:
+def _manual_update_tag_warnings(stats: Dict[str, object], messages: Sequence[str]) -> List[str]:
+    skipped = int(stats.get("skipped", 0) or 0)
+    errors = int(stats.get("errors", 0) or 0)
+    if not skipped and not errors:
+        return []
+    warnings = [f"tag update: skipped_folders={skipped}, file_errors={errors}"]
+    for raw in messages:
+        line = str(raw or "").strip()
+        if not line:
+            continue
+        upper = line.upper()
+        if "ERROR" in upper or "SKIP" in upper or "CANCEL" in upper:
+            warnings.append(line)
+        if len(warnings) >= 6:
+            break
+    return warnings
+
+
+def _update_manual_folder_tags(config, folder_path: str, record_dict: Dict[str, str]) -> Tuple[Dict[str, object], List[str]]:
+    """Update one manually corrected folder's audio tags before inventory commit.
+
+    This intentionally uses the inventory-time tagging behavior without invoking
+    the standalone tagger corruption pass.  Manual Updates is a metadata/path
+    correction workflow; checking Update Tags must not unexpectedly delete or
+    move corrupt files or folders.
+    """
+    from tlo_tag_lib import tag_group_with_record
+
+    group = _build_single_folder_group(config, folder_path)
+    record = _record_namespace_from_dict(record_dict)
+    record.main_dir_path = os.path.normpath(folder_path)
+    record.main_dir_name = os.path.basename(record.main_dir_path)
+    messages: List[str] = []
+    stats = tag_group_with_record(
+        config,
+        group,
+        record,
+        emit=messages.append,
+        allow_unknown_metadata=True,
+        fallback_to_filenames_on_track_problem=True,
+        fallback_to_title_tags_on_track_problem=True,
+    )
+    return stats, _manual_update_tag_warnings(stats, messages)
+
+
+def apply_folder_manual_update(
+    config, original_path: str, new_name: str, *, update_tags: bool = False
+) -> Dict[str, object]:
     """Rename one folder in place and replace its bootlist/setlist inventory identity."""
     original = os.path.normpath(normalize_platform_input_path(strip_optional_quotes(original_path)))
     if not os.path.isabs(original):
@@ -281,17 +330,25 @@ def apply_folder_manual_update(config, original_path: str, new_name: str) -> Dic
 
     active_path = target
     generated = ""
+    tag_stats: Dict[str, object] = {}
+    tag_warnings: List[str] = []
     old_rows_all = read_bootlist(config.TLOHome)
     try:
-        # Remove old exported setlists before creating the replacement so a
-        # same-base manual correction does not spuriously become (alt1).
-        _delete_paths([path for path, _payload in snapshots])
         record = identify_folder_dict(config, active_path)
         # Manual Updates is explicitly user-directed.  The requested leaf is
         # authoritative for the inventory Show identity; the normal metadata
         # engine still supplies the exported setlist body and supporting fields.
         record["show_name"] = new_leaf
         record["main_dir_path"] = active_path
+        if update_tags:
+            tag_stats, tag_warnings = _update_manual_folder_tags(config, active_path, record)
+
+        # Finalize the inventory identity only after the optional tag update has
+        # completed.  Remove old exported setlists immediately before creating
+        # the replacement so a same-base manual correction does not spuriously
+        # become (alt1). Tag write warnings do not discard the user's manual
+        # path correction; they are returned to the GUI for explicit reporting.
+        _delete_paths([path for path, _payload in snapshots])
         generated = create_or_replace_generated_setlist(config.TLOHome, record)
 
         replace_keys = {(row.get("Show", ""), row.get("VolumePath", "")) for row in rows_to_replace}
@@ -331,6 +388,9 @@ def apply_folder_manual_update(config, original_path: str, new_name: str) -> Dic
         "new_name": new_leaf,
         "setlist": generated,
         "rows_replaced": str(len(rows_to_replace)),
+        "update_tags": "yes" if update_tags else "no",
+        "tag_stats": tag_stats,
+        "tag_warnings": tag_warnings,
     }
 
 
@@ -339,7 +399,9 @@ def apply_unidentified_manual_update(
     original_path: str,
     new_name: str,
     destination_path: str,
-) -> Dict[str, str]:
+    *,
+    update_tags: bool = False,
+) -> Dict[str, object]:
     """Inventory an already manually moved/renamed unidentified show.
 
     This branch never renames or moves a folder.  Original is used only to
@@ -370,10 +432,17 @@ def apply_unidentified_manual_update(
             unidentified_snapshot = infile.read()
 
     generated = ""
+    tag_stats: Dict[str, object] = {}
+    tag_warnings: List[str] = []
     try:
         record = identify_folder_dict(config, final_path)
         record["show_name"] = new_leaf
         record["main_dir_path"] = final_path
+        if update_tags:
+            tag_stats, tag_warnings = _update_manual_folder_tags(config, final_path, record)
+        # No move/rename occurs in this branch.  The tag update, when selected,
+        # runs against the manually changed folder before bootlist/setlist state
+        # is finalized.
         generated = create_or_replace_generated_setlist(config.TLOHome, record)
         rows = list(old_rows)
         rows.append({"Show": new_leaf, "VolumePath": final_path})
@@ -410,6 +479,9 @@ def apply_unidentified_manual_update(
         "new_name": new_leaf,
         "setlist": generated,
         "rows_replaced": "0",
+        "update_tags": "yes" if update_tags else "no",
+        "tag_stats": tag_stats,
+        "tag_warnings": tag_warnings,
     }
 
 
@@ -418,9 +490,11 @@ def apply_manual_updates_file(
     path_name: str,
     *,
     unidentified_destinations: Dict[int, str] | None = None,
+    update_tags: bool = False,
 ) -> Dict[str, object]:
     results = []
     errors = []
+    tag_warnings: List[str] = []
     destinations = dict(unidentified_destinations or {})
     for item in parse_manual_updates_file(path_name):
         try:
@@ -431,13 +505,23 @@ def apply_manual_updates_file(
                     raise ManualUpdateError(
                         "This unidentified show requires a destination Path from the Manual Updates window."
                     )
-                results.append(
-                    apply_unidentified_manual_update(
-                        config, item.original_path, item.new_name, destination
-                    )
+                item_result = apply_unidentified_manual_update(
+                    config, item.original_path, item.new_name, destination,
+                    update_tags=update_tags,
                 )
             else:
-                results.append(apply_folder_manual_update(config, item.original_path, item.new_name))
+                item_result = apply_folder_manual_update(
+                    config, item.original_path, item.new_name, update_tags=update_tags
+                )
+            results.append(item_result)
+            for warning in item_result.get("tag_warnings", []) or []:
+                tag_warnings.append(f"Line {item.line_number}: {warning}")
         except Exception as exc:
             errors.append({"line": item.line_number, "path": item.original_path, "error": str(exc)})
-    return {"updated": len(results), "errors": errors, "results": results}
+    return {
+        "updated": len(results),
+        "errors": errors,
+        "results": results,
+        "update_tags": "yes" if update_tags else "no",
+        "tag_warnings": tag_warnings,
+    }
