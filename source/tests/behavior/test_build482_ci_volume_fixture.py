@@ -9,7 +9,7 @@ import tlo_manual_updates as MU
 from tlo_bootlist_volume_policy import format_volume_path
 
 pytestmark = pytest.mark.behavior
-__version__ = "v482"
+__version__ = "v484"
 
 
 def _music_dir(path: Path) -> Path:

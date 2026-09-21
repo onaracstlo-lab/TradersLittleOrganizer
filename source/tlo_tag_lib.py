@@ -1,6 +1,6 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v482"
+__version__ = "v486"
 
 from tlo_diagnostics import debug_suppressed_exception
 import os
@@ -34,7 +34,7 @@ except Exception:  # pragma: no cover - optional fallback imports vary by mutage
 
 from inventory_parser_lib import Config
 from tlo_path_inputs import strip_optional_quotes, normalize_platform_input_path, resolve_tlo_home as resolve_tlo_home_common
-from tlo_options import validate_compliant_rename_exclusivity, validate_corruption_policy
+from tlo_options import validate_compliant_rename_exclusivity, validate_corruption_policy, validate_setlistfm_upgrade_environment
 from logging_lib import ARTIST_SQLITE_DB_FILENAME, TLO_DBS_DIRNAME, VENUE_REFERENCE_DB_FILENAME, setup_logging
 from tlo_artist_db import load_artist_matcher
 from tlo_audio_tags import collect_group_flac_tag_info
@@ -522,6 +522,10 @@ def build_tagger_config(
         raise TaggerError(str(exc)) from exc
     if bool(setlistfm_lookup) and not bool(etree_lookup):
         raise TaggerError("setlist.fm lookup requires eTreeDB lookup.")
+    try:
+        validate_setlistfm_upgrade_environment({"setlistfm_upgrade": bool(setlistfm_upgrade)})
+    except ValueError as exc:
+        raise TaggerError(str(exc)) from exc
     corruption_values = {
         "corrupt_files": corrupt_files,
         "corrupt_folders": corrupt_folders,

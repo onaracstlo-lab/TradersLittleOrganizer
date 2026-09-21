@@ -1,12 +1,18 @@
-__version__ = "v482"
+__version__ = "v486"
 
 import argparse
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Sequence
 
+from tlo_setlistfm_lookup import ENV_UPGRADE_API_KEY, upgrade_api_key_available
+
 
 LOOKUP_DEPENDENCY_ERROR = "--setlistfm-lookup requires --etree-lookup on the command line."
 COMPLIANT_RENAME_CONFLICT_ERROR = "--compliant and --rename-compliantly are mutually exclusive."
+SETLISTFM_UPGRADE_KEY_ERROR = (
+    f"--setlistfm-upgrade requires {ENV_UPGRADE_API_KEY}. "
+    "Set it to the same setlist.fm API key used for SETLISTFM_API_KEY."
+)
 
 
 def parse_bool(value):
@@ -123,7 +129,7 @@ OPTIONS = [
     ),
     Option(
         "tag_during_inventory", "--tag-during-inventory", "flag",
-        gui="checkbox", gui_label="Tag in Place", gui_row=0, gui_col=2,
+        gui="checkbox", gui_label="Tag In Place", gui_row=0, gui_col=2,
         help="Tag audio files in place during Full Inventory and supported Add Shows processing, writing success results to tagsN.txt and errors to tageN.txt under TLOHome/logs.",
     ),
     Option(
@@ -143,7 +149,7 @@ OPTIONS = [
     ),
     Option(
         "artist_in_album", "--no-artist-in-album", "store_false",
-        default=True, gui="checkbox", gui_label="Artist in Album Tag", gui_row=0, gui_col=3,
+        default=True, gui="checkbox", gui_label="Artist In Album Tag", gui_row=0, gui_col=3,
         help="Omit the artist-name prefix from Album tags. By default, Album tags begin with the artist name.",
     ),
     Option(
@@ -173,12 +179,12 @@ OPTIONS = [
     ),
     Option(
         "setlistfm_upgrade", "--setlistfm-upgrade", "flag",
-        gui="checkbox", gui_label="setlist.fm upgrade", gui_row=2, gui_col=0,
-        help="When setlist.fm lookup is enabled, use upgraded access limits of 14 requests/second and 48,000 requests/day.",
+        gui="checkbox", gui_label="setlist.fm Upgrade", gui_row=2, gui_col=0,
+        help="When setlist.fm lookup is enabled, use upgraded access limits of 14 requests/second and 48,000 requests/day. Requires SETLISTFMUPGRADE_API_KEY, set to the same API key as SETLISTFM_API_KEY.",
     ),
     Option(
         "thorough_setlist_matching", "--thorough-setlist-matching", "flag",
-        gui="checkbox", gui_label="Thorough Setlist Matching", gui_row=3, gui_col=0,
+        gui="checkbox", gui_label="Thorough setlist Matching", gui_row=3, gui_col=0,
         help=(
             "Collect and compare additional local and enabled online setlist candidates for better track-title accuracy. "
             "Only online sources explicitly enabled by their own lookup options are used. This can substantially increase "
@@ -189,7 +195,7 @@ OPTIONS = [
     ),
     Option(
         "delete_extra_tags", "--delete-extra-tags", "flag",
-        gui="checkbox", gui_label="Delete extra tags", gui_row=3, gui_col=3,
+        gui="checkbox", gui_label="Delete Extra Tags", gui_row=3, gui_col=3,
         help="When tagging, remove all metadata except Artist, Album, Track Number, and Track Title. Default off.",
     ),
     Option(
@@ -321,6 +327,12 @@ def validate_compliant_rename_exclusivity(values: dict) -> None:
     if bool(values.get("compliant", False)) and bool(values.get("rename_compliantly", False)):
         raise ValueError(COMPLIANT_RENAME_CONFLICT_ERROR)
 
+
+
+def validate_setlistfm_upgrade_environment(values: dict) -> None:
+    """Require the explicit upgrade-enable environment variable when selected."""
+    if bool(values.get("setlistfm_upgrade", False)) and not upgrade_api_key_available():
+        raise ValueError(SETLISTFM_UPGRADE_KEY_ERROR)
 
 def apply_lookup_dependency(values: dict, *, mode: str) -> bool:
     """Apply the setlist.fm -> eTreeDB dependency in one canonical place.

@@ -1,4 +1,4 @@
-__version__ = "v482"
+__version__ = "v486"
 import argparse
 import sys
 import os
@@ -19,6 +19,7 @@ from tlo_options import (
     parse_performance_mode,
     validate_compliant_rename_exclusivity,
     validate_corruption_policy,
+    validate_setlistfm_upgrade_environment,
 )
 from tlo_path_inputs import (
     strip_optional_quotes,
@@ -250,6 +251,7 @@ def parse_command_line():
     values = vars(parsed)
     _apply_lookup_dependency_or_parser_error(values, parser, mode="strict")
     try:
+        validate_setlistfm_upgrade_environment(values)
         validate_corruption_policy(values, require_explicit_threshold=True)
     except ValueError as exc:
         parser.error(str(exc))
@@ -262,6 +264,7 @@ def build_config():
     cli_config = parse_command_line()
     values = namespace_values(argparse.Namespace(**cli_config))
     _apply_lookup_dependency_or_parser_error(values, mode="strict")
+    validate_setlistfm_upgrade_environment(values)
     validate_compliant_rename_exclusivity(values)
     # Command-line strictness is applied before namespace defaults are expanded.
     # Re-normalize the three policy values here without requiring explicit threshold presence.

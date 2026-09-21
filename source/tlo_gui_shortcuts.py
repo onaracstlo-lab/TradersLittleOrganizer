@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v482"
+__version__ = "v486"
 
 import tkinter as tk
 from tkinter import ttk

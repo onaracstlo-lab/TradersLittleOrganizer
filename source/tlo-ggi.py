@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v482"
+__version__ = "v486"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -20,7 +20,7 @@ import threading
 import time
 import tkinter as tk
 import tkinter.font as tkfont
-from tkinter import messagebox, scrolledtext, ttk
+from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 from inventory_parser_lib import Config
 
@@ -40,7 +40,7 @@ from tlo_options import (
 )
 from tlo_path_inputs import normalize_platform_input_path, resolve_current_storage_volume, resolve_tlo_home as resolve_inventory_tlo_home
 from inventory_list_lib import parse_search_path_input
-from tlo_setlistfm_lookup import api_key_available
+from tlo_setlistfm_lookup import api_key_available, upgrade_api_key_available
 from logging_lib import delete_logs_for_tokens
 from tlo_bootlist_volume_policy import normalize_volume_action, volume_display_name
 from tlo_main_lib import run_inventory
@@ -118,6 +118,7 @@ from tlo_dragdrop import (
     enable_tagging_path_folder_drop,
     enable_single_folder_or_txt_drop,
     enable_leaf_folder_drop,
+    enable_single_txt_file_drop,
 )
 from tlo_manual_updates import (
     ManualUpdateError,
@@ -126,6 +127,22 @@ from tlo_manual_updates import (
     apply_unidentified_manual_update,
     manual_update_source_kind,
     parse_manual_updates_file,
+)
+from tlo_copy_requests import (
+    CopyRequestError,
+    STATUS_CLOSED,
+    close_request,
+    copy_available,
+    create_or_open_request,
+    delete_request,
+    evaluate_request,
+    format_bytes,
+    list_requests,
+    load_request,
+    preview_request,
+    request_dir,
+    source_request_change_state,
+    update_request_from_source,
 )
 from tlo_run_settings import append_run_settings
 from tlo_runtime_control import (
@@ -210,6 +227,7 @@ HELP_TEXT = (
     "  Tag               Tag the current master Search Path(s) directly using the current main-window settings; no separate Tag window is opened.\n"
     "  Add New Shows  Open the updater workflow for readyForXfer/staged/dups processing. The updater inherits all applicable main-window options, including Dry run, and validates the storage volume before processing.\n"
     "  Research          Search TLOHome comp/meta logs.\n"
+    "  ☰ > Copy Requests  Create, continue, report, close, or delete persistent list-driven copy requests across changing connected source volumes.\n"
     "  Quit              Close the GUI. If a run is still active, active workers are stopped and active search-path logs are removed before exit; displayed in the middle.\n"
     "  Inventory (full)  Validate the form and show Review Operation. When Dry run is checked, scan and report planned work without changing files; otherwise run the full inventory job.\n"
     "  Pause             Pause traversal between directory operations; displayed in the right-side inventory group.\n"
@@ -610,6 +628,8 @@ class App:
         self.inventory_button = None
         self.research_button = None
         self.manual_tweaks_button = None
+        self.copy_requests_button = None
+        self.active_copy_requests_window = None
         self.pause_button = None
         self.resume_button = None
         self.progress_bar = None
@@ -841,7 +861,11 @@ class App:
         self.help_menu.add_command(label="About", command=self._show_about_from_menu)
         self.help_menu.add_command(label="FAQ", command=self._show_faq_from_menu)
         self.hamburger_menu.add_command(label="Check for updates", command=self._check_for_updates_from_menu)
-        self.hamburger_menu.add_checkbutton(label="Auto update", variable=self.auto_update_var, command=self._toggle_auto_update_from_menu)
+        self.hamburger_menu.add_checkbutton(label="Auto Update", variable=self.auto_update_var, command=self._toggle_auto_update_from_menu)
+        self.hamburger_menu.add_command(
+            label="Copy Requests",
+            command=lambda: self._run_after_menu_closes(self._open_copy_requests),
+        )
         self.hamburger_menu.add_cascade(label="Donate", menu=self.donate_menu)
         self.hamburger_menu.add_separator()
         self.hamburger_menu.add_cascade(label="Help", menu=self.help_menu)
@@ -916,11 +940,11 @@ class App:
             elif option.config_field in {"compliant", "rename_compliantly"}:
                 checkbox_command = (lambda field=option.config_field: self._compliant_rename_clicked(field))
             if option.config_field == "thorough_setlist_matching":
-                checkbox_text = "Thorough Setlist\nMatching"
+                checkbox_text = "Thorough setlist\nMatching"
             elif option.config_field == "tag_copy_and_delete_enabled":
                 checkbox_text = "Tag Copy/Delete\nOriginal"
             elif option.config_field == "delete_extra_tags":
-                checkbox_text = "Delete extra\ntags"
+                checkbox_text = "Delete Extra\nTags"
             else:
                 checkbox_text = option.gui_label
             checkbox_style = (
@@ -948,7 +972,7 @@ class App:
             self.checkbox_widgets[option.config_field] = checkbox
         self.dry_run_checkbox = ttk.Checkbutton(
             checkbox_frame,
-            text="Dry run",
+            text="Dry Run",
             variable=self.dry_run_var,
             style="Main.Large.TCheckbutton",
         )
@@ -1151,20 +1175,28 @@ class App:
         self._sync_corruption_controls_state()
 
     def _apply_setlistfm_key_availability(self):
-        """Disable setlist.fm GUI controls when SETLISTFM_API_KEY is unavailable."""
-        available = api_key_available()
-        if not available:
-            for field in ("setlistfm_lookup", "setlistfm_upgrade"):
-                if field in self.bool_vars:
-                    self.bool_vars[field].set(False)
-        for field in ("setlistfm_lookup", "setlistfm_upgrade"):
+        """Gate normal and upgraded setlist.fm controls on their environment variables."""
+        lookup_available = api_key_available()
+        upgrade_available = lookup_available and upgrade_api_key_available()
+
+        if not lookup_available and "setlistfm_lookup" in self.bool_vars:
+            self.bool_vars["setlistfm_lookup"].set(False)
+        if not upgrade_available and "setlistfm_upgrade" in self.bool_vars:
+            self.bool_vars["setlistfm_upgrade"].set(False)
+
+        states = {
+            "setlistfm_lookup": lookup_available,
+            "setlistfm_upgrade": upgrade_available,
+        }
+        for field, available in states.items():
             widget = getattr(self, "checkbox_widgets", {}).get(field)
             if widget is not None:
                 try:
                     widget.configure(state=("normal" if available else "disabled"))
                 except tk.TclError:
                     pass
-        self._setlistfm_key_available = available
+        self._setlistfm_key_available = lookup_available
+        self._setlistfm_upgrade_key_available = upgrade_available
 
     def _schedule_inline_validation(self, *_args):
         try:
@@ -1807,21 +1839,40 @@ class App:
         tag_active = self._tag_is_running()
         updater_open = self._updater_is_open()
         manual_open = self._manual_updates_is_open()
+        copy_requests_open = self._copy_requests_is_open()
         try:
             if self.tag_button is not None:
-                self.tag_button.configure(state=("disabled" if inventory_active or updater_open or manual_open or tag_active else "normal"))
+                self.tag_button.configure(state=("disabled" if inventory_active or updater_open or manual_open or copy_requests_open or tag_active else "normal"))
             if self.add_shows_button is not None:
-                self.add_shows_button.configure(state=("disabled" if inventory_active or manual_open or tag_active else "normal"))
+                self.add_shows_button.configure(state=("disabled" if inventory_active or manual_open or copy_requests_open or tag_active else "normal"))
             if self.inventory_button is not None:
-                self.inventory_button.configure(state=("disabled" if updater_open or manual_open or tag_active or inventory_active else "normal"))
+                self.inventory_button.configure(state=("disabled" if updater_open or manual_open or copy_requests_open or tag_active or inventory_active else "normal"))
             if self.manual_tweaks_button is not None:
-                self.manual_tweaks_button.configure(state=("disabled" if inventory_active or updater_open or manual_open or tag_active else "normal"))
+                self.manual_tweaks_button.configure(state=("disabled" if inventory_active or updater_open or manual_open or copy_requests_open or tag_active else "normal"))
+            if self.copy_requests_button is not None:
+                self.copy_requests_button.configure(state=("disabled" if inventory_active or updater_open or manual_open or tag_active else "normal"))
             if self.pause_button is not None:
                 self.pause_button.configure(state=("normal" if (inventory_active or tag_active) else "disabled"))
             if self.resume_button is not None:
                 self.resume_button.configure(state=("normal" if (inventory_active or tag_active) else "disabled"))
         except tk.TclError:
             pass
+
+    def _copy_requests_is_open(self):
+        manager = getattr(self, "active_copy_requests_window", None)
+        if manager is None:
+            return False
+        window = getattr(manager, "window", None)
+        if window is None:
+            self.active_copy_requests_window = None
+            return False
+        try:
+            exists = bool(window.winfo_exists())
+        except tk.TclError:
+            exists = False
+        if not exists:
+            self.active_copy_requests_window = None
+        return exists
 
     def _updater_is_open(self):
         updater = getattr(self, "active_updater_window", None)
@@ -2063,6 +2114,28 @@ class App:
             messagebox.showerror("tlo-ggi", str(exc), parent=self.root)
             return
         ManualUpdatesWindow(self, config)
+
+    def _open_copy_requests(self):
+        if self._main_operation_is_running() or self._updater_is_open() or self._manual_updates_is_open():
+            messagebox.showwarning(
+                "tlo-ggi",
+                "Copy Requests cannot be opened while Inventory, Tag, Add New Shows, or Manual Tweaks is active.",
+                parent=self.root,
+            )
+            return
+        if self._copy_requests_is_open():
+            try:
+                self.active_copy_requests_window.window.lift()
+                self.active_copy_requests_window.window.focus_force()
+            except tk.TclError:
+                pass
+            return
+        try:
+            tlo_home = self._resolve_gui_tlo_home(error_type=ValueError)
+        except Exception as exc:
+            messagebox.showerror("tlo-ggi", str(exc), parent=self.root)
+            return
+        CopyRequestsWindow(self, tlo_home)
 
     def _open_add_to_inventory(self):
         if self._tag_is_running():
@@ -2310,6 +2383,14 @@ class App:
         self._force_exit_after_child_cleanup(130)
 
     def _on_quit(self):
+        copy_manager = getattr(self, "active_copy_requests_window", None)
+        if copy_manager is not None and bool(getattr(copy_manager, "busy", False)):
+            messagebox.showwarning(
+                "tlo-ggi",
+                "A Copy Request operation is still running. Let it finish before exiting TLO.",
+                parent=self.root,
+            )
+            return
         if self._tag_is_running():
             messagebox.showinfo(
                 "tlo-ggi",
@@ -2911,6 +2992,500 @@ class App:
         self._consume_inventory_queue()
         self.root.after(100, self._drain)
 
+
+
+class CopyRequestsWindow:
+    """Persistent Copy Request manager for multi-volume, multi-day transfers."""
+
+    def __init__(self, app, tlo_home):
+        self.app = app
+        self.root = app.root
+        self.tlo_home = os.path.abspath(tlo_home)
+        self.busy = False
+        self.window = tk.Toplevel(self.root)
+        self.window.title(versioned_title("TLO Copy Requests"))
+        self.window.geometry("980x500")
+        self.window.minsize(820, 380)
+        self.window.protocol("WM_DELETE_WINDOW", self._close)
+        self.app.active_copy_requests_window = self
+
+        frame = ttk.Frame(self.window, padding=10)
+        frame.pack(fill="both", expand=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
+
+        ttk.Label(
+            frame,
+            text=(
+                "Copy Requests remain active across sessions and drive swaps. "
+                "Connect source volumes, then Continue a request or Process All Active Requests."
+            ),
+            wraplength=930,
+            justify="left",
+        ).grid(row=0, column=0, sticky="ew", pady=(0, 8))
+
+        columns = ("request", "destination", "completed", "waiting", "unmatched", "status")
+        self.tree = ttk.Treeview(frame, columns=columns, show="headings", selectmode="browse")
+        headings = {
+            "request": "Request",
+            "destination": "Destination",
+            "completed": "Complete",
+            "waiting": "Waiting",
+            "unmatched": "Unmatched",
+            "status": "Status",
+        }
+        widths = {"request": 170, "destination": 290, "completed": 75, "waiting": 75, "unmatched": 80, "status": 210}
+        for column in columns:
+            self.tree.heading(column, text=headings[column])
+            self.tree.column(column, width=widths[column], anchor=("center" if column in {"completed", "waiting", "unmatched"} else "w"))
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        self.tree.grid(row=1, column=0, sticky="nsew")
+        scrollbar.grid(row=1, column=1, sticky="ns")
+        self.tree.bind("<Double-1>", lambda _event: self._continue_selected())
+        self.tree.bind("<<TreeviewSelect>>", lambda _event: self._sync_buttons())
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(10, 4))
+        self.new_button = ttk.Button(buttons, text="New Request", command=self._new_request)
+        self.new_button.grid(row=0, column=0, padx=(0, 4))
+        self.continue_button = ttk.Button(buttons, text="Continue", command=self._continue_selected)
+        self.continue_button.grid(row=0, column=1, padx=4)
+        self.all_button = ttk.Button(buttons, text="Process All Active Requests", command=self._process_all)
+        self.all_button.grid(row=0, column=2, padx=4)
+        self.report_button = ttk.Button(buttons, text="View Report", command=self._view_report)
+        self.report_button.grid(row=0, column=3, padx=4)
+        self.close_request_button = ttk.Button(buttons, text="Close Request", command=self._close_selected_request)
+        self.close_request_button.grid(row=0, column=4, padx=4)
+        self.delete_button = ttk.Button(buttons, text="Delete Request", command=self._delete_selected)
+        self.delete_button.grid(row=0, column=5, padx=4)
+        ttk.Button(buttons, text="Exit", command=self._close).grid(row=0, column=6, padx=(12, 0))
+
+        footer = ttk.Frame(frame)
+        footer.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        footer.columnconfigure(0, weight=1)
+        self.status_var = tk.StringVar(value="Ready")
+        ttk.Label(footer, textvariable=self.status_var).grid(row=0, column=0, sticky="w")
+        self.progress = ttk.Progressbar(footer, mode="indeterminate", length=180)
+        self.progress.grid(row=0, column=1, sticky="e")
+
+        self._refresh()
+        self._sync_buttons()
+        self.window.transient(self.root)
+        try:
+            self.window.focus_force()
+        except tk.TclError:
+            pass
+        self.app._update_main_action_states()
+
+    def _close(self):
+        if self.busy:
+            messagebox.showwarning("Copy Requests", "A Copy Request operation is still running.", parent=self.window)
+            return
+        try:
+            self.window.destroy()
+        finally:
+            self.app.active_copy_requests_window = None
+            self.app._update_main_action_states()
+
+    def _selected_id(self):
+        selection = self.tree.selection()
+        return selection[0] if selection else ""
+
+    def _selected_state(self):
+        request_id = self._selected_id()
+        if not request_id:
+            return None
+        try:
+            return load_request(self.tlo_home, request_id)
+        except Exception:
+            return None
+
+    def _refresh(self):
+        selected = self._selected_id()
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        for state in list_requests(self.tlo_home):
+            request_id = str(state.get("request_id", "") or "")
+            summary = state.get("summary") if isinstance(state.get("summary"), dict) else {}
+            completed = int(summary.get("completed", 0) or 0)
+            waiting = int(summary.get("waiting", 0) or 0)
+            unmatched = int(summary.get("unmatched", 0) or 0) + int(summary.get("invalid", 0) or 0)
+            self.tree.insert(
+                "",
+                "end",
+                iid=request_id,
+                values=(
+                    str(state.get("name", request_id)),
+                    str(state.get("destination", "")),
+                    completed,
+                    waiting,
+                    unmatched,
+                    str(state.get("status", "In Progress")),
+                ),
+            )
+        if selected and self.tree.exists(selected):
+            self.tree.selection_set(selected)
+        self._sync_buttons()
+
+    def _set_busy(self, busy, message=""):
+        self.busy = bool(busy)
+        self.status_var.set(message or ("Working..." if busy else "Ready"))
+        if busy:
+            self.progress.start(ACTIVITY_INDICATOR_INTERVAL_MS)
+        else:
+            self.progress.stop()
+        self._sync_buttons()
+
+    def _sync_buttons(self):
+        state = self._selected_state()
+        has_selection = state is not None
+        closed = bool(state and state.get("closed"))
+        normal = "normal"
+        disabled = "disabled"
+        try:
+            self.new_button.configure(state=(disabled if self.busy else normal))
+            self.continue_button.configure(state=(normal if has_selection and not closed and not self.busy else disabled))
+            self.report_button.configure(state=(normal if has_selection and not self.busy else disabled))
+            self.close_request_button.configure(state=(normal if has_selection and not closed and not self.busy else disabled))
+            self.delete_button.configure(state=(normal if has_selection and not self.busy else disabled))
+            active_exists = any(not bool(item.get("closed")) for item in list_requests(self.tlo_home))
+            self.all_button.configure(state=(normal if active_exists and not self.busy else disabled))
+        except tk.TclError:
+            pass
+
+    def _run_background(self, message, function, done_callback):
+        if self.busy:
+            return
+        self._set_busy(True, message)
+
+        def worker():
+            value = None
+            error = None
+            try:
+                value = function()
+            except Exception as exc:  # noqa: BLE001 - worker boundary
+                error = exc
+            try:
+                self.window.after(0, lambda: finish(value, error))
+            except tk.TclError:
+                pass
+
+        def finish(value, error):
+            self._set_busy(False)
+            if error is not None:
+                messagebox.showerror("Copy Requests", str(error), parent=self.window)
+                self._refresh()
+                return
+            self._refresh()
+            done_callback(value)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _new_request(self):
+        dialog = tk.Toplevel(self.window)
+        dialog.title(versioned_title("New Copy Request"))
+        dialog.transient(self.window)
+        dialog.grab_set()
+        frame = ttk.Frame(dialog, padding=12)
+        frame.pack(fill="both", expand=True)
+        frame.columnconfigure(1, weight=1)
+        request_var = tk.StringVar()
+        destination_var = tk.StringVar()
+
+        ttk.Label(frame, text="Request File").grid(row=0, column=0, sticky="w", padx=(0, 6), pady=5)
+        request_entry = ttk.Entry(frame, textvariable=request_var, width=72)
+        request_entry.grid(row=0, column=1, sticky="ew", pady=5)
+        ttk.Button(
+            frame,
+            text="Browse",
+            command=lambda: request_var.set(filedialog.askopenfilename(parent=dialog, title="Select Copy Request", filetypes=[("Text files", "*.txt"), ("All files", "*")]) or request_var.get()),
+        ).grid(row=0, column=2, padx=(6, 0), pady=5)
+
+        ttk.Label(frame, text="Destination").grid(row=1, column=0, sticky="w", padx=(0, 6), pady=5)
+        destination_entry = ttk.Entry(frame, textvariable=destination_var, width=72)
+        destination_entry.grid(row=1, column=1, sticky="ew", pady=5)
+        ttk.Button(
+            frame,
+            text="Browse",
+            command=lambda: destination_var.set(filedialog.askdirectory(parent=dialog, title="Select Copy Request Destination") or destination_var.get()),
+        ).grid(row=1, column=2, padx=(6, 0), pady=5)
+
+        enable_single_txt_file_drop(
+            request_entry,
+            request_var,
+            field_label="Request File",
+            on_error=lambda message: messagebox.showerror("New Copy Request", message, parent=dialog),
+        )
+        enable_folder_path_drop(
+            destination_entry,
+            destination_var,
+            field_label="Destination",
+            on_error=lambda message: messagebox.showerror("New Copy Request", message, parent=dialog),
+        )
+
+        ttk.Label(
+            frame,
+            text=(
+                "The request file uses the same blank-line/#/REM comment convention as toBeInventoried.txt. "
+                "Each line may be a complete Show Name, Artist, Artist plus yyyy-mm-dd, or Artist plus yyyy-yyyy/yy-yy range."
+            ),
+            wraplength=700,
+            justify="left",
+        ).grid(row=2, column=0, columnspan=3, sticky="w", pady=(6, 8))
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=3, column=0, columnspan=3, sticky="e")
+
+        def create():
+            request_file = request_var.get().strip()
+            destination = destination_var.get().strip()
+            try:
+                state = create_or_open_request(self.tlo_home, request_file, destination)
+            except Exception as exc:
+                messagebox.showerror("New Copy Request", str(exc), parent=dialog)
+                return
+            request_id = str(state.get("request_id", ""))
+            dialog.destroy()
+            self._refresh()
+            if self.tree.exists(request_id):
+                self.tree.selection_set(request_id)
+                self.tree.see(request_id)
+            self._continue_id(request_id)
+
+        ttk.Button(buttons, text="Create / Open", command=create).grid(row=0, column=0, padx=4)
+        ttk.Button(buttons, text="Cancel", command=dialog.destroy).grid(row=0, column=1, padx=4)
+        request_entry.focus_set()
+
+    def _prepare_request_for_continue(self, request_id):
+        state = load_request(self.tlo_home, request_id)
+        if bool(state.get("closed")):
+            raise CopyRequestError("This Copy Request is Closed.")
+        source_state = source_request_change_state(self.tlo_home, state)
+        if source_state == "changed":
+            choice = messagebox.askyesnocancel(
+                "Copy Request Changed",
+                "The original request file has changed since this Copy Request was created.\n\n"
+                "Yes = Update Request from the changed file\n"
+                "No = Continue with the saved request\n"
+                "Cancel = Do nothing",
+                parent=self.window,
+            )
+            if choice is None:
+                return None
+            if choice:
+                state = update_request_from_source(self.tlo_home, state)
+        elif source_state == "missing":
+            messagebox.showinfo(
+                "Copy Request",
+                "The original request file is not currently available. TLO will continue using its saved copy of the request.",
+                parent=self.window,
+            )
+        return state
+
+    def _continue_selected(self):
+        request_id = self._selected_id()
+        if request_id:
+            self._continue_id(request_id)
+
+    def _continue_id(self, request_id):
+        try:
+            state = self._prepare_request_for_continue(request_id)
+        except Exception as exc:
+            messagebox.showerror("Copy Requests", str(exc), parent=self.window)
+            return
+        if state is None:
+            return
+        self._run_background(
+            f"Previewing {state.get('name', request_id)}...",
+            lambda: preview_request(self.tlo_home, request_id),
+            lambda value: self._show_preview(request_id, *value),
+        )
+
+    def _show_preview(self, request_id, evaluation, required_bytes, free_bytes, preflight_errors):
+        dialog = tk.Toplevel(self.window)
+        dialog.title(versioned_title(f"Copy Request Preview - {evaluation.name}"))
+        dialog.transient(self.window)
+        frame = ttk.Frame(dialog, padding=10)
+        frame.pack(fill="both", expand=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
+        output = scrolledtext.ScrolledText(frame, width=100, height=28, wrap="word")
+        output.grid(row=0, column=0, sticky="nsew")
+        lines = [
+            f"Request: {evaluation.name}",
+            f"Destination: {evaluation.destination}",
+            f"Status: {evaluation.status}",
+            "",
+            f"Request items: {len(evaluation.items)}",
+            f"Unique shows matched: {len(evaluation.matched_shows)}",
+            f"Already completed: {len(evaluation.completed_shows)}",
+            f"Available on connected volumes: {len(evaluation.available)}",
+            f"Waiting for disconnected volumes: {len(evaluation.waiting)}",
+            f"Stale/missing source folders on connected volumes: {len(evaluation.stale_missing)}",
+            f"Unmatched request items: {len(evaluation.unmatched_items)}",
+            f"Invalid request items: {len(evaluation.invalid_items)}",
+            "",
+            f"Space required for copies planned this pass: {format_bytes(required_bytes)}",
+            f"Destination free space: {format_bytes(free_bytes)}",
+        ]
+        if required_bytes > free_bytes:
+            lines.extend(["", "INSUFFICIENT FREE SPACE: no folders will be copied until the entire current pass fits."])
+        if preflight_errors:
+            lines.extend(["", "PREFLIGHT ISSUES"])
+            for show, error in preflight_errors:
+                lines.append(f"{show}: {error}")
+        lines.extend(["", "BEST VOLUMES TO CONNECT NEXT"])
+        if evaluation.volume_opportunities:
+            for volume, count in evaluation.volume_opportunities.items():
+                lines.append(f"{volume}: {count} remaining show(s)")
+        else:
+            lines.append("None")
+        if evaluation.unmatched_items:
+            lines.extend(["", "UNMATCHED REQUEST ITEMS"] + evaluation.unmatched_items)
+        if evaluation.invalid_items:
+            lines.extend(["", "INVALID REQUEST ITEMS"])
+            lines.extend(f"{raw}: {error}" for raw, error in evaluation.invalid_items.items())
+        output.insert("1.0", "\n".join(lines))
+        output.configure(state="disabled")
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=1, column=0, sticky="e", pady=(8, 0))
+        can_copy = bool(evaluation.available) and required_bytes <= free_bytes and evaluation.status != STATUS_CLOSED
+
+        def start_copy():
+            dialog.destroy()
+            self._run_background(
+                f"Copying available shows for {evaluation.name}...",
+                lambda: copy_available(self.tlo_home, request_id),
+                self._copy_finished,
+            )
+
+        ttk.Button(buttons, text="Copy Available", command=start_copy, state=("normal" if can_copy else "disabled")).grid(row=0, column=0, padx=4)
+        ttk.Button(buttons, text="View Report", command=lambda: self._view_report_id(request_id)).grid(row=0, column=1, padx=4)
+        ttk.Button(buttons, text="Close", command=dialog.destroy).grid(row=0, column=2, padx=4)
+
+    def _copy_finished(self, result):
+        message = (
+            f"Copied: {len(result.copied)}\n"
+            f"Already satisfied: {len(result.already_satisfied)}\n"
+            f"Failures: {len(result.failures)}\n"
+            f"Status: {result.status}"
+        )
+        if result.insufficient_space:
+            message += "\n\nNo folders were copied because the destination did not have enough free space for the entire current pass."
+        messagebox.showinfo("Copy Request", message, parent=self.window)
+        self._refresh()
+
+    def _process_all(self):
+        states = [state for state in list_requests(self.tlo_home) if not bool(state.get("closed"))]
+        if not states:
+            return
+        for state in states:
+            source_state = source_request_change_state(self.tlo_home, state)
+            if source_state == "changed":
+                choice = messagebox.askyesnocancel(
+                    "Copy Request Changed",
+                    f"{state.get('name')} has changed.\n\nYes = Update it before processing all requests\nNo = Use the saved request\nCancel = Abort Process All",
+                    parent=self.window,
+                )
+                if choice is None:
+                    return
+                if choice:
+                    try:
+                        update_request_from_source(self.tlo_home, state)
+                    except Exception as exc:
+                        messagebox.showerror("Copy Requests", str(exc), parent=self.window)
+                        return
+        if not messagebox.askyesno(
+            "Process All Active Requests",
+            f"Process {len(states)} active Copy Request(s) against the volumes that are connected now?\n\nEach request performs its own complete free-space preflight before copying.",
+            parent=self.window,
+        ):
+            return
+
+        def run_all():
+            results = []
+            for state in states:
+                request_id = str(state.get("request_id", ""))
+                try:
+                    results.append((request_id, copy_available(self.tlo_home, request_id), None))
+                except Exception as exc:  # noqa: BLE001 - continue independent requests
+                    results.append((request_id, None, exc))
+            return results
+
+        def done(results):
+            copied = sum(len(result.copied) for _rid, result, error in results if result is not None and error is None)
+            failures = sum(len(result.failures) for _rid, result, error in results if result is not None and error is None)
+            request_errors = sum(1 for _rid, _result, error in results if error is not None)
+            messagebox.showinfo(
+                "Process All Active Requests",
+                f"Requests processed: {len(results)}\nFolders copied: {copied}\nCopy failures: {failures}\nRequest-level errors: {request_errors}",
+                parent=self.window,
+            )
+            self._refresh()
+
+        self._run_background("Processing all active Copy Requests...", run_all, done)
+
+    def _view_report(self):
+        request_id = self._selected_id()
+        if request_id:
+            self._view_report_id(request_id)
+
+    def _view_report_id(self, request_id):
+        path_name = os.path.join(request_dir(self.tlo_home, request_id), "latest-report.txt")
+        if not os.path.isfile(path_name):
+            messagebox.showinfo("Copy Request Report", "No report has been generated for this request yet.", parent=self.window)
+            return
+        try:
+            with open(path_name, "r", encoding="utf-8", errors="replace") as infile:
+                text = infile.read(2 * 1024 * 1024 + 1)
+            if len(text) > 2 * 1024 * 1024:
+                text = text[: 2 * 1024 * 1024] + "\n\n[Report display truncated at 2 MiB.]\n"
+        except OSError as exc:
+            messagebox.showerror("Copy Request Report", str(exc), parent=self.window)
+            return
+        report = tk.Toplevel(self.window)
+        report.title(versioned_title("Copy Request Report"))
+        view = scrolledtext.ScrolledText(report, width=110, height=36, wrap="word")
+        view.pack(fill="both", expand=True, padx=8, pady=8)
+        view.insert("1.0", text)
+        view.configure(state="disabled")
+        ttk.Button(report, text="Close", command=report.destroy).pack(pady=(0, 8))
+
+    def _close_selected_request(self):
+        state = self._selected_state()
+        if not state:
+            return
+        request_id = str(state.get("request_id", ""))
+        if not messagebox.askyesno(
+            "Close Copy Request",
+            "Close this request? Closed requests are kept for history but are not processed again. Copied music is not changed.",
+            parent=self.window,
+        ):
+            return
+        try:
+            close_request(self.tlo_home, request_id)
+        except Exception as exc:
+            messagebox.showerror("Copy Requests", str(exc), parent=self.window)
+        self._refresh()
+
+    def _delete_selected(self):
+        state = self._selected_state()
+        if not state:
+            return
+        request_id = str(state.get("request_id", ""))
+        if not messagebox.askyesno(
+            "Delete Copy Request",
+            "Delete this request's TLO state and report history?\n\nThis does NOT delete any copied music.",
+            parent=self.window,
+        ):
+            return
+        try:
+            delete_request(self.tlo_home, request_id)
+        except Exception as exc:
+            messagebox.showerror("Copy Requests", str(exc), parent=self.window)
+        self._refresh()
 
 
 class TaggerWindow:
@@ -3672,7 +4247,7 @@ class AddToInventoryWindow:
         ttk.Entry(frm, textvariable=self.volume_var, width=56).grid(row=2, column=1, columnspan=2, sticky="ew", pady=4)
         self.volume_status_label = ttk.Label(frm, textvariable=self.volume_status_var, justify="left", wraplength=850)
         self.volume_status_label.grid(row=3, column=0, columnspan=3, sticky="w", pady=(0, 4))
-        ttk.Checkbutton(frm, text="Check for Duplicates", variable=self.check_dups_var).grid(row=4, column=0, sticky="w", pady=(4, 1))
+        ttk.Checkbutton(frm, text="Check For Duplicates", variable=self.check_dups_var).grid(row=4, column=0, sticky="w", pady=(4, 1))
         buttons = ttk.Frame(frm)
         buttons.grid(row=5, column=0, columnspan=3, sticky="w", pady=(6, 0))
         self.process_new_button = ttk.Button(buttons, text="Process New Shows", command=self._process_new_shows)

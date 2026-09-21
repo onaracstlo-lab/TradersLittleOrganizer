@@ -1,4 +1,4 @@
-__version__ = "v482"
+__version__ = "v486"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing

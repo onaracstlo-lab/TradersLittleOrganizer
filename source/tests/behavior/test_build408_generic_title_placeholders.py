@@ -92,13 +92,13 @@ def test_build408_requirements_and_manual_document_generic_title_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v482.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v486.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v482.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v486.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v482 (v1.7 Build 482)." in req_text
+    assert "Current document version: v486 (v1.7 Build 486)." in req_text
     assert "complete cleaned candidate song title" in req_text
     assert "exactly Title, Titled, or Titles" in req_text
     assert "keep the track row/position but write the Title value as Unknown" in req_text
-    assert "Version v1.7 Build 482" in manual_text
+    assert "Version v1.7 Build 486" in manual_text
     assert "Exact placeholder titles Title, Titled, or Titles become Unknown after normal cleanup" in manual_text

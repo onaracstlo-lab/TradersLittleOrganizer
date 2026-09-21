@@ -66,11 +66,13 @@ def test_setlistfm_api_key_presence_is_detected_without_exposing_key(monkeypatch
     assert sfm.api_key_available() is True
 
 
-def test_gui_disables_both_setlistfm_boxes_when_key_missing():
+def test_gui_gates_normal_and_upgrade_setlistfm_boxes_separately():
     source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
-    assert 'for field in ("setlistfm_lookup", "setlistfm_upgrade"):' in source
-    assert 'widget.configure(state=("normal" if available else "disabled"))' in source
-    assert 'self.bool_vars[field].set(False)' in source
+    assert "lookup_available = api_key_available()" in source
+    assert "upgrade_available = lookup_available and upgrade_api_key_available()" in source
+    assert '"setlistfm_lookup": lookup_available' in source
+    assert '"setlistfm_upgrade": upgrade_available' in source
+    assert 'self.bool_vars["setlistfm_upgrade"].set(False)' in source
 
 
 def test_max_workers_is_a_ceiling_while_performance_mode_can_use_fewer(monkeypatch):

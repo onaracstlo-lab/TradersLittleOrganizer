@@ -40,5 +40,5 @@ def test_build463_wrapped_checkbox_labels_keep_first_line_alignment():
     wrapped = source[start:end]
     assert '("Checkbutton.indicator", {"side": "left", "sticky": "n"})' in wrapped
     assert '"Main.Multiline.TCheckbutton" if "\\n" in checkbox_text else "Main.Large.TCheckbutton"' in source
-    assert 'text="Dry run"' in source
+    assert 'text="Dry Run"' in source
     assert 'style="Main.Large.TCheckbutton"' in source

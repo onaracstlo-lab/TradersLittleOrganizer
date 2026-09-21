@@ -192,16 +192,16 @@ def test_build460_requirements_and_manual_document_guarded_fallback():
 
     root = Path(__file__).resolve().parents[2]
     req = "\n".join(
-        paragraph.text for paragraph in Document(root / "TLO_Inventory_Requirements_Working_v482.docx").paragraphs
+        paragraph.text for paragraph in Document(root / "TLO_Inventory_Requirements_Working_v486.docx").paragraphs
     )
-    manual = (root / "TLO_Inventory_User_Manual_v482.rtf").read_text(
+    manual = (root / "TLO_Inventory_User_Manual_v486.rtf").read_text(
         encoding="utf-8", errors="ignore"
     )
 
-    assert "Current document version: v482 (v1.7 Build 482)." in req
+    assert "Current document version: v486 (v1.7 Build 486)." in req
     assert "Artist + Place + Date + TechnicalSuffix" in req
     assert "TLO must not construct, infer, or guess an initialism" in req
     assert "RTF Paris 7 March 76 flac16" in req
-    assert "Version v1.7 Build 482" in manual
+    assert "Version v1.7 Build 486" in manual
     assert "RTF Paris 7 March 76 flac16" in manual
     assert "TLO does not invent RTF from Return to Forever" in manual

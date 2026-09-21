@@ -1,6 +1,6 @@
 """Regression tests for the current TLO requirements and release contract.
 
-The suite pins documented behavior from TLO_Inventory_Requirements_Working_v482.docx.
+The suite pins documented behavior from TLO_Inventory_Requirements_Working_v486.docx.
 Historical build-by-build test notes are preserved in old-change-logs.zip rather
 than repeated in this executable test module.
 """
@@ -1516,7 +1516,7 @@ def test_v305_tagger_gui_keeps_bold_app_heading_and_uses_current_public_version(
     build_source = inspect.getsource(gui.TaggerWindow._build)
 
     assert TAGGER_TITLE == "Traders Little Helper™ Tagger App"
-    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.7 Build 482"
+    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.7 Build 486"
     assert "self.window.title(TAGGER_DISPLAY_VERSION)" in init_source
     assert build_source.count("text=TAGGER_TITLE") == 1
     assert "text=TAGGER_TITLE, font=title_font" in build_source
@@ -3418,7 +3418,7 @@ def test_v240_tag_writer_strips_duration_before_writing(monkeypatch, tmp_path):
 def test_v241_option_registry_adds_tag_copy_and_rename_options():
     from tlo_options import OPTIONS_BY_FIELD
 
-    assert OPTIONS_BY_FIELD["tag_during_inventory"].gui_label == "Tag in Place"
+    assert OPTIONS_BY_FIELD["tag_during_inventory"].gui_label == "Tag In Place"
     assert OPTIONS_BY_FIELD["tag_copy_during_inventory"].flag == "--tag-copy-during-inventory"
     assert OPTIONS_BY_FIELD["tag_copy_during_inventory"].gui_label == "Tag Copy"
     assert OPTIONS_BY_FIELD["rename_compliantly"].flag == "--rename-compliantly"
@@ -3709,7 +3709,7 @@ def test_v246_add_shows_window_has_only_action_specific_checkbox_and_refreshes_m
     assert "compliant_var" not in build_source
     assert 'ttk.Checkbutton(frm, text="Compliant"' not in build_source
     assert build_source.count("ttk.Checkbutton") == 1
-    assert 'text="Check for Duplicates"' in build_source
+    assert 'text="Check For Duplicates"' in build_source
     assert 'values = self._current_main_checkbox_values()' in refresh_source
     assert 'self.config.compliant = values["compliant"]' in refresh_source
 
@@ -6892,10 +6892,10 @@ def test_v304_inventory_updater_button_uses_requested_two_line_label():
 def test_v305_public_version_matches_bundle_number():
     import tlo_version as V
 
-    assert V.VERSION == "v482"
-    assert V.BUNDLE_BUILD == 482
-    assert V.DISPLAY_VERSION == "v1.7 Build 482"
-    assert V.versioned_title("TLO Inventory GUI") == "TLO Inventory GUI v1.7 Build 482"
+    assert V.VERSION == "v486"
+    assert V.BUNDLE_BUILD == 486
+    assert V.DISPLAY_VERSION == "v1.7 Build 486"
+    assert V.versioned_title("TLO Inventory GUI") == "TLO Inventory GUI v1.7 Build 486"
 
 
 def test_v305_startup_banner_never_appends_release_change_summary():
@@ -6904,7 +6904,7 @@ def test_v305_startup_banner_never_appends_release_change_summary():
 
     for debug in (False, True):
         banner = M._startup_banner(SimpleNamespace(debug=debug))
-        assert banner == "Starting tlo-gi v1.7 Build 482"
+        assert banner == "Starting tlo-gi v1.7 Build 486"
         assert V.VERSION_SUMMARY not in banner
         assert " - " not in banner
 
@@ -6913,9 +6913,9 @@ def test_v305_all_toplevel_gui_titles_include_public_version():
     gui = _load_tlo_ggi_module()
     from tlo_inventory_update import UPDATER_DISPLAY_VERSION
 
-    assert gui.WINDOW_TITLE == "TLO Inventory GUI v1.7 Build 482"
-    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.7 Build 482"
-    assert UPDATER_DISPLAY_VERSION == "TLO Inventory Updater v1.7 Build 482"
+    assert gui.WINDOW_TITLE == "TLO Inventory GUI v1.7 Build 486"
+    assert gui.TAGGER_DISPLAY_VERSION == "TLO Tagger GUI v1.7 Build 486"
+    assert UPDATER_DISPLAY_VERSION == "TLO Inventory Updater v1.7 Build 486"
 
     source = _source_text("tlo-ggi.py")
     expected_calls = (
@@ -7044,7 +7044,7 @@ def test_v317_main_inventory_hamburger_help_cascade_sources_about_and_faq():
     assert 'Traders Little Organizer™ - TLO' in source
     assert 'f"V{PUBLIC_VERSION}Build{BUNDLE_BUILD}\\n"' in source
     assert 'TLO-FAQ.txt' in source
-    assert gui.BUNDLE_BUILD == 482
+    assert gui.BUNDLE_BUILD == 486
 
 
 
@@ -7457,7 +7457,7 @@ def test_v323_inventory_and_search_sources_include_update_menu_items():
 
     for source in (inventory_source, search_source):
         assert 'label="Check for updates"' in source
-        assert 'label="Auto update"' in source
+        assert 'label="Auto Update"' in source
         assert 'update-settings.json' in _source_text("tlo_github_updates.py")
         assert 'check_for_updates' in source
 
@@ -7971,7 +7971,7 @@ def test_v333_artist_in_album_option_defaults_checked_and_cli_can_disable():
     import argparse
     option = OPTIONS_BY_FIELD["artist_in_album"]
     assert option.default is True
-    assert option.gui_label == "Artist in Album Tag"
+    assert option.gui_label == "Artist In Album Tag"
     assert option in GUI_CHECKBOX_OPTIONS
     parser = argparse.ArgumentParser()
     add_options_to_parser(parser, fields=("artist_in_album",))
@@ -7986,17 +7986,17 @@ def test_v334_main_gui_checkbox_layout_preserves_original_two_rows_and_adds_v339
     expected = {
         "etree_lookup": (0, 0, "etreeDB"),
         "compliant": (0, 1, "Compliant"),
-        "tag_during_inventory": (0, 2, "Tag in Place"),
-        "artist_in_album": (0, 3, "Artist in Album Tag"),
+        "tag_during_inventory": (0, 2, "Tag In Place"),
+        "artist_in_album": (0, 3, "Artist In Album Tag"),
         "setlistfm_lookup": (1, 0, "setlist.fm"),
-        "setlistfm_upgrade": (2, 0, "setlist.fm upgrade"),
-        "thorough_setlist_matching": (3, 0, "Thorough Setlist Matching"),
+        "setlistfm_upgrade": (2, 0, "setlist.fm Upgrade"),
+        "thorough_setlist_matching": (3, 0, "Thorough setlist Matching"),
         "rename_compliantly": (1, 1, "Rename Compliantly"),
         "tag_copy_during_inventory": (1, 2, "Tag Copy"),
         "convert_shn": (1, 3, "Convert shn"),
         "as_is_artist_name": (2, 1, "As-Is Artist Name"),
         "tag_copy_and_delete_enabled": (2, 2, "Tag Copy/Delete Original"),
-        "delete_extra_tags": (3, 3, "Delete extra tags"),
+        "delete_extra_tags": (3, 3, "Delete Extra Tags"),
     }
     assert len(GUI_CHECKBOX_OPTIONS) == 13
     for field, (row, col, label) in expected.items():
@@ -8514,15 +8514,15 @@ def test_v341_copy_delete_prompt_runs_during_build_config(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_v342_current_documentation_contract():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v482.docx")
-    manual_rtf = _source_text("TLO_Inventory_User_Manual_v482.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v486.docx")
+    manual_rtf = _source_text("TLO_Inventory_User_Manual_v486.rtf")
     faq = _source_text("TLO-FAQ.txt")
     source_and_build_helpers = "\n".join(
         _source_text(name)
         for name in ("createWindowsDist.ps1", "createLinuxDist.sh", "createMacOSDist.sh")
     )
 
-    assert "v1.7 Build 482" in requirements
+    assert "v1.7 Build 486" in requirements
     assert "Build 344" not in requirements
     assert "CHANGES_v344.txt" not in requirements
     assert "eight ZIP assets" in requirements
@@ -8531,9 +8531,9 @@ def test_v342_current_documentation_contract():
     assert "v1.1 Build" not in requirements
     assert "Build 340 checkbox" not in requirements
 
-    assert "Version v1.7 Build 482" in manual_rtf
+    assert "Version v1.7 Build 486" in manual_rtf
     assert "V1.3Build351" not in manual_rtf
-    assert "Version v1.7 Build 482" in manual_rtf
+    assert "Version v1.7 Build 486" in manual_rtf
     assert "eight assets" in manual_rtf
     assert "artists.sqlite" in manual_rtf and "venues.txt" in manual_rtf
     assert "Checking either box only selects the mode" in manual_rtf
@@ -8568,7 +8568,7 @@ def test_v342_current_documentation_contract():
 
 
 def test_v356_requirements_use_canonical_cross_references_and_input_limits():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v482.docx")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v486.docx")
 
     assert "1.3 Generated Setlist Content" in requirements
     assert "Generated setlist content is defined canonically in Section 1.3" in requirements
@@ -8602,7 +8602,7 @@ def test_v356_requirements_use_canonical_cross_references_and_input_limits():
 def test_v342_main_window_uses_dry_run_checkbox_instead_of_preview_buttons():
     source = _source_text("tlo-ggi.py")
     assert 'self.dry_run_checkbox = ttk.Checkbutton' in source
-    assert 'text="Dry run"' in source
+    assert 'text="Dry Run"' in source
     assert '("dry_run", "Dry run", 3, 0)' not in source
     assert 'text="Preview\\n "' not in source
     assert 'self.preview_button = ttk.Button' not in source
@@ -9133,11 +9133,11 @@ def test_v348_child_windows_remove_duplicated_main_option_checkboxes():
     assert "ttk.Checkbutton" not in tag_build
     assert "Tagging Options" not in tag_build
     assert add_build.count("ttk.Checkbutton") == 1
-    assert 'text="Check for Duplicates"' in add_build
+    assert 'text="Check For Duplicates"' in add_build
     for duplicated_label in (
-        "Compliant", "etreeDB", "setlist.fm", "Tag in Place", "Tag Copy",
+        "Compliant", "etreeDB", "setlist.fm", "Tag In Place", "Tag Copy",
         "Tag Copy/Delete Original", "Rename Compliantly", "Convert shn",
-        "Artist in Album Tag", "As-Is Artist Name", "Dry run",
+        "Artist In Album Tag", "As-Is Artist Name", "Dry Run",
     ):
         assert f'text="{duplicated_label}"' not in add_build
 
@@ -9261,8 +9261,8 @@ def test_v349_child_windows_remove_main_window_value_notice_labels():
     assert "Uses checkbox values inherited from the main window" not in full_source
     assert "_refresh_inherited_settings" not in full_source
     assert "_refresh_inherited_dry_run" not in full_source
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v482.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v482.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v486.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v486.rtf")
     assert "no child Tag surface" in requirements
     assert "no separate GUI Tagging Path field" in manual
 
@@ -9315,8 +9315,8 @@ def test_v351_inventory_hamburger_donate_cascades_and_details():
 
 
 def test_v351_donate_details_are_documented():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v482.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v482.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v486.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v486.rtf")
 
     for text in (requirements, manual):
         assert "Donate" in text
@@ -9338,8 +9338,8 @@ def test_v351_donation_details_use_normal_menu_text():
         line = next(line for line in source.splitlines() if f'add_command(label="{label}"' in line)
         assert 'state="disabled"' not in line
     assert "normal dark menu text" in _source_text("TLO-FAQ.txt")
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v482.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v482.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v486.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v486.rtf")
     assert "dark text rather than disabled gray text" in requirements
     assert "normal dark menu text instead of disabled gray text" in manual
 
@@ -9454,8 +9454,8 @@ def test_v353_command_line_inventory_and_tag_use_the_same_log():
 
 
 def test_v353_run_settings_log_is_documented_in_current_artifacts():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v482.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v482.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v486.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v486.rtf")
     faq = _source_text("TLO-FAQ.txt")
     help_source = _source_text("tlo-ggi.py")
 
@@ -9585,8 +9585,8 @@ def test_v356_full_inventory_tag_in_place_passes_artist_in_album_to_album_builde
 def test_v356_safe_grouping_and_artist_in_album_are_documented_in_current_artifacts():
     import zipfile
 
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v482.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v482.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v486.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v486.rtf")
     faq = _source_text("TLO-FAQ.txt")
 
     for text in (requirements, manual, faq):
@@ -9760,8 +9760,8 @@ def test_v356_search_tools_use_central_display_version():
 # --------------------------------------------------------------------------- #
 
 def test_v358_user_manual_is_complete_and_current():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v482.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v482.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v486.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v486.rtf")
 
     assert "14.3 User Manual Content Requirements" in requirements
     assert "first-inventory Quick Start" in requirements
@@ -9837,7 +9837,7 @@ def test_v358_integration_category_contains_ten_promoted_scenarios():
 
 
 def test_v358_requirements_define_test_architecture_and_ci_compatibility():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v482.docx")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v486.docx")
     for phrase in (
         "17. Test Suite Architecture and Execution Requirements",
         "tests/unit",
@@ -9852,8 +9852,8 @@ def test_v358_requirements_define_test_architecture_and_ci_compatibility():
 
 
 def test_copy_delete_documentation_preserves_source_metadata_sequence():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v482.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v482.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v486.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v486.rtf")
     assert "metadata extraction from the original source tree" in requirements
     assert "original folder and path components" in requirements
     assert "Tagging and final inventory output then use the destination path" in requirements
@@ -9862,8 +9862,8 @@ def test_copy_delete_documentation_preserves_source_metadata_sequence():
 
 
 def test_copy_delete_documentation_distinguishes_move_and_copy_preflight():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v482.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v482.rtf")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v486.docx")
+    manual = _source_text("TLO_Inventory_User_Manual_v486.rtf")
     assert "same filesystem, TLO must perform a directory rename/move" in requirements
     assert "must not total source file sizes" in requirements
     assert "Tag Copy always totals the source" in manual
@@ -9879,7 +9879,7 @@ def test_copy_delete_documentation_distinguishes_move_and_copy_preflight():
 def test_v385_setlistfm_upgrade_checkbox_is_under_setlistfm():
     from tlo_options import OPTIONS_BY_FIELD
     option = OPTIONS_BY_FIELD["setlistfm_upgrade"]
-    assert option.gui_label == "setlist.fm upgrade"
+    assert option.gui_label == "setlist.fm Upgrade"
     assert (option.gui_row, option.gui_col) == (2, 0)
     assert option.flag == "--setlistfm-upgrade"
 

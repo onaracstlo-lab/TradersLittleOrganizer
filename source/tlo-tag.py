@@ -1,4 +1,4 @@
-__version__ = "v482"
+__version__ = "v486"
 
 import argparse
 import multiprocessing
@@ -8,7 +8,7 @@ from console_output_lib import console_emit
 if __name__ == "__main__":
     multiprocessing.freeze_support()
 
-from tlo_options import add_options_to_parser, apply_lookup_dependency, parse_bool, validate_compliant_rename_exclusivity, validate_corruption_policy
+from tlo_options import add_options_to_parser, apply_lookup_dependency, parse_bool, validate_compliant_rename_exclusivity, validate_corruption_policy, validate_setlistfm_upgrade_environment
 from tlo_path_inputs import strip_optional_quotes
 from tlo_tag_lib import build_tagger_config, resolve_tagging_path, run_tagger
 from tlo_run_settings import append_run_settings
@@ -41,7 +41,7 @@ def _parse_args(argv=None):
         "compliant": "Use the simplified compliant folder-name parsing rules. Mutually exclusive with --rename-compliantly.",
         "etree_lookup": "Use eTreeDB as a metadata and song-title fallback during tagging.",
         "setlistfm_lookup": "Use setlist.fm as the enabled online fallback/evidence source during tagging. Requires --etree-lookup.",
-        "setlistfm_upgrade": "Use upgraded setlist.fm rate/daily limits when setlist.fm lookup is enabled.",
+        "setlistfm_upgrade": "Use upgraded setlist.fm rate/daily limits when setlist.fm lookup is enabled. Requires SETLISTFMUPGRADE_API_KEY, set to the same API key as SETLISTFM_API_KEY.",
         "thorough_setlist_matching": "Collect and compare additional local and enabled online setlist candidates during tagging.",
         "rename_compliantly": "Rename an identified folder using the resolved Show Name before tagging it in place. Mutually exclusive with --compliant.",
         "convert_shn": "Convert .shn/.shnf files in the selected tagging path to .flac; delete a source only after successful verified conversion.",
@@ -61,6 +61,7 @@ def _parse_args(argv=None):
     try:
         validate_compliant_rename_exclusivity(vars(args))
         apply_lookup_dependency(vars(args), mode="strict")
+        validate_setlistfm_upgrade_environment(vars(args))
         validate_corruption_policy(vars(args), require_explicit_threshold=True)
     except ValueError as exc:
         parser.error(str(exc))

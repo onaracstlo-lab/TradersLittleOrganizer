@@ -19,7 +19,7 @@ def test_build453_wrapped_tag_copy_spans_rows_without_pushing_thorough_down():
     source = _source()
     start = source.index("checkbox_frame = ttk.Frame(options_frame)")
     block = source[start:source.index("self.dry_run_checkbox = ttk.Checkbutton", start)]
-    assert 'checkbox_text = "Thorough Setlist\\nMatching"' in block
+    assert 'checkbox_text = "Thorough setlist\\nMatching"' in block
     assert 'checkbox_text = "Tag Copy/Delete\\nOriginal"' in block
     assert 'if option.config_field == "tag_copy_and_delete_enabled":' in block
     assert 'grid_options["rowspan"] = 2' in block

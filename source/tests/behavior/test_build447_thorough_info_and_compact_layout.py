@@ -54,11 +54,11 @@ def test_build447_thorough_info_never_claims_unselected_sources_under_current_po
 
 def test_build447_thorough_checkbox_wraps_without_changing_registry_label():
     source = _source()
-    assert 'checkbox_text = "Thorough Setlist\\nMatching"' in source
+    assert 'checkbox_text = "Thorough setlist\\nMatching"' in source
 
     from tlo_options import OPTIONS
     option = next(item for item in OPTIONS if item.config_field == "thorough_setlist_matching")
-    assert option.gui_label == "Thorough Setlist Matching"
+    assert option.gui_label == "Thorough setlist Matching"
 
 
 def test_build447_checkbox_block_and_columns_shift_farther_left():

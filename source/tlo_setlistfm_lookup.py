@@ -29,9 +29,10 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from tlo_network_io import MAX_ERROR_RESPONSE_BYTES, MAX_METADATA_RESPONSE_BYTES, ResponseTooLargeError, read_bounded_text
 
-__version__ = "v482"
+__version__ = "v486"
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
+ENV_UPGRADE_API_KEY = "SETLISTFMUPGRADE_API_KEY"
 MIN_REQUEST_INTERVAL_SECONDS = 0.600
 MAX_REQUESTS_PER_RUN = 1400
 UPGRADE_REQUESTS_PER_SECOND = 14
@@ -115,6 +116,16 @@ def convert_date_for_api(date_text: str) -> str:
 def api_key_available() -> bool:
     """Return whether a non-empty setlist.fm API key is available in the environment."""
     return bool(os.environ.get(ENV_API_KEY, "").strip())
+
+
+def upgrade_api_key_available() -> bool:
+    """Return whether the explicit setlist.fm upgrade-enable key is available.
+
+    The upgrade variable is intentionally separate from the normal setlist.fm
+    credential so upgraded rate limits cannot be enabled accidentally. The
+    value is expected to be the same API key stored in SETLISTFM_API_KEY.
+    """
+    return bool(os.environ.get(ENV_UPGRADE_API_KEY, "").strip())
 
 
 def get_api_key() -> str:

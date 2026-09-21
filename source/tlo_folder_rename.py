@@ -1,6 +1,6 @@
 """Shared helpers for exact-case folder renames."""
 
-__version__ = "v482"
+__version__ = "v486"
 
 import os
 import uuid

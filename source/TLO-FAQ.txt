@@ -11,7 +11,7 @@ Q: Do I need to define TLOHome before I start?
 A: Yes. TLOHome is the root for the applications, databases, logs, setlists, and inventory output. Set it with the TLOHome environment variable or the documented --TLOHome command-line option. The Inventory and Search GUIs resolve it at startup and display it as a read-only label.
 
 Q: What else is required before the first run?
-A: A complete installation must contain TLOHome/TLO_DBs/artists.sqlite and TLOHome/TLO_DBs/venues.txt. Full Inventory also requires Search Path. Path(s) can contain one or more semicolon-separated direct roots using the same line grammar as toBeInventoried.txt, or the fully qualified path to any .txt control file using that format. TLOHome/toBeInventoried.txt is not read automatically. Optional settings include TLOCurrentStorage for Add Shows and SETLISTFM_API_KEY for setlist.fm lookup.
+A: A complete installation must contain TLOHome/TLO_DBs/artists.sqlite and TLOHome/TLO_DBs/venues.txt. Full Inventory also requires Search Path. Path(s) can contain one or more semicolon-separated direct roots using the same line grammar as toBeInventoried.txt, or the fully qualified path to any .txt control file using that format. TLOHome/toBeInventoried.txt is not read automatically. Optional settings include TLOCurrentStorage for Add Shows, SETLISTFM_API_KEY for setlist.fm lookup, and SETLISTFMUPGRADE_API_KEY to enable setlist.fm upgrade. SETLISTFMUPGRADE_API_KEY should contain the same API key value as SETLISTFM_API_KEY.
 
 Q: Is toBeInventoried.txt still used automatically?
 A: No. Build 461 keeps toBeInventoried.txt only as an example/template in COMPLETE installations. To use that format, explicitly put the full path to toBeInventoried.txt (or any other .txt control file) in Search Path.
@@ -119,7 +119,7 @@ Q: What happens to the corruption folder controls when Corrupt files is Keep and
 A: Build 469 treats Keep and report as report-only corruption handling. Folder removal is effectively Never, and the Folder removal and Folder corruption threshold controls are greyed out. Select Delete corrupt files to re-enable folder-removal choices; the threshold value is enabled only for At threshold.
 
 Q: Why are the setlist.fm checkboxes disabled?
-A: If SETLISTFM_API_KEY is missing or blank when the Inventory GUI starts, Build 469 forces both setlist.fm and setlist.fm upgrade unchecked and disables them. Set the environment variable before starting TLO to make those controls available. TLO never displays the key itself.
+A: If SETLISTFM_API_KEY is missing or blank when the Inventory GUI starts, both setlist.fm controls are unchecked and disabled. If SETLISTFM_API_KEY is present but SETLISTFMUPGRADE_API_KEY is missing or blank, normal setlist.fm remains available but setlist.fm upgrade is unchecked and greyed out. To enable upgrade, set SETLISTFMUPGRADE_API_KEY to the same API key value as SETLISTFM_API_KEY before starting TLO. TLO never displays either key.
 
 Q: What does Max Workers mean?
 A: Max Workers is a ceiling, not a request to create that many workers. The GUI initializes it to the machine CPU count unless a positive launcher value is supplied. Performance Mode and processing constraints decide how many workers a phase actually uses, and TLO may use fewer because paths share a physical drive, there are fewer parallel work groups, or a phase must serialize work for correctness.
@@ -166,3 +166,18 @@ A: Automatic recovery now requires the recovery journal to match a nonce registr
 
 Q: Why can Tag Copy refuse a folder containing symbolic links?
 A: Build 481 refuses Tag Copy when the source tree contains symbolic links so TLO cannot accidentally copy the contents of a link target outside the traded collection. Sibling setlist aggregation likewise ignores symlinked setlist files. Replace or remove the links deliberately before using those workflows.
+
+Q: What does Copy Requests do?
+A: Open the upper-right hamburger menu in the Inventory window and choose Copy Requests. Copy Requests copies a requested subset of the inventory to a Destination across multiple sessions and changing sets of connected source drives. A request stays saved under TLOHome/copyRequests, so you can copy what is available now, swap drives later, choose Continue, and TLO skips Shows already completed for that request.
+
+Q: What can I put in a Copy Request .txt file?
+A: Use the same blank-line, #, and REM whole-line comment convention as toBeInventoried.txt. Each data line may be a complete Show Name, an Artist, Artist plus a calendar year (yyyy), Artist plus an exact yyyy-mm-dd date, or Artist plus a yyyy-yyyy/yy-yy range. Artist matching checks Artist DB masters and aliases. Artist plus yyyy selects that entire calendar year. A yy-yy range moves forward across a century when needed, so 99-01 means 1999-2001.
+
+Q: What happens if all of the source drives are not connected for a Copy Request?
+A: TLO copies only matching Shows that have an inventoried source on a currently connected volume. Shows known to the inventory but located only on disconnected volumes remain Waiting For Volumes, not failed. Continue the same request after connecting more drives. Preview also lists which remaining volume labels would satisfy the most outstanding Shows.
+
+Q: Can I have more than one Copy Request?
+A: Yes. Different request files are independent persistent requests, and the same request file sent to a different Destination is also independent. Process All Active Requests processes every request that is not Closed, with a separate free-space preflight for each Destination.
+
+Q: How is a Copy Request completed or stopped?
+A: TLO reports Complete when every currently matched Show is satisfied and there are no unmatched request items. Broad Artist/range requests are re-evaluated later and can become active again if new inventory adds matching Shows. If you are done even though unmatched items remain, use Close Request; its terminal state is Closed. Delete Request removes only TLO's request state/history and never deletes copied music.

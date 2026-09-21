@@ -30,7 +30,7 @@ def test_thorough_option_defaults_off_and_is_exposed_to_cli_and_gui():
     option = OPTIONS_BY_FIELD["thorough_setlist_matching"]
     assert option.flag == "--thorough-setlist-matching"
     assert option.default is False
-    assert option.gui_label == "Thorough Setlist Matching"
+    assert option.gui_label == "Thorough setlist Matching"
     assert option in GUI_CHECKBOX_OPTIONS
     assert "normal setlist.fm" in option.help
     assert "setlist.fm upgrade" in option.help
@@ -259,9 +259,9 @@ def test_build420_documents_lock_thorough_coverage_vs_authority_contract():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v482.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v486.docx")
     req_text = "\n".join(paragraph.text for paragraph in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v482.rtf").read_text(encoding="utf-8", errors="replace")
+    manual_text = (root / "TLO_Inventory_User_Manual_v486.rtf").read_text(encoding="utf-8", errors="replace")
 
     assert "Build 420 Thorough Setlist Matching rule" in req_text
     assert "normal 600-millisecond / 1,400-call limits" in req_text

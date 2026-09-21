@@ -6,7 +6,7 @@ or location, so collections, sessions, broadcasts, releases, and similar
 material can retain a useful identity without inventing geographic metadata.
 """
 
-__version__ = "v482"
+__version__ = "v486"
 
 import os
 import re
