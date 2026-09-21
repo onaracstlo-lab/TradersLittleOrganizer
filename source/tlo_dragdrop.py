@@ -1,4 +1,4 @@
-__version__ = "v478"
+__version__ = "v482"
 
 """Native-Windows-only drag-and-drop helpers for the TLO Tk GUI.
 
@@ -130,8 +130,17 @@ def _search_path_values_from_drop(widget, data: str) -> list[str]:
 
 
 def _format_search_path_drop_value(path: str) -> str:
-    """Format one dropped path for the semicolon-delimited Search Path field."""
-    return str(path or "").strip()
+    """Format one dropped path for the semicolon-delimited Search Path field.
+
+    Semicolons are legal folder-name characters on Windows, but they are also
+    the Path(s) delimiter.  Quote only dropped values that contain a literal
+    semicolon so they round-trip through the same parser without making quotes
+    necessary for ordinary paths.
+    """
+    value = str(path or "").strip()
+    if ";" in value and not (len(value) >= 2 and value[0] == '"' and value[-1] == '"'):
+        return f'"{value}"'
+    return value
 
 
 def _append_search_path_drop_values(existing: str, values: list[str]) -> str:

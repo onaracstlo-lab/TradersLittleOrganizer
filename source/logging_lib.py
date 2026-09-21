@@ -1,9 +1,10 @@
-__version__ = "v478"
+__version__ = "v482"
 import logging
 import os
 import re
 import string
 from dataclasses import dataclass
+from tlo_security import escape_structured_log_text
 
 from tlo_bootlist_volume_policy import format_log_volume_path, format_volume_path
 
@@ -392,13 +393,14 @@ def _extract_existing_search_path_header(lines):
 
 def _descriptive_header(prefix_name, search_paths):
     paths = _dedupe_preserve_order(search_paths if isinstance(search_paths, (list, tuple)) else [search_paths])
+    paths = [escape_structured_log_text(path) for path in paths]
     if len(paths) <= 1:
         return f"# {prefix_name} for search path: {paths[0] if paths else ''}"
     return f"# {prefix_name} for search paths: {' | '.join(paths)}"
 
 
 def _header_lines(prefix_name, search_paths):
-    paths = _dedupe_preserve_order(search_paths)
+    paths = [escape_structured_log_text(path) for path in _dedupe_preserve_order(search_paths)]
     if not paths:
         paths = [format_volume_path("", "")]
     lines = [_descriptive_header(prefix_name, paths) + "\n"]
@@ -408,6 +410,7 @@ def _header_lines(prefix_name, search_paths):
 
 def _ensure_appended_log_header(log_file, prefix_name, display_search_path):
     """Ensure an append-mode log has a top header containing display_search_path."""
+    display_search_path = escape_structured_log_text(display_search_path)
     try:
         with open(log_file, "r", encoding="utf-8", errors="ignore") as infile:
             lines = infile.readlines()
@@ -574,32 +577,35 @@ class LogManager:
             self.tag_success("SEARCH_PATH: %s", display_search_path)
             self.tag_error("SEARCH_PATH: %s", display_search_path)
 
+    def _safe_log(self, logger, message, args=()):
+        text = escape_structured_log_text(_format_logger_message(message, args))
+        logger.info("%s", text)
+
     def dead_end(self, message, *args):
-        self._dead_end_logger.info(message, *args)
+        self._safe_log(self._dead_end_logger, message, args)
 
     def duplicate(self, message, *args):
-        self._duplicate_logger.info(message, *args)
+        self._safe_log(self._duplicate_logger, message, args)
 
     def complete_paths(self, message, *args):
-        self._complete_paths_logger.info(message, *args)
+        self._safe_log(self._complete_paths_logger, message, args)
 
     def groups(self, message, *args):
-        self._groups_logger.info(message, *args)
+        self._safe_log(self._groups_logger, message, args)
 
     def conflicts(self, message, *args):
-        self._conflicts_logger.info(message, *args)
+        self._safe_log(self._conflicts_logger, message, args)
 
     def show_metadata(self, message, *args):
-        self._show_metadata_logger.info(message, *args)
+        self._safe_log(self._show_metadata_logger, message, args)
 
     def tag_success(self, message, *args):
-        self._tag_success_logger.info(message, *args)
+        self._safe_log(self._tag_success_logger, message, args)
 
     def tag_error(self, message, *args):
-        text = _format_logger_message(message, args)
-        for line in (text.splitlines() or [text]):
-            self.record_tag_reason_line(line)
-            self._tag_error_logger.info("%s", line)
+        text = escape_structured_log_text(_format_logger_message(message, args))
+        self.record_tag_reason_line(text)
+        self._tag_error_logger.info("%s", text)
 
     def record_tag_reason_line(self, line):
         if getattr(self, "_emitting_tag_reason_summary", False):
@@ -610,14 +616,12 @@ class LogManager:
         self.tag_reason_counts[code] = int(self.tag_reason_counts.get(code, 0) or 0) + 1
 
     def tag(self, message, *args):
-        text = _format_logger_message(message, args)
-        lines = text.splitlines() or [text]
-        for line in lines:
-            if _tag_line_is_error(line):
-                self.record_tag_reason_line(line)
-                self._tag_error_logger.info("%s", line)
-            else:
-                self._tag_success_logger.info("%s", line)
+        text = escape_structured_log_text(_format_logger_message(message, args))
+        if _tag_line_is_error(text):
+            self.record_tag_reason_line(text)
+            self._tag_error_logger.info("%s", text)
+        else:
+            self._tag_success_logger.info("%s", text)
 
 
 def setup_logging(config):

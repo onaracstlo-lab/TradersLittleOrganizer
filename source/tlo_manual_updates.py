@@ -1,9 +1,11 @@
 """Manual folder-name corrections with coordinated bootlist/setlist updates."""
 
-__version__ = "v478"
+__version__ = "v482"
 
+import copy
 import ntpath
 import os
+import tempfile
 from dataclasses import dataclass
 from typing import Dict, List, Sequence, Tuple
 
@@ -19,6 +21,13 @@ from tlo_inventory_update import (
     write_bootlist,
 )
 from tlo_path_inputs import normalize_platform_input_path, strip_optional_quotes
+from tlo_bootlist_volume_policy import (
+    format_volume_path,
+    normalize_path_for_compare,
+    os_volume_label_for_path,
+    volume_key,
+)
+from tlo_phase23_v2 import _find_date_matches
 
 
 class ManualUpdateError(RuntimeError):
@@ -166,6 +175,23 @@ def resolve_unidentified_destination(path_text: str, new_name: str) -> Tuple[str
     return parent, final_path
 
 
+def _atomic_write_bytes(path_name: str, payload: bytes) -> None:
+    os.makedirs(os.path.dirname(path_name) or ".", exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{os.path.basename(path_name)}-", suffix=".tmp", dir=os.path.dirname(path_name) or ".")
+    try:
+        with os.fdopen(fd, "wb") as outfile:
+            outfile.write(payload)
+            outfile.flush()
+            os.fsync(outfile.fileno())
+        os.replace(temp_name, path_name)
+    except Exception:
+        try:
+            os.remove(temp_name)
+        except OSError:
+            pass
+        raise
+
+
 def _remove_unidentified_show_path(tlo_home: str, matched_path: str) -> None:
     path_name = unidentified_shows_path(tlo_home)
     if not os.path.isfile(path_name):
@@ -177,30 +203,51 @@ def _remove_unidentified_show_path(tlo_home: str, matched_path: str) -> None:
             clean = raw.strip()
             if clean and _portable_path(clean) != target:
                 kept.append(clean)
-    with open(path_name, "w", encoding="utf-8", newline="") as outfile:
-        for item in kept:
-            outfile.write(item + "\n")
+    payload = "".join(item + "\n" for item in kept).encode("utf-8")
+    _atomic_write_bytes(path_name, payload)
 
 
 def _matching_bootlist_rows(tlo_home: str, original_path: str) -> List[Dict[str, str]]:
+    """Match a physical Original to canonical bootlist rows without crossing volumes."""
     rows = read_bootlist(tlo_home)
-    exact: List[Dict[str, str]] = []
-    leaf_matches: List[Dict[str, str]] = []
-    target = _portable_path(original_path)
+    target_path = normalize_path_for_compare(original_path)
     target_leaf = _portable_leaf(original_path)
+    target_volume = volume_key(os_volume_label_for_path(original_path))
+
+    path_matches: List[Tuple[Dict[str, str], str]] = []
     for row in rows:
-        _volume, physical = parse_volume_path_value(row.get("VolumePath", ""))
-        if _portable_path(physical) == target:
-            exact.append(row)
-        elif target_leaf and _portable_leaf(physical) == target_leaf:
-            leaf_matches.append(row)
-    if exact:
-        return exact
+        row_volume, physical = parse_volume_path_value(row.get("VolumePath", ""))
+        if normalize_path_for_compare(physical) == target_path:
+            path_matches.append((row, volume_key(row_volume)))
+
+    if path_matches:
+        if target_volume:
+            same_volume = [row for row, row_volume in path_matches if row_volume == target_volume]
+            if same_volume:
+                return same_volume
+            raise ManualUpdateError(
+                f"Original path exists in bootlist.csv only on a different volume: {original_path}"
+            )
+        if len(path_matches) == 1:
+            return [path_matches[0][0]]
+        raise ManualUpdateError(
+            f"More than one inventory row has the path {original_path}; the volume could not be resolved uniquely."
+        )
+
+    # Leaf-only matching is a legacy fallback and is safe only when both sides
+    # have a known, matching visible volume label.  Never use it to jump from a
+    # supplied physical path to a same-named folder on another volume.
+    leaf_matches: List[Dict[str, str]] = []
+    if target_volume and target_leaf:
+        for row in rows:
+            row_volume, physical = parse_volume_path_value(row.get("VolumePath", ""))
+            if volume_key(row_volume) == target_volume and _portable_leaf(physical) == target_leaf:
+                leaf_matches.append(row)
     if len(leaf_matches) == 1:
         return leaf_matches
     if len(leaf_matches) > 1:
         raise ManualUpdateError(
-            f"More than one inventory row has the folder name {os.path.basename(original_path)}; "
+            f"More than one inventory row on the same volume has the folder name {os.path.basename(original_path)}; "
             "the Original path could not be matched uniquely."
         )
     raise ManualUpdateError(f"Original folder is not present in bootlist.csv: {original_path}")
@@ -217,7 +264,8 @@ def _replace_volume_path_leaf(volume_path: str, old_leaf: str, new_leaf: str) ->
     else:
         parent = os.path.dirname(physical)
         new_physical = os.path.join(parent, new_leaf) if parent else new_leaf
-    return f"[{volume}] {new_physical}" if volume else new_physical
+    had_volume_prefix = str(volume_path or "").lstrip().startswith("[")
+    return f"[{volume}] {new_physical}" if (volume or had_volume_prefix) else new_physical
 
 
 def _snapshot_setlists(paths: Sequence[str]) -> List[Tuple[str, bytes]]:
@@ -268,6 +316,35 @@ def _manual_update_tag_warnings(stats: Dict[str, object], messages: Sequence[str
     return warnings
 
 
+def _apply_manual_name_tag_identity(record_dict: Dict[str, str], new_name: str) -> Dict[str, str]:
+    """Make a parseable user-entered New Name authoritative for Artist/Album tags."""
+    record = dict(record_dict or {})
+    text = str(new_name or "").strip()
+    date_matches = [
+        item for item in _find_date_matches(text)
+        if item.get("normalized") and len(item.get("normalized", "")) == 10
+    ]
+    if date_matches:
+        chosen = sorted(date_matches, key=lambda item: (int(item.get("start", 0)), -len(item.get("raw", ""))))[0]
+        start = int(chosen.get("start", 0))
+        artist = text[:start].strip(" -_,")
+        album_piece = text[start:].strip()
+        if artist:
+            record["artist"] = artist
+        if album_piece:
+            record["album_name"] = album_piece
+        record["date"] = chosen.get("normalized", record.get("date", ""))
+        return record
+    if " - " in text:
+        artist, album_piece = text.split(" - ", 1)
+        artist = artist.strip()
+        album_piece = album_piece.strip()
+        if artist and album_piece:
+            record["artist"] = artist
+            record["album_name"] = album_piece
+    return record
+
+
 def _update_manual_folder_tags(config, folder_path: str, record_dict: Dict[str, str]) -> Tuple[Dict[str, object], List[str]]:
     """Update one manually corrected folder's audio tags before inventory commit.
 
@@ -278,13 +355,18 @@ def _update_manual_folder_tags(config, folder_path: str, record_dict: Dict[str, 
     """
     from tlo_tag_lib import tag_group_with_record
 
-    group = _build_single_folder_group(config, folder_path)
+    tag_config = copy.copy(config)
+    # Manual Updates' Update Tags option must never perform SHN conversion or
+    # delete SHN/SHNF originals.  Conversion remains an explicit Tag/Inventory
+    # workflow.
+    setattr(tag_config, "convert_shn", False)
+    group = _build_single_folder_group(tag_config, folder_path)
     record = _record_namespace_from_dict(record_dict)
     record.main_dir_path = os.path.normpath(folder_path)
     record.main_dir_name = os.path.basename(record.main_dir_path)
     messages: List[str] = []
     stats = tag_group_with_record(
-        config,
+        tag_config,
         group,
         record,
         emit=messages.append,
@@ -308,9 +390,21 @@ def apply_folder_manual_update(
     old_leaf = os.path.basename(original)
 
     rows_to_replace = _matching_bootlist_rows(config.TLOHome, original)
+    old_rows_all = read_bootlist(config.TLOHome)
+    replace_keys = {(row.get("Show", ""), row.get("VolumePath", "")) for row in rows_to_replace}
+    old_shows = {str(row.get("Show", "") or "").strip() for row in rows_to_replace}
+    surviving_old_shows = {
+        str(row.get("Show", "") or "").strip()
+        for row in old_rows_all
+        if (row.get("Show", ""), row.get("VolumePath", "")) not in replace_keys
+    }
     old_setlists: List[str] = []
-    for row in rows_to_replace:
-        old_setlists.extend(infer_setlist_paths_for_show(config.TLOHome, row.get("Show", "")))
+    setlists_safe_to_delete: List[str] = []
+    for show in old_shows:
+        family = infer_setlist_paths_for_show(config.TLOHome, show)
+        old_setlists.extend(family)
+        if show not in surviving_old_shows:
+            setlists_safe_to_delete.extend(family)
     snapshots = _snapshot_setlists(old_setlists)
 
     renamed_by_tlo = False
@@ -332,7 +426,7 @@ def apply_folder_manual_update(
     generated = ""
     tag_stats: Dict[str, object] = {}
     tag_warnings: List[str] = []
-    old_rows_all = read_bootlist(config.TLOHome)
+    tags_attempted = False
     try:
         record = identify_folder_dict(config, active_path)
         # Manual Updates is explicitly user-directed.  The requested leaf is
@@ -341,6 +435,8 @@ def apply_folder_manual_update(
         record["show_name"] = new_leaf
         record["main_dir_path"] = active_path
         if update_tags:
+            record = _apply_manual_name_tag_identity(record, new_leaf)
+            tags_attempted = True
             tag_stats, tag_warnings = _update_manual_folder_tags(config, active_path, record)
 
         # Finalize the inventory identity only after the optional tag update has
@@ -348,10 +444,9 @@ def apply_folder_manual_update(
         # the replacement so a same-base manual correction does not spuriously
         # become (alt1). Tag write warnings do not discard the user's manual
         # path correction; they are returned to the GUI for explicit reporting.
-        _delete_paths([path for path, _payload in snapshots])
+        _delete_paths(setlists_safe_to_delete)
         generated = create_or_replace_generated_setlist(config.TLOHome, record)
 
-        replace_keys = {(row.get("Show", ""), row.get("VolumePath", "")) for row in rows_to_replace}
         kept = [
             row for row in old_rows_all
             if (row.get("Show", ""), row.get("VolumePath", "")) not in replace_keys
@@ -378,9 +473,12 @@ def apply_folder_manual_update(
                 rename_folder_exact_case(target, original)
             except Exception:
                 pass
+        detail = str(exc).strip() or exc.__class__.__name__
+        if tags_attempted:
+            detail += " Tag writes may already have been applied; Manual Updates does not roll audio tags back."
         if isinstance(exc, ManualUpdateError):
-            raise
-        raise ManualUpdateError(str(exc).strip() or exc.__class__.__name__) from exc
+            raise ManualUpdateError(detail) from exc
+        raise ManualUpdateError(detail) from exc
 
     return {
         "original": original,
@@ -419,9 +517,13 @@ def apply_unidentified_manual_update(
     destination_parent, final_path = resolve_unidentified_destination(destination_path, new_leaf)
 
     old_rows = read_bootlist(config.TLOHome)
+    final_key = normalize_path_for_compare(final_path)
+    final_volume = volume_key(os_volume_label_for_path(final_path))
     for row in old_rows:
-        _volume, physical = parse_volume_path_value(row.get("VolumePath", ""))
-        if _portable_path(physical) == _portable_path(final_path):
+        row_volume, physical = parse_volume_path_value(row.get("VolumePath", ""))
+        same_path = normalize_path_for_compare(physical) == final_key
+        same_volume = not final_volume or not volume_key(row_volume) or volume_key(row_volume) == final_volume
+        if same_path and same_volume:
             raise ManualUpdateError(f"Destination folder is already present in bootlist.csv: {final_path}")
 
     unidentified_file = unidentified_shows_path(config.TLOHome)
@@ -434,18 +536,24 @@ def apply_unidentified_manual_update(
     generated = ""
     tag_stats: Dict[str, object] = {}
     tag_warnings: List[str] = []
+    tags_attempted = False
     try:
         record = identify_folder_dict(config, final_path)
         record["show_name"] = new_leaf
         record["main_dir_path"] = final_path
         if update_tags:
+            record = _apply_manual_name_tag_identity(record, new_leaf)
+            tags_attempted = True
             tag_stats, tag_warnings = _update_manual_folder_tags(config, final_path, record)
         # No move/rename occurs in this branch.  The tag update, when selected,
         # runs against the manually changed folder before bootlist/setlist state
         # is finalized.
         generated = create_or_replace_generated_setlist(config.TLOHome, record)
         rows = list(old_rows)
-        rows.append({"Show": new_leaf, "VolumePath": final_path})
+        rows.append({
+            "Show": new_leaf,
+            "VolumePath": format_volume_path(os_volume_label_for_path(final_path), final_path),
+        })
         write_bootlist(config.TLOHome, rows)
         _remove_unidentified_show_path(config.TLOHome, matched_unidentified)
     except Exception as exc:
@@ -460,16 +568,17 @@ def apply_unidentified_manual_update(
             pass
         try:
             if unidentified_existed:
-                os.makedirs(os.path.dirname(unidentified_file), exist_ok=True)
-                with open(unidentified_file, "wb") as outfile:
-                    outfile.write(unidentified_snapshot)
+                _atomic_write_bytes(unidentified_file, unidentified_snapshot)
             elif os.path.isfile(unidentified_file):
                 os.remove(unidentified_file)
         except Exception:
             pass
+        detail = str(exc).strip() or exc.__class__.__name__
+        if tags_attempted:
+            detail += " Tag writes may already have been applied; Manual Updates does not roll audio tags back."
         if isinstance(exc, ManualUpdateError):
-            raise
-        raise ManualUpdateError(str(exc).strip() or exc.__class__.__name__) from exc
+            raise ManualUpdateError(detail) from exc
+        raise ManualUpdateError(detail) from exc
 
     return {
         "original": original,

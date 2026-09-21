@@ -50,7 +50,7 @@ def test_gio_trash_uses_argument_terminator_timeout_and_postcondition(monkeypatc
     monkeypatch.setattr(C.subprocess, "run", fake_run)
     C.move_to_trash(str(target))
     command, kwargs = calls[0]
-    assert command[:3] == ["gio", "trash", "--"]
+    assert command[:3] == ["/usr/bin/gio", "trash", "--"]
     assert kwargs["timeout"] == C.TRASH_SUBPROCESS_TIMEOUT_SECONDS
 
 

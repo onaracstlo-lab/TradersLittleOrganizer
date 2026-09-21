@@ -6,6 +6,7 @@ import pytest
 
 import inventory_list_lib as IL
 import tlo_manual_updates as MU
+import tlo_bootlist_volume_policy as BP
 
 pytestmark = pytest.mark.behavior
 
@@ -59,7 +60,7 @@ def test_build474_folder_save_renames_in_place_replaces_bootlist_and_setlist(tmp
     original = _music_dir(tmp_path / "library" / "Old Folder")
     old_setlist = setlists / "OldShow.txt"
     old_setlist.write_text("old", encoding="utf-8")
-    MU.write_bootlist(str(tlohome), [{"Show": "Old Show", "VolumePath": "[VOL] C:\\Music\\Old Folder"}])
+    MU.write_bootlist(str(tlohome), [{"Show": "Old Show", "VolumePath": BP.format_volume_path("", str(original))}])
 
     monkeypatch.setattr(MU, "identify_folder_dict", lambda config, folder: {
         "show_name": "Ignored Parser Name",
@@ -77,7 +78,7 @@ def test_build474_folder_save_renames_in_place_replaces_bootlist_and_setlist(tmp
     assert Path(result["new_path"]) == new_path
     assert new_path.is_dir() and not original.exists()
     rows = MU.read_bootlist(str(tlohome))
-    assert rows == [{"Show": "New Folder", "VolumePath": "[VOL] C:\\Music\\New Folder"}]
+    assert rows == [{"Show": "New Folder", "VolumePath": BP.format_volume_path("", str(new_path))}]
     assert not old_setlist.exists()
     assert (setlists / "NewFolder.txt").is_file()
 

@@ -1,4 +1,4 @@
-__version__ = "v478"
+__version__ = "v482"
 
 import csv
 import json
@@ -10,9 +10,11 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import asdict
 from types import SimpleNamespace
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from tlo_security import csv_formula_escape, csv_formula_unescape
 
 from tlo_artist_db import load_artist_matcher, lookup_artist_master_with_status, match_line_to_artists
 from tlo_file_listing import is_setlist_family_name, scandir_matching_files
@@ -256,7 +258,7 @@ def read_bootlist(tlo_home: str) -> List[Dict[str, str]]:
                 first_data = False
                 continue
             first_data = False
-            show = (row[0] if len(row) >= 1 else "").strip()
+            show = csv_formula_unescape((row[0] if len(row) >= 1 else "").strip())
             if not show:
                 continue
             if len(row) >= 4:
@@ -264,7 +266,7 @@ def read_bootlist(tlo_home: str) -> List[Dict[str, str]]:
                 path = (row[3] or "").strip()
                 volume_path = _format_bootlist_volume_path(volume, path)
             else:
-                volume_path = (row[1] if len(row) >= 2 else "").strip()
+                volume_path = csv_formula_unescape((row[1] if len(row) >= 2 else "").strip())
             rows.append({"Show": show, "VolumePath": volume_path})
     return rows
 
@@ -272,12 +274,24 @@ def read_bootlist(tlo_home: str) -> List[Dict[str, str]]:
 def write_bootlist(tlo_home: str, rows: List[Dict[str, str]]) -> str:
     path_name = bootlist_path(tlo_home)
     rows_out = sorted(rows, key=lambda row: ((row.get("Show") or "").casefold(), (row.get("VolumePath") or "").casefold()))
-    with open(path_name, "w", encoding="utf-8", newline="") as outfile:
-        outfile.write("sep=^\n")
-        outfile.write("Show^VolumePath\n")
-        writer = csv.writer(outfile, delimiter="^", lineterminator="\n")
-        for row in rows_out:
-            writer.writerow([(row.get("Show") or "").strip(), (row.get("VolumePath") or "").strip()])
+    os.makedirs(os.path.dirname(path_name) or ".", exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=".bootlist-", suffix=".tmp", dir=os.path.dirname(path_name) or ".")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as outfile:
+            outfile.write("sep=^\n")
+            outfile.write("Show^VolumePath\n")
+            writer = csv.writer(outfile, delimiter="^", lineterminator="\n")
+            for row in rows_out:
+                writer.writerow([csv_formula_escape((row.get("Show") or "").strip()), csv_formula_escape((row.get("VolumePath") or "").strip())])
+            outfile.flush()
+            os.fsync(outfile.fileno())
+        os.replace(temp_name, path_name)
+    except Exception:
+        try:
+            os.remove(temp_name)
+        except OSError:
+            pass
+        raise
     return path_name
 
 
@@ -949,7 +963,9 @@ def open_paths(paths: Iterable[str]) -> None:
         for path_name in clean_paths:
             os.startfile(path_name)  # type: ignore[attr-defined]
         return
-    opener = "open" if sys.platform == "darwin" else "xdg-open"
+    opener = "/usr/bin/open" if sys.platform == "darwin" else shutil.which("xdg-open")
+    if not opener:
+        return
     for path_name in clean_paths:
         try:
             subprocess.Popen([opener, path_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -967,7 +983,10 @@ def _append_delete_command(script_path: str, path_to_delete: str) -> None:
         if not existed and not is_bat:
             outfile.write("#!/bin/sh\n")
         if is_bat:
-            outfile.write(f'rmdir /s /q "{path_to_delete}"\n')
+            if not existed:
+                outfile.write("setlocal DisableDelayedExpansion\n")
+            safe_path = str(path_to_delete).replace("%", "%%")
+            outfile.write(f'rmdir /s /q "{safe_path}"\n')
         else:
             outfile.write(f"rm -rf -- {shlex.quote(path_to_delete)}\n")
     if not is_bat:

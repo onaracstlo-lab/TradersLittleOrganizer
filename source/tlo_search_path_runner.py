@@ -1,4 +1,4 @@
-__version__ = "v478"
+__version__ = "v482"
 from console_output_lib import console_print
 from initial_dir_walk_lib import initial_dir_walk
 from tlo_complete_path_log import compact_complete_path_log
@@ -43,6 +43,7 @@ def run_search_path(config, path_name, slam_value, search_index, volume_label=""
         recovered_collections = recover_interrupted_sibling_consolidations(
             path_name,
             _report_collection_recovery,
+            tlo_home=config.TLOHome,
         )
         if recovered_collections:
             console_print(
@@ -56,6 +57,7 @@ def run_search_path(config, path_name, slam_value, search_index, volume_label=""
         path_name,
         config.logs.paths.complete_paths,
         lambda message: config.logs.conflicts("%s", message),
+        tlo_home=config.TLOHome,
     )
     if consolidated:
         console_print(config, f"Sibling collections consolidated = {len(consolidated)}")

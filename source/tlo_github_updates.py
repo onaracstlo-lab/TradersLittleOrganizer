@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from tlo_diagnostics import debug_suppressed_exception
 
-__version__ = "v478"
+__version__ = "v482"
 
 import datetime as _dt
 import hashlib
@@ -39,8 +39,9 @@ ALLOWED_DOWNLOAD_HOSTS = {
     "github.com",
     "objects.githubusercontent.com",
     "github-releases.githubusercontent.com",
+    "release-assets.githubusercontent.com",
 }
-ALLOWED_DOWNLOAD_HOST_SUFFIXES = (".githubusercontent.com",)
+ALLOWED_DOWNLOAD_HOST_SUFFIXES = ()
 
 
 @dataclass(frozen=True)

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-__version__ = "v478"
+__version__ = "v482"
 
 
 import copy
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import sys
@@ -24,6 +25,7 @@ from inventory_list_lib import (
     parse_search_path_input,
 )
 from tlo_media_rules import MEDIA_EXTENSIONS
+from tlo_security import is_network_or_device_path
 
 
 # ttk.Progressbar.start() receives the animation interval in milliseconds.
@@ -1105,24 +1107,32 @@ def collect_current_log_issues(tlo_home: str, tokens: Iterable[str], *, tagger: 
 
 def open_path(path_name: str) -> bool:
     target = str(path_name or "").strip()
-    if not target:
+    if not target or is_network_or_device_path(target):
         return False
-    if os.path.isfile(target):
-        target_to_open = target
-    elif os.path.isdir(target):
-        target_to_open = target
-    else:
+    is_file = os.path.isfile(target) and not os.path.islink(target)
+    is_dir = os.path.isdir(target) and not os.path.islink(target)
+    if not is_file and not is_dir:
         parent = os.path.dirname(target)
-        if not parent or not os.path.isdir(parent):
+        if not parent or not os.path.isdir(parent) or os.path.islink(parent) or is_network_or_device_path(parent):
             return False
-        target_to_open = parent
+        target = parent
+        is_dir = True
     try:
         if os.name == "nt":
-            os.startfile(target_to_open)  # type: ignore[attr-defined]
+            system_root = os.environ.get("SystemRoot", r"C:\Windows")
+            explorer = os.path.join(system_root, "explorer.exe")
+            if is_file:
+                subprocess.Popen([explorer, "/select,", os.path.normpath(target)])
+            else:
+                subprocess.Popen([explorer, os.path.normpath(target)])
         elif sys.platform == "darwin":
-            subprocess.Popen(["open", target_to_open])
+            opener = "/usr/bin/open"
+            subprocess.Popen([opener, "-R", target] if is_file else [opener, target])
         else:
-            subprocess.Popen(["xdg-open", target_to_open])
+            opener = shutil.which("xdg-open")
+            if not opener:
+                return False
+            subprocess.Popen([opener, os.path.dirname(target) if is_file else target])
         return True
     except Exception:
         return False

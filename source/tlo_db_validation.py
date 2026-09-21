@@ -1,4 +1,4 @@
-__version__ = "v478"
+__version__ = "v482"
 import os
 import sqlite3
 from typing import Tuple

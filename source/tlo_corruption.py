@@ -1,7 +1,7 @@
 """Pre-mutation audio corruption threshold handling for TLO."""
 from __future__ import annotations
 
-__version__ = "v478"
+__version__ = "v482"
 
 import ctypes
 import os
@@ -381,7 +381,7 @@ def move_to_trash(path):
         )
         try:
             subprocess.run(
-                ["osascript", "-e", script, path],
+                ["/usr/bin/osascript", "-e", script, path],
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
@@ -393,9 +393,10 @@ def move_to_trash(path):
         if os.path.exists(path):
             raise OSError("Trash operation reported success but the source still exists")
         return
+    gio = "/usr/bin/gio"
     try:
         subprocess.run(
-            ["gio", "trash", "--", path],
+            [gio, "trash", "--", path],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,

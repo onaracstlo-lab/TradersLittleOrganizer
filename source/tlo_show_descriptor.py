@@ -6,7 +6,7 @@ or location, so collections, sessions, broadcasts, releases, and similar
 material can retain a useful identity without inventing geographic metadata.
 """
 
-__version__ = "v478"
+__version__ = "v482"
 
 import os
 import re
@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Iterable, List, Sequence
 
 from tlo_setlist_metadata_lookup import is_setlist_metadata_scan_boundary, looks_like_sentence_prose_line
-from tlo_text_utils import compact_ws, normalized_compare_value, standard_ascii_text
+from tlo_text_utils import compact_ws, normalized_compare_value, read_text_file_full, standard_ascii_text
 
 
 MAX_DESCRIPTOR_CHARS = 60
@@ -84,21 +84,7 @@ class DescriptorCandidate:
 
 
 def _read_text(path_name: str) -> str:
-    try:
-        data = open(path_name, "rb").read()
-    except OSError:
-        return ""
-    if not data:
-        return ""
-    for encoding in ("utf-8-sig", "utf-16", "utf-16-le", "utf-16-be", "utf-8", "cp1252", "latin-1"):
-        try:
-            text = data.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-        if text.count("\x00") >= max(3, len(text) // 100):
-            continue
-        return text.replace("\r\n", "\n").replace("\r", "\n")
-    return data.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
+    return read_text_file_full(path_name)
 
 
 def _clean_candidate(value: str) -> str:

@@ -1,4 +1,4 @@
-__version__ = "v478"
+__version__ = "v482"
 from tlo_diagnostics import debug_suppressed_exception
 import os
 from typing import Dict, List
@@ -7,6 +7,8 @@ from mutagen import File as MutagenFile
 
 
 FLAC_EXTENSIONS = {".flac"}
+MP3_EXTENSIONS = {".mp3"}
+AUDIO_TAG_EXTENSIONS = FLAC_EXTENSIONS | MP3_EXTENSIONS
 _FILE_TAG_CACHE: Dict[str, Dict[str, str]] = {}
 
 
@@ -14,7 +16,7 @@ def is_flac_type_file(path_name: str) -> bool:
     normalized = os.path.normpath(path_name or "")
     if not normalized or not os.path.isfile(normalized):
         return False
-    return os.path.splitext(normalized)[1].lower() in FLAC_EXTENSIONS
+    return os.path.splitext(normalized)[1].lower() in AUDIO_TAG_EXTENSIONS
 
 
 
@@ -48,7 +50,7 @@ def read_flac_type_tags(path_name: str) -> Dict[str, str]:
         return dict(result)
 
     try:
-        audio = MutagenFile(normalized)
+        audio = MutagenFile(normalized, easy=True)
         tags = getattr(audio, "tags", None)
         if tags:
             result = {
@@ -72,7 +74,9 @@ def collect_group_flac_tag_info(music_files: List[str], max_files: int = 2) -> D
     albumartist_values: List[str] = []
     date_values: List[str] = []
 
-    for path_name in list(music_files or [])[:max_files]:
+    for path_name in list(music_files or []):
+        if len(samples) >= max_files:
+            break
         if not is_flac_type_file(path_name):
             continue
         tags = read_flac_type_tags(path_name)

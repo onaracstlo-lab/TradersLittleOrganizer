@@ -207,15 +207,15 @@ def test_build414_requirements_and_manual_document_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v478.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v482.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v478.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v482.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v478 (v1.7 Build 478)." in req_text
+    assert "Current document version: v482 (v1.7 Build 482)." in req_text
     assert "Washington, DC" in req_text
     assert "Chick Corea and Herbie Hancock" in req_text
     assert "bare-number" in req_text.casefold()
     assert "Unknown" in req_text
-    assert "Version v1.7 Build 478" in manual_text
+    assert "Version v1.7 Build 482" in manual_text
     assert "Washington" in manual_text
     assert "Unknown" in manual_text

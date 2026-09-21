@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v478"
+__version__ = "v482"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -130,6 +130,7 @@ from tlo_manual_updates import (
 from tlo_run_settings import append_run_settings
 from tlo_runtime_control import (
     clear_cancel_request,
+    is_cancel_requested,
     request_cancel,
     request_cancel_and_terminate_active_executor,
     terminate_all_children,
@@ -178,7 +179,6 @@ HELP_TEXT = (
     "GUI fields and their command-line forms:\n"
     "  TLOHome          --TLOHome DIR\n"
     "  Search Path      --search-path STRING\n"
-    "  Tag Path         --tag-path STRING   (standalone tlo-tag CLI only)\n"
     "  Slam             -$slam STRING   (only valid with --search-path)\n"
     "  Compliant        --compliant\n"
     "  As-Is Artist Name --as-is-artist-name\n"
@@ -195,7 +195,6 @@ HELP_TEXT = (
     "  --TLOHome DIR        Fully qualified existing writable directory path. Defaults from the TLOHome environment variable when present.\n"
     "  --search-path STRING  Required when Inventory starts. Accepts semicolon-separated path entries; each may use [Volume], --$slam, --$copy, and --$copy-delete. A .txt entry is read using the inventory-control-file format.\n"
     "                        In the native Windows GUI, drag one or more folders or .txt control files from File Explorer onto Search Path; each drop appends semicolon-separated entries.\n"
-    "  --tag-path STRING     Optional fully qualified tagger input path. Used only by the Tag workflow; inventory and updater do not use it.\n"
     "  -$slam STRING        Artist override paired with --search-path. Invalid by itself.\n"
     "  --silent             Suppress all console output.\n"
     "  --compliant          Use the simplified compliant Phase 2/3 parsing rules. Mutually exclusive with --rename-compliantly.\n"
@@ -534,7 +533,6 @@ def _parse_gui_command_line(argv=None):
     )
     parser.add_argument("--TLOHome", dest="TLOHome", default="", help="TLOHome directory. Defaults from the TLOHome environment variable when present.")
     parser.add_argument("--myTLO", dest="myTLO", default="", help=argparse.SUPPRESS)
-    parser.add_argument("--tag-path", dest="tagPath", default="", help="Optional fully qualified tagger input path. Tagger-only; inventory/updater ignore it.")
     parser.add_argument("-$slam", "--$slam", dest="search_path_slam_override", default="", help="Artist override paired with --search-path.")
     parser.add_argument("--$copy", dest="search_path_copy_override", default="", help="Per-search-path Tag Copy destination. Only valid with --search-path.")
     parser.add_argument("--$copy-delete", dest="search_path_copy_delete_override", default="", help="Per-search-path Tag Copy and Delete destination. Only valid with --search-path.")
@@ -4168,8 +4166,9 @@ class DuplicateHandlerWindow:
         viewer = scrolledtext.ScrolledText(review, width=110, height=34, font=tkfont.nametofont("TkFixedFont"))
         viewer.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
         try:
-            with open(path_name, "r", encoding="utf-8", errors="replace") as infile:
-                text = infile.read()
+            text = read_text_file_sample(path_name, max_chars=1_000_000)
+            if not text and os.path.getsize(path_name) > 0:
+                text = "File is too large or unreadable for the review window."
         except Exception as exc:
             text = f"Unable to read file: {exc}"
         viewer.insert("1.0", text)

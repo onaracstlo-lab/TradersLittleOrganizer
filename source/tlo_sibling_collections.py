@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v478"
+__version__ = "v482"
 
 import json
 import ntpath
@@ -17,9 +17,12 @@ from xml.etree import ElementTree
 from tlo_media_rules import MEDIA_EXTENSIONS
 from tlo_setlist_file_selection import _ordered_exception_files, _ordered_txt_files
 from tlo_wrapper_rules import split_wrapper_part_suffix
+from tlo_text_utils import MAX_TEXT_FULL_BYTES, read_text_file_full
 
 JOURNAL_NAME = ".tlo-sibling-consolidation.json"
 TEMP_PREFIX = ".tlo-collection-"
+MAX_RECOVERY_JOURNAL_BYTES = 1024 * 1024
+RECOVERY_REGISTRY_DIRNAME = "sibling-recovery"
 TEXT_SETLIST_EXTENSIONS = {".txt", ".nfo"}
 DOCUMENT_SETLIST_EXTENSIONS = {".rtf", ".docx"}
 SETLIST_EXTENSIONS = TEXT_SETLIST_EXTENSIONS | DOCUMENT_SETLIST_EXTENSIONS
@@ -193,8 +196,89 @@ def _format_recovery_error(container: str, payload: Optional[dict], reason: str,
 
 def _read_recovery_journal(container: str) -> dict:
     journal = os.path.join(container, JOURNAL_NAME)
-    with open(journal, "r", encoding="utf-8") as infile:
-        return json.load(infile)
+    try:
+        if os.path.getsize(journal) > MAX_RECOVERY_JOURNAL_BYTES:
+            raise ValueError("recovery journal exceeds 1 MiB safety limit")
+    except OSError:
+        pass
+    with open(journal, "rb") as infile:
+        raw = infile.read(MAX_RECOVERY_JOURNAL_BYTES + 1)
+    if len(raw) > MAX_RECOVERY_JOURNAL_BYTES:
+        raise ValueError("recovery journal exceeds 1 MiB safety limit")
+    return json.loads(raw.decode("utf-8"))
+
+
+def _registry_dir(tlo_home: str) -> str:
+    return os.path.join(os.path.normpath(tlo_home), "logs", RECOVERY_REGISTRY_DIRNAME)
+
+
+def _registry_path(tlo_home: str, nonce: str) -> str:
+    safe_nonce = re.sub(r"[^A-Fa-f0-9]", "", str(nonce or ""))
+    return os.path.join(_registry_dir(tlo_home), f"{safe_nonce}.json") if safe_nonce else ""
+
+
+def _write_recovery_registry(tlo_home: str, payload: dict) -> None:
+    if not tlo_home:
+        return
+    nonce = str(payload.get("recovery_nonce") or "")
+    path_name = _registry_path(tlo_home, nonce)
+    if not path_name:
+        raise ValueError("recovery nonce is missing")
+    os.makedirs(os.path.dirname(path_name), exist_ok=True)
+    registry = {
+        "schema": 1,
+        "recovery_nonce": nonce,
+        "temporary_path": str(payload.get("temporary_path") or ""),
+        "final_path": str(payload.get("final_path") or ""),
+    }
+    temp_name = path_name + f".tmp-{uuid.uuid4().hex}"
+    try:
+        _write_json(temp_name, registry)
+        os.replace(temp_name, path_name)
+    finally:
+        if os.path.lexists(temp_name):
+            try:
+                os.unlink(temp_name)
+            except OSError:
+                pass
+
+
+def _recovery_registry_matches(tlo_home: str, container: str, payload: dict) -> bool:
+    if not tlo_home:
+        return True  # compatibility for direct library/test callers; production always supplies TLOHome
+    nonce = str(payload.get("recovery_nonce") or "")
+    path_name = _registry_path(tlo_home, nonce)
+    if not path_name or not os.path.isfile(path_name) or os.path.islink(path_name):
+        return False
+    try:
+        if os.path.getsize(path_name) > MAX_RECOVERY_JOURNAL_BYTES:
+            return False
+        with open(path_name, "r", encoding="utf-8") as infile:
+            registry = json.load(infile)
+    except Exception:
+        return False
+    if str(registry.get("recovery_nonce") or "") != nonce:
+        return False
+    for key in ("temporary_path", "final_path"):
+        if not _same_path(_runtime_recovery_path(str(registry.get(key) or "")), _runtime_recovery_path(str(payload.get(key) or ""))):
+            return False
+    current = os.path.normpath(container)
+    allowed = [
+        _runtime_recovery_path(str(payload.get("temporary_path") or "")),
+        _runtime_recovery_path(str(payload.get("final_path") or "")),
+    ]
+    return any(candidate and _same_path(current, candidate) for candidate in allowed)
+
+
+def _remove_recovery_registry(tlo_home: str, payload: dict) -> None:
+    if not tlo_home:
+        return
+    path_name = _registry_path(tlo_home, str(payload.get("recovery_nonce") or ""))
+    if path_name and os.path.isfile(path_name) and not os.path.islink(path_name):
+        try:
+            os.unlink(path_name)
+        except OSError:
+            pass
 
 
 def assert_no_interrupted_sibling_consolidations(start_path: str) -> None:
@@ -321,29 +405,14 @@ def _read_docx_text(path_name: str) -> str:
 
 
 def _read_rtf_text(path_name: str) -> str:
-    try:
-        with open(path_name, "rb") as infile:
-            raw = infile.read()
-    except OSError:
-        return ""
-    text = _decode_bytes(raw)
-    text = re.sub(r"\\par[d]?\b", "\n", text, flags=re.I)
-    text = re.sub(r"\\'[0-9a-fA-F]{2}", " ", text)
-    text = re.sub(r"\\[a-zA-Z]+-?\d*\s?", "", text)
-    return text.replace("{", "").replace("}", "")
+    return read_text_file_full(path_name)
 
 
 def _read_setlist_text(path_name: str) -> str:
     extension = os.path.splitext(path_name)[1].lower()
     if extension == ".docx":
         return _read_docx_text(path_name)
-    if extension == ".rtf":
-        return _read_rtf_text(path_name)
-    try:
-        with open(path_name, "rb") as infile:
-            return _decode_bytes(infile.read())
-    except OSError:
-        return ""
+    return read_text_file_full(path_name)
 
 
 def _candidate_setlists(root: str) -> List[str]:
@@ -359,6 +428,8 @@ def _candidate_setlists(root: str) -> List[str]:
             if extension not in SETLIST_EXTENSIONS or HOUSEKEEPING_RE.search(name):
                 continue
             path_name = os.path.normpath(os.path.join(current, name))
+            if os.path.islink(path_name):
+                continue
             (text_files if extension in TEXT_SETLIST_EXTENSIONS else documents).append(path_name)
     ranked = _ordered_txt_files(text_files) + _ordered_exception_files(documents)
     return sorted(dict.fromkeys(ranked), key=_natural_key)
@@ -547,6 +618,7 @@ def _journal_payload(plan: CollectionPlan, temp_path: str) -> dict:
         "temporary_path": os.path.normpath(temp_path),
         "final_path": os.path.normpath(plan.final_path),
         "generated_info": "info.txt",
+        "recovery_nonce": uuid.uuid4().hex,
         "members": [
             {
                 "original": os.path.normpath(member.path),
@@ -572,6 +644,9 @@ def _validate_journal(container: str, payload: dict) -> bool:
     members = list(payload.get("members") or [])
     if payload.get("schema") not in {1, 2} or not final_path or os.path.dirname(final_path) != parent or not members:
         return False
+    generated_info = payload.get("generated_info")
+    if generated_info not in (None, "", "info.txt"):
+        return False
     staged_names = set()
     for row in members:
         original = _runtime_recovery_path(str(row.get("original") or ""))
@@ -580,7 +655,7 @@ def _validate_journal(container: str, payload: dict) -> bool:
         if not original or os.path.dirname(original) != parent or os.path.basename(original) != child_name:
             return False
         for name in (child_name, staged_name):
-            if not name or os.path.sep in name or (os.path.altsep and os.path.altsep in name):
+            if not name or name in {".", ".."} or os.path.sep in name or (os.path.altsep and os.path.altsep in name):
                 return False
         staged_key = os.path.normcase(staged_name)
         if staged_key in staged_names:
@@ -642,7 +717,7 @@ def _rollback_container(container: str, payload: dict) -> bool:
 
 
 def recover_interrupted_sibling_consolidations(
-    start_path: str, emit: Optional[Callable[[str], None]] = None
+    start_path: str, emit: Optional[Callable[[str], None]] = None, *, tlo_home: str = ""
 ) -> int:
     recovered = 0
     for current, dirs, files in os.walk(start_path, topdown=True, followlinks=False):
@@ -669,6 +744,14 @@ def recover_interrupted_sibling_consolidations(
                     current, None, f"recovery journal cannot be read: {exc}"
                 )
             ) from exc
+        if not _recovery_registry_matches(tlo_home, current, payload):
+            dirs[:] = []
+            raise SiblingCollectionRecoveryError(
+                _format_recovery_error(
+                    current, payload,
+                    "recovery journal is not registered by this TLOHome; refusing automatic mutation",
+                )
+            )
         error_container = current
         try:
             success = _rollback_container(current, payload)
@@ -683,6 +766,7 @@ def recover_interrupted_sibling_consolidations(
             raise SiblingCollectionRecoveryError(
                 _format_recovery_error(error_container, payload, reason)
             )
+        _remove_recovery_registry(tlo_home, payload)
         recovered += 1
         _emit(emit, f"SIBLING_COLLECTION_RECOVERED: {current}")
         dirs[:] = []
@@ -741,7 +825,7 @@ def _restore_complete_path_log(complete_path_log: str, original: bytes) -> None:
             os.unlink(temp_log)
 
 
-def _execute_plan(plan: CollectionPlan, complete_path_log: str) -> None:
+def _execute_plan(plan: CollectionPlan, complete_path_log: str, tlo_home: str = "") -> None:
     temp_path = os.path.join(plan.parent_dir, f"{TEMP_PREFIX}{uuid.uuid4().hex}")
     final_path = os.path.normpath(plan.final_path)
     final_is_member = any(
@@ -753,6 +837,7 @@ def _execute_plan(plan: CollectionPlan, complete_path_log: str) -> None:
         original_log = infile.read()
     os.mkdir(temp_path)
     payload = _journal_payload(plan, temp_path)
+    _write_recovery_registry(tlo_home, payload)
     _write_json(os.path.join(temp_path, JOURNAL_NAME), payload)
     combined = _concatenated_setlist_text(plan)
     rewrites = []
@@ -773,6 +858,7 @@ def _execute_plan(plan: CollectionPlan, complete_path_log: str) -> None:
         _rewrite_complete_path_log(complete_path_log, rewrites)
         log_committed = True
         os.unlink(os.path.join(final_path, JOURNAL_NAME))
+        _remove_recovery_registry(tlo_home, payload)
     except Exception:
         if log_committed:
             try:
@@ -780,7 +866,9 @@ def _execute_plan(plan: CollectionPlan, complete_path_log: str) -> None:
             except Exception:
                 pass
         try:
-            _rollback_container(current_container, payload)
+            rolled_back = _rollback_container(current_container, payload)
+            if rolled_back:
+                _remove_recovery_registry(tlo_home, payload)
         except Exception:
             pass
         raise
@@ -790,11 +878,12 @@ def consolidate_sibling_collections(
     start_path: str,
     complete_path_log: str,
     emit: Optional[Callable[[str], None]] = None,
+    *, tlo_home: str = "",
 ) -> List[dict]:
     results = []
     for plan in discover_collection_plans(start_path, _logged_media_paths(complete_path_log)):
         try:
-            _execute_plan(plan, complete_path_log)
+            _execute_plan(plan, complete_path_log, tlo_home=tlo_home)
         except Exception as exc:
             _emit(emit, f"SIBLING_COLLECTION_FAILED: {plan.final_path} | {exc}")
             continue

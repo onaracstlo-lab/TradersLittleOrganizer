@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v478"
+__version__ = "v482"
 
 import csv
 import os

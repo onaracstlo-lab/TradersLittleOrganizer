@@ -1,12 +1,12 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v478"
+__version__ = "v482"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from console_output_lib import console_print
@@ -45,6 +45,7 @@ from tlo_constants import (
 from tlo_models import Candidate, ShowMetadata
 from tlo_show_descriptor import extract_fallback_descriptor
 from tlo_text_utils import compact_ws, normalized_compare_value, standard_ascii_text
+from tlo_security import escape_structured_log_text
 from tlo_etree_lookup import ETreeDBError, lookup_venue_and_location
 from tlo_setlistfm_lookup import SetlistFMError, collect_setlists_by_performance as collect_setlistfm_setlists_by_performance, is_us_country, lookup_venue_and_location as lookup_setlistfm_venue_and_location
 from tlo_setlist_metadata_lookup import extract_setlist_venue_location, is_setlist_metadata_scan_boundary, explicit_metadata_match, looks_like_sentence_prose_line
@@ -347,7 +348,7 @@ def _iter_group_media_files(group: dict, limit: Optional[int] = None):
 def _flac_tag_sample_files_for_group(group: dict, max_files: int = 2) -> List[str]:
     samples: List[str] = []
     for path_name in _iter_group_media_files(group):
-        if os.path.splitext(path_name)[1].lower() in {".flac", ".shn", ".shnf"}:
+        if os.path.splitext(path_name)[1].lower() in {".flac", ".mp3", ".shn", ".shnf"}:
             samples.append(path_name)
             if len(samples) >= max_files:
                 break
@@ -1362,10 +1363,15 @@ def _normalize_year_token(token: str) -> str:
     if not value:
         return ""
     if re.fullmatch(r"\d{2}", value):
-        year = int(value)
-        return f"{2000 + year:04d}" if year < 35 else f"{1900 + year:04d}"
+        short = int(value)
+        current_year = date.today().year
+        century = (current_year // 100) * 100
+        candidate = century + short
+        if candidate > current_year:
+            candidate -= 100
+        return f"{candidate:04d}"
     if re.fullmatch(YEAR4_FULL_RE_TEXT, value):
-        return value
+        return value if int(value) <= date.today().year else ""
     if re.fullmatch(YEAR4_PARTIAL_RE_TEXT, value):
         return value
     return ""
@@ -1437,8 +1443,10 @@ def _normalize_date(year: str, month: str, day: str) -> str:
         return ""
     if year_norm.isdigit() and month_norm.isdigit() and day_norm.isdigit():
         try:
-            datetime(int(year_norm), int(month_norm), int(day_norm))
+            candidate_date = date(int(year_norm), int(month_norm), int(day_norm))
         except ValueError:
+            return ""
+        if candidate_date > date.today():
             return ""
     return f"{year_norm}-{month_norm}-{day_norm}"
 
@@ -3066,13 +3074,23 @@ def _parse_string2(string2: str) -> Tuple[str, str, str, str, str]:
         state_pattern = re.compile(rf"(?:^|[\s,])({state_terms})(?:[\s,-]+)(?P<tail>.+)$", re.IGNORECASE)
         match = state_pattern.search(value)
         if match:
-            region = _state_term_to_code(match.group(1))
+            matched_state = compact_ws(match.group(1))
+            # A two-letter state code followed by trailing source/descriptor
+            # text is accepted only when the source text uses an uppercase
+            # code.  This prevents ordinary words such as "In" from being
+            # misread as Indiana merely because more text follows.  Full state
+            # names remain case-insensitive.
+            if len(matched_state) == 2 and matched_state != matched_state.upper():
+                return "", "", "", "", ""
+            region = _state_term_to_code(matched_state)
             if region:
                 left_text = value[: match.start(1)].rstrip(" ,-")
                 tail = compact_ws(match.group('tail')).strip(" -,")
-                is_full_state_name = len(compact_ws(match.group(1))) > 2
+                is_full_state_name = len(matched_state) > 2
                 venue, city = _split_left_for_city_and_venue(left_text, allow_city_only=is_full_state_name)
                 venue, city = _clean_numbered_path_location_noise(venue, city)
+                if left_text and not venue and not city:
+                    return "", "", "", "", ""
                 return venue, city, region, "", tail
 
     return "", "", "", "", ""
@@ -3560,6 +3578,21 @@ def _has_complete_local_venue_location(record: ShowMetadata) -> bool:
     return bool(record.venue and record.city and (record.region or record.country or record.location))
 
 
+def _case_style(text: str) -> str:
+    letters = [ch for ch in compact_ws(text) if ch.isalpha()]
+    if not letters:
+        return "none"
+    has_lower = any(ch.islower() for ch in letters)
+    has_upper = any(ch.isupper() for ch in letters)
+    if has_lower and has_upper:
+        return "mixed"
+    if has_lower:
+        return "lower"
+    if has_upper:
+        return "upper"
+    return "none"
+
+
 def _apply_case_only_online_corroboration(
     record: ShowMetadata,
     evidence: Dict[str, List[Candidate]],
@@ -3570,12 +3603,18 @@ def _apply_case_only_online_corroboration(
     source_label: str,
     confidence: int,
 ) -> bool:
-    """Adopt authoritative display case without changing metadata identity."""
+    """Adopt online case only when it clearly improves a case-poor value."""
     existing = compact_ws(getattr(record, field, "") or "")
     candidate = compact_ws(candidate_value or "")
     if not existing or not candidate or existing == candidate:
         return False
     if existing.casefold() != candidate.casefold():
+        return False
+    # Preserve already useful mixed capitalization.  This prevents an online
+    # all-caps spelling from degrading values such as "Madison Square Garden".
+    # Lower/all-upper path text may be improved when the corroborating spelling
+    # supplies useful mixed case (for example pori -> Pori).
+    if _case_style(existing) not in {"lower", "upper"} or _case_style(candidate) != "mixed":
         return False
     setattr(record, field, candidate)
     evidence.setdefault(field, []).append(
@@ -3610,6 +3649,13 @@ def _apply_online_fields_fill_blanks(
     or one is a token-boundary subset of the other.
     """
     applied = False
+    location_before_components = _join_location(record.city, record.region, record.country)
+    location_followed_components = bool(
+        record.location
+        and location_before_components
+        and compact_ws(record.location).casefold() == compact_ws(location_before_components).casefold()
+    )
+    location_components_changed = False
 
     if not record.venue and online_venue:
         record.venue = online_venue
@@ -3628,12 +3674,14 @@ def _apply_online_fields_fill_blanks(
         record.city = online_city
         evidence.setdefault("city", []).append(Candidate(record.city, source_label, confidence))
         applied = True
+        location_components_changed = True
     elif record.city and online_city:
         if _apply_case_only_online_corroboration(
             record, evidence, observations, field="city", candidate_value=online_city,
             source_label=source_label, confidence=confidence,
         ):
             applied = True
+            location_components_changed = True
         else:
             _observe_online_disagreement(observations, source_label, "city", record.city, online_city)
 
@@ -3645,12 +3693,14 @@ def _apply_online_fields_fill_blanks(
             record.region = online_region
             evidence.setdefault("region", []).append(Candidate(record.region, source_label, confidence))
             applied = True
+            location_components_changed = True
         elif record.region:
             if _apply_case_only_online_corroboration(
                 record, evidence, observations, field="region", candidate_value=online_region,
                 source_label=source_label, confidence=confidence,
             ):
                 applied = True
+                location_components_changed = True
             else:
                 _observe_online_disagreement(observations, source_label, "region", record.region, online_region)
     if online_country:
@@ -3658,14 +3708,28 @@ def _apply_online_fields_fill_blanks(
             record.country = online_country
             evidence.setdefault("country", []).append(Candidate(record.country, source_label, confidence))
             applied = True
+            location_components_changed = True
         elif record.country:
             if _apply_case_only_online_corroboration(
                 record, evidence, observations, field="country", candidate_value=online_country,
                 source_label=source_label, confidence=confidence,
             ):
                 applied = True
+                location_components_changed = True
             else:
                 _observe_online_disagreement(observations, source_label, "country", record.country, online_country)
+
+    if location_components_changed and location_followed_components:
+        rebuilt_location = _join_location(record.city, record.region, record.country)
+        if rebuilt_location and rebuilt_location != record.location:
+            record.location = rebuilt_location
+            evidence.setdefault("location", []).append(
+                Candidate(record.location, f"{source_label}_case_corroboration", confidence)
+            )
+            observations.append(
+                f"{source_label} rebuilt location after component capitalization correction: {record.location}"
+            )
+            applied = True
 
     if not record.location and (record.city or record.region or record.country):
         record.location = online_location or _join_location(record.city, record.region, record.country)
@@ -4181,7 +4245,7 @@ def _format_show_metadata_log_lines(record: ShowMetadata, date_matches: List[Dic
     for observation in getattr(record, "observations", []):
         lines.append(f"OBSERVATION: {observation}")
     lines.append("END_SHOW_METADATA")
-    return lines
+    return [escape_structured_log_text(line) for line in lines]
 
 
 def _format_show_metadata_log_entry(record: ShowMetadata, date_matches: List[Dict[str, str]], switches_line: str = "") -> str:

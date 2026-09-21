@@ -1,6 +1,6 @@
 """Postprocess metadata logs into setlist files, bootlist.csv, duplicate/group outputs, and summary/unidentified-show files."""
 
-__version__ = "v478"
+__version__ = "v482"
 import csv
 import json
 import os
@@ -16,6 +16,7 @@ from console_output_lib import console_print
 from logging_lib import logs_dir_for_home
 from tlo_file_listing import is_setlist_family_name, scandir_matching_files
 from tlo_text_utils import compact_ws, read_text_file_full, setlist_text_requests_generated_from_music_files, standard_ascii_text
+from tlo_security import is_safe_local_regular_file
 from tlo_runtime_control import throttle_point, is_cancel_requested, normalize_performance_mode
 from tlo_bootlist_volume_policy import (
     filter_rows_for_volume_actions,
@@ -187,95 +188,71 @@ def _normalize_metadata_records_for_postprocess(records) -> List[Dict[str, str]]
 
 def _parse_show_metadata_logs(tlo_home: str, tokens: Sequence[str] | None = None) -> List[Dict[str, str]]:
     records: List[Dict[str, str]] = []
-    for log_path in _show_metadata_log_paths(tlo_home, tokens=tokens):
-        current = {
-            "show_name": "",
-            "setlist_file": "",
-            "volume_label": "",
-            "artist": "",
-            "artist_not_in_database": "",
-            "date": "",
-            "venue": "",
-            "location": "",
-            "parentheticals": "",
-            "album_name": "",
-            "descriptor": "",
-            "descriptor_source": "",
-            "show_in_conflict": "no",
-            "main_dir_path": "",
-            "original_main_dir_path": "",
-            "setlist_files_json": "",
-            "music_dirs_json": "",
+    single_value_keys = {
+        "SHOW_NAME", "SETLIST_FILE", "SETLIST_FILES_JSON", "MUSIC_DIRS_JSON",
+        "VOLUME_LABEL", "ARTIST", "ARTIST_NOT_IN_DATABASE", "DATE", "VENUE",
+        "LOCATION", "PARENTHETICALS", "ALBUM_NAME", "DESCRIPTOR",
+        "DESCRIPTOR_SOURCE", "SHOW_IN_CONFLICT", "MAIN_DIR_PATH",
+        "ORIGINAL_MAIN_DIR_PATH",
+    }
+
+    def empty_record():
+        return {
+            "show_name": "", "setlist_file": "", "volume_label": "", "artist": "",
+            "artist_not_in_database": "", "date": "", "venue": "", "location": "",
+            "parentheticals": "", "album_name": "", "descriptor": "",
+            "descriptor_source": "", "show_in_conflict": "no", "main_dir_path": "",
+            "original_main_dir_path": "", "setlist_files_json": "", "music_dirs_json": "",
         }
+
+    for log_path in _show_metadata_log_paths(tlo_home, tokens=tokens):
+        current = empty_record()
+        seen_single = set()
+        malformed = False
+        malformed_key = ""
         with open(log_path, "r", encoding="utf-8", errors="ignore") as infile:
             for raw_line in infile:
                 line = raw_line.rstrip("\r\n")
                 if not line:
                     continue
                 if line == "END_SHOW_METADATA":
-                    if current["show_name"] or current["main_dir_path"]:
+                    if not malformed and (current["show_name"] or current["main_dir_path"]):
                         records.append(dict(current))
-                    current = {
-                        "show_name": "",
-                        "setlist_file": "",
-                        "volume_label": "",
-                        "artist": "",
-                        "artist_not_in_database": "",
-                        "date": "",
-                        "venue": "",
-                        "location": "",
-                        "parentheticals": "",
-                        "album_name": "",
-                        "descriptor": "",
-                        "descriptor_source": "",
-                        "show_in_conflict": "no",
-                        "main_dir_path": "",
-                        "original_main_dir_path": "",
-                        "setlist_files_json": "",
-                        "music_dirs_json": "",
-                    }
+                    elif malformed:
+                        print(f"POSTPROCESS: skipped malformed metadata log record in {os.path.basename(log_path)}: duplicate {malformed_key}")
+                    current = empty_record()
+                    seen_single = set()
+                    malformed = False
+                    malformed_key = ""
                     continue
                 if ": " not in line:
                     continue
                 key, value = line.split(": ", 1)
-                if key == "SHOW_NAME":
-                    current["show_name"] = value.strip()
-                elif key == "SETLIST_FILE":
-                    current["setlist_file"] = value.strip()
-                elif key == "SETLIST_FILES_JSON":
-                    current["setlist_files_json"] = value.strip()
-                elif key == "MUSIC_DIRS_JSON":
-                    current["music_dirs_json"] = value.strip()
-                elif key == "VOLUME_LABEL":
-                    current["volume_label"] = value.strip()
-                elif key == "ARTIST":
-                    current["artist"] = value.strip()
-                elif key == "ARTIST_NOT_IN_DATABASE":
-                    current["artist_not_in_database"] = value.strip()
-                elif key == "DATE":
-                    current["date"] = value.strip()
-                elif key == "VENUE":
-                    current["venue"] = value.strip()
-                elif key == "LOCATION":
-                    current["location"] = value.strip()
-                elif key == "PARENTHETICALS":
-                    current["parentheticals"] = value.strip()
-                elif key == "ALBUM_NAME":
-                    current["album_name"] = value.strip()
-                elif key == "DESCRIPTOR":
-                    current["descriptor"] = value.strip()
-                elif key == "DESCRIPTOR_SOURCE":
-                    current["descriptor_source"] = value.strip()
-                elif key == "SHOW_IN_CONFLICT":
-                    current["show_in_conflict"] = value.strip().lower()
-                elif key == "CONFLICT":
-                    current["show_in_conflict"] = "yes"
-                elif key == "MAIN_DIR_PATH":
-                    current["main_dir_path"] = value.strip()
-                elif key == "ORIGINAL_MAIN_DIR_PATH":
-                    current["original_main_dir_path"] = value.strip()
+                if key in single_value_keys:
+                    if key in seen_single:
+                        malformed = True
+                        malformed_key = key
+                        continue
+                    seen_single.add(key)
+                if key == "SHOW_NAME": current["show_name"] = value.strip()
+                elif key == "SETLIST_FILE": current["setlist_file"] = value.strip()
+                elif key == "SETLIST_FILES_JSON": current["setlist_files_json"] = value.strip()
+                elif key == "MUSIC_DIRS_JSON": current["music_dirs_json"] = value.strip()
+                elif key == "VOLUME_LABEL": current["volume_label"] = value.strip()
+                elif key == "ARTIST": current["artist"] = value.strip()
+                elif key == "ARTIST_NOT_IN_DATABASE": current["artist_not_in_database"] = value.strip()
+                elif key == "DATE": current["date"] = value.strip()
+                elif key == "VENUE": current["venue"] = value.strip()
+                elif key == "LOCATION": current["location"] = value.strip()
+                elif key == "PARENTHETICALS": current["parentheticals"] = value.strip()
+                elif key == "ALBUM_NAME": current["album_name"] = value.strip()
+                elif key == "DESCRIPTOR": current["descriptor"] = value.strip()
+                elif key == "DESCRIPTOR_SOURCE": current["descriptor_source"] = value.strip()
+                elif key == "SHOW_IN_CONFLICT": current["show_in_conflict"] = value.strip().lower()
+                elif key == "CONFLICT": current["show_in_conflict"] = "yes"
+                elif key == "MAIN_DIR_PATH": current["main_dir_path"] = value.strip()
+                elif key == "ORIGINAL_MAIN_DIR_PATH": current["original_main_dir_path"] = value.strip()
     return records
-
 
 
 
@@ -800,9 +777,19 @@ def _generated_missing_setlist_text(record: Dict[str, str], config=None) -> str:
     return "\n".join(lines).strip()
 
 
+def _safe_setlist_source_for_record(source_path: str, record: Dict[str, str] | None) -> bool:
+    record = record or {}
+    roots = []
+    for key in ("main_dir_path", "original_main_dir_path"):
+        base = str(record.get(key) or "").strip()
+        if base:
+            roots.append(os.path.dirname(os.path.normpath(base)))
+    return is_safe_local_regular_file(source_path, roots)
+
+
 def _export_setlist_text(source_path: str, record: Dict[str, str] | None = None, config=None) -> str:
     normalized = os.path.normpath(source_path or "")
-    if not normalized or not os.path.isfile(normalized):
+    if not normalized or not _safe_setlist_source_for_record(normalized, record):
         return _generated_missing_setlist_text(record or {}, config=config)
 
     text = read_text_file_full(normalized)

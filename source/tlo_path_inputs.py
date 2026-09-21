@@ -1,6 +1,6 @@
 """Path and TLOHome input normalization shared by CLI, GUI, and tagging entry points."""
 
-__version__ = "v478"
+__version__ = "v482"
 
 import argparse
 import os
@@ -9,13 +9,13 @@ from urllib.parse import unquote, urlparse
 
 
 def strip_optional_quotes(text):
-    """Return text without one matching pair of wrapping single/double quotes."""
+    """Return text without one matching pair of wrapping double quotes.
+
+    Single quotes and apostrophes are always literal input characters.
+    """
     text = str(text or "").strip()
-    if len(text) >= 2:
-        if text[0] == '"' and text[-1] == '"':
-            return text[1:-1]
-        if text[0] == "'" and text[-1] == "'":
-            return text[1:-1]
+    if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
+        return text[1:-1]
     return text
 
 

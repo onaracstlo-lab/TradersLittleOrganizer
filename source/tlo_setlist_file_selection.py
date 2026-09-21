@@ -1,9 +1,10 @@
-__version__ = "v478"
+__version__ = "v482"
 import os
 import re
 
 from tlo_wrapper_rules import is_common_music_folder_name, is_wrapper_part_folder_name, split_wrapper_part_suffix, split_parenthesized_numeric_part_suffix
 from tlo_constants import MONTH_NAME_CASED_PATTERN
+from tlo_text_utils import MAX_TEXT_FULL_BYTES
 
 SETLIST_NAME_PATTERNS = [
     re.compile(r"set[\s._-]*list", re.IGNORECASE),
@@ -260,6 +261,13 @@ def _is_unreadable_or_null_txt_file(path_name):
 
 def _is_disqualified_txt_file(path_name):
     base_name = os.path.basename(path_name).lower()
+    if os.path.islink(path_name):
+        return True
+    try:
+        if os.path.getsize(path_name) > MAX_TEXT_FULL_BYTES:
+            return True
+    except OSError:
+        return True
     return any(pattern.search(base_name) for pattern in HOUSEKEEPING_NAME_PATTERNS)
 
 

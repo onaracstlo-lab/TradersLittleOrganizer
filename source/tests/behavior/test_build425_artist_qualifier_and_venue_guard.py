@@ -218,17 +218,17 @@ def test_build425_requirements_and_manual_document_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v478.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v482.docx")
     requirements_text = "\n".join(paragraph.text for paragraph in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v478.rtf").read_text(
+    manual_text = (root / "TLO_Inventory_User_Manual_v482.rtf").read_text(
         encoding="utf-8", errors="ignore"
     )
 
-    assert "Current document version: v478 (v1.7 Build 478)." in requirements_text
+    assert "Current document version: v482 (v1.7 Build 482)." in requirements_text
     assert "unique apostrophe-insensitive retry" in requirements_text
     assert "Attic inside Eddie's Attic" in requirements_text
     assert "final Show identity must end with (Early Show)" in requirements_text
-    assert "Version v1.7 Build 478" in manual_text
+    assert "Version v1.7 Build 482" in manual_text
     assert "unique-only apostrophe retry" in manual_text
     assert "Attic inside Eddie's Attic" in manual_text
     assert "retained as a parenthesized suffix" in manual_text

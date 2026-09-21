@@ -1,10 +1,12 @@
-__version__ = "v478"
+__version__ = "v482"
 
 import csv
 import os
 import posixpath
 import re
+import tempfile
 from typing import Dict, Iterable, List, Sequence, Tuple
+from tlo_security import csv_formula_escape, csv_formula_unescape
 
 
 BOOTLIST_FILENAME = "bootlist.csv"
@@ -119,7 +121,7 @@ def read_bootlist_rows(tlo_home: str) -> List[Dict[str, str]]:
                 first_data = False
                 continue
             first_data = False
-            show = (row[0] if len(row) >= 1 else "").strip()
+            show = csv_formula_unescape((row[0] if len(row) >= 1 else "").strip())
             if not show:
                 continue
             if len(row) >= 4:
@@ -127,7 +129,7 @@ def read_bootlist_rows(tlo_home: str) -> List[Dict[str, str]]:
                 path = (row[3] or "").strip()
                 volume_path = format_volume_path(volume, path)
             else:
-                volume_path = (row[1] if len(row) >= 2 else "").strip()
+                volume_path = csv_formula_unescape((row[1] if len(row) >= 2 else "").strip())
             volume, path = parse_volume_path_value(volume_path)
             rows.append({
                 "Show": show,
@@ -144,16 +146,28 @@ def write_bootlist_rows(tlo_home: str, rows: Sequence[Dict[str, str]]) -> str:
         rows,
         key=lambda row: ((row.get("Show") or "").casefold(), (row.get("VolumePath") or "").casefold()),
     )
-    with open(path_name, "w", encoding="utf-8", newline="") as outfile:
-        outfile.write("sep=^\n")
-        outfile.write("Show^VolumePath\n")
-        writer = csv.writer(outfile, delimiter="^", lineterminator="\n")
-        for row in rows_out:
-            show = (row.get("Show") or "").strip()
-            volume_path = (row.get("VolumePath") or "").strip()
-            if not volume_path:
-                volume_path = format_volume_path(row.get("Volume", ""), row.get("Path", ""))
-            writer.writerow([show, volume_path])
+    os.makedirs(os.path.dirname(path_name) or ".", exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=".bootlist-", suffix=".tmp", dir=os.path.dirname(path_name) or ".")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as outfile:
+            outfile.write("sep=^\n")
+            outfile.write("Show^VolumePath\n")
+            writer = csv.writer(outfile, delimiter="^", lineterminator="\n")
+            for row in rows_out:
+                show = (row.get("Show") or "").strip()
+                volume_path = (row.get("VolumePath") or "").strip()
+                if not volume_path:
+                    volume_path = format_volume_path(row.get("Volume", ""), row.get("Path", ""))
+                writer.writerow([csv_formula_escape(show), csv_formula_escape(volume_path)])
+            outfile.flush()
+            os.fsync(outfile.fileno())
+        os.replace(temp_name, path_name)
+    except Exception:
+        try:
+            os.remove(temp_name)
+        except OSError:
+            pass
+        raise
     return path_name
 
 

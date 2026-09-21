@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 import tlo_manual_updates as MU
+import tlo_bootlist_volume_policy as BP
 
 pytestmark = pytest.mark.behavior
 
@@ -87,7 +88,7 @@ def test_unidentified_manual_update_does_not_move_or_rename_and_updates_inventor
     assert final.is_dir()
     assert not original.exists()
     rows = MU.read_bootlist(str(home))
-    assert {"Show": "New Collection Name", "VolumePath": str(final)} in rows
+    assert {"Show": "New Collection Name", "VolumePath": BP.format_volume_path("", str(final))} in rows
     remaining = (home / "unidentifiedShows.txt").read_text(encoding="utf-8").splitlines()
     assert str(original) not in remaining
     assert str(other) in remaining
@@ -113,7 +114,7 @@ def test_batch_file_unidentified_line_uses_supplied_destination(tmp_path, monkey
     )
     assert result["updated"] == 1
     assert result["errors"] == []
-    assert MU.read_bootlist(str(home)) == [{"Show": "Named Show", "VolumePath": str(final)}]
+    assert MU.read_bootlist(str(home)) == [{"Show": "Named Show", "VolumePath": BP.format_volume_path("", str(final))}]
 
 
 def test_v17_gui_prompt_contract():

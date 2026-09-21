@@ -1,4 +1,4 @@
-__version__ = "v478"
+__version__ = "v482"
 from tlo_diagnostics import debug_suppressed_exception
 import os
 import re
@@ -120,11 +120,8 @@ def _normalize_input_path(path_text):
 def _strip_optional_quotes(text):
     text = text.strip()
 
-    if len(text) >= 2:
-        if text[0] == '"' and text[-1] == '"':
-            return text[1:-1]
-        if text[0] == "'" and text[-1] == "'":
-            return text[1:-1]
+    if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
+        return text[1:-1]
 
     return text
 

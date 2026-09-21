@@ -1,6 +1,6 @@
 """Text cleanup utilities for safe titles, ASCII normalization, comparison keys, and full-file reads."""
 
-__version__ = "v478"
+__version__ = "v482"
 import os
 import re
 import unicodedata
@@ -189,7 +189,13 @@ def _read_text_content(
                 return ""
             raw = raw[:byte_limit]
 
-        for encoding in ("utf-8", "utf-8-sig", "cp1252", "latin-1"):
+        encodings = ["utf-8-sig", "utf-8"]
+        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+            encodings.insert(0, "utf-16")
+        elif raw and raw.count(b"\x00") >= max(2, len(raw) // 8):
+            encodings.extend(["utf-16-le", "utf-16-be"])
+        encodings.extend(["cp1252", "latin-1"])
+        for encoding in encodings:
             try:
                 text = raw.decode(encoding, errors="ignore")
                 if ext == ".rtf":

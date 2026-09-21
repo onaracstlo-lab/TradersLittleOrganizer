@@ -29,7 +29,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from tlo_network_io import MAX_ERROR_RESPONSE_BYTES, MAX_METADATA_RESPONSE_BYTES, ResponseTooLargeError, read_bounded_text
 
-__version__ = "v478"
+__version__ = "v482"
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 MIN_REQUEST_INTERVAL_SECONDS = 0.600
@@ -566,7 +566,11 @@ def search_setlists(
 
     wanted = normalize_name(artist)
     exact_artist_results = [result for result in results if normalize_name(result.artist) == wanted]
-    return exact_artist_results or results
+    # setlist.fm artistName search is fuzzy.  A same-date result for a different
+    # artist must never supply TLO venue/location metadata.  Alias-equivalent
+    # names can be admitted later only when they are independently confirmed by
+    # the Artist DB; the lookup layer itself returns exact normalized matches.
+    return exact_artist_results
 
 
 def lookup_venue_and_location(

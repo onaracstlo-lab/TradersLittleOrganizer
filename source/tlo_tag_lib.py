@@ -1,12 +1,13 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v478"
+__version__ = "v482"
 
 from tlo_diagnostics import debug_suppressed_exception
 import os
 import re
 import shutil
 import subprocess
+import tempfile
 import copy
 import unicodedata
 import sys
@@ -52,7 +53,8 @@ from tlo_runtime_control import clear_cancel_request, is_cancel_requested, throt
 from tlo_etree_lookup import ETreeDBError, lookup_setlists_by_performance, lookup_setlists_for_performance
 from initial_dir_walk_lib import initial_dir_walk
 from tlo_setlist_file_selection import find_setlist_files_for_music_dir
-from tlo_text_utils import compact_ws, normalized_compare_value, setlist_text_requests_generated_from_music_files, standard_ascii_text
+from tlo_text_utils import compact_ws, normalized_compare_value, read_text_file_full, setlist_text_requests_generated_from_music_files, standard_ascii_text
+from tlo_security import windows_reserved_folder_name
 from tlo_postprocess import _adjust_show_name_for_output, _candidate_setlist_name, _setlist_base_from_record
 from tlo_wrapper_rules import (
     is_wrapper_part_folder_name,
@@ -741,16 +743,7 @@ def _groups_from_inventory_discovery(config: Config, tagging_path: str) -> List[
 
 
 def _read_text(path_name: str) -> str:
-    with open(path_name, "rb") as infile:
-        raw = infile.read()
-    for encoding in ("utf-8-sig", "utf-16", "utf-16-le", "utf-16-be", "cp1252", "latin-1"):
-        try:
-            text = raw.decode(encoding, errors="replace")
-            if sum(ch.isalpha() for ch in text) >= 2:
-                return text
-        except Exception:
-            continue
-    return raw.decode("latin-1", errors="replace")
+    return read_text_file_full(path_name)
 
 
 def _clean_track_title(title: str) -> str:
@@ -3032,6 +3025,8 @@ def safe_compliant_folder_name(show_name: str, fallback: str = "TLO Show") -> st
     value = standard_ascii_text(show_name, fallback=fallback_ascii)
     value = INVALID_FOLDER_CHARS_RE.sub(" ", value)
     value = re.sub(r"\s+", " ", value).strip(" .")
+    if windows_reserved_folder_name(value):
+        value = f"{value} - TLO"
     return value or fallback_ascii or "TLO Show"
 
 
@@ -3168,9 +3163,19 @@ def _directory_path_set(root: str) -> set[str]:
     return result
 
 
+def _tree_contains_symlink(root: str) -> bool:
+    for current, dirs, files in os.walk(root, topdown=True, followlinks=False):
+        for name in list(dirs) + list(files):
+            if os.path.islink(os.path.join(current, name)):
+                return True
+    return False
+
+
 def _copy_entire_directory_tree(source_root: str, destination_root: str) -> None:
-    """Copy the complete source folder recursively, not just inventoried media."""
-    shutil.copytree(source_root, destination_root, symlinks=False)
+    """Copy the complete source folder, refusing untrusted symlink trees."""
+    if _tree_contains_symlink(source_root):
+        raise TaggerError(f"Tag Copy refuses a source tree containing symbolic links: {source_root}")
+    shutil.copytree(source_root, destination_root, symlinks=True)
 
 
 def _owned_partial_copy_path(destination_root: str) -> str:
@@ -3432,18 +3437,19 @@ def convert_shn_to_flac(path_name: str, emit: Optional[Callable[[str], None]] = 
     source = os.path.normpath(str(path_name or ""))
     if not _is_shn_audio_file(source):
         raise TaggerError(f"not an SHN file: {source}")
-    if not os.path.isfile(source):
-        raise TaggerError(f"SHN file does not exist: {source}")
+    if os.path.islink(source) or not os.path.isfile(source):
+        raise TaggerError(f"SHN source must be a local regular file, not a symbolic link: {source}")
     target = _converted_flac_path_for_shn(source)
-    if os.path.exists(target):
+    if os.path.lexists(target):
         raise TaggerError(f"FLAC destination already exists: {target}")
     converter = _bundled_ffmpeg_executable()
     if not converter:
         raise TaggerError("bundled native SHN converter is unavailable; rebuild the PyInstaller app with imageio-ffmpeg data included")
-    temp_target = target + ".tlo-convert.tmp.flac"
+    temp_fd, temp_target = tempfile.mkstemp(
+        prefix=".tlo-convert-", suffix=".tmp.flac", dir=os.path.dirname(target) or "."
+    )
+    os.close(temp_fd)
     try:
-        if os.path.exists(temp_target):
-            os.remove(temp_target)
         command = [converter, "-nostdin", "-y", "-i", source, "-compression_level", "5", temp_target]
         try:
             result = subprocess.run(
@@ -3467,7 +3473,7 @@ def convert_shn_to_flac(path_name: str, emit: Optional[Callable[[str], None]] = 
         return target
     except Exception:
         try:
-            if os.path.exists(temp_target):
+            if os.path.lexists(temp_target):
                 os.remove(temp_target)
         except Exception as exc:  # noqa: BLE001 - best-effort boundary
             debug_suppressed_exception(__name__, exc)

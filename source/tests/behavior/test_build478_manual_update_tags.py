@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 import tlo_manual_updates as MU
+from tlo_bootlist_volume_policy import format_volume_path, os_volume_label_for_path
 
 pytestmark = pytest.mark.behavior
 __version__ = "v478"
@@ -15,6 +16,12 @@ def _music_dir(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     (path / "01.flac").write_bytes(b"x")
     return path
+
+
+def _inventory_volume_path(path: Path) -> str:
+    """Use the canonical VolumePath format emitted by Full Inventory."""
+    text = str(path)
+    return format_volume_path(os_volume_label_for_path(text), text)
 
 
 def test_build478_gui_update_tags_is_default_on_and_propagated_to_all_save_paths():
@@ -33,7 +40,7 @@ def test_build478_existing_manual_update_tags_before_setlist_and_bootlist_commit
     home = tmp_path / "TLOHome"
     (home / "setlists").mkdir(parents=True)
     original = _music_dir(tmp_path / "library" / "Old Folder")
-    MU.write_bootlist(str(home), [{"Show": "Old Folder", "VolumePath": str(original)}])
+    MU.write_bootlist(str(home), [{"Show": "Old Folder", "VolumePath": _inventory_volume_path(original)}])
     events = []
 
     monkeypatch.setattr(MU, "identify_folder_dict", lambda config, folder: {
@@ -87,7 +94,7 @@ def test_build478_unchecked_update_tags_skips_tagging(tmp_path, monkeypatch):
     home = tmp_path / "TLOHome"
     (home / "setlists").mkdir(parents=True)
     original = _music_dir(tmp_path / "library" / "Old Folder")
-    MU.write_bootlist(str(home), [{"Show": "Old Folder", "VolumePath": str(original)}])
+    MU.write_bootlist(str(home), [{"Show": "Old Folder", "VolumePath": _inventory_volume_path(original)}])
     monkeypatch.setattr(MU, "identify_folder_dict", lambda config, folder: {"show_name": "x", "main_dir_path": folder})
     monkeypatch.setattr(MU, "create_or_replace_generated_setlist", lambda home_, record: "")
 

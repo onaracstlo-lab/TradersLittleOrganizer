@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v478"
+__version__ = "v482"
 
 from dataclasses import dataclass
 import json
@@ -204,6 +204,10 @@ def parse_research_query(value: str) -> ResearchQuery:
 def _parse_meta_block(log_path: str, lines: list[str]) -> MetaRecord | None:
     if not lines:
         return None
+    single_value_keys = {
+        "SHOW_NAME", "MAIN_DIR_PATH", "ORIGINAL_MAIN_DIR_PATH", "SETLIST_FILE",
+        "SETLIST_FILES_JSON", "VOLUME_LABEL", "ARTIST", "DATE", "VENUE", "LOCATION",
+    }
     fields: dict[str, list[str]] = {}
     for line in lines:
         if ":" not in line:
@@ -212,6 +216,8 @@ def _parse_meta_block(log_path: str, lines: list[str]) -> MetaRecord | None:
         key = name.strip().upper()
         if not key:
             continue
+        if key in single_value_keys and key in fields:
+            return None
         fields.setdefault(key, []).append(value.strip())
     if not fields:
         return None
