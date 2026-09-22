@@ -174,8 +174,8 @@ def test_build449_documentation_describes_artist_aware_dash_spacing():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    req = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v486.docx").paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v486.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v487.docx").paragraphs)
+    manual = (root / "TLO_Inventory_User_Manual_v487.rtf").read_text(encoding="utf-8", errors="ignore")
 
     assert "Artist - Album, Artist- Album, Artist -Album, and Artist-Album" in req
     assert "preserve every later dash in String2" in req

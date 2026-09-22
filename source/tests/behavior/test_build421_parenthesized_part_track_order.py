@@ -100,13 +100,13 @@ def test_build421_documentation_contract():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v486.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v487.docx")
     req_text = "\n".join(paragraph.text for paragraph in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v486.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v487.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v486 (v1.7 Build 486)." in req_text
+    assert "Current document version: v487 (v1.7 Build 487)." in req_text
     assert "Build 421 extends the same disc-first ordering" in req_text
     assert "Parent (1) through Parent (N)" in req_text
-    assert "Version v1.7 Build 486" in manual_text
+    assert "Version v1.7 Build 487" in manual_text
     assert "The same ordering applies to validated multipart release folders named Parent (1) through Parent (N)" in manual_text
     assert "stripe all track 01 files across the parts" in manual_text

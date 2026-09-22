@@ -96,7 +96,7 @@ Traders Little Organizer\u8482\'99}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl252\slmult1\qc\sb0\sa80{\loch
 TLO Inventory User Manual}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl252\slmult1\qc\sb0\sa80{\loch
-Version v1.7 Build 486}
+Version v1.7 Build 487}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1\loch
 
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl252\slmult1\sb0\sa80\loch
@@ -3091,7 +3091,7 @@ Start the Windows GUI with TLOHome/apps/Windows/tlo-ggi.exe, or the WSL/Linux GU
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1{\loch
 On native Windows installations, drag one or more folders and/or .txt control files from File Explorer onto the Path(s) text box. TLO processes the complete Windows drag payload, so every item selected in one drag is retained. Each drag appends its items to the existing Search Path value in drop order, with semicolons inserted automatically. You can drag one folder, then another, then several folders together; all remain in Search Path. Build 463 also acknowledges each successful Windows drop to TkDND so a later drag does not replace the accumulated value. A .txt file is preserved as the control-file path. Other dropped files contribute their containing folder. A comma inside a dropped path is preserved normally and does not trigger quoting; user-supplied quotes remain accepted.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1{\loch
-The upper-right hamburger menu includes Copy Requests and Donate. Donate > Venmo displays @James-Scarano-3. Donate > Check displays James Scarano, 49 Majestic Ave., Nashua, NH 03063. Venmo and Check are submenu items with chevrons. Their detail rows use normal dark menu text instead of disabled gray text.}
+The upper-right hamburger menu includes Copy Requests, Redundancy Groups, and Donate. Donate > Venmo displays @James-Scarano-3. Donate > Check displays James Scarano, 49 Majestic Ave., Nashua, NH 03063. Venmo and Check are submenu items with chevrons. Their detail rows use normal dark menu text instead of disabled gray text.}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1\loch
 
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1{\loch
@@ -5631,4 +5631,10 @@ Automatic states are In Progress, Waiting For Volumes, Matches Complete / Unmatc
 \par
 \b Build 486 Copy Requests menu placement\b0\par
 Build 486 removes the Copy Requests button from the main action row and places Copy Requests under the upper-right hamburger menu. Selecting it opens the same Copy Requests manager; no Copy Request workflow or other GUI layout/behavior changes are introduced.\par
+\par
+\b Build 487 Redundancy Groups for backup/equivalent volumes\b0\par
+Open the upper-right hamburger menu and choose Redundancy Groups to tell Copy Requests that two or more volume labels are equivalent replicas. Enter one group per line using equals signs, in the exact order TLO should prefer them. Example: Juke3 = Back-up3 = Back-up3a. If Juke3 and Back-up3a are both connected, TLO uses Juke3. If Juke3 is unavailable but Back-up3 is available, TLO uses Back-up3. The leftmost member always has the highest precedence and the rightmost member the lowest.\par
+You may enter a visible volume label or a currently accessible volume/root path for each member. Paths with spaces do not require quotes. When you Save, path entries are resolved to their visible volume labels and the saved declaration is normalized to labels. A path must be accessible at Save time so TLO can resolve its label; if it is not connected, enter the known volume label instead.\par
+You only need to inventory one copy. If bootlist.csv says a Show is on Juke3 at /G/Grateful Dead/1977/show, and Back-up3a is connected instead, Copy Requests checks that same rootless path on Back-up3a. If the folder exists, the backup can satisfy the request. Copy Request reports show both the inventoried volume and the actual equivalent volume used.\par
+A volume label may belong to only one Redundancy Group. Redundancy Groups do not add backup copies to bootlist.csv and do not change ordinary duplicate handling. They are used only to locate interchangeable physical sources for Copy Requests.\par
 }

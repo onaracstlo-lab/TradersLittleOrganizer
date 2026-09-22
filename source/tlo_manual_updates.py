@@ -1,6 +1,6 @@
 """Manual folder-name corrections with coordinated bootlist/setlist updates."""
 
-__version__ = "v486"
+__version__ = "v487"
 
 import copy
 import ntpath

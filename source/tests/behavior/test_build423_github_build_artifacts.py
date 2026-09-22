@@ -24,12 +24,12 @@ def _doc_text(path: Path) -> str:
 def test_build423_public_version_and_current_documents():
     import tlo_version as V
 
-    assert V.VERSION == "v486"
+    assert V.VERSION == "v487"
     assert V.PUBLIC_VERSION == "1.7"
-    assert V.BUNDLE_BUILD == 486
-    assert V.DISPLAY_VERSION == "v1.7 Build 486"
-    assert (ROOT / "TLO_Inventory_Requirements_Working_v486.docx").is_file()
-    assert (ROOT / "TLO_Inventory_User_Manual_v486.rtf").is_file()
+    assert V.BUNDLE_BUILD == 487
+    assert V.DISPLAY_VERSION == "v1.7 Build 487"
+    assert (ROOT / "TLO_Inventory_Requirements_Working_v487.docx").is_file()
+    assert (ROOT / "TLO_Inventory_User_Manual_v487.rtf").is_file()
 
 
 def test_build423_source_bundle_contains_no_github_build_process_artifacts():
@@ -43,9 +43,9 @@ def test_build423_source_bundle_contains_no_github_build_process_artifacts():
 
 
 def test_build423_tlo_requirements_record_strict_separation_rule():
-    req = ROOT / "TLO_Inventory_Requirements_Working_v486.docx"
+    req = ROOT / "TLO_Inventory_Requirements_Working_v487.docx"
     text = _doc_text(req)
-    assert "Current document version: v486 (v1.7 Build 486)." in text
+    assert "Current document version: v487 (v1.7 Build 487)." in text
     assert "source bundle and the independently versioned GitHub Build Process are separate artifacts" in text
     assert "shall contain no GitHub Build Process files" in text
     assert "Run-TLO-GitHub-Build.ps1" in text

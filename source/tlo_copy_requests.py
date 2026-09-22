@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v486"
+__version__ = "v487"
 
 import hashlib
 import json
@@ -26,6 +26,12 @@ from tlo_bootlist_volume_policy import (
 )
 from tlo_tree_compare import directory_trees_exactly_match
 from tlo_volume_label import resolve_volume_label
+from tlo_redundancy import (
+    RedundancyGroup,
+    group_display_for_volume,
+    load_redundancy_groups,
+    ordered_equivalents,
+)
 
 COPY_REQUESTS_DIRNAME = "copyRequests"
 REQUEST_STATE_FILENAME = "state.json"
@@ -73,6 +79,7 @@ class SourceCandidate:
     source_path: str
     volume: str
     inventory_path: str
+    inventory_volume: str = ""
 
 
 @dataclass
@@ -112,6 +119,7 @@ class CopyPassResult:
     copied: List[Tuple[str, str, str]] = field(default_factory=list)
     already_satisfied: List[Tuple[str, str]] = field(default_factory=list)
     failures: List[Tuple[str, str]] = field(default_factory=list)
+    source_details: Dict[str, Tuple[str, str]] = field(default_factory=dict)
     required_bytes: int = 0
     free_bytes: int = 0
     insufficient_space: bool = False
@@ -545,14 +553,19 @@ def connected_volume_roots() -> Dict[str, List[str]]:
     return result
 
 
-def _physical_paths_for_row(row: Mapping[str, str], roots: Mapping[str, Sequence[str]]) -> Tuple[List[str], bool]:
-    volume, stored = parse_volume_path_value(str(row.get("VolumePath", "") or ""))
+def _physical_paths_for_volume_stored(
+    volume: str,
+    stored: str,
+    roots: Mapping[str, Sequence[str]],
+    *,
+    allow_native_absolute: bool = False,
+) -> Tuple[List[str], bool]:
     stored = str(stored or "").strip()
     vkey = volume_key(volume)
     candidates: List[str] = []
     volume_connected = bool(roots.get(vkey))
 
-    if os.name != "nt" and not _running_on_wsl() and stored and os.path.isabs(stored):
+    if allow_native_absolute and os.name != "nt" and not _running_on_wsl() and stored and os.path.isabs(stored):
         candidates.append(os.path.normpath(stored))
 
     for root in roots.get(vkey, []):
@@ -560,10 +573,7 @@ def _physical_paths_for_row(row: Mapping[str, str], roots: Mapping[str, Sequence
         candidate = os.path.normpath(os.path.join(root, *([part for part in relative.split("/") if part] or [""])))
         candidates.append(candidate)
 
-    # Blank labels are intentionally ambiguous.  Search every currently
-    # connected blank-label root for the stored relative path, but never use a
-    # differently labeled volume as a fallback.
-    unique = []
+    unique: List[str] = []
     seen = set()
     for candidate in candidates:
         key = os.path.normcase(candidate)
@@ -573,31 +583,76 @@ def _physical_paths_for_row(row: Mapping[str, str], roots: Mapping[str, Sequence
     return unique, volume_connected
 
 
-def source_status_for_show(show: str, rows: Sequence[Mapping[str, str]], roots: Mapping[str, Sequence[str]]) -> Tuple[Optional[SourceCandidate], List[str], List[str]]:
-    available: List[SourceCandidate] = []
+def _physical_paths_for_row(row: Mapping[str, str], roots: Mapping[str, Sequence[str]]) -> Tuple[List[str], bool]:
+    volume, stored = parse_volume_path_value(str(row.get("VolumePath", "") or ""))
+    return _physical_paths_for_volume_stored(volume, stored, roots, allow_native_absolute=True)
+
+
+def source_status_for_show(
+    show: str,
+    rows: Sequence[Mapping[str, str]],
+    roots: Mapping[str, Sequence[str]],
+    redundancy_groups: Sequence[RedundancyGroup] = (),
+) -> Tuple[Optional[SourceCandidate], List[str], List[str]]:
+    available: List[Tuple[int, int, SourceCandidate]] = []
     disconnected: List[str] = []
     stale: List[str] = []
-    for row in rows:
-        volume, stored = parse_volume_path_value(str(row.get("VolumePath", "") or ""))
-        candidates, is_connected = _physical_paths_for_row(row, roots)
+    for row_index, row in enumerate(rows):
+        inventory_volume, stored = parse_volume_path_value(str(row.get("VolumePath", "") or ""))
+        equivalents = ordered_equivalents(inventory_volume, redundancy_groups)
+        group_display = group_display_for_volume(inventory_volume, redundancy_groups)
+        any_connected = False
         found = False
-        for candidate in candidates:
-            try:
-                if os.path.isdir(candidate) and not os.path.islink(candidate):
-                    available.append(SourceCandidate(show=show, source_path=candidate, volume=volume, inventory_path=stored))
-                    found = True
-            except OSError:
-                continue
+        connected_missing: List[str] = []
+
+        for precedence, candidate_volume in enumerate(equivalents):
+            candidates, is_connected = _physical_paths_for_volume_stored(
+                candidate_volume,
+                stored,
+                roots,
+                allow_native_absolute=(volume_key(candidate_volume) == volume_key(inventory_volume)),
+            )
+            any_connected = any_connected or is_connected
+            candidate_found = False
+            for candidate in candidates:
+                try:
+                    if os.path.isdir(candidate) and not os.path.islink(candidate):
+                        available.append((
+                            row_index,
+                            precedence,
+                            SourceCandidate(
+                                show=show,
+                                source_path=candidate,
+                                volume=candidate_volume,
+                                inventory_path=stored,
+                                inventory_volume=inventory_volume,
+                            ),
+                        ))
+                        candidate_found = True
+                        found = True
+                        break
+                except OSError:
+                    continue
+            if candidate_found:
+                # Declaration order is authoritative.  Once the highest-precedence
+                # connected usable replica is found, lower-precedence members of
+                # the same redundancy group are not candidates for this row.
+                break
+            if is_connected:
+                connected_missing.append(f"[{candidate_volume}] {stored}".strip())
+
         if found:
             continue
-        display = f"[{volume}] {stored}".strip()
-        if is_connected:
-            stale.append(display)
-        else:
-            disconnected.append(display)
+        if any_connected:
+            stale.extend(connected_missing or [f"[{group_display}] {stored}".strip()])
+        if not any_connected or any(not roots.get(volume_key(member)) for member in equivalents):
+            disconnected.append(f"[{group_display}] {stored}".strip())
+
     if available:
-        available.sort(key=lambda item: (item.volume.casefold(), item.source_path.casefold()))
-        return available[0], disconnected, stale
+        # Preserve inventory-row order across unrelated rows, but honor the exact
+        # left-to-right redundancy declaration within each row.
+        available.sort(key=lambda item: (item[0], item[1], item[2].source_path.casefold()))
+        return available[0][2], disconnected, stale
     return None, disconnected, stale
 
 
@@ -637,6 +692,7 @@ def evaluate_request(tlo_home: str, request_id: str, *, roots: Optional[Mapping[
             rows_by_show.setdefault(show, []).append(row)
 
     roots = dict(connected_volume_roots() if roots is None else roots)
+    redundancy_groups = load_redundancy_groups(tlo_home)
     completed_map = state.setdefault("completed", {})
     if not isinstance(completed_map, dict):
         completed_map = {}
@@ -655,7 +711,9 @@ def evaluate_request(tlo_home: str, request_id: str, *, roots: Optional[Mapping[
         if completed_entry is not None:
             completed_map.pop(_normalize_show(show), None)
 
-        source, disconnected, stale_rows = source_status_for_show(show, rows_by_show.get(show, []), roots)
+        source, disconnected, stale_rows = source_status_for_show(
+            show, rows_by_show.get(show, []), roots, redundancy_groups
+        )
         if source is not None:
             available[show] = source
             continue
@@ -667,15 +725,17 @@ def evaluate_request(tlo_home: str, request_id: str, *, roots: Optional[Mapping[
                 show_volume_labels.add(volume or "(blank volume label)")
             for label in show_volume_labels:
                 volume_opportunities[label] = volume_opportunities.get(label, 0) + 1
-        elif stale_rows:
+        if stale_rows:
             stale[show] = stale_rows
 
     if bool(state.get("closed")):
         status = STATUS_CLOSED
-    elif available or stale:
+    elif available:
         status = STATUS_IN_PROGRESS
     elif waiting:
         status = STATUS_WAITING
+    elif stale:
+        status = STATUS_IN_PROGRESS
     elif unmatched or invalid:
         status = STATUS_MATCHES_COMPLETE
     else:
@@ -738,6 +798,7 @@ def _record_completed(state: Dict[str, object], show: str, destination_path: str
         "show": show,
         "destination_path": os.path.abspath(destination_path),
         "source_volume": source.volume,
+        "inventory_volume": source.inventory_volume or source.volume,
         "source_inventory_path": source.inventory_path,
         "source_path": source.source_path,
         "completed_at": _now_iso(),
@@ -781,7 +842,13 @@ def _report_lines(evaluation: RequestEvaluation, result: Optional[CopyPassResult
         lines.extend(["", "COPIED"])
         if result.copied:
             for show, source, destination in result.copied:
-                lines.extend([show, f"  From: {source}", f"  To:   {destination}"])
+                inventory_volume, actual_volume = result.source_details.get(show, ("", ""))
+                lines.append(show)
+                if inventory_volume:
+                    lines.append(f"  Inventoried volume: {inventory_volume}")
+                if actual_volume:
+                    lines.append(f"  Actual source volume: {actual_volume}")
+                lines.extend([f"  From: {source}", f"  To:   {destination}"])
         else:
             lines.append("None")
         lines.extend(["", "ALREADY SATISFIED"])
@@ -904,6 +971,7 @@ def copy_available(tlo_home: str, request_id: str, *, roots: Optional[Mapping[st
                     exact_existing = False
             if exact_existing:
                 result.already_satisfied.append((show, target))
+                result.source_details[show] = (source.inventory_volume or source.volume, source.volume)
                 _record_completed(state, show, target, source, method="existing exact match")
                 continue
             result.failures.append((show, f"Destination collision: {target}"))
@@ -949,6 +1017,7 @@ def copy_available(tlo_home: str, request_id: str, *, roots: Optional[Mapping[st
             _record_completed(state, show, target, source, method="copied")
             save_request(tlo_home, state)
             result.copied.append((show, source.source_path, target))
+            result.source_details[show] = (source.inventory_volume or source.volume, source.volume)
         except Exception as exc:
             try:
                 if os.path.isdir(temp_target) and not os.path.islink(temp_target):

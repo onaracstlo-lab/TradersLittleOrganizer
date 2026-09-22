@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v486"
+__version__ = "v487"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -143,6 +143,13 @@ from tlo_copy_requests import (
     request_dir,
     source_request_change_state,
     update_request_from_source,
+)
+from tlo_redundancy import (
+    RedundancyError,
+    canonical_redundancy_text,
+    load_redundancy_groups,
+    redundancy_path,
+    save_redundancy_text,
 )
 from tlo_run_settings import append_run_settings
 from tlo_runtime_control import (
@@ -630,6 +637,7 @@ class App:
         self.manual_tweaks_button = None
         self.copy_requests_button = None
         self.active_copy_requests_window = None
+        self.active_redundancy_window = None
         self.pause_button = None
         self.resume_button = None
         self.progress_bar = None
@@ -865,6 +873,10 @@ class App:
         self.hamburger_menu.add_command(
             label="Copy Requests",
             command=lambda: self._run_after_menu_closes(self._open_copy_requests),
+        )
+        self.hamburger_menu.add_command(
+            label="Redundancy Groups",
+            command=lambda: self._run_after_menu_closes(self._open_redundancy_groups),
         )
         self.hamburger_menu.add_cascade(label="Donate", menu=self.donate_menu)
         self.hamburger_menu.add_separator()
@@ -1840,15 +1852,16 @@ class App:
         updater_open = self._updater_is_open()
         manual_open = self._manual_updates_is_open()
         copy_requests_open = self._copy_requests_is_open()
+        redundancy_open = self._redundancy_groups_is_open()
         try:
             if self.tag_button is not None:
-                self.tag_button.configure(state=("disabled" if inventory_active or updater_open or manual_open or copy_requests_open or tag_active else "normal"))
+                self.tag_button.configure(state=("disabled" if inventory_active or updater_open or manual_open or copy_requests_open or redundancy_open or tag_active else "normal"))
             if self.add_shows_button is not None:
-                self.add_shows_button.configure(state=("disabled" if inventory_active or manual_open or copy_requests_open or tag_active else "normal"))
+                self.add_shows_button.configure(state=("disabled" if inventory_active or manual_open or copy_requests_open or redundancy_open or tag_active else "normal"))
             if self.inventory_button is not None:
-                self.inventory_button.configure(state=("disabled" if updater_open or manual_open or copy_requests_open or tag_active or inventory_active else "normal"))
+                self.inventory_button.configure(state=("disabled" if updater_open or manual_open or copy_requests_open or redundancy_open or tag_active or inventory_active else "normal"))
             if self.manual_tweaks_button is not None:
-                self.manual_tweaks_button.configure(state=("disabled" if inventory_active or updater_open or manual_open or copy_requests_open or tag_active else "normal"))
+                self.manual_tweaks_button.configure(state=("disabled" if inventory_active or updater_open or manual_open or copy_requests_open or redundancy_open or tag_active else "normal"))
             if self.copy_requests_button is not None:
                 self.copy_requests_button.configure(state=("disabled" if inventory_active or updater_open or manual_open or tag_active else "normal"))
             if self.pause_button is not None:
@@ -1857,6 +1870,22 @@ class App:
                 self.resume_button.configure(state=("normal" if (inventory_active or tag_active) else "disabled"))
         except tk.TclError:
             pass
+
+    def _redundancy_groups_is_open(self):
+        manager = getattr(self, "active_redundancy_window", None)
+        if manager is None:
+            return False
+        window = getattr(manager, "window", None)
+        if window is None:
+            self.active_redundancy_window = None
+            return False
+        try:
+            exists = bool(window.winfo_exists())
+        except tk.TclError:
+            exists = False
+        if not exists:
+            self.active_redundancy_window = None
+        return exists
 
     def _copy_requests_is_open(self):
         manager = getattr(self, "active_copy_requests_window", None)
@@ -2114,6 +2143,37 @@ class App:
             messagebox.showerror("tlo-ggi", str(exc), parent=self.root)
             return
         ManualUpdatesWindow(self, config)
+
+    def _open_redundancy_groups(self):
+        if self.full_inventory_active or self.tag_active or self._updater_is_open() or self._manual_updates_is_open():
+            messagebox.showwarning(
+                "Redundancy Groups",
+                "Redundancy Groups cannot be edited while Inventory, Tag, Add New Shows, or Manual Tweaks is active.",
+                parent=self.root,
+            )
+            return
+        manager = getattr(self, "active_redundancy_window", None)
+        if manager is not None:
+            try:
+                if manager.window.winfo_exists():
+                    manager.window.lift()
+                    manager.window.focus_force()
+                    return
+            except tk.TclError:
+                self.active_redundancy_window = None
+        if self._copy_requests_is_open():
+            messagebox.showwarning(
+                "Redundancy Groups",
+                "Close the Copy Requests window before editing Redundancy Groups.",
+                parent=self.root,
+            )
+            return
+        try:
+            tlo_home = self._resolve_gui_tlo_home(error_type=ValueError)
+            RedundancyGroupsWindow(self, tlo_home)
+            self._update_main_action_states()
+        except Exception as exc:
+            messagebox.showerror("Redundancy Groups", str(exc), parent=self.root)
 
     def _open_copy_requests(self):
         if self._main_operation_is_running() or self._updater_is_open() or self._manual_updates_is_open():
@@ -2992,6 +3052,96 @@ class App:
         self._consume_inventory_queue()
         self.root.after(100, self._drain)
 
+
+
+class RedundancyGroupsWindow:
+    """Editor for ordered equivalent-volume declarations used by Copy Requests."""
+
+    def __init__(self, app, tlo_home):
+        self.app = app
+        self.tlo_home = os.path.abspath(tlo_home)
+        self.window = tk.Toplevel(app.root)
+        self.window.title(versioned_title("TLO Redundancy Groups"))
+        self.window.geometry("760x430")
+        self.window.minsize(650, 340)
+        self.window.protocol("WM_DELETE_WINDOW", self._close)
+        self.app.active_redundancy_window = self
+
+        frame = ttk.Frame(self.window, padding=10)
+        frame.pack(fill="both", expand=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(2, weight=1)
+
+        ttk.Label(
+            frame,
+            text=(
+                "Declare one equivalent-volume group per line. Left-to-right order is source precedence: "
+                "A = B = C uses A first, then B, then C. Enter visible volume labels or currently accessible "
+                "volume/root paths. Paths with spaces do not require quotes."
+            ),
+            wraplength=720,
+            justify="left",
+        ).grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        ttk.Label(
+            frame,
+            text="Example: Juke3 = Back-up3 = Back-up3a",
+        ).grid(row=1, column=0, sticky="w", pady=(0, 6))
+
+        self.editor = scrolledtext.ScrolledText(frame, width=86, height=16, wrap="none")
+        self.editor.grid(row=2, column=0, sticky="nsew")
+        try:
+            groups = load_redundancy_groups(self.tlo_home)
+            self.editor.insert("1.0", canonical_redundancy_text(groups))
+        except Exception as exc:
+            messagebox.showerror("Redundancy Groups", str(exc), parent=self.window)
+
+        ttk.Label(
+            frame,
+            text=f"Saved in: {redundancy_path(self.tlo_home)}",
+        ).grid(row=3, column=0, sticky="w", pady=(6, 4))
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=4, column=0, sticky="e")
+        ttk.Button(buttons, text="Save", command=self._save).grid(row=0, column=0, padx=4)
+        ttk.Button(buttons, text="Cancel", command=self._close).grid(row=0, column=1, padx=(4, 0))
+        self.window.transient(app.root)
+        try:
+            self.window.focus_force()
+        except tk.TclError:
+            pass
+
+    def _save(self):
+        try:
+            groups = save_redundancy_text(self.tlo_home, self.editor.get("1.0", "end"))
+        except RedundancyError as exc:
+            messagebox.showerror("Redundancy Groups", str(exc), parent=self.window)
+            return
+        except Exception as exc:
+            messagebox.showerror("Redundancy Groups", f"Cannot save Redundancy Groups: {exc}", parent=self.window)
+            return
+        # Normalize path entries to their resolved visible labels so the saved
+        # declaration remains stable after drive letters or mount points change.
+        self.editor.delete("1.0", "end")
+        self.editor.insert("1.0", canonical_redundancy_text(groups))
+        messagebox.showinfo(
+            "Redundancy Groups",
+            f"Saved {len(groups)} redundancy group(s). Copy Requests will use each group's left-to-right precedence.",
+            parent=self.window,
+        )
+
+    def _close(self):
+        try:
+            self.app.active_redundancy_window = None
+        except Exception:
+            pass
+        try:
+            self.window.destroy()
+        except tk.TclError:
+            pass
+        try:
+            self.app._update_main_action_states()
+        except Exception:
+            pass
 
 
 class CopyRequestsWindow:

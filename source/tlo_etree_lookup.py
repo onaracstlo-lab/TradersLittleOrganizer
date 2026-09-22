@@ -24,7 +24,7 @@ Important:
 
 from __future__ import annotations
 
-__version__ = "v486"
+__version__ = "v487"
 
 
 import argparse

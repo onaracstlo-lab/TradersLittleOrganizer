@@ -1,4 +1,4 @@
-__version__ = "v486"
+__version__ = "v487"
 import re
 import sqlite3
 from dataclasses import dataclass, field
