@@ -184,3 +184,7 @@ A: TLO reports Complete when every currently matched Show is satisfied and there
 
 Q: How can Copy Requests use my backup drives without inventorying every backup?
 A: Open the upper-right hamburger menu and choose Redundancy Groups. Enter one equivalent-volume group per line, for example Juke3 = Back-up3 = Back-up3a. The order is the precedence: Juke3 is tried first, then Back-up3, then Back-up3a. You may enter visible volume labels or currently accessible volume/root paths; paths with spaces do not require quotes. TLO stores the resolved volume labels and Copy Requests uses the same inventoried rootless path on whichever equivalent member is connected. Only one copy needs to be inventoried.
+
+Build 488 note: In Redundancy Groups, Close dismisses the window without saving unsaved editor changes; use Save to store changes.
+
+Build 489 note: Help > About now lists support@traderslittleorganizer.com as the TLO contact email.

@@ -1,6 +1,6 @@
 """Build 487 ordered redundancy groups and Copy Request source substitution."""
 
-__version__ = "v487"
+__version__ = "v489"
 
 import os
 from pathlib import Path
@@ -124,8 +124,8 @@ def test_build487_hamburger_has_redundancy_groups_and_no_main_button():
 
 def test_build487_documentation_covers_ordered_redundancy_and_unquoted_paths():
     from docx import Document
-    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v487.docx").paragraphs)
-    manual = Path("TLO_Inventory_User_Manual_v487.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v489.docx").paragraphs)
+    manual = Path("TLO_Inventory_User_Manual_v489.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = Path("TLO-FAQ.txt").read_text(encoding="utf-8")
     assert "Build 487 - ordered redundancy groups for equivalent source volumes" in req
     assert "Declaration order is authoritative source precedence" in req

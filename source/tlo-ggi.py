@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v487"
+__version__ = "v489"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -1537,7 +1537,7 @@ class App:
             f"V{PUBLIC_VERSION}Build{BUNDLE_BUILD}\n"
             "TLO is developed by Jay Scarano\n"
             "using ChatGPT and Anthropic/Claude\n"
-            "Contact me at: onaracs.tlo of gmail"
+            "Contact me at: support@traderslittleorganizer.com"
         )
         frame = ttk.Frame(dialog, padding=14)
         frame.grid(sticky="nsew")
@@ -3103,7 +3103,7 @@ class RedundancyGroupsWindow:
         buttons = ttk.Frame(frame)
         buttons.grid(row=4, column=0, sticky="e")
         ttk.Button(buttons, text="Save", command=self._save).grid(row=0, column=0, padx=4)
-        ttk.Button(buttons, text="Cancel", command=self._close).grid(row=0, column=1, padx=(4, 0))
+        ttk.Button(buttons, text="Close", command=self._close).grid(row=0, column=1, padx=(4, 0))
         self.window.transient(app.root)
         try:
             self.window.focus_force()

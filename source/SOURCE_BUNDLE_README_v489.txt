@@ -1,20 +1,18 @@
-TLO Source and Utilities Bundle v487
+TLO Source and Utilities Bundle v489
 
-Public application version: v1.7 Build 487
-Source bundle label: v487
+Public application version: v1.7 Build 489
+Source bundle label: v489
 
-Build 487 summary
-- Adds ordered Redundancy Groups for equivalent replica volumes used by persistent Copy Requests.
-- A = B = C means A has highest source precedence and C the lowest.
-- Redundancy group members can be volume labels or currently accessible paths; path inputs with spaces do not require quotes.
-- Backup/equivalent volumes do not need separate bootlist inventory rows.
-- Carries forward all Build 486 Copy Request menu placement, Build 485 persistent Copy Requests, Build 484 checkbox text, Build 483 setlist.fm-upgrade gating, Build 481 security hardening, and prior stabilization behavior.
+Build 489 summary
+- Changes Help > About contact text to support@traderslittleorganizer.com.
+- This is a contact-text-only GUI change; About layout and all other GUI behavior are unchanged.
+- Carries forward Build 488 Redundancy Groups Close wording, Build 487 ordered Redundancy Groups, Build 486 Copy Request menu placement, Build 485 persistent Copy Requests, and all prior behavior.
 
 Current documentation files:
-- TLO_Inventory_User_Manual_v487.rtf: current end-user manual.
-- TLO_Inventory_Requirements_Working_v487.docx: current TLO requirements/development document.
+- TLO_Inventory_User_Manual_v489.rtf: current end-user manual.
+- TLO_Inventory_Requirements_Working_v489.docx: current TLO requirements/development document.
 - TLO-FAQ.txt: current frequently asked questions.
-- CHANGES_v487.txt: changes introduced by this release build.
+- CHANGES_v489.txt: changes introduced by this release build.
 - old-change-logs.zip: archived historical TLO change notes through Build 486.
 
 GitHub Build Process separation:

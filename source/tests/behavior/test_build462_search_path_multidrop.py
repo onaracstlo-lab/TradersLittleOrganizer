@@ -158,11 +158,11 @@ def test_build462_documentation_records_cumulative_multidrop_behavior():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    req = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v487.docx").paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v487.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v489.docx").paragraphs)
+    manual = (root / "TLO_Inventory_User_Manual_v489.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = (root / "TLO-FAQ.txt").read_text(encoding="utf-8")
 
-    assert "Current document version: v487 (v1.7 Build 487)." in req
+    assert "Current document version: v489 (v1.7 Build 489)." in req
     assert "Repeated drag actions are cumulative" in req
     assert "complete file list supplied by File Explorer" in req
     assert "A;B;C;D" in req

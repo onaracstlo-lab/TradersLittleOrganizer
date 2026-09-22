@@ -187,15 +187,15 @@ def test_build410_requirements_and_manual_document_reported_fix():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v487.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v489.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v487.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v489.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v487 (v1.7 Build 487)." in req_text
+    assert "Current document version: v489 (v1.7 Build 489)." in req_text
     assert "Build 410 explicit-setlist and disc-order rule" in req_text
     assert "CJM-Disc01,Track01.flac" in req_text
     assert "Thank The Nurse That's Nursing You" in req_text
     assert "later collector notes beginning 1), 2), 3)" in req_text
-    assert "Version v1.7 Build 487" in manual_text
+    assert "Version v1.7 Build 489" in manual_text
     assert "CJM-Disc01,Track01.flac" in manual_text
 

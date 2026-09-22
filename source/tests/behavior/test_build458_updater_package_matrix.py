@@ -157,10 +157,10 @@ def test_build458_check_for_updates_reports_database_refresh(monkeypatch, tmp_pa
 def test_build458_current_documentation_describes_package_matrix():
     root = Path(__file__).resolve().parents[2]
     from docx import Document
-    req_text = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v487.docx").paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v487.rtf").read_text(encoding="utf-8", errors="ignore")
+    req_text = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v489.docx").paragraphs)
+    manual = (root / "TLO_Inventory_User_Manual_v489.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = (root / "TLO-FAQ.txt").read_text(encoding="utf-8")
-    assert "Current document version: v487 (v1.7 Build 487)." in req_text
+    assert "Current document version: v489 (v1.7 Build 489)." in req_text
     assert "exact matching complete ZIP" in req_text
     assert "databases_included" in req_text
     assert "only the four complete ZIPs" in manual

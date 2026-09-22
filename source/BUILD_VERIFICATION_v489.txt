@@ -1,0 +1,24 @@
+TLO v1.7 Build 489 - Build Verification
+
+Scope
+- Help > About contact-text change only: the contact address is support@traderslittleorganizer.com.
+- About layout, version/build display, attribution, Help menu placement, and all other GUI behavior are unchanged.
+
+Working-tree validation
+- Targeted Build 489 regression tests: 2 passed.
+- Exact GitHub/Linux requirements entry point: 1,323 passed.
+- Full test suite: 1,433 passed.
+- Python compilation: 193 Python files compiled successfully.
+- Direct tlo-ggi.py diff against Build 488: only __version__ and the About contact-address line changed.
+
+Documentation QA
+- Requirements DOCX rendered to 104 pages and visually reviewed.
+- User Manual rendered to 42 pages and visually reviewed after removing an orphan trailing-page spill.
+
+Frozen-package validation
+- Internal manifest: 217/217 payload hashes verified.
+- ZIP integrity: passed.
+- Exact GitHub/Linux requirements entry point from clean extraction: 1,323 passed.
+- Full test suite from clean extraction: 1,433 passed.
+- Python compilation from clean extraction: 193 files compiled successfully.
+- Final archive contains 218 files including SHA256SUMS_v489.txt.
