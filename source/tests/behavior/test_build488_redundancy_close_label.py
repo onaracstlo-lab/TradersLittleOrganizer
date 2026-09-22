@@ -1,6 +1,6 @@
 """Build 488 Redundancy Groups dismiss-button wording."""
 
-__version__ = "v489"
+__version__ = "v490"
 
 from pathlib import Path
 import pytest
@@ -31,9 +31,9 @@ def test_build488_redundancy_groups_layout_and_behavior_unchanged():
 
 def test_build488_docs_describe_label_only_change():
     from docx import Document
-    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v489.docx").paragraphs)
-    manual = Path("TLO_Inventory_User_Manual_v489.rtf").read_text(encoding="utf-8", errors="ignore")
-    assert "Current document version: v489 (v1.7 Build 489)." in req
+    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v490.docx").paragraphs)
+    manual = Path("TLO_Inventory_User_Manual_v490.rtf").read_text(encoding="utf-8", errors="ignore")
+    assert "Current document version: v490 (v1.7 Build 490)." in req
     assert "Build 488 - Redundancy Groups Close label" in req
     assert "labeled Close rather than Cancel" in req
     assert "Build 488 Redundancy Groups Close label" in manual

@@ -1,0 +1,35 @@
+TLO v1.7 Build 490 - Build Verification
+
+Scope
+- Extend only the existing guarded non-compliant Artist + Place + Date fallback.
+- The fallback still requires an exact, unique Artist DB master/alias prefix at the start of the folder name and a date accepted by the existing date parser.
+- The post-date tail must be recognized technical/source text (including the narrow literal SDB compatibility spelling) or one existing terminal performance qualifier.
+- Existing Artist Date ... parsing retains precedence, and an unrecognized title-like tail does not activate the fallback.
+- Compliant mode is unchanged.
+
+Behavior validation
+- "Todd Snider Skipper's Smokehouse, Tampa, FL 2005-04-16 sdb" now recovers Todd Snider / 2005-04-16 / Skipper's Smokehouse / Tampa, FL in non-compliant mode when Todd Snider is an exact Artist DB master/alias prefix.
+- SDB is a compatibility spelling used only to validate this guarded source/technical-tail path; it is not promoted into a new qualifier system.
+- Existing terminal performance qualifiers continue through the existing qualifier machinery.
+- Normal Artist Date Venue/Location parsing remains unchanged.
+- The malformed Todd Snider example remains intentionally unchanged in Compliant mode.
+
+Working-tree validation
+- Baseline before this change: 1,433 full-suite tests passed.
+- Targeted Build 490 regression tests: 6 passed.
+- Exact GitHub/Linux requirements entry point: 1,329 passed.
+- Full test suite: 1,439 passed.
+- Python compilation: 194 Python files compiled successfully.
+
+Documentation QA
+- Requirements DOCX updated to v490 / v1.7 Build 490 and rendered to 105 pages.
+- All 105 rendered requirements pages were visually reviewed, including full-page inspection of the changed version/rule/release-note pages; no clipping, overlap, blank-page, or margin defect was found.
+- User Manual, source-bundle README, changelog, and current-version references were updated to Build 490.
+
+Frozen-package validation
+- Final ZIP integrity: passed.
+- Internal SHA-256 manifest: all listed payload hashes verified from a clean extraction.
+- Exact GitHub/Linux requirements entry point from clean extraction: 1,329 passed.
+- Full test suite from clean extraction: 1,439 passed.
+- Python compilation from clean extraction: 194 Python files compiled successfully.
+- The source bundle contains application source/tests/docs only; the independent GitHub Build Process v091 bundle was not modified or embedded.

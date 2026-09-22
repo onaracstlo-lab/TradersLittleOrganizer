@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v489"
+__version__ = "v490"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
@@ -78,12 +78,15 @@ TRAILING_MEDIA_TECHNICAL_SUFFIX_RE = re.compile(
     r"(?ix)^(?:"
     r"flacs?|flac(?:16|24)|shns?|shnf|wav|wave|aiff?|ape|alac|mp3|m4a|aac|ogg|opus|wv|"
     r"16\s*[-_ ]?\s*bit|24\s*[-_ ]?\s*bit|"
-    r"sbd|aud|fm|matrix|soundboard|audience"
+    r"sbd|sdb|aud|fm|matrix|soundboard|audience"
     r")(?:\s+(?:"
     r"flacs?|flac(?:16|24)|shns?|shnf|wav|wave|aiff?|ape|alac|mp3|m4a|aac|ogg|opus|wv|"
     r"16\s*[-_ ]?\s*bit|24\s*[-_ ]?\s*bit|"
-    r"sbd|aud|fm|matrix|soundboard|audience"
+    r"sbd|sdb|aud|fm|matrix|soundboard|audience"
     r"))*$"
+)
+TRAILING_PERFORMANCE_QUALIFIER_SUFFIX_RE = re.compile(
+    rf"^(?:{TERMINAL_PERFORMANCE_QUALIFIER_TEXT})$", re.IGNORECASE
 )
 MULTI_EXT_RE = re.compile(
     r"(?i)(?:\.(?:txt|docx?|rtf|nfo|md5|ffp|fpt|sfv|log|cue|m3u8?|pls|shn|shnf|flac|flac16|flac24|wav|mp3|m4a|aac|ogg|oga|opus|aiff?|ape|wv|alac|aucdtect))+$"
@@ -2111,11 +2114,14 @@ def _match_artist_place_date_technical_suffix(
     """Match guarded ``Artist Place Date TechnicalSuffix`` folder text.
 
     This is a narrow non-compliant fallback for traded-show names such as
-    ``RTF Paris 7 March 76 flac16``.  The artist prefix must resolve directly
-    and uniquely through the Artist DB; TLO does not construct or guess an
-    initialism.  Text between the artist and date is retained only as a
-    venue/location hint, and the text after the date must consist entirely of
-    recognized media/source technical tokens.
+    ``RTF Paris 7 March 76 flac16`` and ``Artist Venue Location Date Set 1``.
+    The artist prefix must resolve directly and uniquely through the Artist DB;
+    TLO does not construct or guess an initialism. Text between the artist and
+    date is retained only as a venue/location hint. Text after the date must be
+    either entirely recognized media/source technical tokens or one existing
+    terminal performance qualifier. The common literal ``sdb`` spelling is
+    accepted only as a technical/source tail compatibility token; it does not
+    create or alter qualifier metadata.
     """
     if matcher is None:
         return None, []
@@ -2128,7 +2134,14 @@ def _match_artist_place_date_technical_suffix(
         end = int(date_match.get("end", 0) or 0)
         left = _clean_piece(cleaned[:start])
         technical_suffix = _clean_piece(cleaned[end:])
-        if not left or not technical_suffix or not TRAILING_MEDIA_TECHNICAL_SUFFIX_RE.fullmatch(technical_suffix):
+        recognized_tail = bool(
+            technical_suffix
+            and (
+                TRAILING_MEDIA_TECHNICAL_SUFFIX_RE.fullmatch(technical_suffix)
+                or TRAILING_PERFORMANCE_QUALIFIER_SUFFIX_RE.fullmatch(technical_suffix)
+            )
+        )
+        if not left or not recognized_tail:
             continue
 
         token_matches = list(re.finditer(r"[A-Za-z][A-Za-z'&.+-]*", left))
