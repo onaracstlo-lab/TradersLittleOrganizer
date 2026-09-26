@@ -154,14 +154,14 @@ def test_build416_requirements_and_manual_document_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v490.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v493.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v490.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v493.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v490 (v1.7 Build 490)." in req_text
+    assert "Current document version: v493 (v1.7 Build 493)." in req_text
     assert "Artist / Live at Venue" in req_text
     assert "AL DiMeola Group GROUP" in req_text
     assert "Gürzenich" in req_text
     assert "Build 416: Structured Live at setlist metadata precedence" in req_text
-    assert "Version v1.7 Build 490" in manual_text
+    assert "Version v1.7 Build 493" in manual_text
     assert "Artist followed by Live at Venue" in manual_text

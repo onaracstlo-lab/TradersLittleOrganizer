@@ -45,8 +45,8 @@ def test_research_is_built_on_all_platforms():
 
 
 def test_research_documentation_is_present():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v490.docx")
-    manual = (ROOT / "TLO_Inventory_User_Manual_v490.rtf").read_text(encoding="utf-8", errors="ignore")
+    requirements = _docx_text("TLO_Inventory_Requirements_Working_v493.docx")
+    manual = (ROOT / "TLO_Inventory_User_Manual_v493.rtf").read_text(encoding="utf-8", errors="ignore")
     for text in (requirements, manual):
         assert "tlo-research" in text
         assert "artist followed by a date" in text.lower()

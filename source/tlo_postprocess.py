@@ -1,6 +1,6 @@
 """Postprocess metadata logs into setlist files, bootlist.csv, duplicate/group outputs, and summary/unidentified-show files."""
 
-__version__ = "v490"
+__version__ = "v493"
 import csv
 import json
 import os
@@ -16,7 +16,7 @@ from console_output_lib import console_print
 from logging_lib import logs_dir_for_home
 from tlo_file_listing import is_setlist_family_name, scandir_matching_files
 from tlo_text_utils import compact_ws, read_text_file_full, setlist_text_requests_generated_from_music_files, standard_ascii_text
-from tlo_security import is_safe_local_regular_file
+from tlo_security import is_safe_local_regular_file, is_network_or_device_path
 from tlo_runtime_control import throttle_point, is_cancel_requested, normalize_performance_mode
 from tlo_bootlist_volume_policy import (
     filter_rows_for_volume_actions,
@@ -34,6 +34,7 @@ PLACEHOLDER_SETLIST_TEXT = "*** No setlist found ***"
 MAX_FILENAME_CHARS = 255
 FILENAME_RESERVE_CHARS = 10
 SETLIST_EXTENSION = ".txt"
+GENERATED_INFO_FILENAME = "info-gen.txt"
 
 MEDIA_EXTENSIONS_FOR_PLACEHOLDER_SETLIST = {
     ".3gp", ".aac", ".aif", ".aiff", ".alac", ".ape", ".avi", ".flac",
@@ -741,6 +742,46 @@ def _title_from_music_filename_for_generated_setlist(filename: str) -> str:
     return stem or os.path.basename(str(filename or ""))
 
 
+def _generated_marker_info_text(record: Dict[str, str], config=None) -> str:
+    """Create the source-folder info-gen.txt text for a marker-only placeholder.
+
+    Keep metadata explicit and list the exact media filenames. Unknown metadata
+    fields are omitted rather than filled with placeholders. ``File:`` prefixes
+    prevent numbered audio filenames from being mistaken for authored track
+    titles if this generated file is selected on a later inventory.
+    """
+    lines: List[str] = []
+    for label, key in (("Artist", "artist"), ("Date", "date"), ("Venue", "venue"), ("Location", "location")):
+        value = compact_ws(record.get(key, ""))
+        if value:
+            lines.append(f"{label}: {value}")
+
+    filenames = _iter_music_file_names_for_placeholder(
+        record.get("main_dir_path", ""),
+        config=config,
+        music_dirs=_json_list_from_record(record, "music_dirs_json"),
+    )
+    if filenames and lines:
+        lines.append("")
+    lines.extend(f"File: {filename}" for filename in filenames)
+    return "\n".join(lines).strip()
+
+
+def _write_marker_info_gen(record: Dict[str, str], text: str) -> str:
+    """Best-effort creation/replacement of info-gen.txt in the associated show folder."""
+    main_dir = os.path.normpath(str(record.get("main_dir_path") or "").strip())
+    if not main_dir or is_network_or_device_path(main_dir) or not os.path.isdir(main_dir) or os.path.islink(main_dir):
+        return ""
+    target = os.path.join(main_dir, GENERATED_INFO_FILENAME)
+    if os.path.lexists(target) and os.path.islink(target):
+        return ""
+    try:
+        _write_text_file(target, text)
+    except OSError:
+        return ""
+    return target
+
+
 def _generated_missing_setlist_text(record: Dict[str, str], config=None) -> str:
     """Create a synthetic setlist when no usable setlist file exists."""
     lines: List[str] = []
@@ -794,7 +835,9 @@ def _export_setlist_text(source_path: str, record: Dict[str, str] | None = None,
 
     text = read_text_file_full(normalized)
     if setlist_text_requests_generated_from_music_files(text):
-        return _generated_missing_setlist_text(record or {}, config=config)
+        generated = _generated_marker_info_text(record or {}, config=config)
+        _write_marker_info_gen(record or {}, generated)
+        return generated
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     lines = [line.rstrip() for line in text.split("\n")]
     text = "\n".join(lines).strip()

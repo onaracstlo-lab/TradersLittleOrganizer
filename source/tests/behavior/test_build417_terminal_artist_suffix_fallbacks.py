@@ -78,14 +78,14 @@ def test_build417_requirements_and_manual_document_new_suffix_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v490.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v493.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v490.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual = (root / "TLO_Inventory_User_Manual_v493.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v490 (v1.7 Build 490)." in req_text
+    assert "Current document version: v493 (v1.7 Build 493)." in req_text
     assert "Band or Group" in req_text
     assert "All Star Band / All-Star Band" in req_text
     assert "Build 407, 417, 418: Terminal Band/Group/All-Star-family Artist DB fallback" in req_text
-    assert "Version v1.7 Build 490" in manual
+    assert "Version v1.7 Build 493" in manual
     assert "terminal Band, Group, All Star/All-Star/All Stars/All-Stars" in manual
     assert "corresponding ... Band form" in manual

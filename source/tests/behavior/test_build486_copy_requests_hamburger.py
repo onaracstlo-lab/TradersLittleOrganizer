@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v490"
+__version__ = "v493"
 
 
 def test_build486_copy_requests_is_hamburger_command_not_main_button():
@@ -27,13 +27,13 @@ def test_build486_existing_main_action_button_positions_are_unchanged():
 
 
 def test_build486_docs_place_copy_requests_under_hamburger():
-    requirements = Document("TLO_Inventory_Requirements_Working_v490.docx")
+    requirements = Document("TLO_Inventory_Requirements_Working_v493.docx")
     requirement_text = "\n".join(p.text for p in requirements.paragraphs)
     assert "Build 486 - Copy Requests moved to hamburger menu" in requirement_text
     assert "removes the Copy Requests button from the main action row" in requirement_text
     assert "upper-right hamburger menu" in requirement_text
 
-    manual = Path("TLO_Inventory_User_Manual_v490.rtf").read_text(encoding="utf-8")
+    manual = Path("TLO_Inventory_User_Manual_v493.rtf").read_text(encoding="utf-8")
     assert "Open the upper-right hamburger menu, choose Copy Requests" in manual
     assert "Build 486 Copy Requests menu placement" in manual
 

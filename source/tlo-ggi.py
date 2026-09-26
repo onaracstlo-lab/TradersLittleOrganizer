@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v490"
+__version__ = "v493"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -2237,7 +2237,7 @@ class App:
         alert.grab_set()
         ttk.Label(
             alert,
-            text="TLOHome/deleteBackupFolders already exists. Continue or abort?",
+            text="TLOHome/deleteBackupFolders.txt already exists. Continue or abort?",
             padding=12,
         ).grid(row=0, column=0, columnspan=2, sticky="w")
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v490"
+__version__ = "v493"
 
 import csv
 import os
@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from tlo_constants import (
+    AMBIGUOUS_CANADIAN_REGION_CODES, CANADIAN_REGION_ALIASES, CANADIAN_REGION_CODES,
     COUNTRY_ALIASES, COUNTRY_SEARCH_TERMS, LOCATION_CONNECTIVE_WORDS,
     LOWERCASE_COMMON_STATE_CODES, MONTH_NAME_CASED_PATTERN, US_STATE_ALIASES, US_STATE_CODES,
 )
@@ -159,6 +160,14 @@ def _load_regions(tlo_dbs_dir: str) -> Dict[str, Dict[str, str]]:
         regions[code.upper()] = {"region": code.upper(), "country": "USA"}
     for alias, code in US_STATE_ALIASES.items():
         regions[_norm_key(alias)] = {"region": code.upper(), "country": "USA"}
+
+    for code in sorted(CANADIAN_REGION_CODES):
+        country = "" if code in AMBIGUOUS_CANADIAN_REGION_CODES else "Canada"
+        regions[code.upper()] = {"region": code.upper(), "country": country}
+    for alias, code in CANADIAN_REGION_ALIASES.items():
+        # Full province/territory names are unambiguous even when their postal
+        # abbreviation (notably NT) is shared with another country.
+        regions[_norm_key(alias)] = {"region": code.upper(), "country": "Canada"}
 
     for row in _read_caret_csv(Path(tlo_dbs_dir) / "states_regions.csv"):
         abbrev = _clean_spaces(row.get("abbrev", ""))
@@ -779,19 +788,20 @@ def _region_anchor_at_end(line: str, support: _SupportData) -> Tuple[str, str, s
 
 
 def _parse_comma_state_code_location(line: str, support: _SupportData) -> Tuple[str, str, str, str, str, int]:
-    """Parse a city followed by a comma and a two-letter state code.
+    """Parse a city followed by a comma and a recognized two-letter region code.
 
-    Old setlists commonly write state codes in title case (``Santa Cruz,Ca``).
-    That casing is safe to normalize when the code is the complete comma-delimited
-    tail.  Ambiguous/common-word state codes remain case-sensitive so text such as
-    ``You, Me`` cannot silently become Maine.
+    U.S. compatibility keeps the historical title-case normalization for most
+    state codes. Canadian postal abbreviations are intentionally uppercase-only
+    so ordinary words such as ``on`` cannot silently become Ontario.
     """
     match = re.match(r"^\s*([A-Za-z][A-Za-z.'-]*(?:\s+[A-Za-z][A-Za-z.'-]*){0,4})\s*,\s*([A-Za-z]{2})\s*$", line)
     if not match:
         return "", "", "", "", "", 0
     raw_code = match.group(2)
     code = raw_code.upper()
-    if code not in US_STATE_CODES or code not in support.regions:
+    if code not in set(US_STATE_CODES) | set(CANADIAN_REGION_CODES) or code not in support.regions:
+        return "", "", "", "", "", 0
+    if code in CANADIAN_REGION_CODES and raw_code != code:
         return "", "", "", "", "", 0
     if raw_code != code and code in LOWERCASE_COMMON_STATE_CODES:
         return "", "", "", "", "", 0

@@ -1,10 +1,10 @@
-__version__ = "v490"
+__version__ = "v493"
 import os
 import re
 
 from tlo_wrapper_rules import is_common_music_folder_name, is_wrapper_part_folder_name, split_wrapper_part_suffix, split_parenthesized_numeric_part_suffix
 from tlo_constants import MONTH_NAME_CASED_PATTERN
-from tlo_text_utils import MAX_TEXT_FULL_BYTES
+from tlo_text_utils import MAX_TEXT_FULL_BYTES, setlist_text_requests_generated_from_music_files
 
 SETLIST_NAME_PATTERNS = [
     re.compile(r"set[\s._-]*list", re.IGNORECASE),
@@ -221,6 +221,13 @@ def _analyze_txt_file(path_name):
         analysis["is_unreadable_or_null"] = True
         analysis["content_score"] = -1000
     elif text:
+        if setlist_text_requests_generated_from_music_files(text):
+            # Keep a marker-only placeholder selectable when it is the only info
+            # file so postprocess can generate info-gen.txt, but rank it below a
+            # real/generated info file on later inventories.
+            analysis["content_score"] = -50
+            _TXT_ANALYSIS_CACHE[normalized] = analysis
+            return analysis
         meaningful_lines = []
         for raw_line in text.splitlines()[:120]:
             stripped = raw_line.strip()

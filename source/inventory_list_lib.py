@@ -1,4 +1,4 @@
-__version__ = "v490"
+__version__ = "v493"
 from tlo_diagnostics import debug_suppressed_exception
 import os
 import re

@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v490"
+__version__ = "v493"
 
 from tlo_diagnostics import debug_suppressed_exception
 import json
@@ -38,9 +38,15 @@ from tlo_constants import (
     MONTHS,
     ORDINAL_SUFFIX,
     QUALIFIER_PATTERNS,
+    AMBIGUOUS_CANADIAN_REGION_CODES,
+    CANADIAN_REGION_ALIASES,
+    CANADIAN_REGION_CODES,
+    REGION_CODES,
     US_STATE_CODES,
     US_STATE_ALIASES,
     LOCATION_CONNECTIVE_WORDS,
+    LOWERCASE_COMMON_STATE_CODES,
+    LOWERCASE_STATE_NOISE_WORDS,
 )
 from tlo_models import Candidate, ShowMetadata
 from tlo_show_descriptor import extract_fallback_descriptor
@@ -2218,7 +2224,10 @@ def _pre_date_place_hint_kind(config, place_hint: str) -> Tuple[str, Dict[str, s
     hint = _clean_piece(place_hint)
     if not hint:
         return "", {}
-    venue, city, region, country, extra = _parse_string2(hint)
+    venue, city, region, country, extra = _parse_string2(
+        hint,
+        allow_lowercase_region_codes=_is_consistently_lowercase_path_fragment(hint),
+    )
     if venue or city or region or country:
         return "structured", {
             "venue": venue, "city": city, "region": region, "country": country,
@@ -2278,7 +2287,10 @@ def _match_date_artist_venue_location(
         if not raw_artist or not string2:
             continue
 
-        venue, city, region, country, extra_parenthetical = _parse_string2(string2)
+        venue, city, region, country, extra_parenthetical = _parse_string2(
+            string2,
+            allow_lowercase_region_codes=_is_consistently_lowercase_path_fragment(string2),
+        )
         if not (venue and city and (region or country)):
             continue
 
@@ -2877,16 +2889,23 @@ def _state_term_to_code(term: str) -> str:
     if not value:
         return ""
     upper = value.upper()
-    if upper in US_STATE_CODES:
+    if upper in REGION_CODES:
         return upper
-    return (US_STATE_ALIASES.get(value.casefold()) or "").upper()
+    return (US_STATE_ALIASES.get(value.casefold()) or CANADIAN_REGION_ALIASES.get(value.casefold()) or "").upper()
+
+
+def _region_code_country(code: str) -> str:
+    normalized = compact_ws(code).upper()
+    if normalized in CANADIAN_REGION_CODES and normalized not in AMBIGUOUS_CANADIAN_REGION_CODES:
+        return "Canada"
+    return ""
 
 
 def _state_search_terms(include_codes: bool = True) -> List[str]:
     terms: List[str] = []
     if include_codes:
-        terms.extend(US_STATE_CODES)
-    for alias, code in US_STATE_ALIASES.items():
+        terms.extend(REGION_CODES)
+    for alias, code in {**US_STATE_ALIASES, **CANADIAN_REGION_ALIASES}.items():
         # For path String2 parsing, include full state names and legacy/long
         # abbreviations, but do not duplicate the two-letter codes here.  Codes
         # are handled explicitly so LA remains Louisiana and is not mixed with
@@ -2900,7 +2919,41 @@ def _state_terms_regex(include_codes: bool = True) -> str:
     return "|".join(r"\s+".join(re.escape(part) for part in term.split()) for term in _state_search_terms(include_codes))
 
 
-def _state_anchor_at_end(value: str) -> Tuple[str, str]:
+def _is_consistently_lowercase_path_fragment(value: str) -> bool:
+    """Return True when every cased letter in a path fragment is lowercase."""
+    letters = [char for char in str(value or "") if char.isalpha()]
+    return bool(letters) and all(not char.isupper() for char in letters)
+
+
+_LOWERCASE_AMBIGUOUS_REGION_CODES = frozenset(set(LOWERCASE_COMMON_STATE_CODES) | {"ON"})
+
+
+def _lowercase_ambiguous_region_has_structure(value: str, raw_region: str, venue: str, city: str) -> bool:
+    """Require extra location structure before relaxing a word-like region code.
+
+    Lowercase ``in``/``on``/``or`` and similar tokens are accepted only in an
+    otherwise-lowercase path fragment and only when either punctuation marks the
+    region boundary (``toronto, on``) or the parse contains both venue and city.
+    Noise-like one-word cities/venues are rejected so phrases such as ``live in``
+    do not become Indiana.
+    """
+    if not city:
+        return False
+    city_key = compact_ws(city).casefold()
+    if city_key in LOWERCASE_STATE_NOISE_WORDS:
+        return False
+    escaped = re.escape(raw_region)
+    if re.search(rf",\s*{escaped}(?:\b|$)", value, re.IGNORECASE):
+        return True
+    if not venue:
+        return False
+    venue_tokens = [token.casefold() for token in re.findall(r"[A-Za-z]+", venue)]
+    if venue_tokens and all(token in LOWERCASE_STATE_NOISE_WORDS for token in venue_tokens):
+        return False
+    return True
+
+
+def _state_anchor_at_end(value: str, *, allow_lowercase_region_codes: bool = False) -> Tuple[str, str]:
     terms = _state_terms_regex(include_codes=True)
     if not terms:
         return "", ""
@@ -2908,9 +2961,22 @@ def _state_anchor_at_end(value: str) -> Tuple[str, str]:
     match = pattern.search(value)
     if not match:
         return "", ""
-    code = _state_term_to_code(match.group(1))
+    raw_region = compact_ws(match.group(1))
+    code = _state_term_to_code(raw_region)
     if not code:
         return "", ""
+    # Build 492 keeps ordinary-word/noisy U.S. codes and Canadian postal codes
+    # uppercase-only by default. Build 493 adds a narrow path-only exception:
+    # exact lowercase is permitted when the location fragment itself is
+    # consistently lowercase. Mixed-case abbreviations remain rejected.
+    if len(raw_region) == 2 and raw_region != code:
+        protected = code in CANADIAN_REGION_CODES or code in LOWERCASE_COMMON_STATE_CODES
+        if protected and not (
+            allow_lowercase_region_codes
+            and raw_region.islower()
+            and _is_consistently_lowercase_path_fragment(value)
+        ):
+            return "", ""
     return code, value[: match.start(1)].rstrip(" ,")
 
 
@@ -2921,7 +2987,7 @@ def _ends_with_full_state_name(value: str) -> bool:
     return bool(re.search(rf"(?:^|[\s,])(?:{terms})$", compact_ws(value).strip(" ,"), re.IGNORECASE))
 
 
-def _extract_anchor_at_end(text: str) -> Tuple[str, str]:
+def _extract_anchor_at_end(text: str, *, allow_lowercase_region_codes: bool = False) -> Tuple[str, str]:
     value = compact_ws(text).rstrip(" ,")
     upper = value.upper()
     if upper.endswith(" NYC") or upper == "NYC":
@@ -2935,7 +3001,7 @@ def _extract_anchor_at_end(text: str) -> Tuple[str, str]:
         if match:
             return COUNTRY_ALIASES.get(match.group(1).casefold(), country), value[: match.start(1)].rstrip(" ,")
 
-    state_anchor, state_left = _state_anchor_at_end(value)
+    state_anchor, state_left = _state_anchor_at_end(value, allow_lowercase_region_codes=allow_lowercase_region_codes)
     if state_anchor:
         return state_anchor, state_left
 
@@ -3056,31 +3122,42 @@ def _clean_numbered_path_location_noise(venue: str, city: str) -> Tuple[str, str
     return venue_clean, city_clean
 
 
-def _parse_string2(string2: str) -> Tuple[str, str, str, str, str]:
+def _parse_string2(string2: str, *, allow_lowercase_region_codes: bool = False) -> Tuple[str, str, str, str, str]:
     value = compact_ws(string2).strip(" ,")
     if not value:
         return "", "", "", "", ""
-    anchor, left = _extract_anchor_at_end(value)
+    anchor, left = _extract_anchor_at_end(
+        value, allow_lowercase_region_codes=allow_lowercase_region_codes
+    )
     if anchor:
         if anchor == "NYC":
             return compact_ws(left), "New York", "NY", "", ""
         if anchor == "NOLA":
             return compact_ws(left), "New Orleans", "LA", "", ""
-        if anchor in COUNTRY_ALIASES.values() and anchor not in US_STATE_CODES:
+        if anchor in COUNTRY_ALIASES.values() and anchor not in REGION_CODES:
             venue, city, region, country, extra = _parse_country_qualified_region(value, anchor, left)
             if city and (region or country):
                 return venue, city, region, country, extra
-        allow_city_only = bool(anchor in US_STATE_CODES and _ends_with_full_state_name(value))
+        allow_city_only = bool(anchor in REGION_CODES and _ends_with_full_state_name(value))
         venue, city = _split_left_for_city_and_venue(left, allow_city_only=allow_city_only)
         venue, city = _clean_numbered_path_location_noise(venue, city)
+        raw_region = compact_ws(value[len(left):]).strip(" ,") if left else compact_ws(value).strip(" ,")
+        if (
+            allow_lowercase_region_codes
+            and len(raw_region) == 2
+            and raw_region.islower()
+            and anchor in _LOWERCASE_AMBIGUOUS_REGION_CODES
+            and not _lowercase_ambiguous_region_has_structure(value, raw_region, venue, city)
+        ):
+            return "", "", "", "", ""
         if left and not venue and not city:
             # A non-empty left side that failed the city/venue split (for
             # example ``Two Gentlemen In, NY`` where ``In`` would be the city)
             # is not valid location evidence.
             return "", "", "", "", ""
-        if anchor in COUNTRY_ALIASES.values() and anchor not in US_STATE_CODES:
+        if anchor in COUNTRY_ALIASES.values() and anchor not in REGION_CODES:
             return venue, city, "", "" if anchor == "USA" else anchor, ""
-        return venue, city, anchor, "", ""
+        return venue, city, anchor, _region_code_country(anchor), ""
 
     state_terms = _state_terms_regex(include_codes=True)
     if state_terms:
@@ -3094,7 +3171,12 @@ def _parse_string2(string2: str) -> Tuple[str, str, str, str, str]:
             # misread as Indiana merely because more text follows.  Full state
             # names remain case-insensitive.
             if len(matched_state) == 2 and matched_state != matched_state.upper():
-                return "", "", "", "", ""
+                if not (
+                    allow_lowercase_region_codes
+                    and matched_state.islower()
+                    and _is_consistently_lowercase_path_fragment(value)
+                ):
+                    return "", "", "", "", ""
             region = _state_term_to_code(matched_state)
             if region:
                 left_text = value[: match.start(1)].rstrip(" ,-")
@@ -3102,9 +3184,17 @@ def _parse_string2(string2: str) -> Tuple[str, str, str, str, str]:
                 is_full_state_name = len(matched_state) > 2
                 venue, city = _split_left_for_city_and_venue(left_text, allow_city_only=is_full_state_name)
                 venue, city = _clean_numbered_path_location_noise(venue, city)
+                if (
+                    allow_lowercase_region_codes
+                    and len(matched_state) == 2
+                    and matched_state.islower()
+                    and region in _LOWERCASE_AMBIGUOUS_REGION_CODES
+                    and not _lowercase_ambiguous_region_has_structure(value, matched_state, venue, city)
+                ):
+                    return "", "", "", "", ""
                 if left_text and not venue and not city:
                     return "", "", "", "", ""
-                return venue, city, region, "", tail
+                return venue, city, region, _region_code_country(region), tail
 
     return "", "", "", "", ""
 
@@ -3330,12 +3420,13 @@ def _normalize_etree_location_parts(result) -> Tuple[str, str, str, str]:
     raw_state = compact_ws(getattr(result, "state", "") or "")
     if raw_state:
         state_code = ""
-        if len(raw_state) == 2 and raw_state.upper() in US_STATE_CODES:
+        if len(raw_state) == 2 and raw_state.upper() in REGION_CODES:
             state_code = raw_state.upper()
         else:
-            state_code = (US_STATE_ALIASES.get(raw_state.casefold().strip()) or "").upper()
+            state_code = (US_STATE_ALIASES.get(raw_state.casefold().strip()) or CANADIAN_REGION_ALIASES.get(raw_state.casefold().strip()) or "").upper()
         if state_code:
             region = state_code
+            country = _region_code_country(state_code)
         else:
             country_value = COUNTRY_ALIASES.get(raw_state.casefold().strip())
             if country_value and country_value != "USA":
@@ -3878,7 +3969,12 @@ def _apply_setlistfm_lookup_to_record(config, record: ShowMetadata, evidence: Di
     if is_us_country(result.country, result.country_code):
         lookup_region = (result.state_code or US_STATE_ALIASES.get((result.state or "").casefold().strip(), "") or "").upper()
     else:
-        lookup_country = result.country or result.country_code or ""
+        possible_region = (result.state_code or CANADIAN_REGION_ALIASES.get((result.state or "").casefold().strip(), "") or "").upper()
+        if possible_region in CANADIAN_REGION_CODES:
+            lookup_region = possible_region
+            lookup_country = result.country or result.country_code or _region_code_country(possible_region)
+        else:
+            lookup_country = result.country or result.country_code or ""
     lookup_location = _join_location(lookup_city, lookup_region, lookup_country)
     if not (lookup_venue and lookup_city and lookup_location):
         observations.append(f"setlist.fm lookup returned incomplete venue/location for {record.artist} on {record.date}")
@@ -4711,7 +4807,10 @@ def _path_artist_hit_is_location_tail(part: str, matched_text: str) -> bool:
         return False
     for tail in candidate_tails:
         try:
-            venue, city, region, country, _parenthetical = _parse_string2(tail)
+            venue, city, region, country, _parenthetical = _parse_string2(
+                tail,
+                allow_lowercase_region_codes=_is_consistently_lowercase_path_fragment(tail),
+            )
         except Exception:
             continue
         for metadata_value in (venue, city, region, country):
@@ -5401,7 +5500,11 @@ def _resolve_date_with_structural_precedence(
 def _apply_string2_to_record(record: ShowMetadata, match: Optional[Dict[str, str]], evidence: Dict[str, List[Candidate]]) -> None:
     if not match or not match.get("string2"):
         return
-    venue, city, region, country, extra_parenthetical = _parse_string2(match["string2"])
+    string2 = match["string2"]
+    venue, city, region, country, extra_parenthetical = _parse_string2(
+        string2,
+        allow_lowercase_region_codes=_is_consistently_lowercase_path_fragment(string2),
+    )
     record.venue = venue
     record.city = city
     record.region = region

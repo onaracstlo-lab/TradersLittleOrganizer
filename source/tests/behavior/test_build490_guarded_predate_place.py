@@ -10,7 +10,7 @@ import tlo_phase23_v2 as P
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v490"
+__version__ = "v493"
 
 
 def _matcher():
@@ -143,16 +143,16 @@ def test_build490_requirements_and_manual_document_guarded_extension():
     root = Path(__file__).resolve().parents[2]
     req = "\n".join(
         paragraph.text
-        for paragraph in Document(root / "TLO_Inventory_Requirements_Working_v490.docx").paragraphs
+        for paragraph in Document(root / "TLO_Inventory_Requirements_Working_v493.docx").paragraphs
     )
-    manual = (root / "TLO_Inventory_User_Manual_v490.rtf").read_text(
+    manual = (root / "TLO_Inventory_User_Manual_v493.rtf").read_text(
         encoding="utf-8", errors="ignore"
     )
 
-    assert "Current document version: v490 (v1.7 Build 490)." in req
+    assert "Current document version: v493 (v1.7 Build 493)." in req
     assert "Todd Snider Skipper's Smokehouse, Tampa, FL 2005-04-16 sdb" in req
     assert "The literal SDB spelling is accepted only inside this guarded fallback" in req
     assert "Compliant mode is unchanged" in req
-    assert "Version v1.7 Build 490" in manual
+    assert "Version v1.7 Build 493" in manual
     assert "Todd Snider Skipper's Smokehouse, Tampa, FL 2005-04-16 sdb" in manual
     assert "Existing Artist Date ... parsing retains precedence, and Compliant mode is unchanged." in manual

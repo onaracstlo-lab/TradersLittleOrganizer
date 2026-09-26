@@ -1,0 +1,17 @@
+TLO v1.7 Build 493 - Build Verification
+
+Behavior implemented
+- Build 492 uppercase protections remain the default.
+- Non-compliant path-derived location fragments may accept exact lowercase two-letter region codes only when the fragment is consistently lowercase.
+- Mixed-case protected abbreviations remain rejected.
+- Common/word-like protected codes require a comma before the code or both venue and city; noise-word guards remain active.
+- Selected-setlist/free-form parsing remains uppercase-only; Compliant mode is unchanged.
+
+Verification results
+- Targeted Build 493 regression tests: 17 passed.
+- Requirements entry point: 1,374 passed.
+- Full suite: 1,484 passed.
+- Python compilation: 197 files compiled successfully.
+- First frozen clean extraction: all 221 payload SHA-256 hashes verified; 197 Python files compiled; requirements entry point 1,374 passed; full suite 1,484 passed.
+- Requirements DOCX: 106 pages. Page 1 and pages 83-106 visually reviewed at full render resolution; pages 2-82 are pixel-identical to the already-reviewed Build 492 render. No clipping, overlap, blank-page, or margin defects were found.
+- GitHub Build Process artifacts are not included in this source bundle.

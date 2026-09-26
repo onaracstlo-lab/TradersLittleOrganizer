@@ -1,4 +1,4 @@
-__version__ = "v490"
+__version__ = "v493"
 import re
 
 LOCATION_CONNECTIVE_WORDS = frozenset({
@@ -20,6 +20,37 @@ US_STATE_CODE_TO_NAME = {
     "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
     "WI": "Wisconsin", "WY": "Wyoming",
 }
+
+
+CANADIAN_REGION_CODE_TO_NAME = {
+    "AB": "Alberta",
+    "BC": "British Columbia",
+    "MB": "Manitoba",
+    "NB": "New Brunswick",
+    "NL": "Newfoundland and Labrador",
+    "NS": "Nova Scotia",
+    "NT": "Northwest Territories",
+    "NU": "Nunavut",
+    "ON": "Ontario",
+    "PE": "Prince Edward Island",
+    "QC": "Quebec",
+    "SK": "Saskatchewan",
+    "YT": "Yukon",
+}
+
+# NT is also the standard abbreviation for Australia's Northern Territory.
+# TLO still recognizes NT as a region anchor, but does not infer Canada from
+# the abbreviation alone unless the surrounding evidence supplies Canada.
+AMBIGUOUS_CANADIAN_REGION_CODES = frozenset({"NT"})
+
+CANADIAN_REGION_ALIASES = {
+    **{name.lower(): code for code, name in CANADIAN_REGION_CODE_TO_NAME.items()},
+    "quebec": "QC",
+    "québec": "QC",
+    "newfoundland": "NL",
+    "labrador": "NL",
+}
+CANADIAN_REGION_CODES = tuple(sorted(CANADIAN_REGION_CODE_TO_NAME.keys()))
 
 US_STATE_OLD_ABBREVIATIONS = {
     "ala": "AL",
@@ -105,6 +136,8 @@ US_STATE_OLD_TERMS = tuple(
     if term not in {code.lower() for code in US_STATE_CODES}
 )
 STATE_SEARCH_TERMS = tuple(list(US_STATE_CODES) + list(US_STATE_FULL_NAMES) + list(US_STATE_OLD_TERMS))
+CANADIAN_REGION_FULL_NAMES = tuple(CANADIAN_REGION_CODE_TO_NAME[code] for code in CANADIAN_REGION_CODES)
+REGION_CODES = tuple(sorted(set(US_STATE_CODES) | set(CANADIAN_REGION_CODES)))
 
 COUNTRY_ALIASES = {
     'albania': 'Albania',
