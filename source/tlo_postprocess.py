@@ -1,6 +1,6 @@
 """Postprocess metadata logs into setlist files, bootlist.csv, duplicate/group outputs, and summary/unidentified-show files."""
 
-__version__ = "v510"
+__version__ = "v511"
 import csv
 import hashlib
 import json

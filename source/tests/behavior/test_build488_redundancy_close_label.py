@@ -31,9 +31,9 @@ def test_build488_redundancy_groups_layout_and_behavior_unchanged():
 
 def test_build488_docs_describe_label_only_change():
     from docx import Document
-    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v510.docx").paragraphs)
-    manual = Path("TLO_Inventory_User_Manual_v510.rtf").read_text(encoding="utf-8", errors="ignore")
-    assert "Current document version: v510 (TLO v1.7)." in req
+    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v511.docx").paragraphs)
+    manual = Path("TLO_Inventory_User_Manual_v511.rtf").read_text(encoding="utf-8", errors="ignore")
+    assert "Current document version: v511 (TLO v1.7)." in req
     assert "Build 488: Redundancy Groups Close label" in req
     assert "The editor-dismiss button is labeled Close" in req
     assert "Build 488 Redundancy Groups Close label" in manual

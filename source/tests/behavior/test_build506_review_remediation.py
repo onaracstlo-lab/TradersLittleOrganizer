@@ -1,6 +1,6 @@
 """Build 506 remediation for the v505 targeted review findings."""
 
-__version__ = "v510"
+__version__ = "v511"
 
 import importlib.util
 import os

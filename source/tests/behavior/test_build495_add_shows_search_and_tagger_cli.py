@@ -93,14 +93,14 @@ def test_build495_tlo_tag_explicit_corrupt_folder_policy_overrides_keep_default(
 def test_build495_documentation_records_new_search_path_and_tagger_contract():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v510.docx").paragraphs)
-    manual = (ROOT / "TLO_Inventory_User_Manual_v510.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v511.docx").paragraphs)
+    manual = (ROOT / "TLO_Inventory_User_Manual_v511.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8")
-    assert "Current document version: v510 (TLO v1.7)." in req
+    assert "Current document version: v511 (TLO v1.7)." in req
     assert "Build 495: Add New Shows Search Path and explicit tlo-tag search folder" in req
     assert "pre-filled with the current TLOHome/readyForXfer path" in req
     assert "A search folder is required on every command-line run" in req
     assert "--corrupt-folders defaults to never" in req
-    assert "Version v1.7 Build 510" in manual
+    assert "Version v1.7 Build 511" in manual
     assert "Build 495: Add New Shows now has a Search Path textbox" in manual
     assert "requires an explicit search folder" in faq

@@ -288,8 +288,8 @@ def test_build501_unmatched_generic_unknown_tag_is_still_blankened():
 def test_build501_requirements_reconcile_review_findings_and_remove_stale_label():
     from docx import Document
     root = Path(__file__).resolve().parents[2]
-    text = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v510.docx").paragraphs)
-    assert "Current document version: v510 (TLO v1.7)." in text
+    text = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v511.docx").paragraphs)
+    assert "Current document version: v511 (TLO v1.7)." in text
     assert "Old Grammar" not in text
     assert "14.8 Collection Search GUI (tlo-gsi)" in text
     assert "14.9 Artist Database Search GUI (search-artist-db)" in text
@@ -300,8 +300,8 @@ def test_build501_requirements_reconcile_review_findings_and_remove_stale_label(
 
 def test_build501_current_manual_and_changes_are_versioned():
     root = Path(__file__).resolve().parents[2]
-    manual = (root / "TLO_Inventory_User_Manual_v510.rtf").read_text(encoding="utf-8", errors="ignore")
-    changes = (root / "CHANGES_v510.txt").read_text(encoding="utf-8")
-    assert "Version v1.7 Build 510" in manual
+    manual = (root / "TLO_Inventory_User_Manual_v511.rtf").read_text(encoding="utf-8", errors="ignore")
+    changes = (root / "CHANGES_v511.txt").read_text(encoding="utf-8")
+    assert "Version v1.7 Build 511" in manual
     assert "Build 501" in manual
     assert "Review remediation" in changes

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v510"
+__version__ = "v511"
 
 import hashlib
 import json
@@ -28,7 +28,8 @@ from tlo_bootlist_volume_policy import (
 )
 from tlo_tree_compare import directory_trees_exactly_match
 from tlo_path_policy import OS_MANAGED_DIR_NAMES
-from tlo_path_inputs import normalize_platform_input_path
+from tlo_path_inputs import normalize_platform_input_path, strip_optional_quotes
+from inventory_list_lib import split_search_path_entries
 from tlo_volume_label import resolve_volume_label
 from tlo_redundancy import (
     RedundancyGroup,
@@ -200,6 +201,33 @@ def request_id_for(request_file: str, destination: str) -> str:
     return f"{stem[:48]}--{digest}"
 
 
+def _normalized_paths_input_identity(request_input: str) -> str:
+    entries = split_search_path_entries(request_input)
+    return "\n".join(strip_optional_quotes(entry).strip() for entry in entries)
+
+
+def _copy_request_name_from_paths_input(request_input: str) -> str:
+    entries = split_search_path_entries(request_input)
+    if not entries:
+        return "Copy Request"
+    value = strip_optional_quotes(entries[0]).strip().rstrip("\\/")
+    leaf = re.split(r"[\\/]", value)[-1] if value else ""
+    if leaf.lower().endswith(".txt"):
+        leaf = leaf[:-4]
+    leaf = " ".join(leaf.split()).strip()
+    return leaf[:80] or "Copy Request"
+
+
+def request_id_for_paths(request_input: str, destination: str) -> str:
+    request_identity = _normalized_paths_input_identity(request_input)
+    if not request_identity:
+        raise CopyRequestError("Copy Request Path(s) is required.")
+    destination_abs = _normalized_identity_path(destination)
+    digest = hashlib.sha256((request_identity + "\0" + destination_abs).encode("utf-8", errors="surrogatepass")).hexdigest()[:12]
+    stem = SAFE_ID_RE.sub("-", _copy_request_name_from_paths_input(request_input)).strip("-._") or "copy-request"
+    return f"{stem[:48]}--{digest}"
+
+
 def request_dir(tlo_home: str, request_id: str) -> str:
     return os.path.join(copy_requests_root(tlo_home), request_id)
 
@@ -240,6 +268,56 @@ def request_lines_from_text(text: str) -> List[str]:
     return result
 
 
+def aggregate_request_paths_input(request_input: str) -> Tuple[str, List[Dict[str, object]]]:
+    """Expand a Copy Request Path(s) field into one persisted request snapshot.
+
+    Semicolon splitting and optional double-quote handling are exactly the same
+    as the main GUI Path(s) field. Entries ending in .txt are read immediately
+    as request-list files. Their blank/#/REM comment lines are discarded and
+    their usable request lines are inserted at that position. Other entries are
+    persisted literally as request items, so paths and ordinary Artist/Show text
+    may be mixed freely. The returned snapshot is self-contained; continuing the
+    request never requires the source .txt files to still exist.
+    """
+    try:
+        entries = split_search_path_entries(request_input)
+    except ValueError as exc:
+        raise CopyRequestError(str(exc)) from exc
+    if not entries:
+        raise CopyRequestError("Copy Request Path(s) is required.")
+
+    aggregated: List[str] = []
+    sources: List[Dict[str, object]] = []
+    for entry in entries:
+        value = strip_optional_quotes(entry).strip()
+        if not value:
+            continue
+        if value.lower().endswith(".txt"):
+            source_path = normalize_platform_input_path(value)
+            text = _request_text_from_file(source_path)
+            file_items = request_lines_from_text(text)
+            if not file_items:
+                raise CopyRequestError(f"Copy Request .txt file contains no request items: {source_path}")
+            aggregated.extend(file_items)
+            sources.append({
+                "kind": "file",
+                "input": value,
+                "expanded_items": list(file_items),
+            })
+            continue
+
+        aggregated.append(value)
+        sources.append({
+            "kind": "item",
+            "input": value,
+            "expanded_items": [value],
+        })
+
+    if not aggregated:
+        raise CopyRequestError("Copy Request Path(s) contains no request items.")
+    return "\n".join(aggregated) + "\n", sources
+
+
 def _default_state(request_file: str, destination: str, request_text: str, request_id: str) -> Dict[str, object]:
     now = _now_iso()
     return {
@@ -257,6 +335,62 @@ def _default_state(request_file: str, destination: str, request_text: str, reque
         "pending_copy": {},
         "history": [],
     }
+
+
+def _default_paths_state(
+    request_input: str,
+    destination: str,
+    request_text: str,
+    request_id: str,
+    sources: Sequence[Mapping[str, object]],
+) -> Dict[str, object]:
+    now = _now_iso()
+    return {
+        "schema": STATE_SCHEMA,
+        "request_id": request_id,
+        "name": _copy_request_name_from_paths_input(request_input),
+        "input_mode": "paths",
+        "request_input": str(request_input or "").strip(),
+        "request_sources": [dict(source) for source in sources],
+        "request_digest": _digest_text(request_text),
+        "destination": os.path.abspath(destination),
+        "created_at": now,
+        "updated_at": now,
+        "closed": False,
+        "status": STATUS_IN_PROGRESS,
+        "completed": {},
+        "pending_copy": {},
+        "history": [],
+    }
+
+
+def create_or_open_request_paths(tlo_home: str, request_input: str, destination: str) -> Dict[str, object]:
+    """Create/open a request from the GUI Path(s) field.
+
+    The request identity is derived from the entered Path(s) expression plus the
+    Destination before any .txt file is opened. Therefore an already-saved
+    request can be reopened with the same Path(s) text even if a contributing
+    .txt file has since been moved or deleted. New requests expand every .txt
+    source once and persist the resulting aggregate snapshot.
+    """
+    destination = os.path.abspath(os.path.normpath(destination))
+    if not os.path.isdir(destination):
+        raise CopyRequestError(f"Destination is not an accessible folder: {destination}")
+    try:
+        rid = request_id_for_paths(request_input, destination)
+    except ValueError as exc:
+        raise CopyRequestError(str(exc)) from exc
+    existing = load_request(tlo_home, rid, missing_ok=True)
+    if existing:
+        return existing
+
+    text, sources = aggregate_request_paths_input(request_input)
+    state = _default_paths_state(request_input, destination, text, rid, sources)
+    directory = request_dir(tlo_home, rid)
+    os.makedirs(os.path.join(directory, REPORTS_DIRNAME), exist_ok=True)
+    _atomic_write_text(os.path.join(directory, REQUEST_SNAPSHOT_FILENAME), text)
+    _atomic_write_json(state_path(tlo_home, rid), state)
+    return state
 
 
 def create_or_open_request(tlo_home: str, request_file: str, destination: str) -> Dict[str, object]:
@@ -311,8 +445,14 @@ def saved_request_text(tlo_home: str, request_id: str) -> str:
         raise CopyRequestError(f"Saved Copy Request specification is missing: {path_name}") from exc
 
 
+def request_uses_persisted_paths_input(state: Mapping[str, object]) -> bool:
+    return str(state.get("input_mode", "") or "").casefold() == "paths"
+
+
 def source_request_change_state(tlo_home: str, state: Mapping[str, object]) -> str:
-    """Return unchanged, changed, or missing for the original request file."""
+    """Return unchanged, changed, missing, or snapshot-only for the source input."""
+    if request_uses_persisted_paths_input(state):
+        return "snapshot-only"
     path_name = str(state.get("request_file", "") or "")
     if not path_name or not os.path.isfile(path_name):
         return "missing"

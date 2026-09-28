@@ -1,4 +1,4 @@
-__version__ = "v510"
+__version__ = "v511"
 from tlo_diagnostics import debug_suppressed_exception
 import os
 from typing import Dict, List

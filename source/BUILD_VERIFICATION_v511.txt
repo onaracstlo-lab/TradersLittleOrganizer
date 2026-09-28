@@ -1,0 +1,51 @@
+TLO v1.7 Build 511 - Build Verification
+Verification date: 2026-09-28
+
+Scope
+-----
+Build 511 changes the Copy Requests New Copy Request input from Request File to Path(s). The new field uses the main GUI Path(s) semicolon and optional-double-quote parsing rules, accepts mixed direct paths/volumes, plain request text, and .txt request files, supports repeated drag-and-drop append behavior, expands .txt files once using the toBeInventoried.txt blank/#/REM comment convention, and persists the ordered aggregate so later request operations do not require the source .txt files.
+
+Verification performed
+----------------------
+1. Python compilation
+   python -m compileall -q .
+   PASS
+
+2. Full automated test suite
+   python -m pytest -q -p no:cacheprovider
+   1,595 passed; 1 expected warning from the duplicate-ZIP-member security regression fixture.
+
+3. Requirements compatibility suite
+   python -m pytest -q -p no:cacheprovider test_tlo_requirements.py
+   1,420 passed.
+
+4. Build 511 focused regression suite
+   python -m pytest -q -p no:cacheprovider tests/behavior/test_build511_copy_request_paths_input.py
+   6 passed.
+
+5. Ruff
+   Ruff is not installed in the isolated packaging environment used for this source-bundle verification, so it was not claimed as locally executed here. TLO GitHub Build Process v095 performs the mandatory source gate with the selected build Python using:
+       python -m ruff check --select F821,F822,F823,F541 .
+   That build-process gate remains authoritative for release construction.
+
+6. Requirements document
+   TLO_Inventory_Requirements_Working_v511.docx rendered successfully to 105 pages. All pages were reviewed by contact sheets; the changed Copy Requests requirements and revision-index pages were also inspected full size. No clipping or layout defect was observed.
+
+7. User Manual
+   TLO_Inventory_User_Manual_v511.rtf rendered successfully to 46 pages. The title/version page, Copy Requests section, and Build 511 release-note page were inspected full size. The Windows example renders as:
+       c:\tmpBoots; c:\tlo\copyMe.txt; Allman Brothers Band
+   and the RTF source correctly escapes the backslashes.
+
+8. Behavior verified by Build 511 regressions
+   - Path(s) uses the same semicolon/quoted-entry splitter as the main GUI Path(s) field.
+   - Mixed direct paths, .txt files, and plain Artist/Show request text preserve input order when aggregated.
+   - .txt blank lines and whole-line # / REM comments are ignored.
+   - Repeated native-Windows drops append using the same Path(s) helper as the main GUI.
+   - Browse .txt supports multiple selections and appends them.
+   - The expanded request aggregate and source expansion metadata are persisted before copy processing.
+   - Once created, an existing request can reopen and continue after a contributing .txt file is moved or deleted; the saved aggregate is authoritative.
+   - Legacy single-Request-File request states remain supported.
+
+Packaging
+---------
+Superseded current Build 510 change/verification/manifest files are archived in old-change-logs.zip before removal from the current bundle. Build 511 current filenames and version stamps are aligned.

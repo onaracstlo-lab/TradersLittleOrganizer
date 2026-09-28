@@ -150,13 +150,13 @@ def test_build427_documentation_contract():
 
     root = Path(__file__).resolve().parents[2]
     requirements = "\n".join(
-        paragraph.text for paragraph in Document(root / "TLO_Inventory_Requirements_Working_v510.docx").paragraphs
+        paragraph.text for paragraph in Document(root / "TLO_Inventory_Requirements_Working_v511.docx").paragraphs
     )
-    manual = (root / "TLO_Inventory_User_Manual_v510.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual = (root / "TLO_Inventory_User_Manual_v511.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v510 (TLO v1.7)." in requirements
+    assert "Current document version: v511 (TLO v1.7)." in requirements
     assert "Show/FLAC/Set 1 and Show/FLAC/Set 2" in requirements
     assert "must not enumerate or recursively revisit Show's sibling directories" in requirements
-    assert "Version v1.7 Build 510" in manual
+    assert "Version v1.7 Build 511" in manual
     assert "Show/FLAC/Set 1 and Show/FLAC/Set 2" in manual
     assert "It does not rescan sibling show folders" in manual

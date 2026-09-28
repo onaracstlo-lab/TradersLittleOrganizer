@@ -1,4 +1,4 @@
-__version__ = "v510"
+__version__ = "v511"
 from tlo_diagnostics import debug_suppressed_exception
 import os
 import re
@@ -430,14 +430,16 @@ def _parse_inventory_file(file_path):
     return parsed_items
 
 
-def _split_search_path_entries(value):
+def split_search_path_entries(value):
     """Split Path(s) entries on semicolons outside quoted strings.
 
-    Build 476 restored semicolon-separated entries in the single-line GUI
-    field. Build 478 treats commas and apostrophes as ordinary path/directive
-    characters. Matching double quotes remain accepted around entries or
-    values, but are optional. Single quotes are always ordinary input text, so
-    names such as ``Tito Puente's`` cannot create an unmatched-quote error.
+    This is the shared parser for every GUI field that promises the main
+    Path(s) semicolon/quoting rules. Build 476 restored semicolon-separated
+    entries in the single-line GUI field. Build 478 treats commas and
+    apostrophes as ordinary path/directive characters. Matching double quotes
+    remain accepted around entries or values, but are optional. Single quotes
+    are always ordinary input text, so names such as ``Tito Puente's`` cannot
+    create an unmatched-quote error.
     """
     text = str(value or "").strip()
     if not text:
@@ -471,6 +473,11 @@ def _split_search_path_entries(value):
     if entry:
         entries.append(entry)
     return entries
+
+
+# Backward-compatible private name used by older callers/tests.
+def _split_search_path_entries(value):
+    return split_search_path_entries(value)
 
 
 def _looks_like_text_control_path(path_text):

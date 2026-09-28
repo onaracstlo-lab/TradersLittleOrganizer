@@ -334,14 +334,14 @@ def test_build485_explicit_empty_roots_stays_disconnected_and_volume_counts_uniq
 def test_build485_documents_describe_persistent_copy_requests_and_closed_state():
     from docx import Document
 
-    requirements = Document("TLO_Inventory_Requirements_Working_v510.docx")
+    requirements = Document("TLO_Inventory_Requirements_Working_v511.docx")
     requirement_text = "\n".join(paragraph.text for paragraph in requirements.paragraphs)
     assert "Build 485: persistent multi-pass Copy Requests" in requirement_text
     assert "Artist + single date/year" in requirement_text
     assert "Artist + increasing year range using the established yy-yy wraparound rule" in requirement_text
     assert "Requests are Open until complete or explicitly Closed" in requirement_text
 
-    manual = Path("TLO_Inventory_User_Manual_v510.rtf").read_text(encoding="utf-8")
+    manual = Path("TLO_Inventory_User_Manual_v511.rtf").read_text(encoding="utf-8")
     assert "Build 485 persistent Copy Requests" in manual
     assert "Grateful Dead 1977" in manual
     assert "Closed" in manual

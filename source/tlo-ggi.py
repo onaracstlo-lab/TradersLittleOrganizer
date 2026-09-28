@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v510"
+__version__ = "v511"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -131,12 +131,12 @@ from tlo_inventory_update import (
     archive_updater_delete_script_for_new_session,
 )
 from tlo_dragdrop import (
+    append_search_path_values,
     create_tk_root,
     enable_folder_path_drop,
     enable_search_path_folder_drop,
     enable_single_folder_or_txt_drop,
     enable_leaf_folder_drop,
-    enable_single_txt_file_drop,
 )
 from tlo_manual_updates import (
     ManualUpdateError,
@@ -153,7 +153,7 @@ from tlo_copy_requests import (
     copy_available,
     destination_stale_lock_details,
     clear_destination_stale_lock,
-    create_or_open_request,
+    create_or_open_request_paths,
     delete_request,
     evaluate_request,
     format_bytes,
@@ -3410,13 +3410,23 @@ class CopyRequestsWindow:
         request_var = tk.StringVar()
         destination_var = tk.StringVar()
 
-        ttk.Label(frame, text="Request File").grid(row=0, column=0, sticky="w", padx=(0, 6), pady=5)
+        ttk.Label(frame, text="Path(s)").grid(row=0, column=0, sticky="w", padx=(0, 6), pady=5)
         request_entry = ttk.Entry(frame, textvariable=request_var, width=72)
         request_entry.grid(row=0, column=1, sticky="ew", pady=5)
+
+        def browse_request_files():
+            selected = filedialog.askopenfilenames(
+                parent=dialog,
+                title="Select Copy Request text file(s)",
+                filetypes=[("Text files", "*.txt")],
+            )
+            if selected:
+                request_var.set(append_search_path_values(request_var.get(), list(selected)))
+
         ttk.Button(
             frame,
-            text="Browse",
-            command=lambda: request_var.set(filedialog.askopenfilename(parent=dialog, title="Select Copy Request", filetypes=[("Text files", "*.txt"), ("All files", "*")]) or request_var.get()),
+            text="Browse .txt",
+            command=browse_request_files,
         ).grid(row=0, column=2, padx=(6, 0), pady=5)
 
         ttk.Label(frame, text="Destination").grid(row=1, column=0, sticky="w", padx=(0, 6), pady=5)
@@ -3428,10 +3438,9 @@ class CopyRequestsWindow:
             command=lambda: destination_var.set(filedialog.askdirectory(parent=dialog, title="Select Copy Request Destination") or destination_var.get()),
         ).grid(row=1, column=2, padx=(6, 0), pady=5)
 
-        enable_single_txt_file_drop(
+        enable_search_path_folder_drop(
             request_entry,
             request_var,
-            field_label="Request File",
             on_error=lambda message: messagebox.showerror("New Copy Request", message, parent=dialog),
         )
         enable_folder_path_drop(
@@ -3444,8 +3453,11 @@ class CopyRequestsWindow:
         ttk.Label(
             frame,
             text=(
-                "The request file uses the same blank-line/#/REM comment convention as toBeInventoried.txt. "
-                "Each line may be a complete Show Name, Artist, Artist plus yyyy-mm-dd, or Artist plus yyyy-yyyy/yy-yy range."
+                "Path(s) accepts semicolon-separated request items, folders/paths, and .txt request files in any mix. "
+                "Repeated drag/drop appends like the main Path(s) field. A .txt file uses the same blank-line/#/REM "
+                "comment convention as toBeInventoried.txt; its usable lines are expanded and saved immediately, so the "
+                "file is not needed again. Request items may be a complete Show Name, Artist, Artist plus yyyy-mm-dd, "
+                "Artist plus yyyy-yyyy/yy-yy range, or a direct path/volume."
             ),
             wraplength=700,
             justify="left",
@@ -3455,10 +3467,10 @@ class CopyRequestsWindow:
         buttons.grid(row=3, column=0, columnspan=3, sticky="e")
 
         def create():
-            request_file = request_var.get().strip()
+            request_paths = request_var.get().strip()
             destination = destination_var.get().strip()
             try:
-                state = create_or_open_request(self.tlo_home, request_file, destination)
+                state = create_or_open_request_paths(self.tlo_home, request_paths, destination)
             except Exception as exc:
                 messagebox.showerror("New Copy Request", str(exc), parent=dialog)
                 return

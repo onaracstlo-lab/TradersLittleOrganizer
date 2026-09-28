@@ -1,4 +1,4 @@
-__version__ = "v510"
+__version__ = "v511"
 
 """Native-Windows-only drag-and-drop helpers for the TLO Tk GUI.
 
@@ -156,6 +156,11 @@ def _append_search_path_drop_values(existing: str, values: list[str]) -> str:
     if current.endswith(";"):
         return current + joined
     return current + ";" + joined
+
+
+def append_search_path_values(existing: str, values: list[str]) -> str:
+    """Public helper for fields that use the main GUI Path(s) append rules."""
+    return _append_search_path_drop_values(existing, values)
 
 
 def enable_folder_path_drop(

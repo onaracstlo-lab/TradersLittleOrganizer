@@ -216,13 +216,13 @@ def test_build505_review_documentation_and_packaging_cleanup():
     import re
 
     root = Path(__file__).resolve().parents[2]
-    doc = Document(root / "TLO_Inventory_Requirements_Working_v510.docx")
+    doc = Document(root / "TLO_Inventory_Requirements_Working_v511.docx")
     paragraphs = [p.text for p in doc.paragraphs]
     sec20 = next(i for i, text in enumerate(paragraphs) if text.startswith("20. Destructive Operations Safety"))
     revision = next(i for i, text in enumerate(paragraphs) if text.startswith("21. Revision Index"))
     appendix_a = next(i for i, text in enumerate(paragraphs) if text.startswith("Appendix A -"))
     assert sec20 < revision < appendix_a
-    assert paragraphs[revision] == "21. Revision Index (Build 398-510)"
+    assert paragraphs[revision] == "21. Revision Index (Build 398-511)"
     assert not any(re.search(r"\bBuild\s+\d+", text) for text in paragraphs[:revision])
     req = "\n".join(paragraphs)
     assert "BOM-marked UTF-16 and NUL-dominant BOM-less UTF-16 LE/BE must be recognized before UTF-8" in req
@@ -231,7 +231,7 @@ def test_build505_review_documentation_and_packaging_cleanup():
     assert "exactly the same API key value as SETLISTFM_API_KEY" in req
     assert "Delete extra tags" not in req
 
-    manual = (root / "TLO_Inventory_User_Manual_v510.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual = (root / "TLO_Inventory_User_Manual_v511.rtf").read_text(encoding="utf-8", errors="ignore")
     assert manual.rfind("Build 500:") < manual.rfind("Build 501:") < manual.rfind("Build 502:") < manual.rfind("Build 503:") < manual.rfind("Build 504") < manual.rfind("Build 505")
     assert "ambiguous and you must write [Volume] explicitly" in manual
     assert "System Volume Information" in manual
