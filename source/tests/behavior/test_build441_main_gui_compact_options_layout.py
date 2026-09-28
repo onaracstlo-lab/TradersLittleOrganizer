@@ -56,6 +56,7 @@ def test_build441_checkbox_internal_layout_is_unchanged():
         "as_is_artist_name": (2, 1),
         "tag_copy_and_delete_enabled": (2, 2),
         "thorough_setlist_matching": (3, 0),
+        "proper_grammar": (3, 1),
         "delete_extra_tags": (3, 3),
     }
     assert len(GUI_CHECKBOX_OPTIONS) == len(expected)

@@ -1,6 +1,6 @@
 """Exact recursive directory-tree comparison and copy/alternate collision helpers."""
 
-__version__ = "v493"
+__version__ = "v510"
 
 import hashlib
 import os
@@ -25,10 +25,19 @@ def _normalized_relative(path_name: str, root: str) -> str:
     return os.path.normcase(os.path.normpath(os.path.relpath(path_name, root)))
 
 
-def _tree_manifest(root: str) -> Tuple[Set[str], Dict[str, int]]:
+def _raise_walk_error(error: OSError) -> None:
+    raise error
+
+
+def _tree_manifest(root: str, *, ignore_root_names: Set[str] | None = None) -> Tuple[Set[str], Dict[str, int]]:
     directories: Set[str] = set()
     files: Dict[str, int] = {}
-    for current_dir, dir_names, file_names in os.walk(root):
+    ignored = {str(name).casefold() for name in (ignore_root_names or set())}
+    root_norm = os.path.normcase(os.path.abspath(os.path.normpath(root)))
+    for current_dir, dir_names, file_names in os.walk(root, onerror=_raise_walk_error):
+        if os.path.normcase(os.path.abspath(os.path.normpath(current_dir))) == root_norm and ignored:
+            dir_names[:] = [name for name in dir_names if name.casefold() not in ignored]
+            file_names = [name for name in file_names if name.casefold() not in ignored]
         for dir_name in dir_names:
             full_path = os.path.join(current_dir, dir_name)
             directories.add(_normalized_relative(full_path, root))
@@ -50,7 +59,7 @@ def _sha256(path_name: str) -> str:
     return digest.hexdigest()
 
 
-def directory_trees_exactly_match(left_root: str, right_root: str) -> bool:
+def directory_trees_exactly_match(left_root: str, right_root: str, *, ignore_root_names: Set[str] | None = None) -> bool:
     """Return True only for identical recursive structure and byte contents.
 
     Exact identity requires the same relative descendant folders (including
@@ -70,8 +79,8 @@ def directory_trees_exactly_match(left_root: str, right_root: str) -> bool:
         pass
 
     try:
-        left_dirs, left_files = _tree_manifest(left_root)
-        right_dirs, right_files = _tree_manifest(right_root)
+        left_dirs, left_files = _tree_manifest(left_root, ignore_root_names=ignore_root_names)
+        right_dirs, right_files = _tree_manifest(right_root, ignore_root_names=ignore_root_names)
         if left_dirs != right_dirs or left_files != right_files:
             return False
         for relative in sorted(left_files):

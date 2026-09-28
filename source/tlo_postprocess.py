@@ -1,7 +1,8 @@
 """Postprocess metadata logs into setlist files, bootlist.csv, duplicate/group outputs, and summary/unidentified-show files."""
 
-__version__ = "v493"
+__version__ = "v510"
 import csv
+import hashlib
 import json
 import os
 import re
@@ -571,9 +572,27 @@ def _setlist_text_output_size(text: str) -> int:
     return len(output.encode("utf-8"))
 
 
-def _setlist_file_size_matches(path_name: str, new_text: str) -> bool:
+def _setlist_output_bytes(text: str) -> bytes:
+    output = text or ""
+    if not output.endswith("\n"):
+        output += "\n"
+    return output.encode("utf-8")
+
+
+def _setlist_file_matches_text(path_name: str, new_text: str) -> bool:
+    expected = _setlist_output_bytes(new_text)
     try:
-        return os.path.getsize(path_name) == _setlist_text_output_size(new_text)
+        if os.path.getsize(path_name) != len(expected):
+            return False
+        expected_digest = hashlib.sha256(expected).digest()
+        hasher = hashlib.sha256()
+        with open(path_name, "rb") as infile:
+            while True:
+                chunk = infile.read(65536)
+                if not chunk:
+                    break
+                hasher.update(chunk)
+        return hasher.digest() == expected_digest
     except OSError:
         return False
 
@@ -594,15 +613,14 @@ def _existing_alt_numbers_for_base(base: str, setlists_dir: str, used: set) -> L
 
 
 def _resolve_setlist_filename_for_text(base: str, setlists_dir: str, new_text: str, used: set) -> tuple[str, bool]:
-    """Return (filename, should_write) using size-aware alternate handling.
+    """Return (filename, should_write) using content-aware alternate handling.
 
     The first requested filename remains <base>.txt. If that name already exists
-    and its file size is the same size that the new setlist text would write, the
+    and its UTF-8 content has the same SHA-256 digest as the new setlist text, the
     new setlist is treated as a duplicate and the row resolves to the existing
     file. If the size differs, the new file becomes <base>(altN).txt, where N is
     one greater than the highest existing alternate number for that base. Existing
-    alternate files are also checked by size before a new alternate is created.
-    File contents are not read for collision comparison.
+    alternate files are also verified by SHA-256 before a new alternate is created.
     """
     os.makedirs(setlists_dir, exist_ok=True)
     base = _truncate_setlist_base(base)
@@ -615,7 +633,7 @@ def _resolve_setlist_filename_for_text(base: str, setlists_dir: str, new_text: s
     if exact_name.casefold() not in folded_known:
         used.add(exact_name)
         return exact_name, True
-    if os.path.isfile(exact_path) and _setlist_file_size_matches(exact_path, new_text):
+    if os.path.isfile(exact_path) and _setlist_file_matches_text(exact_path, new_text):
         used.add(exact_name)
         return exact_name, False
 
@@ -623,7 +641,7 @@ def _resolve_setlist_filename_for_text(base: str, setlists_dir: str, new_text: s
     for number in sorted(alt_numbers):
         alt_name = _candidate_setlist_name(base, f"(alt{number})")
         alt_path = os.path.join(setlists_dir, alt_name)
-        if os.path.isfile(alt_path) and _setlist_file_size_matches(alt_path, new_text):
+        if os.path.isfile(alt_path) and _setlist_file_matches_text(alt_path, new_text):
             used.add(alt_name)
             return alt_name, False
 
@@ -634,7 +652,7 @@ def _resolve_setlist_filename_for_text(base: str, setlists_dir: str, new_text: s
         if alt_name.casefold() not in folded_known and not os.path.exists(alt_path):
             used.add(alt_name)
             return alt_name, True
-        if os.path.isfile(alt_path) and _setlist_file_size_matches(alt_path, new_text):
+        if os.path.isfile(alt_path) and _setlist_file_matches_text(alt_path, new_text):
             used.add(alt_name)
             return alt_name, False
         next_number += 1
@@ -642,7 +660,7 @@ def _resolve_setlist_filename_for_text(base: str, setlists_dir: str, new_text: s
 
 def _unique_setlist_filename(base: str, used: set) -> str:
     # Compatibility helper for older callers/tests. New postprocess row building
-    # uses _resolve_setlist_filename_for_text so collisions can be size-aware.
+    # uses _resolve_setlist_filename_for_text so collisions can be content-aware.
     base = _truncate_setlist_base(base)
     folded_used = {name.casefold() for name in used}
     candidate = _candidate_setlist_name(base)
@@ -1900,7 +1918,8 @@ def postprocess_metadata_outputs(config) -> Dict[str, int | str]:
     stage_started = time.monotonic()
     current_tokens = list(getattr(config, "current_run_log_tokens", []) or [])
     runtime_records = getattr(config, "current_metadata_records", None)
-    if isinstance(runtime_records, list) and runtime_records:
+    runtime_records_ready = bool(getattr(config, "current_metadata_records_ready", False))
+    if isinstance(runtime_records, list) and (runtime_records or runtime_records_ready):
         records = _normalize_metadata_records_for_postprocess(runtime_records)
         elapsed = _record_postprocess_timing(timing_entries, "use in-memory metadata records", stage_started)
         _postprocess_status(config, f"using in-memory metadata records complete: {len(records)} record(s) ({_format_elapsed_seconds(elapsed)})")

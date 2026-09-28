@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v493"
+__version__ = "v510"
 
 import csv
 import os
@@ -17,7 +17,7 @@ from tlo_constants import (
     LOWERCASE_COMMON_STATE_CODES, MONTH_NAME_CASED_PATTERN, US_STATE_ALIASES, US_STATE_CODES,
 )
 from tlo_text_utils import (
-    MAX_TEXT_FULL_BYTES, MAX_TEXT_SAMPLE_BYTES, compact_ws, normalized_compare_value, safe_title,
+    MAX_TEXT_FULL_BYTES, compact_ws, normalized_compare_value, read_text_file_sample, safe_title,
 )
 
 
@@ -57,35 +57,17 @@ def _norm_key(value: str) -> str:
 
 
 def _read_text_file(path: str) -> Tuple[str, str]:
-    """Read only the bounded setlist sample needed by the header parser.
-
-    Files larger than the full-input ceiling are rejected; otherwise at most
-    the configured sample ceiling is read because callers consume only the
-    first 100 metadata lines.
-    """
+    """Read the bounded selected-setlist sample through the shared text reader."""
     file_path = Path(path)
     try:
         if file_path.stat().st_size > MAX_TEXT_FULL_BYTES:
             return "", "too-large"
-        with file_path.open("rb") as handle:
-            data = handle.read(MAX_TEXT_SAMPLE_BYTES)
     except OSError:
         raise
-    if not data:
+    text = read_text_file_sample(str(file_path))
+    if not text:
         return "", "empty"
-    for enc in ("utf-8-sig", "utf-16", "utf-16-le", "utf-16-be"):
-        try:
-            text = data.decode(enc)
-            if text.count("\x00") < max(3, len(text) // 100):
-                return text.replace("\r\n", "\n").replace("\r", "\n"), enc
-        except UnicodeDecodeError:
-            pass
-    for enc in ("utf-8", "cp1252", "latin-1"):
-        try:
-            return data.decode(enc).replace("\r\n", "\n").replace("\r", "\n"), enc
-        except UnicodeDecodeError:
-            pass
-    return data.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n"), "utf-8-replace"
+    return text.replace("\r\n", "\n").replace("\r", "\n"), "shared"
 
 
 def _content_lines(text: str, limit: Optional[int] = None) -> List[str]:

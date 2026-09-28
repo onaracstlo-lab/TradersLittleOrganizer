@@ -1,4 +1,4 @@
-__version__ = "v493"
+__version__ = "v510"
 import re
 import sqlite3
 from dataclasses import dataclass, field
@@ -80,6 +80,115 @@ def _restore_terminal_artist_suffix(master: str, suffix: str) -> str:
     if raw_suffix.startswith("-"):
         return compact_ws(base_master + raw_suffix)
     return compact_ws(f"{base_master} {raw_suffix}")
+
+
+PROPER_GRAMMAR_ARTICLE_SUFFIX_RE = re.compile(r"^(.+?),\s*(The|A)$", re.IGNORECASE)
+PROPER_GRAMMAR_COLLAB_CONNECTOR_RE = re.compile(r"(\s+(?:and|with)\s+|\s*&\s*|\s*\+\s*)", re.IGNORECASE)
+
+
+def _master_for_exact_artist_output_name(text: str, matcher: Optional["ArtistMatcher"]) -> str:
+    """Return one DB master when *text* exactly names that master or one alias."""
+    value = compact_ws(text)
+    if not value or matcher is None:
+        return ""
+    folded = value.casefold()
+    matches: List[str] = []
+    for master, aliases in matcher.master_aliases.items():
+        names = [master] + list(aliases or [])
+        if any(compact_ws(name).casefold() == folded for name in names if compact_ws(name)):
+            matches.append(master)
+    unique = []
+    seen = set()
+    for master in matches:
+        key = master.casefold()
+        if key not in seen:
+            seen.add(key)
+            unique.append(master)
+    return unique[0] if len(unique) == 1 else ""
+
+
+def _proper_grammar_alias_for_master(master: str, matcher: Optional["ArtistMatcher"]) -> str:
+    """Choose a conservative ``last, first`` or ``Band, The`` DB spelling.
+
+    A comma by itself is never enough: person-style aliases must reverse to a
+    different known spelling for the same master.  This prevents ordinary
+    comma-bearing band names (for example ``Emerson, Lake & Palmer``) from
+    being mistaken for proper-grammar aliases.  ``Name, The``/``Name, A`` are
+    intrinsically recognizable article-suffix forms and only need to exist in
+    that artist's alias set.
+    """
+    if matcher is None:
+        return compact_ws(master)
+    aliases = list(matcher.master_aliases.get(master, [master]) or [master])
+    cleaned_aliases: List[str] = []
+    seen = set()
+    for alias in [master] + aliases:
+        value = compact_ws(alias)
+        key = value.casefold()
+        if value and key not in seen:
+            seen.add(key)
+            cleaned_aliases.append(value)
+
+    # Article-suffix spellings are unambiguous proper-grammar forms.
+    for alias in cleaned_aliases:
+        if PROPER_GRAMMAR_ARTICLE_SUFFIX_RE.fullmatch(alias):
+            return alias
+
+    # Person-style comma forms must have a swapped counterpart in the same
+    # artist's master/alias family.  Compare letters only so punctuation in
+    # initials does not prevent B.B. King <-> King, B.B. style matches.
+    norms = {_letters_only(name) for name in cleaned_aliases if _letters_only(name)}
+    for alias in cleaned_aliases:
+        if alias.count(",") != 1:
+            continue
+        left, right = [compact_ws(part) for part in alias.split(",", 1)]
+        if not left or not right:
+            continue
+        if re.search(r"(?:\band\b|&|\+)", left, re.IGNORECASE) or re.search(r"(?:\band\b|&|\+)", right, re.IGNORECASE):
+            continue
+        swapped = compact_ws(f"{right} {left}")
+        swapped_norm = _letters_only(swapped)
+        alias_norm = _letters_only(alias)
+        if swapped_norm and swapped_norm != alias_norm and swapped_norm in norms:
+            return alias
+    return compact_ws(master)
+
+
+def proper_grammar_artist_name(text: str, matcher: Optional["ArtistMatcher"]) -> str:
+    """Return the DB-backed Proper Grammar output spelling for *text* when known.
+
+    The full artist is tried first.  If it is not itself one DB artist, a
+    conservative collaboration split lets independently known artists adopt
+    their own proper-grammar aliases while preserving the original connectors.
+    Unknown components retain their current spelling.
+    """
+    raw = compact_ws(text)
+    if not raw or matcher is None:
+        return raw
+    master = _master_for_exact_artist_output_name(raw, matcher)
+    if master:
+        return _proper_grammar_alias_for_master(master, matcher) or raw
+
+    pieces = PROPER_GRAMMAR_COLLAB_CONNECTOR_RE.split(raw)
+    if len(pieces) < 3:
+        return raw
+    changed = False
+    rebuilt: List[str] = []
+    for idx, piece in enumerate(pieces):
+        if idx % 2:
+            rebuilt.append(piece)
+            continue
+        component = compact_ws(piece)
+        component_master = _master_for_exact_artist_output_name(component, matcher)
+        if not component_master:
+            rebuilt.append(piece)
+            continue
+        preferred = _proper_grammar_alias_for_master(component_master, matcher) or component
+        if preferred.casefold() != component.casefold() or preferred != component:
+            changed = True
+        # Preserve connector spacing, but normalize the artist component itself.
+        rebuilt.append(preferred)
+    return compact_ws("".join(rebuilt)) if changed else raw
 
 
 def artist_search_variants(text: str) -> List[str]:

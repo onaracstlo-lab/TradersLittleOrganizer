@@ -1,17 +1,17 @@
-__version__ = "v493"
+__version__ = "v510"
 
 import argparse
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Sequence
 
-from tlo_setlistfm_lookup import ENV_UPGRADE_API_KEY, upgrade_api_key_available
+from tlo_setlistfm_lookup import ENV_API_KEY, ENV_UPGRADE_API_KEY, ENV_UPGRADE_API_KEY_ALIASES, upgrade_api_key_available
 
 
 LOOKUP_DEPENDENCY_ERROR = "--setlistfm-lookup requires --etree-lookup on the command line."
 COMPLIANT_RENAME_CONFLICT_ERROR = "--compliant and --rename-compliantly are mutually exclusive."
 SETLISTFM_UPGRADE_KEY_ERROR = (
-    f"--setlistfm-upgrade requires {ENV_UPGRADE_API_KEY}. "
-    "Set it to the same setlist.fm API key used for SETLISTFM_API_KEY."
+    f"--setlistfm-upgrade requires {ENV_API_KEY} and either {ENV_UPGRADE_API_KEY} "
+    f"or {ENV_UPGRADE_API_KEY_ALIASES[0]}, with both variables containing the same setlist.fm API key."
 )
 
 
@@ -128,6 +128,11 @@ OPTIONS = [
         help="Preserve the artist name as found in show metadata instead of replacing a matched alias with the Artist DB master name.",
     ),
     Option(
+        "proper_grammar", "--proper-grammar", "flag",
+        gui="checkbox", gui_label="Proper Grammar", gui_row=3, gui_col=1,
+        help="Prefer a DB-backed last-name-first or article-suffix alias for output naming when available. As-Is Artist Name overrides this preference.",
+    ),
+    Option(
         "tag_during_inventory", "--tag-during-inventory", "flag",
         gui="checkbox", gui_label="Tag In Place", gui_row=0, gui_col=2,
         help="Tag audio files in place during Full Inventory and supported Add Shows processing, writing success results to tagsN.txt and errors to tageN.txt under TLOHome/logs.",
@@ -180,11 +185,11 @@ OPTIONS = [
     Option(
         "setlistfm_upgrade", "--setlistfm-upgrade", "flag",
         gui="checkbox", gui_label="setlist.fm Upgrade", gui_row=2, gui_col=0,
-        help="When setlist.fm lookup is enabled, use upgraded access limits of 14 requests/second and 48,000 requests/day. Requires SETLISTFMUPGRADE_API_KEY, set to the same API key as SETLISTFM_API_KEY.",
+        help="When setlist.fm lookup is enabled, use upgraded access limits of 14 requests/second and 48,000 requests/day. Requires SETLISTFMUPGRADE_API_KEY or SETLISTFM_UPGRADE_API_KEY, set to the same API key as SETLISTFM_API_KEY.",
     ),
     Option(
         "thorough_setlist_matching", "--thorough-setlist-matching", "flag",
-        gui="checkbox", gui_label="Thorough setlist Matching", gui_row=3, gui_col=0,
+        gui="checkbox", gui_label="Thorough Setlist Matching", gui_row=3, gui_col=0,
         help=(
             "Collect and compare additional local and enabled online setlist candidates for better track-title accuracy. "
             "Only online sources explicitly enabled by their own lookup options are used. This can substantially increase "
@@ -292,6 +297,30 @@ def option_defaults(fields: Optional[Sequence[str]] = None) -> dict:
     return {option.config_field: option.default for option in iter_options(fields)}
 
 
+
+def defensive_corruption_policy_values(source) -> tuple[str, str, int]:
+    """Return fail-closed corruption values when a malformed caller omits fields.
+
+    Normal configured values are preserved. Missing/invalid values fail toward
+    keep/never/100 so an incomplete configuration cannot become more destructive.
+    """
+    def read(name, default=None):
+        if isinstance(source, dict):
+            return source.get(name, default)
+        return getattr(source, name, default)
+
+    raw_files = str(read("corrupt_files", "") or "").strip().casefold()
+    raw_folders = str(read("corrupt_folders", "") or "").strip().casefold()
+    files = raw_files if raw_files in {"keep", "delete"} else "keep"
+    folders = raw_folders if raw_folders in {"never", "all", "threshold"} else "never"
+    raw_threshold = read("corrupt_folder_threshold", 100)
+    try:
+        threshold = 100 if raw_threshold is None else int(raw_threshold)
+    except (TypeError, ValueError):
+        threshold = 100
+    threshold = max(0, min(100, threshold))
+    return files, folders, threshold
+
 def namespace_values(namespace: argparse.Namespace, fields: Optional[Sequence[str]] = None) -> dict:
     return {
         option.config_field: getattr(namespace, option.config_field, option.default)
@@ -330,8 +359,10 @@ def validate_compliant_rename_exclusivity(values: dict) -> None:
 
 
 def validate_setlistfm_upgrade_environment(values: dict) -> None:
-    """Require the explicit upgrade-enable environment variable when selected."""
-    if bool(values.get("setlistfm_upgrade", False)) and not upgrade_api_key_available():
+    """Require matching normal/upgrade keys only when setlist.fm lookup is active."""
+    if not bool(values.get("setlistfm_upgrade", False)) or not bool(values.get("setlistfm_lookup", False)):
+        return
+    if not upgrade_api_key_available():
         raise ValueError(SETLISTFM_UPGRADE_KEY_ERROR)
 
 def apply_lookup_dependency(values: dict, *, mode: str) -> bool:

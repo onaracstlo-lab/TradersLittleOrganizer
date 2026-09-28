@@ -1,6 +1,6 @@
 """Tagging engine and shared tagging/conversion helpers."""
 
-__version__ = "v493"
+__version__ = "v510"
 
 from tlo_diagnostics import debug_suppressed_exception
 import os
@@ -34,7 +34,7 @@ except Exception:  # pragma: no cover - optional fallback imports vary by mutage
 
 from inventory_parser_lib import Config
 from tlo_path_inputs import strip_optional_quotes, normalize_platform_input_path, resolve_tlo_home as resolve_tlo_home_common
-from tlo_options import validate_compliant_rename_exclusivity, validate_corruption_policy, validate_setlistfm_upgrade_environment
+from tlo_options import defensive_corruption_policy_values, validate_compliant_rename_exclusivity, validate_corruption_policy, validate_setlistfm_upgrade_environment
 from logging_lib import ARTIST_SQLITE_DB_FILENAME, TLO_DBS_DIRNAME, VENUE_REFERENCE_DB_FILENAME, setup_logging
 from tlo_artist_db import load_artist_matcher
 from tlo_audio_tags import collect_group_flac_tag_info
@@ -51,6 +51,7 @@ from tlo_phase23_v2 import (
 )
 from tlo_runtime_control import clear_cancel_request, is_cancel_requested, throttle_point, wait_if_paused
 from tlo_etree_lookup import ETreeDBError, lookup_setlists_by_performance, lookup_setlists_for_performance
+from tlo_setlistfm_lookup import MAX_REQUESTS_PER_RUN, MIN_REQUEST_INTERVAL_SECONDS, UPGRADE_MAX_REQUESTS_PER_DAY, UPGRADE_REQUESTS_PER_SECOND
 from initial_dir_walk_lib import initial_dir_walk
 from tlo_setlist_file_selection import find_setlist_files_for_music_dir
 from tlo_text_utils import compact_ws, normalized_compare_value, read_text_file_full, setlist_text_requests_generated_from_music_files, standard_ascii_text
@@ -65,7 +66,6 @@ from tlo_tree_compare import has_exact_tree_match_in_family
 from tlo_folder_rename import folder_name_write_needed, rename_folder_exact_case, same_existing_entry
 
 
-TAGGER_TITLE = "Traders Little Helper™ Tagger App"
 READY_FOR_XFER_DIRNAME = "readyForXfer"
 
 # Audio formats with common metadata containers.  SHN/SHNF are intentionally
@@ -512,6 +512,7 @@ def build_tagger_config(
     artist_in_album: bool = True,
     delete_extra_tags: bool = False,
     as_is_artist_name: bool = False,
+    proper_grammar: bool = False,
 ) -> Config:
     try:
         validate_compliant_rename_exclusivity({
@@ -545,6 +546,7 @@ def build_tagger_config(
         compliant=bool(compliant),
         compliant_artist_mode=("as-is" if bool(as_is_artist_name) else "master"),
         as_is_artist_name=bool(as_is_artist_name),
+        proper_grammar=bool(proper_grammar),
         # The standalone tagger always writes tags directly to the selected
         # tagging path. These shared Config fields remain fixed so inventory-only
         # copy controls cannot leak into standalone Tag processing.
@@ -558,7 +560,7 @@ def build_tagger_config(
         thorough_setlist_matching=bool(thorough_setlist_matching),
         corrupt_files=str(corruption_values["corrupt_files"]),
         corrupt_folders=str(corruption_values["corrupt_folders"]),
-        corrupt_folder_threshold=int(corruption_values.get("corrupt_folder_threshold", 100) or 0),
+        corrupt_folder_threshold=int(100 if corruption_values.get("corrupt_folder_threshold", 100) is None else corruption_values.get("corrupt_folder_threshold", 100)),
         performance_mode="gentle",
         max_workers=1,
         convert_shn=bool(convert_shn),
@@ -566,12 +568,12 @@ def build_tagger_config(
         delete_extra_tags=bool(delete_extra_tags),
     )
     if config.setlistfm_lookup and config.setlistfm_upgrade:
-        config.setlistfm_min_interval_seconds = 1.0 / 14.0
+        config.setlistfm_min_interval_seconds = 1.0 / UPGRADE_REQUESTS_PER_SECOND
         config.setlistfm_max_calls = 0
-        config.setlistfm_max_calls_per_day = 48000
+        config.setlistfm_max_calls_per_day = UPGRADE_MAX_REQUESTS_PER_DAY
     else:
-        config.setlistfm_min_interval_seconds = 0.600
-        config.setlistfm_max_calls = 1400
+        config.setlistfm_min_interval_seconds = MIN_REQUEST_INTERVAL_SECONDS
+        config.setlistfm_max_calls = MAX_REQUESTS_PER_RUN
         config.setlistfm_max_calls_per_day = 0
     config.standalone_tagger_corruption_enabled = True
     config.tlo_dbs_dir = os.path.join(config.TLOHome, TLO_DBS_DIRNAME)
@@ -2006,7 +2008,7 @@ def _looks_like_personnel_or_credit_line(line: str) -> bool:
     if not raw:
         return False
     credit_words = r"(?:guitar|vocals?|bass|drums?|keyboards?|sax(?:ophone)?|trombone|trumpet|flute|percussion|vibraphone|vibes?|piano|organ|taper|recorded|transferred|mastered|lineage|source|transfer)"
-    if re.match(rf"^(?:source|transfer|lineage|recorded|taped|transferred|mastered)\b", raw):
+    if re.match(r"^(?:source|transfer|lineage|recorded|taped|transferred|mastered)\b", raw):
         return True
     # Personnel lines commonly look like "Name - guitar" or "Name: vocals".
     # Collector info files also use compact trailing role abbreviations such as
@@ -3076,6 +3078,45 @@ def _unique_destination_path(parent_dir: str, folder_name: str, source_root: str
     raise TaggerError(f"could not allocate unique {suffix} destination folder under {parent_dir}")
 
 
+def _reserve_unique_destination_directory(parent_dir: str, folder_name: str, source_root: str = "") -> str:
+    """Atomically reserve a unique final destination directory owned by this operation."""
+    for _ in range(100):
+        candidate = _unique_destination_path(parent_dir, folder_name, source_root)
+        try:
+            os.mkdir(candidate)
+            return candidate
+        except FileExistsError:
+            continue
+    raise TaggerError(f"could not atomically reserve destination folder under {parent_dir}")
+
+
+def _copy_tree_into_reserved_directory(source_root: str, destination_root: str) -> None:
+    if _tree_contains_symlink(source_root):
+        raise TaggerError(f"Tag Copy refuses a source tree containing symbolic links: {source_root}")
+    shutil.copytree(source_root, destination_root, symlinks=True, dirs_exist_ok=True)
+
+
+def _move_tree_into_reserved_directory(source_root: str, destination_root: str) -> None:
+    """Move one directory tree into a pre-reserved empty destination without overwrite."""
+    moved_any = False
+    try:
+        for name in os.listdir(source_root):
+            os.rename(os.path.join(source_root, name), os.path.join(destination_root, name))
+            moved_any = True
+        try:
+            shutil.copystat(source_root, destination_root, follow_symlinks=False)
+        except OSError:
+            pass
+        os.rmdir(source_root)
+    except Exception as exc:
+        if not moved_any:
+            shutil.rmtree(destination_root, ignore_errors=True)
+        raise TaggerError(
+            f"Tag Copy and Delete move failed without overwriting another destination: {exc}. "
+            f"Recovery may be required; source={source_root}; reserved destination={destination_root}"
+        ) from exc
+
+
 def _rewrite_path_under_root(path_name: str, old_root: str, new_root: str) -> str:
     if not path_name:
         return path_name
@@ -3141,10 +3182,14 @@ def _paths_on_same_filesystem(path_a: str, path_b: str) -> bool:
         return False
 
 
+def _raise_verification_walk_error(error: OSError) -> None:
+    raise error
+
+
 def _file_size_map(root: str) -> Dict[str, int]:
     """Return relative file sizes or fail verification on any unreadable stat."""
     result: Dict[str, int] = {}
-    for current_dir, _dir_names, file_names in os.walk(root):
+    for current_dir, _dir_names, file_names in os.walk(root, onerror=_raise_verification_walk_error):
         for file_name in file_names:
             full_path = os.path.join(current_dir, file_name)
             relative = os.path.relpath(full_path, root)
@@ -3159,7 +3204,7 @@ def _file_size_map(root: str) -> Dict[str, int]:
 def _directory_path_set(root: str) -> set[str]:
     """Return every descendant directory path, including empty directories."""
     result: set[str] = set()
-    for current_dir, dir_names, _file_names in os.walk(root):
+    for current_dir, dir_names, _file_names in os.walk(root, onerror=_raise_verification_walk_error):
         for dir_name in dir_names:
             full_path = os.path.join(current_dir, dir_name)
             relative = os.path.relpath(full_path, root)
@@ -3264,44 +3309,35 @@ def prepare_inventory_copy_delete_target(
     show_name = _compliant_rename_show_name_from_record(record)
     use_compliant_name = bool(getattr(config, "rename_compliantly", False)) and bool(show_name)
     destination_leaf = safe_compliant_folder_name(show_name if use_compliant_name else source_leaf, fallback=source_leaf)
-    destination_root = _unique_destination_path(destination_parent, destination_leaf, source_root)
+    destination_root = _reserve_unique_destination_directory(destination_parent, destination_leaf, source_root)
 
     if _paths_on_same_filesystem(source_root, destination_parent):
-        try:
-            # The source and destination are on the same filesystem, so this is
-            # a directory rename/move. Do not total or compare file sizes.
-            os.rename(source_root, destination_root)
-            _emit(emit, f"TAG_COPY_DELETE_MOVE: {source_root} -> {destination_root}")
-        except Exception as exc:
-            raise TaggerError(f"Tag Copy and Delete move failed: {exc}") from exc
+        _move_tree_into_reserved_directory(source_root, destination_root)
+        _emit(emit, f"TAG_COPY_DELETE_MOVE: {source_root} -> {destination_root}")
     else:
-        partial_root = _owned_partial_copy_path(destination_root)
-        destination_owned = False
         source_delete_started = False
+        destination_verified = False
         try:
-            _copy_entire_directory_tree(source_root, partial_root)
-            if os.path.lexists(destination_root):
-                raise TaggerError(f"Copy/Delete destination appeared during transfer: {destination_root}")
-            os.rename(partial_root, destination_root)
-            partial_root = ""
-            destination_owned = True
-            # Preserve the existing relative-path/size verification and add a
-            # full SHA-256 tree comparison before source deletion.
+            _copy_tree_into_reserved_directory(source_root, destination_root)
             _verify_copy_by_file_size(source_root, destination_root)
             _verify_copy_exact(source_root, destination_root)
+            destination_verified = True
             source_delete_started = True
-            shutil.rmtree(source_root)
+            try:
+                shutil.rmtree(source_root)
+            except Exception as exc:
+                raise TaggerError(
+                    f"Tag Copy and Delete source cleanup failed after destination verification: {exc}. "
+                    f"Destination verified; source may be partially removed at {source_root}; destination={destination_root}"
+                ) from exc
             _emit(emit, f"TAG_COPY_DELETE_COPY: {source_root} -> {destination_root}")
         except Exception as exc:
-            _cleanup_owned_partial(partial_root)
-            # Before source deletion starts the final destination is known to be
-            # ours and can be rolled back safely. Once deletion starts, retain
-            # the verified destination even if source cleanup later errors.
-            if destination_owned and not source_delete_started and os.path.isdir(destination_root):
+            if not source_delete_started and os.path.isdir(destination_root):
                 shutil.rmtree(destination_root, ignore_errors=True)
             if isinstance(exc, TaggerError):
                 raise
-            raise TaggerError(f"Tag Copy and Delete copy/delete failed: {exc}") from exc
+            state = "destination verified; source cleanup started" if destination_verified else "destination not verified"
+            raise TaggerError(f"Tag Copy and Delete copy/delete failed ({state}): {exc}") from exc
 
     return (
         _rewrite_group_paths(group, source_root, destination_root, mutate=False),
@@ -3329,23 +3365,15 @@ def prepare_inventory_tagging_target(
         destination_parent = os.path.normpath(str(getattr(config, "tag_copy_destination", "") or ""))
         if not destination_parent or not os.path.isdir(destination_parent):
             raise TaggerError(f"Tag Copy destination is not a valid directory: {destination_parent}")
-        destination_root = _unique_destination_path(destination_parent, target_name, source_root)
-        partial_root = _owned_partial_copy_path(destination_root)
-        destination_owned = False
+        destination_root = _reserve_unique_destination_directory(destination_parent, target_name, source_root)
         try:
-            _copy_entire_directory_tree(source_root, partial_root)
-            if os.path.lexists(destination_root):
-                raise TaggerError(f"Tag Copy destination appeared during transfer: {destination_root}")
-            os.rename(partial_root, destination_root)
-            partial_root = ""
-            destination_owned = True
+            _copy_tree_into_reserved_directory(source_root, destination_root)
             # Tag Copy retains the source, so size/structure verification remains
             # sufficient by policy; byte hashing is reserved for delete-gating.
             _verify_copy_by_file_size(source_root, destination_root)
             _emit(emit, f"TAG_COPY: {source_root} -> {destination_root}")
         except Exception as exc:
-            _cleanup_owned_partial(partial_root)
-            if destination_owned and os.path.isdir(destination_root):
+            if os.path.isdir(destination_root):
                 shutil.rmtree(destination_root, ignore_errors=True)
             if isinstance(exc, TaggerError):
                 raise
@@ -5252,13 +5280,12 @@ def process_tagging_group(
 
     if bool(getattr(config, "standalone_tagger_corruption_enabled", False)):
         from tlo_corruption import handle_group_corruption
+        safe_corrupt_files, safe_corrupt_folders, safe_corrupt_threshold = defensive_corruption_policy_values(config)
         corruption_outcome = handle_group_corruption(
-            config,
-            group,
-            record,
-            corrupt_files=str(getattr(config, "corrupt_files", "delete") or "delete"),
-            corrupt_folders=str(getattr(config, "corrupt_folders", "all") or "all"),
-            folder_threshold=int(getattr(config, "corrupt_folder_threshold", 100) or 0),
+            config, group, record,
+            corrupt_files=safe_corrupt_files,
+            corrupt_folders=safe_corrupt_folders,
+            folder_threshold=safe_corrupt_threshold,
         )
         if corruption_outcome.show_removed:
             stats["skipped"] += 1
@@ -5733,6 +5760,7 @@ def run_tagger(
     artist_in_album: bool = True,
     delete_extra_tags: bool = False,
     as_is_artist_name: bool = False,
+    proper_grammar: bool = False,
     emit: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, int]:
     clear_cancel_request()
@@ -5753,6 +5781,7 @@ def run_tagger(
         artist_in_album=artist_in_album,
         delete_extra_tags=delete_extra_tags,
         as_is_artist_name=as_is_artist_name,
+        proper_grammar=proper_grammar,
     )
     ensure_corrupt_flacs_log(config)
     tagging_path = resolve_tagging_path(config.TLOHome, tag_path=tag_path)
@@ -5768,7 +5797,7 @@ def run_tagger(
     tag_emit = _build_tag_log_emit(config, emit)
     artist_matcher = load_artist_matcher(config)
 
-    _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | setlist.fm fallback={'yes' if config.setlistfm_lookup else 'no'} | setlist.fm upgrade={'yes' if getattr(config, 'setlistfm_upgrade', False) else 'no'} | thorough setlist matching={'yes' if getattr(config, 'thorough_setlist_matching', False) else 'no'} | corrupt files={getattr(config, 'corrupt_files', 'delete')} | corrupt folders={getattr(config, 'corrupt_folders', 'all')} | corrupt folder threshold={getattr(config, 'corrupt_folder_threshold', 100)}% | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | artist in album={'yes' if getattr(config, 'artist_in_album', True) else 'no'} | delete extra tags={'yes' if getattr(config, 'delete_extra_tags', False) else 'no'} | as-is artist name={'yes' if getattr(config, 'as_is_artist_name', False) else 'no'} | debug={'yes' if config.debug else 'no'}")
+    _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | setlist.fm fallback={'yes' if config.setlistfm_lookup else 'no'} | setlist.fm upgrade={'yes' if getattr(config, 'setlistfm_upgrade', False) else 'no'} | thorough setlist matching={'yes' if getattr(config, 'thorough_setlist_matching', False) else 'no'} | corrupt files={getattr(config, 'corrupt_files', 'delete')} | corrupt folders={getattr(config, 'corrupt_folders', 'all')} | corrupt folder threshold={getattr(config, 'corrupt_folder_threshold', 100)}% | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | artist in album={'yes' if getattr(config, 'artist_in_album', True) else 'no'} | delete extra tags={'yes' if getattr(config, 'delete_extra_tags', False) else 'no'} | as-is artist name={'yes' if getattr(config, 'as_is_artist_name', False) else 'no'} | proper grammar={'yes' if getattr(config, 'proper_grammar', False) else 'no'} | debug={'yes' if config.debug else 'no'}")
     _emit(tag_emit, f"TLOHome: {config.TLOHome}")
     _emit(tag_emit, f"Tagging Path: {tagging_path}")
 

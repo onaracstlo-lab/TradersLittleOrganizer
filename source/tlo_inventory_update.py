@@ -1,4 +1,4 @@
-__version__ = "v493"
+__version__ = "v510"
 
 import csv
 import json
@@ -23,6 +23,7 @@ from logging_lib import allocate_log_tokens, setup_logging
 from tlo_db_validation import validate_required_databases
 from tlo_audio_tags import collect_group_flac_tag_info
 from tlo_media_rules import MEDIA_EXTENSIONS
+from tlo_path_policy import is_phase1_pruned_directory
 from tlo_phase23_v2 import (
     _extract_metadata_for_group,
     _find_date_matches,
@@ -77,7 +78,25 @@ def prepare_updater_config(config):
 
 def updater_delete_script_path(tlo_home: str) -> str:
     suffix = ".bat" if os.name == "nt" or platform.system().casefold().startswith("win") else ".sh"
-    return os.path.join(tlo_home, f"deleteBackupFolders{suffix}")
+    return os.path.join(tlo_home, "deleteReplacedFolders.bat" if suffix == ".bat" else "deleteBackupFolders.sh")
+
+
+def archive_updater_delete_script_for_new_session(tlo_home: str) -> str:
+    """Archive an existing delete script and return the fresh session path."""
+    script_path = updater_delete_script_path(tlo_home)
+    if not os.path.exists(script_path):
+        return script_path
+    logs_dir = os.path.join(tlo_home, "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    stamp = __import__("datetime").datetime.now().strftime("%Y%m%d-%H%M%S")
+    base, ext = os.path.splitext(os.path.basename(script_path))
+    archived = os.path.join(logs_dir, f"{base}-{stamp}{ext}")
+    counter = 2
+    while os.path.exists(archived):
+        archived = os.path.join(logs_dir, f"{base}-{stamp}-{counter}{ext}")
+        counter += 1
+    os.replace(script_path, archived)
+    return script_path
 
 
 def updater_directories(tlo_home: str) -> Dict[str, str]:
@@ -112,7 +131,7 @@ def _iter_top_level_dirs(path_name: str) -> List[str]:
 
 def _should_prune_dir(dirname: str) -> bool:
     name = str(dirname or "").strip().lower()
-    return name.endswith("-ignoredir") or name in {"$recycle.bin", "system volume information", "__pycache__"}
+    return name.endswith("-ignoredir") or is_phase1_pruned_directory(name)
 
 
 def _collect_folder_paths(folder_path: str) -> Tuple[List[str], List[str], List[str]]:
@@ -727,24 +746,69 @@ def _is_rooted_storage_path(path_text: str) -> bool:
     return bool(_WINDOWS_DRIVE_PATH_RE.match(text) or _WSL_MOUNT_PATH_RE.match(text) or os.path.isabs(text))
 
 
-def _is_safe_delete_rooted_path(path_text: str) -> bool:
-    """Return True only when a bootlist path carries a usable drive/mount root.
+def _path_contains_parent_segment(path_text: str) -> bool:
+    return any(part == ".." for part in re.split(r"[\\/]+", str(path_text or "").strip()))
 
-    Legacy Add Shows rows could contain values such as ``[Backup] /Artist``
-    because the old current-storage logic stripped the drive/mount prefix.  An
-    absolute-looking POSIX value is not automatically safe to delete unless it
-    identifies a known mounted volume root.  This keeps deleteBackupFolders from
-    inventing targets from the current storage selection or from legacy
-    drive-stripped rows.
+
+def _canonical_safe_delete_path(path_text: str, *, tlo_home: str = "") -> str:
+    """Return a canonical destructive target only when it is below a volume root.
+
+    Validation is intentionally syntax-aware so Windows/WSL/macOS paths remain
+    safe even when the source bundle is tested on a different operating system.
+    Literal parent traversal is rejected before normalization.
     """
     text = str(path_text or "").strip()
-    if not text:
-        return False
-    if _WINDOWS_DRIVE_PATH_RE.match(text) or _WSL_MOUNT_PATH_RE.match(text):
-        return True
-    normalized = text.replace("\\", "/")
-    return normalized.startswith(("/Volumes/", "/media/", "/run/media/"))
+    if not text or _path_contains_parent_segment(text):
+        return ""
 
+    target = ""
+    win = re.match(r"^(?P<drive>[A-Za-z]):(?P<sep>[\\/])(?P<rest>.+)$", text)
+    if win:
+        rest = [part for part in re.split(r"[\\/]+", win.group("rest")) if part not in {"", "."}]
+        if not rest:
+            return ""
+        target = ntpath.normpath(f"{win.group('drive').upper()}:\\" + "\\".join(rest))
+    elif re.match(r"^[A-Za-z]:$", text):
+        return ""  # drive-relative path, never safe for destructive output
+    else:
+        slash = text.replace("\\", "/")
+        if not slash.startswith("/"):
+            return ""
+        parts = [part for part in slash.split("/") if part not in {"", "."}]
+        minimum_components = 0
+        if len(parts) >= 2 and parts[0].casefold() == "mnt" and len(parts[1]) == 1 and parts[1].isalpha():
+            minimum_components = 3                         # /mnt/e/<folder>
+        elif len(parts) >= 2 and parts[0].casefold() == "volumes":
+            minimum_components = 3                         # /Volumes/<volume>/<folder>
+        elif len(parts) >= 3 and parts[0].casefold() == "media":
+            minimum_components = 4                         # /media/<user>/<volume>/<folder>
+        elif len(parts) >= 4 and parts[0].casefold() == "run" and parts[1].casefold() == "media":
+            minimum_components = 5                         # /run/media/<user>/<volume>/<folder>
+        else:
+            # Destructive scripts accept only explicitly recognized storage-root
+            # syntaxes. An arbitrary absolute path such as /Artist is not enough
+            # evidence of a volume identity.
+            return ""
+        if not target:
+            if len(parts) < minimum_components:
+                return ""
+            target = "/" + "/".join(parts)
+            target = os.path.normpath(target)
+
+    if tlo_home:
+        home = os.path.normcase(os.path.abspath(os.path.normpath(tlo_home)))
+        candidate = os.path.normcase(os.path.abspath(os.path.normpath(target))) if not re.match(r"^[A-Za-z]:", target) else ""
+        if candidate:
+            try:
+                if os.path.commonpath([home, candidate]) == candidate:
+                    return ""  # target is TLOHome or one of its ancestors
+            except ValueError:
+                pass
+    return target
+
+
+def _is_safe_delete_rooted_path(path_text: str, *, tlo_home: str = "") -> bool:
+    return bool(_canonical_safe_delete_path(path_text, tlo_home=tlo_home))
 
 def _join_storage_root(root_path: str, folder_leaf: str) -> str:
     root = str(root_path or "").strip()
@@ -899,17 +963,15 @@ def _format_add_shows_volume_path(current_storage: str, folder_leaf: str) -> str
     return _format_bootlist_volume_path(label, folder_leaf)
 
 
-def _delete_path_from_bootlist_volume_path(volume_path: str) -> str:
-    _volume_label, path_to_delete = parse_volume_path_value(volume_path)
-    path_to_delete = str(path_to_delete or "").strip()
-    if not path_to_delete:
-        return ""
-    # A safe delete command requires the bootlist row to contain its drive/root.
-    # Do not fall back to the current Add Shows storage field; duplicate rows may
-    # refer to a different backup volume than the one currently being added.
-    if _is_safe_delete_rooted_path(path_to_delete):
-        return os.path.normpath(path_to_delete)
-    return ""
+def _delete_target_from_bootlist_volume_path(volume_path: str, *, tlo_home: str = "") -> Tuple[str, str]:
+    volume_label, path_to_delete = parse_volume_path_value(volume_path)
+    safe_path = _canonical_safe_delete_path(path_to_delete, tlo_home=tlo_home)
+    return str(volume_label or "").strip(), safe_path
+
+
+def _delete_path_from_bootlist_volume_path(volume_path: str, *, tlo_home: str = "") -> str:
+    _volume_label, safe_path = _delete_target_from_bootlist_volume_path(volume_path, tlo_home=tlo_home)
+    return safe_path
 
 def _add_bootlist_row_for_record(tlo_home: str, record_dict: Dict[str, str], current_volume: str, folder_leaf: str) -> None:
     show = _adjust_show_name_for_output(dict(record_dict))
@@ -956,44 +1018,147 @@ def infer_setlist_paths_for_show(tlo_home: str, show_name: str) -> List[str]:
 
 
 def open_paths(paths: Iterable[str]) -> None:
+    """Open only directories or inert text documents; never execute a path."""
     clean_paths = [p for p in paths if p and os.path.exists(p)]
     if not clean_paths:
         return
+    safe_text_exts = {".txt", ".log", ".csv", ".rtf"}
     if os.name == "nt":
         for path_name in clean_paths:
-            os.startfile(path_name)  # type: ignore[attr-defined]
+            try:
+                if os.path.isdir(path_name):
+                    subprocess.Popen(["explorer.exe", path_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                elif os.path.splitext(path_name)[1].casefold() in safe_text_exts:
+                    subprocess.Popen(["notepad.exe", path_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except OSError:
+                pass
         return
     opener = "/usr/bin/open" if sys.platform == "darwin" else shutil.which("xdg-open")
     if not opener:
         return
     for path_name in clean_paths:
+        if not os.path.isdir(path_name) and os.path.splitext(path_name)[1].casefold() not in safe_text_exts:
+            continue
         try:
             subprocess.Popen([opener, path_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except OSError:
             pass
 
 
-def _append_delete_command(script_path: str, path_to_delete: str) -> None:
-    if not path_to_delete:
-        return
+def _running_under_wsl() -> bool:
+    if os.name == "nt":
+        return False
+    try:
+        with open("/proc/version", "r", encoding="utf-8") as infile:
+            value = infile.read().casefold()
+        return "microsoft" in value or "wsl" in value
+    except OSError:
+        return False
+
+
+def _delete_command_path_for_script(script_path: str, path_to_delete: str) -> str:
+    """Translate a rooted bootlist path into the syntax of the generated script."""
+    raw = str(path_to_delete or "").strip()
+    if not raw:
+        return ""
+    is_bat = str(script_path or "").casefold().endswith(".bat")
+    win = re.match(r"^(?P<drive>[A-Za-z]):(?:[\\/](?P<rest>.*))?$", raw)
+    wsl = re.match(r"^/mnt/(?P<drive>[A-Za-z])(?:/(?P<rest>.*))?$", raw.replace("\\", "/"), re.IGNORECASE)
+    if is_bat:
+        if win:
+            drive = win.group("drive").upper()
+            rest = (win.group("rest") or "").replace("/", "\\")
+            return f"{drive}:\\{rest}" if rest else f"{drive}:\\"
+        if wsl:
+            drive = wsl.group("drive").upper()
+            rest = (wsl.group("rest") or "").replace("/", "\\")
+            return f"{drive}:\\{rest}" if rest else f"{drive}:\\"
+        return ""
+    if win:
+        if not _running_under_wsl():
+            return ""
+        drive = win.group("drive").casefold()
+        rest = (win.group("rest") or "").replace("\\", "/")
+        return f"/mnt/{drive}/{rest}" if rest else f"/mnt/{drive}"
+    if raw.startswith("/"):
+        return os.path.normpath(raw)
+    return ""
+
+
+def _batch_escape_literal(value: str) -> str:
+    """Escape a literal that is written inside a double-quoted batch argument.
+
+    In cmd.exe metacharacters such as &, ^, |, < and > are literal inside
+    double quotes. Percent signs still expand environment variables, so only
+    percent signs are doubled. Windows path components cannot contain a quote.
+    """
+    return str(value or "").replace("%", "%%").replace('"', '""')
+
+
+def _delete_guard_root(path_to_delete: str) -> str:
+    win = re.match(r"^(?P<drive>[A-Za-z]):[\\/]", path_to_delete)
+    if win:
+        return f"{win.group('drive').upper()}:\\"
+    slash = path_to_delete.replace("\\", "/")
+    parts = [part for part in slash.split("/") if part]
+    if len(parts) >= 2 and parts[0].casefold() == "mnt" and len(parts[1]) == 1:
+        return f"/mnt/{parts[1].casefold()}"
+    if len(parts) >= 2 and parts[0].casefold() == "volumes":
+        return f"/Volumes/{parts[1]}"
+    if len(parts) >= 3 and parts[0].casefold() == "media":
+        return "/" + "/".join(parts[:3])
+    if len(parts) >= 4 and parts[0].casefold() == "run" and parts[1].casefold() == "media":
+        return "/" + "/".join(parts[:4])
+    return os.path.dirname(path_to_delete)
+
+
+def _append_delete_command(script_path: str, path_to_delete: str, volume_label: str = "") -> bool:
+    translated = _delete_command_path_for_script(script_path, path_to_delete)
+    if not translated:
+        return False
     os.makedirs(os.path.dirname(script_path), exist_ok=True)
     is_bat = script_path.lower().endswith(".bat")
     existed = os.path.exists(script_path)
-    with open(script_path, "a", encoding="utf-8", newline="\n") as outfile:
+    newline = "\r\n" if is_bat else "\n"
+    label = str(volume_label or "").strip()
+    root = _delete_guard_root(translated)
+    with open(script_path, "a", encoding="utf-8", newline="") as outfile:
         if not existed and not is_bat:
-            outfile.write("#!/bin/sh\n")
+            outfile.write("#!/bin/sh" + newline)
+            outfile.write("set -eu" + newline)
         if is_bat:
             if not existed:
-                outfile.write("setlocal DisableDelayedExpansion\n")
-            safe_path = str(path_to_delete).replace("%", "%%")
-            outfile.write(f'rmdir /s /q "{safe_path}"\n')
+                outfile.write("setlocal DisableDelayedExpansion" + newline)
+                outfile.write("chcp 65001 >nul" + newline)
+                outfile.write("REM Edit drive letters below as needed before running this file." + newline)
+                outfile.write("REM Volume labels identify where each recorded path was found; [] means the volume was unlabeled." + newline + newline)
+            safe_path = _batch_escape_literal(translated)
+            safe_label = _batch_escape_literal(label)
+            outfile.write(f'REM [{safe_label}] "{safe_path}"' + newline)
+            outfile.write(f'if exist "{safe_path}\\" (' + newline)
+            outfile.write(f'  echo Deleting [{safe_label}] "{safe_path}"' + newline)
+            outfile.write(f'  rmdir /s /q "{safe_path}"' + newline)
+            outfile.write(') else (' + newline)
+            outfile.write(f'  echo Not found [{safe_label}] "{safe_path}"' + newline)
+            outfile.write(')' + newline + newline)
         else:
-            outfile.write(f"rm -rf -- {shlex.quote(path_to_delete)}\n")
+            if label:
+                qroot = shlex.quote(root)
+                qlabel = shlex.quote(label)
+                outfile.write(f"TLO_EXPECTED_LABEL={qlabel}; TLO_ROOT={qroot}" + newline)
+                outfile.write("TLO_ACTUAL_LABEL=''" + newline)
+                outfile.write("if command -v powershell.exe >/dev/null 2>&1 && printf '%s' \"$TLO_ROOT\" | grep -Eq '^/mnt/[A-Za-z]$'; then TLO_DRIVE=$(printf '%s' \"$TLO_ROOT\" | cut -c6 | tr '[:lower:]' '[:upper:]'); TLO_ACTUAL_LABEL=$(powershell.exe -NoProfile -Command \"(Get-Volume -DriveLetter '$TLO_DRIVE').FileSystemLabel\" 2>/dev/null | tr -d '\\r' || true); " +
+                              "elif command -v diskutil >/dev/null 2>&1; then TLO_ACTUAL_LABEL=$(diskutil info \"$TLO_ROOT\" 2>/dev/null | awk -F: '/Volume Name/{sub(/^[ \\t]+/,\"\",$2); print $2; exit}'); " +
+                              "elif command -v findmnt >/dev/null 2>&1; then TLO_ACTUAL_LABEL=$(findmnt -n -o LABEL --target \"$TLO_ROOT\" 2>/dev/null || true); fi" + newline)
+                outfile.write("[ \"$TLO_ACTUAL_LABEL\" = \"$TLO_EXPECTED_LABEL\" ] || { echo \"Wrong or unverifiable volume at $TLO_ROOT; expected $TLO_EXPECTED_LABEL\" >&2; exit 1; }" + newline)
+            outfile.write(f"printf '%s\\n' {shlex.quote('Deleting ' + translated)}" + newline)
+            outfile.write(f"rm -rf -- {shlex.quote(translated)}" + newline)
     if not is_bat:
         try:
             os.chmod(script_path, 0o755)
         except OSError:
             pass
+    return True
 
 
 
@@ -1167,9 +1332,12 @@ def _tag_add_shows_folder_in_place(config, folder_path: str, record_dict: Dict[s
     return subtotal
 
 
-def process_new_shows(config, current_volume: str, check_duplicates: bool = True) -> Dict[str, object]:
+def process_new_shows(config, current_volume: str, check_duplicates: bool = True, search_path: str = "") -> Dict[str, object]:
     prepare_updater_config(config)
     dirs = ensure_updater_directories(config.TLOHome)
+    source_root = os.path.normpath(str(search_path or dirs["ready"]).strip())
+    if not os.path.isdir(source_root):
+        raise InventoryUpdateError(f"Add Shows Search Path does not exist or is not a directory: {source_root}")
     artist_matcher = load_artist_matcher(config)
     duplicate_count = 0
     pdup_count = 0
@@ -1177,7 +1345,7 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
     processed_count = 0
     error_count = 0
     issue_records: List[Dict[str, str]] = []
-    for folder in _iter_top_level_dirs(dirs["ready"]):
+    for folder in _iter_top_level_dirs(source_root):
         processed_count += 1
         try:
             record = identify_folder(config, folder, artist_matcher=artist_matcher)
@@ -1267,13 +1435,19 @@ def process_duplicate_folder(config, item: Dict[str, object], selected_rows: Seq
     folder = str(item.get("folder") or "")
     record = dict(item.get("record") or {})
     deleted_old = 0
+    scripted_rows: List[Dict[str, str]] = []
+    skipped_delete_commands = 0
     for row in selected_rows:
-        path_to_delete = _delete_path_from_bootlist_volume_path(row.get("VolumePath", ""))
-        if path_to_delete:
-            _append_delete_command(script_path, path_to_delete)
+        volume_label, path_to_delete = _delete_target_from_bootlist_volume_path(
+            row.get("VolumePath", ""), tlo_home=config.TLOHome
+        )
+        if path_to_delete and _append_delete_command(script_path, path_to_delete, volume_label):
             deleted_old += 1
-    if selected_rows:
-        _remove_bootlist_rows(config.TLOHome, selected_rows)
+            scripted_rows.append(row)
+        else:
+            skipped_delete_commands += 1
+    if scripted_rows:
+        _remove_bootlist_rows(config.TLOHome, scripted_rows)
     folder = _rename_add_shows_folder_compliantly(config, folder, record)
     folder_leaf = os.path.basename(os.path.normpath(folder))
     generated_setlist = create_or_replace_generated_setlist(config.TLOHome, record)
@@ -1281,7 +1455,7 @@ def process_duplicate_folder(config, item: Dict[str, object], selected_rows: Seq
     _log_add_shows_metadata(config, record, folder, current_volume, "Add Shows duplicate resolved and staged")
     _tag_add_shows_folder_in_place(config, folder, record, generated_setlist)
     move_folder_to(folder, dirs["staged"])
-    return {"delete_commands": deleted_old, "staged": 1}
+    return {"delete_commands": deleted_old, "delete_commands_skipped": skipped_delete_commands, "staged": 1}
 
 
 def delete_new_keep_old(item: Dict[str, object]) -> None:

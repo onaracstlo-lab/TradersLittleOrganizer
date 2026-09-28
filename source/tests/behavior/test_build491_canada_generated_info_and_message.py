@@ -14,7 +14,7 @@ from tlo_constants import CANADIAN_REGION_CODES
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v493"
+__version__ = "v497"
 
 
 def _load_gui_module():
@@ -127,18 +127,19 @@ def test_build491_marker_with_other_content_remains_original_and_does_not_create
     assert not (show / "info-gen.txt").exists()
 
 
-def test_build491_backup_alert_names_delete_backup_folders_txt():
+def test_build491_backup_alert_names_platform_delete_backup_script():
     root = Path(__file__).resolve().parents[2]
     source = (root / "tlo-ggi.py").read_text(encoding="utf-8")
-    assert "TLOHome/deleteBackupFolders.txt already exists. Continue or abort?" in source
+    assert "_backup_alert_message(script_path)" in source
+    assert "deleteBackupFolders.txt already exists" not in source
 
 
 def test_build491_requirements_and_manual_document_changes():
     root = Path(__file__).resolve().parents[2]
     from docx import Document
 
-    req = root / "TLO_Inventory_Requirements_Working_v493.docx"
-    manual = root / "TLO_Inventory_User_Manual_v493.rtf"
+    req = root / "TLO_Inventory_Requirements_Working_v510.docx"
+    manual = root / "TLO_Inventory_User_Manual_v510.rtf"
     assert req.is_file()
     assert manual.is_file()
 
@@ -147,8 +148,10 @@ def test_build491_requirements_and_manual_document_changes():
 
     assert "Build 491" in req_text
     assert "info-gen.txt" in req_text
-    assert "deleteBackupFolders.txt" in req_text
+    assert "deleteReplacedFolders.bat" in req_text
+    assert "deleteBackupFolders.sh" in req_text
     assert "BC" in req_text and "ON" in req_text
-    assert "Version v1.7 Build 493" in manual_text
+    assert "Version v1.7 Build 510" in manual_text
     assert "info-gen.txt" in manual_text
-    assert "deleteBackupFolders.txt" in manual_text
+    assert "deleteReplacedFolders.bat" in manual_text
+    assert "deleteBackupFolders.sh" in manual_text

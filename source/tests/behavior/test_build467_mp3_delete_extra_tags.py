@@ -57,8 +57,8 @@ def test_build467_delete_extra_tags_option_is_far_right_two_line_checkbox_contra
     assert (option.gui_row, option.gui_col) == (3, 3)
     assert option.default is False
     assert ux.MAIN_WINDOW_CHECKBOX_SPECS[-2:] == (
-        ("delete_extra_tags", "Delete extra tags"),
-        ("dry_run", "Dry run"),
+        ("delete_extra_tags", "Delete Extra Tags"),
+        ("dry_run", "Dry Run"),
     )
 
 
@@ -66,8 +66,8 @@ def test_build467_main_window_review_includes_delete_extra_tags_before_dry_run()
     values = ux.main_window_checkbox_values({"delete_extra_tags": True}, dry_run=False)
     assert values["delete_extra_tags"] is True
     lines = ux.main_window_checkbox_review_lines(values, dry_run=False)
-    delete_index = next(i for i, line in enumerate(lines) if "Delete extra tags:" in line)
-    dry_index = next(i for i, line in enumerate(lines) if "Dry run:" in line)
+    delete_index = next(i for i, line in enumerate(lines) if "Delete Extra Tags:" in line)
+    dry_index = next(i for i, line in enumerate(lines) if "Dry Run:" in line)
     assert delete_index < dry_index
 
 

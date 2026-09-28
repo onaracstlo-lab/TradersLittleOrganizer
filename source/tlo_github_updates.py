@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from tlo_diagnostics import debug_suppressed_exception
 
-__version__ = "v493"
+__version__ = "v510"
 
 import datetime as _dt
 import hashlib
@@ -424,6 +424,9 @@ def _download_asset(asset: dict[str, Any], destination: Path) -> bool:
 
 
 MAX_PACKAGE_MANIFEST_BYTES = 1024 * 1024
+MAX_ZIP_MEMBERS = 5000
+MAX_ZIP_UNCOMPRESSED_BYTES = MAX_UPDATE_ASSET_BYTES * 4
+MAX_ZIP_COMPRESSION_RATIO = 250
 
 
 def _read_zip_json_member(archive: zipfile.ZipFile, member_name: str) -> dict[str, Any]:
@@ -454,6 +457,50 @@ def _manifest_build_number(manifest: dict[str, Any]) -> int | None:
         return None
 
 
+def _validate_zip_members(archive: zipfile.ZipFile) -> set[str]:
+    """Validate member paths/types and decompression bounds before testzip()."""
+    names: set[str] = set()
+    total_uncompressed = 0
+    infos = archive.infolist()
+    if len(infos) > MAX_ZIP_MEMBERS:
+        raise ValueError(f"Downloaded TLO package contains too many ZIP members ({len(infos)}).")
+    for info in infos:
+        raw_name = str(info.filename or "")
+        name = raw_name.replace("\\", "/")
+        if not name or "\x00" in name:
+            raise ValueError("Downloaded TLO package contains an invalid ZIP member name.")
+        if name.startswith("/") or re.match(r"^[A-Za-z]:", name):
+            raise ValueError(f"Downloaded TLO package contains an absolute ZIP member path: {raw_name}")
+        parts = [part for part in name.split("/") if part not in {"", "."}]
+        if any(part == ".." for part in parts):
+            raise ValueError(f"Downloaded TLO package contains parent traversal in ZIP member: {raw_name}")
+        normalized_name = "/".join(parts)
+        if normalized_name in names:
+            raise ValueError(f"Downloaded TLO package contains a duplicate ZIP member name: {raw_name}")
+        reserved = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+        for part in parts:
+            if ":" in part:
+                raise ValueError(f"Downloaded TLO package contains an NTFS alternate-data-stream name: {raw_name}")
+            if part.endswith((".", " ")):
+                raise ValueError(f"Downloaded TLO package contains a Windows-unsafe component: {raw_name}")
+            base = part.split(".", 1)[0].upper()
+            if base in reserved:
+                raise ValueError(f"Downloaded TLO package contains a reserved Windows device name: {raw_name}")
+        unix_mode = (int(info.external_attr) >> 16) & 0xFFFF
+        if (unix_mode & 0o170000) == 0o120000:
+            raise ValueError(f"Downloaded TLO package contains a symbolic-link ZIP member: {raw_name}")
+        total_uncompressed += int(info.file_size or 0)
+        if total_uncompressed > MAX_ZIP_UNCOMPRESSED_BYTES:
+            raise ValueError("Downloaded TLO package exceeds the uncompressed-size safety limit.")
+        compressed = int(info.compress_size or 0)
+        if int(info.file_size or 0) > 1024 * 1024 and compressed > 0:
+            ratio = int(info.file_size or 0) / compressed
+            if ratio > MAX_ZIP_COMPRESSION_RATIO:
+                raise ValueError(f"Downloaded TLO package contains an unsafe compression ratio: {raw_name}")
+        names.add(normalized_name)
+    return names
+
+
 def _inspect_downloaded_package(
     path: Path,
     *,
@@ -464,12 +511,12 @@ def _inspect_downloaded_package(
     """Validate release-package identity without extracting any files."""
     try:
         with zipfile.ZipFile(path, "r") as archive:
+            names = _validate_zip_members(archive)
             bad_member = archive.testzip()
             if bad_member:
                 raise ValueError(f"Downloaded TLO package contains a corrupt ZIP member: {bad_member}")
             member_name = "UPDATE_MANIFEST.json" if expected_kind == "update" else "manifest.json"
             manifest = _read_zip_json_member(archive, member_name)
-            names = {name.replace("\\", "/") for name in archive.namelist()}
     except zipfile.BadZipFile as exc:
         raise ValueError("Downloaded TLO release asset is not a valid ZIP file.") from exc
 

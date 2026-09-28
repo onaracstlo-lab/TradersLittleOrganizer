@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-__version__ = "v493"
+__version__ = "v510"
 
 import json
 import ntpath
 import os
 import re
 import uuid
-import zipfile
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
-from xml.etree import ElementTree
 
 from tlo_media_rules import MEDIA_EXTENSIONS
 from tlo_setlist_file_selection import _ordered_exception_files, _ordered_txt_files
 from tlo_wrapper_rules import split_wrapper_part_suffix
-from tlo_text_utils import MAX_TEXT_FULL_BYTES, read_text_file_full
+from tlo_text_utils import MAX_TEXT_FULL_BYTES, decode_text_bytes, read_text_file_full
+from tlo_path_policy import is_phase1_pruned_directory
 
 JOURNAL_NAME = ".tlo-sibling-consolidation.json"
 TEMP_PREFIX = ".tlo-collection-"
@@ -375,33 +374,11 @@ def _normalize_title(value: str) -> str:
 
 
 def _decode_bytes(raw: bytes) -> str:
-    choices = []
-    for order, encoding in enumerate(("utf-8-sig", "utf-16", "utf-16-le", "utf-16-be", "cp1252", "latin-1")):
-        try:
-            text = raw.decode(encoding, errors="replace")
-        except Exception:
-            continue
-        score = sum(ch.isalpha() for ch in text) - text.count("\ufffd") * 4 - text.count("\x00") * 8
-        choices.append((score, -order, text))
-    return max(choices, default=(0, 0, ""))[2]
+    return decode_text_bytes(raw)[0]
 
 
 def _read_docx_text(path_name: str) -> str:
-    try:
-        with zipfile.ZipFile(path_name) as archive:
-            document = archive.getinfo("word/document.xml")
-            if document.file_size > 16 * 1024 * 1024:
-                return ""
-            root = ElementTree.fromstring(archive.read(document))
-    except Exception:
-        return ""
-    namespace = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
-    paragraphs = []
-    for paragraph in root.iter(namespace + "p"):
-        text = "".join(node.text or "" for node in paragraph.iter(namespace + "t"))
-        if text.strip():
-            paragraphs.append(text.strip())
-    return "\n".join(paragraphs)
+    return read_text_file_full(path_name)
 
 
 def _read_rtf_text(path_name: str) -> str:
@@ -421,7 +398,7 @@ def _candidate_setlists(root: str) -> List[str]:
         dirs[:] = [
             name for name in dirs
             if not name.casefold().endswith("-ignoredir")
-            and name.casefold() not in {"$recycle.bin", "system volume information"}
+            and not is_phase1_pruned_directory(name)
         ]
         for name in files:
             extension = os.path.splitext(name)[1].lower()
@@ -452,7 +429,7 @@ def _audio_files_under(root: str) -> List[str]:
         dirs[:] = [
             name for name in dirs
             if not name.casefold().endswith("-ignoredir")
-            and name.casefold() not in {"$recycle.bin", "system volume information"}
+            and not is_phase1_pruned_directory(name)
         ]
         for name in files:
             if os.path.splitext(name)[1].lower() in MEDIA_EXTENSIONS:

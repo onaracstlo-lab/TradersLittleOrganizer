@@ -1,4 +1,4 @@
-__version__ = "v493"
+__version__ = "v510"
 
 import argparse
 import multiprocessing
@@ -18,7 +18,7 @@ from tlo_ux import operation_review_lines
 def _parse_args(argv=None):
     parser = argparse.ArgumentParser(
         prog="tlo-tag.py",
-        description="Tag audio files in TLOHome/readyForXfer or an explicit tagPath.",
+        description="Tag audio files beneath a required search folder.",
     )
     parser.add_argument("--TLOHome", dest="TLOHome", default="", metavar="DIR", help="TLOHome directory. Defaults from the TLOHome environment variable when present.")
     parser.add_argument("--myTLO", dest="myTLO", default="", metavar="DIR", help=argparse.SUPPRESS)
@@ -36,27 +36,30 @@ def _parse_args(argv=None):
         "artist_in_album",
         "delete_extra_tags",
         "as_is_artist_name",
+        "proper_grammar",
     ))
+    parser.set_defaults(corrupt_folders="never")
     tagger_help = {
         "compliant": "Use the simplified compliant folder-name parsing rules. Mutually exclusive with --rename-compliantly.",
         "etree_lookup": "Use eTreeDB as a metadata and song-title fallback during tagging.",
         "setlistfm_lookup": "Use setlist.fm as the enabled online fallback/evidence source during tagging. Requires --etree-lookup.",
-        "setlistfm_upgrade": "Use upgraded setlist.fm rate/daily limits when setlist.fm lookup is enabled. Requires SETLISTFMUPGRADE_API_KEY, set to the same API key as SETLISTFM_API_KEY.",
+        "setlistfm_upgrade": "Use upgraded setlist.fm rate/daily limits when setlist.fm lookup is enabled. Requires SETLISTFMUPGRADE_API_KEY or SETLISTFM_UPGRADE_API_KEY, set to the same API key as SETLISTFM_API_KEY.",
         "thorough_setlist_matching": "Collect and compare additional local and enabled online setlist candidates during tagging.",
         "rename_compliantly": "Rename an identified folder using the resolved Show Name before tagging it in place. Mutually exclusive with --compliant.",
-        "convert_shn": "Convert .shn/.shnf files in the selected tagging path to .flac; delete a source only after successful verified conversion.",
+        "convert_shn": "Convert .shn/.shnf files in the selected search folder to .flac; delete a source only after successful verified conversion.",
+        "corrupt_folders": "Corrupt-folder handling: never keeps corrupt folders, all removes only 100% corrupt folders, and threshold uses --corrupt-folder-threshold. Default never (keep corrupt folders).",
     }
     for action in parser._actions:
         if action.dest in tagger_help:
             action.help = tagger_help[action.dest]
     parser.add_argument("--debug", dest="debug", nargs="?", const=True, default=False, type=parse_bool, metavar="BOOL", help="Enable debug output and write Unknown-title diagnostic setlist copies under TLOHome/debug; optional BOOL accepts true/false, yes/no, y/n, 1/0.")
-    parser.add_argument("--tag-path", dest="tagPathOption", default="", metavar="DIR", help="Optional fully qualified tagging path override.")
-    parser.add_argument("tagPath", nargs="?", default="", help="Optional fully qualified tagging path override.")
+    parser.add_argument("--search-folder", "--tag-path", dest="tagPathOption", default="", metavar="DIR", help="Required fully qualified search folder. --tag-path is retained as a compatibility alias.")
+    parser.add_argument("tagPath", nargs="?", default="", metavar="SEARCH_FOLDER", help="Required fully qualified search folder (positional form).")
     args = parser.parse_args(argv)
     option_value = strip_optional_quotes(args.tagPathOption).strip()
     positional_value = strip_optional_quotes(args.tagPath).strip()
     if option_value and positional_value and option_value != positional_value:
-        parser.error("Use either --tag-path or positional tagPath, not both with different values.")
+        parser.error("Use either --search-folder/--tag-path or positional SEARCH_FOLDER, not both with different values.")
     args.tagPath = option_value or positional_value
     try:
         validate_compliant_rename_exclusivity(vars(args))
@@ -65,6 +68,8 @@ def _parse_args(argv=None):
         validate_corruption_policy(vars(args), require_explicit_threshold=True)
     except ValueError as exc:
         parser.error(str(exc))
+    if not args.tagPath:
+        parser.error("A search folder is required; tlo-tag no longer defaults to TLOHome/readyForXfer.")
     return args
 
 
@@ -88,6 +93,7 @@ def main(argv=None) -> int:
             artist_in_album=bool(args.artist_in_album),
             delete_extra_tags=bool(args.delete_extra_tags),
             as_is_artist_name=bool(args.as_is_artist_name),
+            proper_grammar=bool(args.proper_grammar),
         )
         review_config.tag_during_inventory = True
         review_config.tag_copy_during_inventory = False
@@ -119,6 +125,7 @@ def main(argv=None) -> int:
             artist_in_album=bool(args.artist_in_album),
             delete_extra_tags=bool(args.delete_extra_tags),
             as_is_artist_name=bool(args.as_is_artist_name),
+            proper_grammar=bool(args.proper_grammar),
             emit=lambda text: console_emit(str(text), end="" if str(text).endswith("\n") else "\n"),
         )
         return 0

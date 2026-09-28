@@ -113,7 +113,7 @@ def test_generated_info_is_limited_to_info_txt(tmp_path):
 
 
 def test_windows_delete_script_escapes_percent_and_disables_delayed_expansion(tmp_path):
-    script = tmp_path / "deleteBackupFolders.bat"
+    script = tmp_path / "deleteReplacedFolders.bat"
     IU._append_delete_command(str(script), r"E:\boots\Band - 100% Live !wow!")
     text = script.read_text(encoding="utf-8")
     assert text.startswith("setlocal DisableDelayedExpansion\n")

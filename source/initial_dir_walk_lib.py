@@ -1,14 +1,12 @@
-__version__ = "v493"
+__version__ = "v510"
 import os
 import re
 
 from console_output_lib import console_print
 from tlo_runtime_control import throttle_point, normalize_performance_mode
+from tlo_path_policy import OS_MANAGED_DIR_NAMES, is_phase1_pruned_directory
 
-SYSTEM_DIR_NAMES_TO_PRUNE = {
-    "$recycle.bin",
-    "system volume information",
-}
+SYSTEM_DIR_NAMES_TO_PRUNE = OS_MANAGED_DIR_NAMES
 
 MUSIC_FILE_EXTENSIONS_PHASE1 = {
     ".3gp", ".aac", ".aif", ".aiff", ".alac", ".ape", ".avi", ".flac",
@@ -54,8 +52,7 @@ def _phase1_should_prune_dir(dirname):
     name = str(dirname or "").strip().lower()
     return (
         name.endswith("-ignoredir")
-        or name in SYSTEM_DIR_NAMES_TO_PRUNE
-        or name.startswith(".tlo-collection-")
+        or is_phase1_pruned_directory(name)
     )
 
 

@@ -54,8 +54,8 @@ def test_checkbox_grid_uses_registry_positions_and_dry_run_cell(tk_root, monkeyp
     for widget in _descendants(tk_root):
         if isinstance(widget, ttk.Checkbutton):
             text = str(widget.cget("text"))
-            if text == "Thorough setlist\nMatching":
-                registry_text = "Thorough setlist Matching"
+            if text == "Thorough Setlist\nMatching":
+                registry_text = "Thorough Setlist Matching"
             elif text == "Tag Copy/Delete\nOriginal":
                 registry_text = "Tag Copy/Delete Original"
             elif text == "Delete Extra\nTags":

@@ -1,7 +1,7 @@
 """Folder-only reversal for logged TLO rename/copy/copy-delete operations."""
 from __future__ import annotations
 
-__version__ = "v493"
+__version__ = "v510"
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -194,9 +194,13 @@ def prepare_reverse_plan(
     return ReversePlan(resolved_home, requested, chosen[0], tuple(chosen[1]))
 
 
+def _raise_walk_error(error: OSError) -> None:
+    raise error
+
+
 def _relative_file_names(root: str) -> set[str]:
     found: set[str] = set()
-    for current, _dirs, files in os.walk(root):
+    for current, _dirs, files in os.walk(root, onerror=_raise_walk_error):
         for name in files:
             found.add(os.path.normcase(os.path.normpath(os.path.relpath(os.path.join(current, name), root))))
     return found

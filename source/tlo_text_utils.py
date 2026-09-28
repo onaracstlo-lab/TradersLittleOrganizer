@@ -1,6 +1,7 @@
 """Text cleanup utilities for safe titles, ASCII normalization, comparison keys, and full-file reads."""
 
-__version__ = "v493"
+__version__ = "v510"
+import codecs
 import os
 import re
 import unicodedata
@@ -146,6 +147,248 @@ def _normalize_text_preserve_lines(text: str) -> str:
     return "\n".join(kept)
 
 
+def _decode_utf8_with_legacy_spans(raw: bytes) -> tuple[str, str]:
+    """Preserve valid UTF-8 while decoding isolated legacy bytes as cp1252.
+
+    ``surrogateescape`` marks only bytes that are invalid in UTF-8.  Converting
+    those marked bytes back through cp1252 avoids turning the *valid* UTF-8
+    portions of a mixed/hand-edited setlist into mojibake.
+    """
+    decoded = raw.decode("utf-8-sig", errors="surrogateescape")
+    if not any("\udc80" <= ch <= "\udcff" for ch in decoded):
+        return decoded, "utf-8-sig"
+
+    out: list[str] = []
+    legacy = bytearray()
+
+    def flush_legacy() -> None:
+        if not legacy:
+            return
+        data = bytes(legacy)
+        legacy.clear()
+        try:
+            out.append(data.decode("cp1252"))
+        except UnicodeDecodeError:
+            out.append(data.decode("latin-1"))
+
+    for ch in decoded:
+        codepoint = ord(ch)
+        if 0xDC80 <= codepoint <= 0xDCFF:
+            legacy.append(codepoint - 0xDC00)
+            continue
+        flush_legacy()
+        out.append(ch)
+    flush_legacy()
+    return "".join(out), "utf-8+cp1252"
+
+
+def _bomless_utf16_encoding(raw: bytes) -> str:
+    """Return a likely BOM-less UTF-16 endian encoding, or an empty string."""
+    if len(raw) < 4 or raw.count(b"\x00") < max(2, len(raw) // 8):
+        return ""
+    even_nuls = sum(1 for byte in raw[0::2] if byte == 0)
+    odd_nuls = sum(1 for byte in raw[1::2] if byte == 0)
+    # ASCII-heavy UTF-16 LE places most NULs in odd byte positions; BE does
+    # the inverse. Require a clear bias so arbitrary binary data is not guessed.
+    if odd_nuls >= max(2, even_nuls * 2):
+        return "utf-16-le"
+    if even_nuls >= max(2, odd_nuls * 2):
+        return "utf-16-be"
+    return ""
+
+
+def decode_text_bytes(raw: bytes) -> tuple[str, str]:
+    """Decode traded setlist text without UTF-16 or mixed-encoding mojibake.
+
+    BOM-marked and NUL-dominant UTF-16 are recognized *before* UTF-8 because
+    NUL bytes are legal UTF-8 and would otherwise mask BOM-less UTF-16. Clean
+    UTF-8 is preferred. A trailing partial UTF-8 sequence (common when a bounded
+    sample ends inside a multi-byte character) is dropped without poisoning the
+    whole sample. If strict UTF-8 still fails, valid UTF-8 spans are preserved
+    while only invalid bytes are decoded through cp1252/latin-1.
+    """
+    raw = bytes(raw or b"")
+    if not raw:
+        return "", "empty"
+
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        try:
+            return raw.decode("utf-16"), "utf-16"
+        except UnicodeDecodeError:
+            pass
+
+    bomless_utf16 = _bomless_utf16_encoding(raw)
+    if bomless_utf16:
+        try:
+            return raw.decode(bomless_utf16), bomless_utf16
+        except UnicodeDecodeError:
+            pass
+
+    for encoding in ("utf-8-sig", "utf-8"):
+        try:
+            return raw.decode(encoding), encoding
+        except UnicodeDecodeError:
+            pass
+
+    # An incremental decoder with final=False accepts only the special case
+    # where the sample ends in an incomplete multi-byte UTF-8 sequence. Any
+    # invalid byte earlier in the sample still raises and falls through to the
+    # mixed-encoding path below.
+    try:
+        decoder = codecs.getincrementaldecoder("utf-8-sig")("strict")
+        text = decoder.decode(raw, final=False)
+        buffered, _flag = decoder.getstate()
+        if buffered:
+            return text, "utf-8-truncated-sample"
+    except (LookupError, UnicodeDecodeError):
+        pass
+
+    return _decode_utf8_with_legacy_spans(raw)
+
+
+
+
+_RTF_DESTINATIONS = frozenset({
+    "fonttbl", "colortbl", "stylesheet", "info", "pict", "object",
+    "header", "headerl", "headerr", "headerf", "footer", "footerl",
+    "footerr", "footerf", "generator", "themedata", "colorschememapping",
+    "listtable", "listoverridetable", "rsidtbl", "xmlnstbl",
+})
+
+def _rtf_to_text(text: str) -> str:
+    """Convert the subset of RTF used by trader setlists into plain text.
+
+    The parser is deliberately small but group-aware: metadata/destination
+    groups are skipped, character escapes are decoded using ansicpg, and
+    paragraph/TextEdit line boundaries are preserved.
+    """
+    out = []
+    stack = []
+    state = {"skip": False, "uc": 1, "codepage": 1252, "group_start": True}
+    skip_fallback = 0
+    i = 0
+    length = len(text)
+
+    def emit(value: str) -> None:
+        nonlocal skip_fallback
+        if state["skip"]:
+            return
+        if skip_fallback > 0:
+            skip_fallback -= 1
+            return
+        out.append(value)
+
+    while i < length:
+        ch = text[i]
+        if ch == "{":
+            stack.append(dict(state))
+            state = dict(state)
+            state["group_start"] = True
+            i += 1
+            continue
+        if ch == "}":
+            if stack:
+                state = stack.pop()
+            i += 1
+            continue
+        if ch != "\\":
+            emit(ch)
+            if not ch.isspace():
+                state["group_start"] = False
+            i += 1
+            continue
+
+        # Backslash followed by a physical newline is TextEdit's line break.
+        if i + 1 < length and text[i + 1] in "\r\n":
+            if not state["skip"]:
+                out.append("\n")
+            i += 2
+            if i < length and text[i - 1] == "\r" and text[i] == "\n":
+                i += 1
+            continue
+        if i + 1 >= length:
+            i += 1
+            continue
+        nxt = text[i + 1]
+        if nxt in "\\{}":
+            emit(nxt)
+            state["group_start"] = False
+            i += 2
+            continue
+        if nxt == "*":
+            state["skip"] = True
+            i += 2
+            continue
+        if nxt == "'" and i + 3 < length:
+            pair = text[i + 2:i + 4]
+            try:
+                byte = bytes([int(pair, 16)])
+                encoding = f"cp{int(state['codepage'])}"
+                decoded = byte.decode(encoding, errors="replace")
+            except (ValueError, LookupError):
+                decoded = "�"
+            emit(decoded)
+            state["group_start"] = False
+            i += 4
+            continue
+
+        match = re.match(r"\\([A-Za-z]+)(-?\d+)? ?", text[i:])
+        if match:
+            word = match.group(1)
+            number = match.group(2)
+            lowered = word.casefold()
+            i += len(match.group(0))
+            if state.get("group_start") and lowered in _RTF_DESTINATIONS:
+                state["skip"] = True
+            state["group_start"] = False
+            if lowered == "ansicpg" and number:
+                try:
+                    state["codepage"] = int(number)
+                except ValueError:
+                    pass
+            elif lowered == "uc" and number:
+                try:
+                    state["uc"] = max(0, int(number))
+                except ValueError:
+                    pass
+            elif lowered == "u" and number and not state["skip"]:
+                value = int(number)
+                if value < 0:
+                    value += 65536
+                try:
+                    out.append(chr(value))
+                except ValueError:
+                    pass
+                skip_fallback = int(state.get("uc", 1) or 0)
+            elif lowered in {"par", "line"} and not state["skip"]:
+                out.append("\n")
+            elif lowered == "tab" and not state["skip"]:
+                out.append(" ")
+            elif not state["skip"]:
+                symbol_words = {
+                    "lquote": "'", "rquote": "'",
+                    "ldblquote": '"', "rdblquote": '"',
+                    "emdash": "-", "endash": "-",
+                    "bullet": "•",
+                    "emspace": " ", "enspace": " ", "qmspace": " ",
+                }
+                if lowered in symbol_words:
+                    out.append(symbol_words[lowered])
+            continue
+
+        # Standard RTF control symbols that carry text semantics.
+        if nxt == "~":
+            emit(" ")
+        elif nxt == "_":
+            emit("-")
+        elif nxt == "-":
+            pass  # optional hyphen: emit nothing
+        # Unknown control symbols are consumed rather than leaking RTF syntax.
+        i += 2
+
+    return _normalize_text_preserve_lines("".join(out))
+
+
 def _read_text_content(
     path_name: str,
     *,
@@ -160,6 +403,11 @@ def _read_text_content(
     byte_limit = max(1, int(max_bytes or 1))
 
     try:
+        if ext == ".doc":
+            # Legacy binary Word .doc files are not text. Keep the extension
+            # discoverable for diagnostics, but never decode the binary payload
+            # as setlist text.
+            return ""
         if ext == ".docx":
             with zipfile.ZipFile(path_name, "r") as zf:
                 info = zf.getinfo("word/document.xml")
@@ -189,24 +437,10 @@ def _read_text_content(
                 return ""
             raw = raw[:byte_limit]
 
-        encodings = ["utf-8-sig", "utf-8"]
-        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
-            encodings.insert(0, "utf-16")
-        elif raw and raw.count(b"\x00") >= max(2, len(raw) // 8):
-            encodings.extend(["utf-16-le", "utf-16-be"])
-        encodings.extend(["cp1252", "latin-1"])
-        for encoding in encodings:
-            try:
-                text = raw.decode(encoding, errors="ignore")
-                if ext == ".rtf":
-                    text = re.sub(r"\\par[d]?", "\n", text)
-                    text = re.sub(r"\\'[0-9a-fA-F]{2}", "", text)
-                    text = re.sub(r"\\[a-zA-Z]+-?\d* ?", "", text)
-                    text = re.sub(r"[{}]", "", text)
-                    return _normalize_text_preserve_lines(text)
-                return text
-            except (LookupError, UnicodeError):
-                continue
+        text, _encoding = decode_text_bytes(raw)
+        if ext == ".rtf":
+            return _rtf_to_text(text)
+        return text
     except OSError:
         return ""
     except (KeyError, zipfile.BadZipFile, RuntimeError):

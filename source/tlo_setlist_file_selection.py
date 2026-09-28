@@ -1,10 +1,10 @@
-__version__ = "v493"
+__version__ = "v510"
 import os
 import re
 
 from tlo_wrapper_rules import is_common_music_folder_name, is_wrapper_part_folder_name, split_wrapper_part_suffix, split_parenthesized_numeric_part_suffix
 from tlo_constants import MONTH_NAME_CASED_PATTERN
-from tlo_text_utils import MAX_TEXT_FULL_BYTES, setlist_text_requests_generated_from_music_files
+from tlo_text_utils import decode_text_bytes, MAX_TEXT_FULL_BYTES, setlist_text_requests_generated_from_music_files
 
 SETLIST_NAME_PATTERNS = [
     re.compile(r"set[\s._-]*list", re.IGNORECASE),
@@ -104,28 +104,11 @@ def _decoded_text_quality(raw_bytes, text):
 def _decode_text_sample_bytes(raw):
     if not raw:
         return "", _decoded_text_quality(raw, "")
-
-    candidates = []
-    # UTF-16 files legitimately contain many NUL bytes. Try BOM and inferred
-    # UTF-16 before deciding that a NUL-heavy text file is unusable.
-    for order, encoding in enumerate(("utf-8-sig", "utf-16", "utf-16-le", "utf-16-be", "cp1252", "latin-1")):
-        try:
-            decoded = raw.decode(encoding, errors="ignore")
-        except Exception:
-            continue
-        quality = _decoded_text_quality(raw, decoded)
-        decoded_null_penalty = int(quality.get("decoded_null_ratio", 0.0) * 1000)
-        score = quality["alpha_count"] - decoded_null_penalty + int(quality["printable_ratio"] * 10)
-        candidates.append((score, -order, decoded, quality))
-
-    if not candidates:
-        return "", _decoded_text_quality(raw, "")
-    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
-    return candidates[0][2], candidates[0][3]
+    decoded, _encoding = decode_text_bytes(raw)
+    return decoded, _decoded_text_quality(raw, decoded)
 
 
 def _is_unreadable_or_null_text_sample(text, quality):
-    value = text or ""
     q = quality or {}
     raw_len = int(q.get("raw_len") or 0)
     alpha_count = int(q.get("alpha_count") or 0)

@@ -1,8 +1,9 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v493"
+__version__ = "v510"
 
 from tlo_diagnostics import debug_suppressed_exception
+from tlo_text_utils import read_text_file_full
 import json
 import os
 import re
@@ -27,6 +28,7 @@ from tlo_artist_db import (
     artist_search_variants,
     lookup_artist_master_with_status,
     match_line_to_artists,
+    proper_grammar_artist_name,
     terminal_suffix_fallback_info_for_artist,
 )
 from tlo_audio_tags import collect_group_flac_tag_info
@@ -56,6 +58,7 @@ from tlo_etree_lookup import ETreeDBError, lookup_venue_and_location
 from tlo_setlistfm_lookup import SetlistFMError, collect_setlists_by_performance as collect_setlistfm_setlists_by_performance, is_us_country, lookup_venue_and_location as lookup_setlistfm_venue_and_location
 from tlo_setlist_metadata_lookup import extract_setlist_venue_location, is_setlist_metadata_scan_boundary, explicit_metadata_match, looks_like_sentence_prose_line
 from tlo_runtime_control import throttle_point
+from tlo_options import defensive_corruption_policy_values
 from tlo_tree_compare import has_exact_tree_match_in_family, split_collision_suffix
 
 FOUR_DIGIT_WRAPPER_RE = re.compile(r"^\d{4}$")
@@ -2775,6 +2778,26 @@ def _compliant_artist_mode(config) -> str:
     return "as-is" if _as_is_artist_name(config) else "master"
 
 
+def _proper_grammar_artist_name_enabled(config) -> bool:
+    return bool(getattr(config, "proper_grammar", False)) and not _as_is_artist_name(config)
+
+
+def _apply_proper_grammar_artist_output(
+    config, record: ShowMetadata, matcher: Optional[ArtistMatcher], observations: List[str]
+) -> None:
+    """Apply the output-only Artist DB naming preference before Show construction."""
+    if not _proper_grammar_artist_name_enabled(config):
+        return
+    current = compact_ws(getattr(record, "artist", ""))
+    if not current or matcher is None:
+        return
+    preferred = compact_ws(proper_grammar_artist_name(current, matcher))
+    if not preferred or preferred == current:
+        return
+    record.artist = preferred
+    observations.append(f"Proper Grammar artist output selected from Artist DB: {current} -> {preferred}")
+
+
 def _artist_output_name(config, raw_name: str, master_name: str) -> str:
     raw = compact_ws(raw_name)
     master = compact_ws(master_name)
@@ -4281,6 +4304,7 @@ def _format_switches_log_line(config, action: str = "Full Inventory") -> str:
         f"Artist in Album: {_yes_no(getattr(config, 'artist_in_album', True))}",
         f"Delete extra tags: {_yes_no(getattr(config, 'delete_extra_tags', False))}",
         f"As-Is Artist Name: {_yes_no(_as_is_artist_name(config))}",
+        f"Proper Grammar: {_yes_no(bool(getattr(config, 'proper_grammar', False)))}",
         f"etreeDB: {_yes_no(getattr(config, 'etree_lookup', False))}",
         f"setlist.fm: {_yes_no(getattr(config, 'setlistfm_lookup', False))}",
         f"setlist.fm upgrade: {_yes_no(getattr(config, 'setlistfm_upgrade', False))}",
@@ -4427,15 +4451,18 @@ NONCOMPLIANT_BLANK_ARTIST_TAG_MARKERS = (
 )
 
 
-def _contains_blankable_noncompliant_artist_tag(value: str) -> str:
-    folded = standard_ascii_text(value).casefold()
+def _contains_blankable_noncompliant_artist_tag(value: str, matcher: Optional[ArtistMatcher] = None) -> str:
+    term = compact_ws(value)
+    if term and _lookup_artist_detail(term, matcher)["status"] == "matched":
+        return ""
+    folded = standard_ascii_text(term).casefold()
     for marker in NONCOMPLIANT_BLANK_ARTIST_TAG_MARKERS:
         if marker in folded:
             return marker
     return ""
 
 
-def _blank_unusable_artist_tags_for_noncompliant(record: ShowMetadata, observations: Optional[List[str]] = None) -> None:
+def _blank_unusable_artist_tags_for_noncompliant(record: ShowMetadata, observations: Optional[List[str]] = None, matcher: Optional[ArtistMatcher] = None) -> None:
     """Blank unusable non-compliant artist-tag values before tag resolution.
 
     In non-compliant mode, tag-derived artist values containing generic
@@ -4449,7 +4476,7 @@ def _blank_unusable_artist_tags_for_noncompliant(record: ShowMetadata, observati
     for sample in record.flac_tag_samples:
         for field_name, label in (("artist", "ARTIST"), ("albumartist", "ALBUMARTIST")):
             value = (sample.get(field_name) or "").strip()
-            marker = _contains_blankable_noncompliant_artist_tag(value)
+            marker = _contains_blankable_noncompliant_artist_tag(value, matcher)
             if value and marker:
                 sample[field_name] = ""
                 changed = True
@@ -5132,22 +5159,9 @@ def _ranked_setlist_date_matches(header_lines: Sequence[str]) -> List[Dict[str, 
     return [item for _score, _line_neg, _start_neg, _serial_neg, item in ranked]
 
 def _read_text_for_date_fallback(path_name: str) -> str:
-    try:
-        with open(path_name, "rb") as infile:
-            data = infile.read()
-    except OSError:
-        return ""
-    if not data:
-        return ""
-    for encoding in ("utf-8-sig", "utf-16", "utf-16-le", "utf-16-be", "utf-8", "cp1252", "latin-1"):
-        try:
-            text = data.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-        if text.count("\x00") >= max(3, len(text) // 100):
-            continue
-        return text.replace("\r\n", "\n").replace("\r", "\n")
-    return data.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
+    """Read descriptor/date-fallback text through the shared bounded reader."""
+    text = read_text_file_full(path_name)
+    return text.replace("\r\n", "\n").replace("\r", "\n") if text else ""
 
 
 def _setlist_content_lines_for_date(text: str, limit: int = 80) -> List[str]:
@@ -5422,7 +5436,6 @@ def _resolve_date_from_candidates_with_setlist_validation(
     chosen_date = validation_hits[0][1]
     chosen_setlist = validation_hits[0][2]
     chosen_conflict_value = validation_hits[0][3]
-    compatible_chosen = [hit for hit in validation_hits if hit[1] == chosen_date]
     unique_chosen_dates = _unique_preserve([hit[1] for hit in validation_hits])
     if len(unique_chosen_dates) > 1:
         # Keep the conflict if setlist validation is itself ambiguous.
@@ -5959,7 +5972,6 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
     unresolved_reasons: List[str] = []
     date_matches: List[Dict[str, str]] = []
     compliant_dash_match = False
-    compliant_dash_date_match = False
     compliant_string_date_match = False
     compliant_folder_name_show_match = False
     compliant_mp3_year_show_match = False
@@ -5995,7 +6007,6 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
         if dash_artist:
             record.artist = dash_artist
         if dash_date_match:
-            compliant_dash_date_match = True
             record.date = dash_date_match.get("date_norm", "")
             if record.date:
                 evidence.setdefault("date", []).append(Candidate(record.date, "compliant:string_dash_string_date", 68))
@@ -6117,6 +6128,7 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
         unresolved_reasons.append("unable to identify artist")
     _apply_selected_day_range_parenthetical(record, date_matches, observations)
     _apply_unknown_date_descriptor_fallback(record, observations)
+    _apply_proper_grammar_artist_output(config, record, artist_matcher, observations)
     if compliant_dash_match:
         record.show_name = _build_compliant_dash_show_name(record)
     elif compliant_string_date_match:
@@ -6265,7 +6277,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
         if not string_date_string_found:
             dash_album_match = _find_string_dash_string_match(group, artist_matcher)
     else:
-        _blank_unusable_artist_tags_for_noncompliant(record, observations)
+        _blank_unusable_artist_tags_for_noncompliant(record, observations, artist_matcher)
         # Tag artist metadata is deliberately deferred until structural path and
         # selected-setlist evidence have had the opportunity to identify the
         # group. A single stale/foreign FLAC tag must not override a coherent
@@ -6624,11 +6636,10 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             evidence.setdefault("qualifier", []).append(Candidate(record.qualifier, "path", 15))
     record.is_24_bit = _detect_24_bit([record.main_dir_name, record.main_dir_path] + list(_iter_group_media_files(group)))
 
-    lookup_success = False
-
     if not record.artist:
         unresolved_reasons.append("unable to identify artist")
     _apply_selected_day_range_parenthetical(record, date_matches, observations)
+    _apply_proper_grammar_artist_output(config, record, artist_matcher, observations)
     if dash_album_mode:
         if _dash_album_mode_should_use_structured_show_name(record, evidence):
             record.show_name = _build_show_name(record)
@@ -6842,16 +6853,14 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
         tag_group_ready = True
 
         from tlo_corruption import handle_group_corruption
+        safe_corrupt_files, safe_corrupt_folders, safe_corrupt_threshold = defensive_corruption_policy_values(config)
         corruption_outcome = handle_group_corruption(
-            config,
-            group,
-            record,
-            corrupt_files=str(getattr(config, "corrupt_files", "delete") or "delete"),
-            corrupt_folders=str(getattr(config, "corrupt_folders", "all") or "all"),
-            folder_threshold=int(getattr(config, "corrupt_folder_threshold", 100) or 0),
+            config, group, record,
+            corrupt_files=safe_corrupt_files,
+            corrupt_folders=safe_corrupt_folders,
+            folder_threshold=safe_corrupt_threshold,
         )
         corruption_unverifiable = corruption_outcome.unverifiable
-        corruption_unverifiable_details = list(corruption_outcome.assessment.unverifiable_details)
         if corruption_outcome.show_removed:
             continue
         unidentified_for_mutation = _record_is_unidentified_for_mutation(record, unresolved_reasons)

@@ -1,0 +1,32 @@
+TLO v1.7 Build 510 - Build Verification
+Verification date: 2026-09-28
+
+Scope
+- Build 510 is a lint-only source correction over Build 509.
+- tests/behavior/test_build465_cross_platform_collection_recovery.py line 15 changes the unnecessary raw f-string prefix from rf to r for the fixed Windows path literal.
+- No application/runtime behavior changes from Build 509.
+
+Code/test verification
+- Python compileall: passed.
+- Full pytest suite: 1,589 passed, 0 failed (1 expected zipfile duplicate-name warning from the ZIP-hardening regression fixture).
+- Requirements compatibility suite: 1,420 passed, 0 failed.
+- Current source/test version references advanced to v510 / v1.7 Build 510.
+- The Build 510 requirements Revision Index heading is Build 398-510, and its current-version tests were updated accordingly.
+
+Ruff gate
+- GitHub Build Process v094 runs: python -m ruff check --select F821,F822,F823,F541 .
+- The Build 509 local build reported one F541 violation at tests/behavior/test_build465_cross_platform_collection_recovery.py:15; Build 510 applies Ruff's exact suggested correction (rf -> r).
+- A source AST sanity scan after the correction found no top-level f-strings without replacement fields.
+- Ruff itself is not installed in this isolated verification container and could not be installed because package-network access is unavailable; the mandatory v094 local/GitHub lint gate remains the authoritative Ruff execution.
+
+Documentation verification
+- TLO_Inventory_Requirements_Working_v510.docx rendered successfully to 104 pages.
+- Pixel comparison against the previously verified Build 509 requirements render showed unchanged pages remain identical; changed pages are limited to the current-version/revision-index reflow and retain normal page margins without clipping.
+- TLO_Inventory_User_Manual_v510.rtf converted successfully to a 46-page PDF for QA. Compared with Build 509, only page 1 (version) and page 46 (Build 510 release note) changed; both were visually checked and are clean.
+- CHANGES_v510.txt preserves the Build 509 review-remediation history and adds the Build 510 lint-only entry.
+- The superseded Build 509 changes, verification record, and SHA-256 manifest were added to old-change-logs.zip.
+
+Packaging
+- Current documentation and metadata filenames use v510.
+- No current v509-named top-level release artifact remains.
+- No GitHub Build Process artifact is included in the TLO source bundle; that process remains separately versioned as v094.

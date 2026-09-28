@@ -113,11 +113,15 @@ def test_gui_disables_both_when_normal_key_is_missing_even_if_upgrade_variable_e
 
 
 def test_upgrade_cli_validation_requires_second_environment_variable(monkeypatch):
+    monkeypatch.setenv(sfm.ENV_API_KEY, "same-secret")
     monkeypatch.delenv(sfm.ENV_UPGRADE_API_KEY, raising=False)
     with pytest.raises(ValueError, match="SETLISTFMUPGRADE_API_KEY"):
-        validate_setlistfm_upgrade_environment({"setlistfm_upgrade": True})
+        validate_setlistfm_upgrade_environment({"setlistfm_lookup": True, "setlistfm_upgrade": True})
     assert "same setlist.fm API key" in SETLISTFM_UPGRADE_KEY_ERROR
 
     monkeypatch.setenv(sfm.ENV_UPGRADE_API_KEY, "same-secret")
-    validate_setlistfm_upgrade_environment({"setlistfm_upgrade": True})
-    validate_setlistfm_upgrade_environment({"setlistfm_upgrade": False})
+    validate_setlistfm_upgrade_environment({"setlistfm_lookup": True, "setlistfm_upgrade": True})
+    validate_setlistfm_upgrade_environment({"setlistfm_lookup": True, "setlistfm_upgrade": False})
+    # Upgrade is inert when lookup itself is off.
+    monkeypatch.delenv(sfm.ENV_UPGRADE_API_KEY, raising=False)
+    validate_setlistfm_upgrade_environment({"setlistfm_lookup": False, "setlistfm_upgrade": True})

@@ -4,7 +4,7 @@ The categorized suite lives under tests/. Importing the tests here preserves the
 existing CI command: python -m pytest -q test_tlo_requirements.py.
 """
 
-__version__ = "v493"
+__version__ = "v510"
 
 from tests.contracts.test_legacy_contracts import *  # noqa: F401,F403
 from tests.contracts.test_build364_contracts import *  # noqa: F401,F403
@@ -141,7 +141,7 @@ from tests.behavior.test_build465_cross_platform_collection_recovery import *  #
 from tests.behavior.test_build466_collection_sibling_topology import *  # noqa: F401,F403
 
 from tests.behavior.test_build467_mp3_delete_extra_tags import *  # noqa: F401,F403
-from tests.behavior.test_build468_tagger_cancel_state import *  # noqa: F401,F403
+from tests.behavior.test_build508_remove_dead_tagger_window import *  # noqa: F401,F403
 
 from tests.behavior.test_build469_gui_tag_and_controls import *  # noqa: F401,F403
 
@@ -164,3 +164,19 @@ from tests.behavior.test_build491_canada_generated_info_and_message import *  # 
 from tests.behavior.test_build492_common_word_region_codes import *  # noqa: F401,F403
 
 from tests.behavior.test_build493_lowercase_path_regions import *  # noqa: F401,F403
+from tests.behavior.test_build494_thorough_setlist_capitalization import *  # noqa: F401,F403
+from tests.behavior.test_build495_add_shows_search_and_tagger_cli import *  # noqa: F401,F403
+from tests.behavior.test_build496_empty_runtime_postprocess import *  # noqa: F401,F403
+
+from tests.behavior.test_build497_delete_extra_tags_state import *  # noqa: F401,F403
+from tests.behavior.test_build498_proper_grammar import *  # noqa: F401,F403
+
+from tests.behavior.test_build500_proper_grammar_terminology import *  # noqa: F401,F403
+
+from tests.behavior.test_build501_review_remediation import *  # noqa: F401,F403
+
+from tests.contracts.test_build502_requirements_consolidation import *  # noqa: F401,F403
+
+from tests.behavior.test_build503_copy_request_direct_paths_volumes import *  # noqa: F401,F403
+
+from tests.behavior.test_build504_gui_state_and_upgrade_env import *  # noqa: F401,F403

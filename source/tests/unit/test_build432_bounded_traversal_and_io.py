@@ -31,20 +31,36 @@ def _deep_tree(tmp_path, depth=1050):
     return cur
 
 
+def _remove_deep_tree(leaf, root):
+    audio = leaf / "01.flac"
+    if audio.exists():
+        audio.unlink()
+    cur = leaf
+    while cur != root:
+        cur.rmdir()
+        cur = cur.parent
+
+
 def test_phase1_deep_tree_does_not_depend_on_python_recursion_limit(tmp_path):
     leaf=_deep_tree(tmp_path)
-    cfg=SimpleNamespace(logs=_Logs(), performance_mode='balanced', pause_event=None, cancel_requested=False)
-    count=W.initial_dir_walk(cfg, str(tmp_path))
-    assert count == 1051
-    assert cfg.logs.complete and cfg.logs.complete[-1].endswith('01.flac')
+    try:
+        cfg=SimpleNamespace(logs=_Logs(), performance_mode='balanced', pause_event=None, cancel_requested=False)
+        count=W.initial_dir_walk(cfg, str(tmp_path))
+        assert count == 1051
+        assert cfg.logs.complete and cfg.logs.complete[-1].endswith('01.flac')
+    finally:
+        _remove_deep_tree(leaf, tmp_path)
 
 
 def test_phase23_deep_tree_does_not_depend_on_python_recursion_limit(tmp_path):
     leaf=_deep_tree(tmp_path)
-    cfg=SimpleNamespace(logs=_Logs())
-    found=P._discover_music_dirs(cfg, str(tmp_path))
-    assert len(found)==1
-    assert Path(found[0]['music_dir']) == leaf
+    try:
+        cfg=SimpleNamespace(logs=_Logs())
+        found=P._discover_music_dirs(cfg, str(tmp_path))
+        assert len(found)==1
+        assert Path(found[0]['music_dir']) == leaf
+    finally:
+        _remove_deep_tree(leaf, tmp_path)
 
 
 def test_bounded_response_rejects_one_byte_over_limit():

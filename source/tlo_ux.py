@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v493"
+__version__ = "v510"
 
 
 import copy
@@ -26,6 +26,7 @@ from inventory_list_lib import (
 )
 from tlo_media_rules import MEDIA_EXTENSIONS
 from tlo_security import is_network_or_device_path
+from tlo_options import defensive_corruption_policy_values
 
 
 # ttk.Progressbar.start() receives the animation interval in milliseconds.
@@ -210,9 +211,10 @@ MAIN_WINDOW_CHECKBOX_SPECS = (
     ("tag_copy_during_inventory", "Tag Copy"),
     ("convert_shn", "Convert shn"),
     ("as_is_artist_name", "As-Is Artist Name"),
+    ("proper_grammar", "Proper Grammar"),
     ("tag_copy_and_delete_enabled", "Tag Copy/Delete Original"),
-    ("delete_extra_tags", "Delete extra tags"),
-    ("dry_run", "Dry run"),
+    ("delete_extra_tags", "Delete Extra Tags"),
+    ("dry_run", "Dry Run"),
 )
 
 
@@ -240,6 +242,7 @@ def main_window_checkbox_values(source, *, dry_run=None) -> dict[str, bool]:
         "tag_copy_during_inventory": bool(tag_copy),
         "convert_shn": bool(read("convert_shn", False)),
         "as_is_artist_name": bool(read("as_is_artist_name", False)),
+        "proper_grammar": bool(read("proper_grammar", False)),
         "tag_copy_and_delete_enabled": bool(copy_delete),
         "delete_extra_tags": bool(read("delete_extra_tags", False)),
         "dry_run": bool(read("main_window_dry_run", False) if dry_run is None else dry_run),
@@ -294,14 +297,13 @@ def operation_review_lines(
             f"Performance: {getattr(config, 'performance_mode', 'balanced')} / "
             f"Max Workers ceiling {getattr(config, 'max_workers', 0)}"
         )
-        corrupt_files = str(getattr(config, "corrupt_files", "delete") or "delete")
-        corrupt_folders = str(getattr(config, "corrupt_folders", "all") or "all")
+        corrupt_files, corrupt_folders, safe_corrupt_threshold = defensive_corruption_policy_values(config)
         file_display = {"keep": "Keep and report", "delete": "Delete corrupt files"}.get(corrupt_files, corrupt_files)
         folder_display = {"never": "Never", "all": "100% corrupt only", "threshold": "At threshold"}.get(corrupt_folders, corrupt_folders)
         lines.append(f"Corrupt files: {file_display}")
         lines.append(f"Folder removal: {folder_display}")
         if corrupt_folders == "threshold":
-            lines.append(f"Folder corruption threshold: {int(getattr(config, 'corrupt_folder_threshold', 100) or 0)}%")
+            lines.append(f"Folder corruption threshold: {safe_corrupt_threshold}%")
         copy_delete = str(getattr(config, "tag_copy_and_delete_path", "") or "").strip()
         destination = str(getattr(config, "tag_copy_destination", "") or copy_delete).strip()
         if destination:
@@ -564,9 +566,7 @@ def preview_operation(
                             from tlo_corruption import classify_audio_paths, corruption_action, qualifying_corrupt_music_dirs, group_audio_snapshot
                             corruption_audio, snapshot_errors = group_audio_snapshot(group)
                             corruption_bad, unverifiable_files = classify_audio_paths(corruption_audio)
-                            file_policy = str(getattr(preview_config, "corrupt_files", "delete") or "delete")
-                            folder_policy = str(getattr(preview_config, "corrupt_folders", "all") or "all")
-                            folder_threshold = int(getattr(preview_config, "corrupt_folder_threshold", 100) or 0)
+                            file_policy, folder_policy, folder_threshold = defensive_corruption_policy_values(preview_config)
                             unverifiable = list(snapshot_errors) + list(unverifiable_files)
                             corruption_policy = (
                                 "unverifiable"
@@ -632,6 +632,7 @@ def preview_add_shows(
     config,
     *,
     mode: str = "new",
+    search_path: str = "",
     check_duplicates: bool = True,
     sample_limit: int = 30,
     cancel_check=None,
@@ -655,7 +656,9 @@ def preview_add_shows(
     operation = "Add Shows - Potential Duplicate/Upgrades Dry Run" if duplicate_mode else "Add Shows - New Shows Dry Run"
     result = PreviewResult(operation=operation)
     source_name = "dups" if duplicate_mode else "readyForXfer"
-    root = os.path.join(str(getattr(config, "TLOHome", "") or ""), source_name)
+    default_root = os.path.join(str(getattr(config, "TLOHome", "") or ""), source_name)
+    root = default_root if duplicate_mode else (str(search_path or "").strip() or default_root)
+    root = os.path.normpath(root)
     result.roots = [os.path.normpath(root)]
     if not os.path.isdir(root):
         result.issues.append(RunIssue("Inaccessible path", f"Add Shows source directory does not exist: {root}", root, "error", "preview"))

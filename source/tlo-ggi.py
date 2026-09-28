@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v493"
+__version__ = "v510"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -34,21 +34,31 @@ from tlo_options import (
     parse_bool,
     parse_corrupt_file_policy,
     parse_corrupt_folder_policy,
+    defensive_corruption_policy_values,
     parse_percent_0_100,
     validate_compliant_rename_exclusivity,
     validate_corruption_policy,
 )
 from tlo_path_inputs import normalize_platform_input_path, resolve_current_storage_volume, resolve_tlo_home as resolve_inventory_tlo_home
 from inventory_list_lib import parse_search_path_input
-from tlo_setlistfm_lookup import api_key_available, upgrade_api_key_available
+from tlo_setlistfm_lookup import (
+    MAX_REQUESTS_PER_RUN,
+    MIN_REQUEST_INTERVAL_SECONDS,
+    UPGRADE_MAX_REQUESTS_PER_DAY,
+    UPGRADE_REQUESTS_PER_SECOND,
+    api_key_available,
+    upgrade_api_key_available,
+    upgrade_api_key_status,
+)
 from logging_lib import delete_logs_for_tokens
 from tlo_bootlist_volume_policy import normalize_volume_action, volume_display_name
 from tlo_main_lib import run_inventory
-from tlo_tag_lib import TAGGER_TITLE, run_tagger, run_tagger_jobs
+from tlo_tag_lib import run_tagger_jobs
 from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION, PUBLIC_VERSION, versioned_title
 from tlo_research_lib import research_logs
 from tlo_gui_shortcuts import install_global_ctrl_a
 from tlo_gui_shortcuts import configure_centered_ttk_button_text, bounded_initial_window_size
+from tlo_text_utils import read_text_file_sample
 from tlo_github_updates import (
     check_for_updates,
     download_update,
@@ -57,14 +67,6 @@ from tlo_github_updates import (
     should_auto_check,
 )
 
-# Keep the standalone Tagger dialog intentionally compact. The prior layout
-# used an 82-character path field and a 110-character output pane; v298 halves
-# those character widths so the dialog occupies about half as much horizontal
-# screen space while preserving normal resize behavior.
-TAGGER_PATH_ENTRY_WIDTH = 41
-TAGGER_OUTPUT_TEXT_WIDTH = 55
-TAGGER_MODE_WRAP_PIXELS = 520
-TAGGER_DISPLAY_VERSION = versioned_title("TLO Tagger GUI")
 GUI_THREAD_CALLBACK_TIMEOUT_SECONDS = 30.0
 
 CORRUPT_FILE_GUI_VALUES = {
@@ -78,6 +80,22 @@ CORRUPT_FOLDER_GUI_VALUES = {
 }
 CORRUPT_FILE_GUI_TO_POLICY = {label: value for value, label in CORRUPT_FILE_GUI_VALUES.items()}
 CORRUPT_FOLDER_GUI_TO_POLICY = {label: value for value, label in CORRUPT_FOLDER_GUI_VALUES.items()}
+
+
+def _setlistfm_upgrade_gate_message(status: str) -> str:
+    """Return a non-secret explanation when a setlist.fm control is unavailable."""
+    if status == "missing-normal":
+        return "setlist.fm is disabled because SETLISTFM_API_KEY is unavailable."
+    if status == "missing-upgrade":
+        return (
+            "setlist.fm upgrade is disabled because neither SETLISTFMUPGRADE_API_KEY nor "
+            "SETLISTFM_UPGRADE_API_KEY is available."
+        )
+    if status == "mismatch":
+        return "setlist.fm upgrade is disabled because the upgrade key does not match SETLISTFM_API_KEY."
+    if status == "invalid-characters":
+        return "setlist.fm upgrade is disabled because one of the configured keys contains invalid control or invisible characters."
+    return ""
 
 
 def _thorough_setlist_info_message(*, thorough: bool, etree_enabled: bool, setlistfm_enabled: bool, setlistfm_upgrade: bool) -> str:
@@ -110,12 +128,12 @@ from tlo_inventory_update import (
     process_new_shows,
     review_paths_for_duplicate,
     updater_delete_script_path,
+    archive_updater_delete_script_for_new_session,
 )
 from tlo_dragdrop import (
     create_tk_root,
     enable_folder_path_drop,
     enable_search_path_folder_drop,
-    enable_tagging_path_folder_drop,
     enable_single_folder_or_txt_drop,
     enable_leaf_folder_drop,
     enable_single_txt_file_drop,
@@ -133,6 +151,8 @@ from tlo_copy_requests import (
     STATUS_CLOSED,
     close_request,
     copy_available,
+    destination_stale_lock_details,
+    clear_destination_stale_lock,
     create_or_open_request,
     delete_request,
     evaluate_request,
@@ -207,7 +227,7 @@ HELP_TEXT = (
     "  Compliant        --compliant\n"
     "  As-Is Artist Name --as-is-artist-name\n"
     "  Tag in Place     --tag-during-inventory\n"
-    "  Tag Copy         --tag-copy-during-inventory\n  Destination      --tag-copy-destination DIR\n  Tag Copy/Delete Original --tag-copy-delete-original\n  Destination      --tag-copy-and-delete DIR   (command line only)\n  Rename Compliantly --rename-compliantly\n  Convert shn      --convert-shn\n  Delete extra tags --delete-extra-tags\n"
+    "  Tag Copy         --tag-copy-during-inventory\n  Destination      --tag-copy-destination DIR\n  Tag Copy/Delete Original --tag-copy-delete-original\n  Destination      --tag-copy-and-delete DIR   (command line only)\n  Rename Compliantly --rename-compliantly\n  Convert shn      --convert-shn\n  Delete Extra Tags --delete-extra-tags\n"
     "  etreeDB          --etree-lookup\n"
     "  setlist.fm       --setlistfm-lookup\n"
     "  Performance Mode --performance-mode gentle|balanced|fast|extreme\n"
@@ -232,11 +252,11 @@ HELP_TEXT = (
     "\n"
     "GUI buttons:\n"
     "  Tag               Tag the current master Search Path(s) directly using the current main-window settings; no separate Tag window is opened.\n"
-    "  Add New Shows  Open the updater workflow for readyForXfer/staged/dups processing. The updater inherits all applicable main-window options, including Dry run, and validates the storage volume before processing.\n"
+    "  Add New Shows  Open the updater workflow for readyForXfer/staged/dups processing. The updater inherits all applicable main-window options, including Dry Run, and validates the storage volume before processing.\n"
     "  Research          Search TLOHome comp/meta logs.\n"
     "  ☰ > Copy Requests  Create, continue, report, close, or delete persistent list-driven copy requests across changing connected source volumes.\n"
     "  Quit              Close the GUI. If a run is still active, active workers are stopped and active search-path logs are removed before exit; displayed in the middle.\n"
-    "  Inventory (full)  Validate the form and show Review Operation. When Dry run is checked, scan and report planned work without changing files; otherwise run the full inventory job.\n"
+    "  Inventory (full)  Validate the form and show Review Operation. When Dry Run is checked, scan and report planned work without changing files; otherwise run the full inventory job.\n"
     "  Pause             Pause traversal between directory operations; displayed in the right-side inventory group.\n"
     "  Resume            Resume a paused traversal; displayed in the right-side inventory group.\n"
     "  ☰ > Donate        Shows Venmo and Check donation details.\n"
@@ -244,7 +264,7 @@ HELP_TEXT = (
     "Run experience:\n"
     "  Inventory and Tag validate the master Path(s) when clicked. Tag uses the master Path(s) and current main-window options; no separate Tag window opens.\n"
     "  Review Operation shows every main-window checkbox value in the same order for Inventory, Tag, and Add Shows, followed by action-specific details and whether original files may be changed. After Start is selected, the same lines are appended to TLOHome/logs/runSettings.log with the action, date, and time.\n"
-    "  Dry run is controlled by the main-window checkbox and inherited by Inventory, Add Shows, and Tag. It is non-destructive. Inventory resolves the resulting show name for each show. When tagging applies, Inventory or Tag also lists each file and the Artist, Album, Track, and Title values that would be written.\n"
+    "  Dry Run is controlled by the main-window checkbox and inherited by Inventory, Add Shows, and Tag. It is non-destructive. Inventory resolves the resulting show name for each show. When tagging applies, Inventory or Tag also lists each file and the Artist, Album, Track, and Title values that would be written.\n"
     "  Current Operation shows the live stage, current item, counts, warnings, errors, and elapsed time while a run is active.\n"
     "  Completion summaries provide View Issues, Open Output, and Open Logs actions. Issues are grouped by reason and may open the affected path.\n"
     "  Tag has no duplicated option checkboxes and reads current settings from the main window when Tag is clicked. Add Shows does the same and retains only its action-specific Check for Duplicates checkbox. Standalone Tag never copies or moves folders; verified SHN-to-FLAC conversion is the only case where it removes a source file.\n"
@@ -434,7 +454,7 @@ def _show_operation_review(parent, *, title, lines, preview_callback=None):
     if any(line.endswith("Yes") for line in lines if line.startswith("Original files may be changed:")):
         ttk.Label(
             frame,
-            text="This operation can change original folders or audio files. Dry run is non-destructive.",
+            text="This operation can change original folders or audio files. Dry Run is non-destructive.",
             justify="left",
             wraplength=780,
         ).grid(row=2, column=0, sticky="w", pady=(10, 0))
@@ -568,6 +588,7 @@ def _parse_gui_command_line(argv=None):
         "compliant",
         "compliant_artist_mode",
         "as_is_artist_name",
+        "proper_grammar",
         "tag_during_inventory",
         "tag_copy_during_inventory",
         "tag_copy_destination",
@@ -610,6 +631,11 @@ def _parse_gui_command_line(argv=None):
         args.tag_copy_and_delete_enabled = True
     return args
 
+def _backup_alert_message(script_path: str) -> str:
+    name = os.path.basename(str(script_path or "")) or "deleteReplacedFolders/deleteBackupFolders script"
+    return f"TLOHome/{name} already exists. Continue or abort?"
+
+
 class App:
     def __init__(self, root, cli_args=None):
         self.root = root
@@ -628,7 +654,6 @@ class App:
         self._form_valid = True
         self._validation_after_id = None
         self.active_updater_window = None
-        self.active_tagger_window = None
         self.active_manual_updates_window = None
         self.tag_button = None
         self.add_shows_button = None
@@ -657,12 +682,55 @@ class App:
             normalize_platform_input_path(str(getattr(self.cli_args, "tag_copy_and_delete_path", "") or "").strip())
         ) if str(getattr(self.cli_args, "tag_copy_and_delete_path", "") or "").strip() else ""
         self._build()
-        self._fit_initial_window_to_screen()
         self.root.protocol("WM_DELETE_WINDOW", self._on_quit)
         self._install_sigint_handler()
         self.root.after(100, self._drain)
         self.root.after(250, self._refresh_inline_validation)
         self.root.after(1000, self._refresh_elapsed_display)
+
+    def _show_main_window(self):
+        """Map and stabilize the main window before applying first-open fit.
+
+        Build 499 deliberately fits *after* the Tk root has been mapped.  Some
+        Linux/X11/Wayland window managers do not reliably honor geometry that
+        is calculated while the root is still withdrawn, which can leave the
+        application present in a task switcher without a usable visible main
+        window.  Mapping first is harmless on Windows and gives the Linux
+        window manager a real client to place before TLO constrains its size.
+        """
+        try:
+            self.root.state("normal")
+        except (AttributeError, tk.TclError):
+            pass
+        try:
+            self.root.deiconify()
+            self.root.update_idletasks()
+        except tk.TclError:
+            return
+        self._fit_initial_window_to_screen()
+        try:
+            self.root.lift()
+        except tk.TclError:
+            pass
+        try:
+            self.root.after_idle(self._stabilize_main_window)
+        except tk.TclError:
+            pass
+
+    def _stabilize_main_window(self):
+        """Repeat mapping/fit once Tk and the desktop window manager are idle."""
+        try:
+            state = str(self.root.state() or "").strip().lower()
+            if state in {"withdrawn", "iconic"}:
+                try:
+                    self.root.state("normal")
+                except tk.TclError:
+                    self.root.deiconify()
+            self.root.update_idletasks()
+            self._fit_initial_window_to_screen()
+            self.root.lift()
+        except tk.TclError:
+            pass
 
     def _configure_gui_fonts(self):
         base_font = tkfont.nametofont("TkDefaultFont")
@@ -952,7 +1020,7 @@ class App:
             elif option.config_field in {"compliant", "rename_compliantly"}:
                 checkbox_command = (lambda field=option.config_field: self._compliant_rename_clicked(field))
             if option.config_field == "thorough_setlist_matching":
-                checkbox_text = "Thorough setlist\nMatching"
+                checkbox_text = "Thorough Setlist\nMatching"
             elif option.config_field == "tag_copy_and_delete_enabled":
                 checkbox_text = "Tag Copy/Delete\nOriginal"
             elif option.config_field == "delete_extra_tags":
@@ -1209,6 +1277,7 @@ class App:
                     pass
         self._setlistfm_key_available = lookup_available
         self._setlistfm_upgrade_key_available = upgrade_available
+        self._setlistfm_upgrade_key_status = upgrade_api_key_status()
 
     def _schedule_inline_validation(self, *_args):
         try:
@@ -1249,6 +1318,10 @@ class App:
                 corruption_percent_valid = False
 
         option_messages = []
+        upgrade_status = getattr(self, "_setlistfm_upgrade_key_status", upgrade_api_key_status())
+        upgrade_gate_message = _setlistfm_upgrade_gate_message(upgrade_status)
+        if upgrade_gate_message:
+            option_messages.append(upgrade_gate_message)
         if bool(self.bool_vars["tag_copy_during_inventory"].get()):
             option_messages.append("Tag Copy destination will be requested after Inventory is started. When Tag is started, the same destination prompt is used.")
         if bool(self.bool_vars.get("tag_copy_and_delete_enabled", tk.BooleanVar(value=False)).get()):
@@ -1275,7 +1348,6 @@ class App:
         elif not corruption_percent_valid:
             validation_message = "Folder corruption threshold must be an integer from 0 through 100 when Folder removal is At threshold."
 
-        form_values_valid = bool(max_workers_valid and corruption_percent_valid)
         if validation_message:
             status_message = "Error: " + validation_message
         elif option_messages:
@@ -1935,48 +2007,7 @@ class App:
             self.active_manual_updates_window = None
         return exists
 
-    def _tagger_is_open(self):
-        tagger = getattr(self, "active_tagger_window", None)
-        if tagger is None:
-            return False
 
-        # Closing the Tagger window during an active run only requests
-        # cancellation. Keep the main actions locked until the tag worker has
-        # actually stopped, even though the Toplevel itself is already gone.
-        worker = getattr(tagger, "worker", None)
-        worker_active = bool(getattr(tagger, "_processing", False))
-        if worker is not None:
-            try:
-                worker_active = worker_active or bool(worker.is_alive())
-            except Exception as exc:  # noqa: BLE001 - best-effort GUI boundary
-                debug_suppressed_exception(__name__, exc)
-
-        window = getattr(tagger, "window", None)
-        if window is None:
-            if worker_active:
-                return True
-            self.active_tagger_window = None
-            return False
-        try:
-            exists = bool(window.winfo_exists())
-        except tk.TclError:
-            exists = False
-        if exists or worker_active:
-            return True
-        self.active_tagger_window = None
-        return False
-
-    def _focus_active_tagger(self):
-        tagger = getattr(self, "active_tagger_window", None)
-        window = getattr(tagger, "window", None) if tagger is not None else None
-        if window is None:
-            return
-        try:
-            window.deiconify()
-            window.lift()
-            window.focus_force()
-        except tk.TclError:
-            pass
 
     def _focus_active_updater(self):
         updater = getattr(self, "active_updater_window", None)
@@ -2237,11 +2268,16 @@ class App:
         alert.grab_set()
         ttk.Label(
             alert,
-            text="TLOHome/deleteBackupFolders.txt already exists. Continue or abort?",
+            text=_backup_alert_message(script_path),
             padding=12,
         ).grid(row=0, column=0, columnspan=2, sticky="w")
 
         def continue_clicked():
+            try:
+                archive_updater_delete_script_for_new_session(config.TLOHome)
+            except Exception as exc:
+                messagebox.showerror("TLO Backup Alert", f"Unable to archive the existing delete script: {exc}", parent=alert)
+                return
             try:
                 alert.grab_release()
             except tk.TclError:
@@ -2338,6 +2374,18 @@ class App:
         finally:
             self._compliant_rename_syncing = False
 
+    def _sync_delete_extra_tags_state(self, *_args):
+        widget = getattr(self, "checkbox_widgets", {}).get("delete_extra_tags")
+        if widget is None:
+            return
+        tag_mode_enabled = any(
+            field in self.bool_vars and bool(self.bool_vars[field].get())
+            for field in ("tag_during_inventory", "tag_copy_during_inventory", "tag_copy_and_delete_enabled")
+        )
+        if not tag_mode_enabled and "delete_extra_tags" in self.bool_vars:
+            self.bool_vars["delete_extra_tags"].set(False)
+        widget.configure(state=("normal" if tag_mode_enabled else "disabled"))
+
     def _tag_mode_clicked(self, field: str):
         if getattr(self, "_tag_mode_syncing", False):
             return
@@ -2350,6 +2398,7 @@ class App:
         finally:
             self._tag_mode_syncing = False
 
+        self._sync_delete_extra_tags_state()
         self._schedule_inline_validation()
 
     def _reapply_tag_mode_exclusivity(self, *_args):
@@ -2357,16 +2406,16 @@ class App:
             field for field in ("tag_during_inventory", "tag_copy_during_inventory", "tag_copy_and_delete_enabled")
             if field in self.bool_vars and bool(self.bool_vars[field].get())
         ]
-        if len(enabled) <= 1:
-            return
-        keep = "tag_copy_and_delete_enabled" if "tag_copy_and_delete_enabled" in enabled else enabled[0]
-        self._tag_mode_syncing = True
-        try:
-            for field in enabled:
-                if field != keep:
-                    self.bool_vars[field].set(False)
-        finally:
-            self._tag_mode_syncing = False
+        if len(enabled) > 1:
+            keep = "tag_copy_and_delete_enabled" if "tag_copy_and_delete_enabled" in enabled else enabled[0]
+            self._tag_mode_syncing = True
+            try:
+                for field in enabled:
+                    if field != keep:
+                        self.bool_vars[field].set(False)
+            finally:
+                self._tag_mode_syncing = False
+        self._sync_delete_extra_tags_state()
 
 
     def _cleanup_active_logs(self):
@@ -2684,6 +2733,7 @@ class App:
             compliant=self.bool_vars["compliant"].get(),
             compliant_artist_mode=compliant_artist_mode,
             as_is_artist_name=as_is_artist_name,
+            proper_grammar=bool(getattr(self.bool_vars.get("proper_grammar"), "get", lambda: False)()),
             tag_during_inventory=tag_in_place,
             tag_copy_during_inventory=tag_copy,
             tag_copy_destination=tag_copy_destination,
@@ -2691,7 +2741,10 @@ class App:
             rename_compliantly=rename_compliantly,
             convert_shn=self.bool_vars["convert_shn"].get(),
             artist_in_album=self.bool_vars["artist_in_album"].get(),
-            delete_extra_tags=bool(getattr(self.bool_vars.get("delete_extra_tags"), "get", lambda: False)()),
+            delete_extra_tags=(
+                bool(getattr(self.bool_vars.get("delete_extra_tags"), "get", lambda: False)())
+                and bool(tag_in_place or requested_tag_copy or requested_copy_delete)
+            ),
             etree_lookup=self.bool_vars["etree_lookup"].get(),
             setlistfm_lookup=self.bool_vars["setlistfm_lookup"].get(),
             setlistfm_upgrade=bool(getattr(self.bool_vars.get("setlistfm_upgrade"), "get", lambda: False)()),
@@ -2727,9 +2780,9 @@ class App:
         config.main_window_dry_run = bool(getattr(getattr(self, "dry_run_var", None), "get", lambda: False)())
         apply_lookup_dependency(vars(config), mode="auto")
         if config.setlistfm_lookup and config.setlistfm_upgrade:
-            config.setlistfm_min_interval_seconds = 1.0 / 14.0
+            config.setlistfm_min_interval_seconds = 1.0 / UPGRADE_REQUESTS_PER_SECOND
             config.setlistfm_max_calls = 0
-            config.setlistfm_max_calls_per_day = 48000
+            config.setlistfm_max_calls_per_day = UPGRADE_MAX_REQUESTS_PER_DAY
         return config
 
     def _pause_inventory(self):
@@ -2857,12 +2910,12 @@ class App:
         # Legacy path: volume, existing_count, queued_count or volume, path,
         # existing_count, queued_count.  Present only Skip/Re-inventory.
         if len(args) >= 4:
-            volume_label, path_name, row_count, path_count = args[:4]
+            volume_label, path_name, row_count, _path_count = args[:4]
         else:
             volume_label = args[0] if len(args) > 0 else ""
             path_name = ""
             row_count = args[1] if len(args) > 1 else 0
-            path_count = args[2] if len(args) > 2 else 1
+            _path_count = args[2] if len(args) > 2 else 1
         item = {
             "item_index": 0,
             "volume": volume_label,
@@ -3152,6 +3205,8 @@ class CopyRequestsWindow:
         self.root = app.root
         self.tlo_home = os.path.abspath(tlo_home)
         self.busy = False
+        self.copy_cancel_event = threading.Event()
+        self._copy_operation_cancellable = False
         self.window = tk.Toplevel(self.root)
         self.window.title(versioned_title("TLO Copy Requests"))
         self.window.geometry("980x500")
@@ -3209,7 +3264,9 @@ class CopyRequestsWindow:
         self.close_request_button.grid(row=0, column=4, padx=4)
         self.delete_button = ttk.Button(buttons, text="Delete Request", command=self._delete_selected)
         self.delete_button.grid(row=0, column=5, padx=4)
-        ttk.Button(buttons, text="Exit", command=self._close).grid(row=0, column=6, padx=(12, 0))
+        self.cancel_copy_button = ttk.Button(buttons, text="Cancel Copy", command=self._cancel_copy)
+        self.cancel_copy_button.grid(row=0, column=6, padx=4)
+        ttk.Button(buttons, text="Exit", command=self._close).grid(row=0, column=7, padx=(12, 0))
 
         footer = ttk.Frame(frame)
         footer.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(4, 0))
@@ -3299,14 +3356,23 @@ class CopyRequestsWindow:
             self.report_button.configure(state=(normal if has_selection and not self.busy else disabled))
             self.close_request_button.configure(state=(normal if has_selection and not closed and not self.busy else disabled))
             self.delete_button.configure(state=(normal if has_selection and not self.busy else disabled))
+            self.cancel_copy_button.configure(state=(normal if self.busy and self._copy_operation_cancellable else disabled))
             active_exists = any(not bool(item.get("closed")) for item in list_requests(self.tlo_home))
             self.all_button.configure(state=(normal if active_exists and not self.busy else disabled))
         except tk.TclError:
             pass
 
-    def _run_background(self, message, function, done_callback):
+    def _cancel_copy(self):
+        if self.busy and self._copy_operation_cancellable:
+            self.copy_cancel_event.set()
+            self.status_var.set("Cancelling after the current file...")
+            self._sync_buttons()
+
+    def _run_background(self, message, function, done_callback, *, cancellable=False):
         if self.busy:
             return
+        self.copy_cancel_event.clear()
+        self._copy_operation_cancellable = bool(cancellable)
         self._set_busy(True, message)
 
         def worker():
@@ -3322,6 +3388,7 @@ class CopyRequestsWindow:
                 pass
 
         def finish(value, error):
+            self._copy_operation_cancellable = False
             self._set_busy(False)
             if error is not None:
                 messagebox.showerror("Copy Requests", str(error), parent=self.window)
@@ -3469,9 +3536,12 @@ class CopyRequestsWindow:
             "",
             f"Request items: {len(evaluation.items)}",
             f"Unique shows matched: {len(evaluation.matched_shows)}",
-            f"Already completed: {len(evaluation.completed_shows)}",
-            f"Available on connected volumes: {len(evaluation.available)}",
-            f"Waiting for disconnected volumes: {len(evaluation.waiting)}",
+            f"Already completed shows: {len(evaluation.completed_shows)}",
+            f"Already completed direct items: {len(evaluation.completed_direct_items)}",
+            f"Available matched shows: {len(evaluation.available)}",
+            f"Available direct path/volume items: {len(evaluation.direct_available)}",
+            f"Waiting matched shows: {len(evaluation.waiting)}",
+            f"Waiting direct path/volume items: {len(evaluation.direct_waiting)}",
             f"Stale/missing source folders on connected volumes: {len(evaluation.stale_missing)}",
             f"Unmatched request items: {len(evaluation.unmatched_items)}",
             f"Invalid request items: {len(evaluation.invalid_items)}",
@@ -3481,6 +3551,8 @@ class CopyRequestsWindow:
         ]
         if required_bytes > free_bytes:
             lines.extend(["", "INSUFFICIENT FREE SPACE: no folders will be copied until the entire current pass fits."])
+        if evaluation.preview_notes:
+            lines.extend(["", "NOTES"] + list(evaluation.preview_notes))
         if preflight_errors:
             lines.extend(["", "PREFLIGHT ISSUES"])
             for show, error in preflight_errors:
@@ -3501,14 +3573,29 @@ class CopyRequestsWindow:
 
         buttons = ttk.Frame(frame)
         buttons.grid(row=1, column=0, sticky="e", pady=(8, 0))
-        can_copy = bool(evaluation.available) and required_bytes <= free_bytes and evaluation.status != STATUS_CLOSED
+        can_copy = bool(evaluation.available or evaluation.direct_available) and required_bytes <= free_bytes and evaluation.status != STATUS_CLOSED
 
         def start_copy():
+            stale = destination_stale_lock_details(evaluation.destination)
+            if stale:
+                host = str(stale.get("hostname", "another computer"))
+                age_hours = float(stale.get("age_seconds", 0.0) or 0.0) / 3600.0
+                if not messagebox.askyesno(
+                    "Clear Stale Copy Request Lock",
+                    f"A stale Copy Request lock from {host} was found on the destination.\n\n"
+                    f"Approximate age: {age_hours:.1f} hours.\n\nClear this stale lock and continue?",
+                    parent=dialog,
+                ):
+                    return
+                if not clear_destination_stale_lock(evaluation.destination):
+                    messagebox.showerror("Copy Request", "The stale destination lock could not be cleared.", parent=dialog)
+                    return
             dialog.destroy()
             self._run_background(
                 f"Copying available shows for {evaluation.name}...",
-                lambda: copy_available(self.tlo_home, request_id),
+                lambda: copy_available(self.tlo_home, request_id, cancel_check=self.copy_cancel_event.is_set),
                 self._copy_finished,
+                cancellable=True,
             )
 
         ttk.Button(buttons, text="Copy Available", command=start_copy, state=("normal" if can_copy else "disabled")).grid(row=0, column=0, padx=4)
@@ -3522,6 +3609,8 @@ class CopyRequestsWindow:
             f"Failures: {len(result.failures)}\n"
             f"Status: {result.status}"
         )
+        if result.cancelled:
+            message += "\n\nCancelled. Completed folders remain complete; the request remains Open for a later Continue pass."
         if result.insufficient_space:
             message += "\n\nNo folders were copied because the destination did not have enough free space for the entire current pass."
         messagebox.showinfo("Copy Request", message, parent=self.window)
@@ -3547,6 +3636,23 @@ class CopyRequestsWindow:
                     except Exception as exc:
                         messagebox.showerror("Copy Requests", str(exc), parent=self.window)
                         return
+        for state in states:
+            destination = os.path.abspath(str(state.get("destination", "") or ""))
+            stale = destination_stale_lock_details(destination)
+            if not stale:
+                continue
+            host = str(stale.get("hostname", "another computer"))
+            age_hours = float(stale.get("age_seconds", 0.0) or 0.0) / 3600.0
+            if not messagebox.askyesno(
+                "Clear Stale Copy Request Lock",
+                f"A stale Copy Request lock from {host} was found on:\n{destination}\n\n"
+                f"Approximate age: {age_hours:.1f} hours.\n\nClear this stale lock before Process All?",
+                parent=self.window,
+            ):
+                return
+            if not clear_destination_stale_lock(destination):
+                messagebox.showerror("Copy Requests", f"Could not clear stale lock on {destination}.", parent=self.window)
+                return
         if not messagebox.askyesno(
             "Process All Active Requests",
             f"Process {len(states)} active Copy Request(s) against the volumes that are connected now?\n\nEach request performs its own complete free-space preflight before copying.",
@@ -3559,7 +3665,9 @@ class CopyRequestsWindow:
             for state in states:
                 request_id = str(state.get("request_id", ""))
                 try:
-                    results.append((request_id, copy_available(self.tlo_home, request_id), None))
+                    if self.copy_cancel_event.is_set():
+                        break
+                    results.append((request_id, copy_available(self.tlo_home, request_id, cancel_check=self.copy_cancel_event.is_set), None))
                 except Exception as exc:  # noqa: BLE001 - continue independent requests
                     results.append((request_id, None, exc))
             return results
@@ -3575,7 +3683,7 @@ class CopyRequestsWindow:
             )
             self._refresh()
 
-        self._run_background("Processing all active Copy Requests...", run_all, done)
+        self._run_background("Processing all active Copy Requests...", run_all, done, cancellable=True)
 
     def _view_report(self):
         request_id = self._selected_id()
@@ -3638,413 +3746,6 @@ class CopyRequestsWindow:
         self._refresh()
 
 
-class TaggerWindow:
-    def __init__(
-        self,
-        parent_app,
-        tlo_home,
-        tag_path,
-        debug=False,
-    ):
-        self.parent_app = parent_app
-        self.tlo_home = tlo_home
-        self.debug = bool(debug)
-        self.queue = queue.Queue()
-        self.worker = None
-        self._processing = False
-        self._closed = False
-        self._tag_cancel_requested = False
-        self.monitor = None
-        self.issues = []
-        self.window = tk.Toplevel(parent_app.root)
-        parent_app.active_tagger_window = self
-        parent_app._update_main_action_states()
-        self.window.title(TAGGER_DISPLAY_VERSION)
-        self.window.protocol("WM_DELETE_WINDOW", self._request_exit)
-        self.path_var = tk.StringVar(value=tag_path or "")
-        self.path_status_var = tk.StringVar(value="Checking Tagging Path...")
-        self.stage_var = tk.StringVar(value="Ready")
-        self.item_var = tk.StringVar(value="")
-        self.counts_var = tk.StringVar(value="")
-        self.elapsed_var = tk.StringVar(value="Elapsed: 0:00")
-        self._build()
-        self.path_var.trace_add("write", self._validate_controls)
-        self._validate_controls()
-        self.window.after(100, self._drain)
-        self.window.after(1000, self._refresh_elapsed)
-
-    def _build(self):
-        frm = ttk.Frame(self.window, padding=10)
-        frm.grid(sticky="nsew")
-        self.window.columnconfigure(0, weight=1)
-        self.window.rowconfigure(0, weight=1)
-        frm.columnconfigure(1, weight=1)
-
-        title_font = getattr(self.parent_app, "title_font", None) or tkfont.Font(size=12, weight="bold")
-        ttk.Label(frm, text=TAGGER_TITLE, font=title_font).grid(
-            row=0, column=0, columnspan=3, sticky="w", pady=(0, 2)
-        )
-        ttk.Label(
-            frm,
-            text=(
-                "Tags the selected path directly. It does not inventory, copy, move, or delete folders. "
-                "When Convert SHN is selected, a source SHN is removed only after the FLAC conversion is verified."
-            ),
-            wraplength=TAGGER_MODE_WRAP_PIXELS,
-            justify="left",
-        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 10))
-
-        ttk.Label(frm, text="Tagging Path:").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
-        self.path_entry = ttk.Entry(frm, textvariable=self.path_var, width=TAGGER_PATH_ENTRY_WIDTH)
-        self.path_entry.grid(row=2, column=1, columnspan=2, sticky="ew", pady=4)
-        self._enable_tagging_path_drag_drop()
-        ttk.Label(frm, textvariable=self.path_status_var, wraplength=TAGGER_MODE_WRAP_PIXELS, justify="left").grid(
-            row=3, column=1, columnspan=2, sticky="w", pady=(0, 6)
-        )
-
-        buttons = ttk.Frame(frm)
-        buttons.grid(row=4, column=0, columnspan=3, sticky="w", pady=(6, 6))
-        self.tag_run_button = ttk.Button(buttons, text="Tag", command=self._start_tagging)
-        self.tag_run_button.grid(row=0, column=0, padx=(0, 6))
-        self.pause_button = ttk.Button(buttons, text="Pause", command=self._toggle_pause, state="disabled")
-        self.pause_button.grid(row=0, column=1, padx=6)
-        self.exit_button = ttk.Button(buttons, text="Quit", command=self._request_exit)
-        self.exit_button.grid(row=0, column=2, padx=6)
-
-        progress = ttk.LabelFrame(frm, text="Current Operation", padding=6)
-        progress.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(0, 6))
-        progress.columnconfigure(1, weight=1)
-        ttk.Label(progress, textvariable=self.stage_var).grid(row=0, column=0, sticky="w", padx=(0, 10))
-        ttk.Label(progress, textvariable=self.item_var, wraplength=430).grid(row=0, column=1, sticky="w")
-        ttk.Label(progress, textvariable=self.elapsed_var).grid(row=0, column=2, sticky="e")
-        ttk.Label(progress, textvariable=self.counts_var).grid(row=1, column=0, columnspan=3, sticky="w", pady=(3, 0))
-        self.progress_bar = ttk.Progressbar(progress, mode="indeterminate")
-        self.progress_bar.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(5, 0))
-
-        self.output = scrolledtext.ScrolledText(frm, width=TAGGER_OUTPUT_TEXT_WIDTH, height=22, font=tkfont.nametofont("TkFixedFont"))
-        self.output.grid(row=6, column=0, columnspan=3, sticky="nsew", pady=(4, 0))
-        frm.rowconfigure(6, weight=1)
-
-    def _enable_tagging_path_drag_drop(self):
-        return enable_tagging_path_folder_drop(
-            self.path_entry,
-            self.path_var,
-            on_error=lambda msg: messagebox.showwarning("TLO Tagger", msg, parent=self.window),
-        )
-
-    def _main_checkbox_values(self):
-        getter = getattr(self.parent_app, "_current_main_checkbox_values", None)
-        if callable(getter):
-            return getter()
-        bool_vars = getattr(self.parent_app, "bool_vars", {}) or {}
-        values = {field: bool(var.get()) for field, var in bool_vars.items()}
-        dry_var = getattr(self.parent_app, "dry_run_var", None)
-        values["dry_run"] = bool(dry_var.get()) if dry_var is not None else False
-        return main_window_checkbox_values(values, dry_run=values["dry_run"])
-
-    def _current_dry_run(self):
-        return bool(self._main_checkbox_values()["dry_run"])
-
-    def _tag_config(self):
-        values = self._main_checkbox_values()
-        validate_compliant_rename_exclusivity(values)
-        config = Config(
-            debug=self.debug,
-            silent=False,
-            TLOHome=self.tlo_home,
-            compliant=values["compliant"],
-            compliant_artist_mode=("as-is" if values["as_is_artist_name"] else "master"),
-            as_is_artist_name=values["as_is_artist_name"],
-            # Standalone Tag always tags the selected path directly. The three
-            # inventory tag-mode checkboxes are reported in the review dialog
-            # but do not change standalone Tag's no-copy behavior.
-            tag_during_inventory=True,
-            tag_copy_during_inventory=False,
-            tag_copy_destination="",
-            tag_copy_and_delete_path="",
-            etree_lookup=values["etree_lookup"],
-            setlistfm_lookup=values["setlistfm_lookup"],
-            setlistfm_upgrade=bool(values.get("setlistfm_upgrade", False)),
-            thorough_setlist_matching=bool(values.get("thorough_setlist_matching", False)),
-            corrupt_files=CORRUPT_FILE_GUI_TO_POLICY.get(
-                getattr(getattr(self.parent_app, "vars", {}).get("corrupt_files"), "get", lambda: CORRUPT_FILE_GUI_VALUES["delete"])(), "delete"
-            ),
-            corrupt_folders=CORRUPT_FOLDER_GUI_TO_POLICY.get(
-                getattr(getattr(self.parent_app, "vars", {}).get("corrupt_folders"), "get", lambda: CORRUPT_FOLDER_GUI_VALUES["all"])(), "all"
-            ),
-            corrupt_folder_threshold=(
-                parse_percent_0_100(getattr(getattr(self.parent_app, "vars", {}).get("corrupt_folder_threshold"), "get", lambda: "100")())
-                if CORRUPT_FOLDER_GUI_TO_POLICY.get(
-                    getattr(getattr(self.parent_app, "vars", {}).get("corrupt_folders"), "get", lambda: CORRUPT_FOLDER_GUI_VALUES["all"])(), "all"
-                ) == "threshold"
-                else 100
-            ),
-            rename_compliantly=values["rename_compliantly"],
-            convert_shn=values["convert_shn"],
-            artist_in_album=values["artist_in_album"],
-            delete_extra_tags=bool(values.get("delete_extra_tags", False)),
-        )
-        if config.setlistfm_lookup and config.setlistfm_upgrade:
-            config.setlistfm_min_interval_seconds = 1.0 / 14.0
-            config.setlistfm_max_calls = 0
-            config.setlistfm_max_calls_per_day = 48000
-        config.main_window_tag_in_place_selected = values["tag_during_inventory"]
-        config.main_window_tag_copy_selected = values["tag_copy_during_inventory"]
-        config.main_window_tag_copy_delete_selected = values["tag_copy_and_delete_enabled"]
-        config.main_window_dry_run = values["dry_run"]
-        config.main_window_checkbox_values = dict(values)
-        return config
-
-    def _validate_controls(self, *_args):
-        status = validate_tag_path(self.path_var.get())
-        self.path_status_var.set(status.display)
-        enabled = status.valid and not self._processing
-        state = "normal" if enabled else "disabled"
-        for widget in (getattr(self, "tag_run_button", None),):
-            if widget is not None:
-                try:
-                    widget.configure(state=state)
-                except tk.TclError:
-                    pass
-
-    def _set_processing_controls(self, enabled):
-        state = "normal" if enabled else "disabled"
-        for widget in (self.tag_run_button, self.path_entry):
-            try:
-                widget.configure(state=state)
-            except tk.TclError:
-                pass
-        self.pause_button.configure(state=("disabled" if enabled else "normal"))
-        self.exit_button.configure(state="normal")
-        if enabled:
-            self._validate_controls()
-
-    def _start_tagging(self):
-        if self._processing:
-            messagebox.showinfo("TLO Tagger", "Tagging is already running.", parent=self.window)
-            return
-        status = validate_tag_path(self.path_var.get())
-        if not status.valid:
-            messagebox.showerror("TLO Tagger", status.message, parent=self.window)
-            return
-        config = self._tag_config()
-        dry_run = self._current_dry_run()
-        config.main_window_dry_run = dry_run
-        review_lines = operation_review_lines(
-            config,
-            operation="Tag",
-            path_text=status.normalized,
-            dry_run=dry_run,
-            main_checkbox_source=config.main_window_checkbox_values,
-        )
-        if not _show_operation_review_and_log(
-            self.window,
-            config=config,
-            action="Tag Dry Run" if dry_run else "Tag",
-            title="Review Tag Dry Run" if dry_run else "Review Tagging",
-            lines=review_lines,
-        ):
-            return
-        if dry_run:
-            PreviewWindow(self.window, config, operation="Tag Dry Run", tag_path=status.normalized)
-            return
-        clear_cancel_request()
-        clear_pause()
-        self.output.delete("1.0", tk.END)
-        self._tag_cancel_requested = False
-        self._processing = True
-        self.monitor = RunMonitor("Tag")
-        self.issues = []
-        self._set_processing_controls(False)
-        self.parent_app._update_main_action_states()
-        self._update_progress_display()
-        _start_activity_indicator(self.progress_bar)
-
-        def worker():
-            totals = None
-            error = None
-            try:
-                totals = run_tagger(
-                    tlo_home=self.tlo_home,
-                    compliant=bool(config.compliant),
-                    tag_path=status.normalized,
-                    etree_lookup=bool(config.etree_lookup),
-                    setlistfm_lookup=bool(config.setlistfm_lookup),
-                    setlistfm_upgrade=bool(getattr(config, "setlistfm_upgrade", False)),
-                    thorough_setlist_matching=bool(getattr(config, "thorough_setlist_matching", False)),
-                    corrupt_files=str(getattr(config, "corrupt_files", "delete")),
-                    corrupt_folders=str(getattr(config, "corrupt_folders", "all")),
-                    corrupt_folder_threshold=int(getattr(config, "corrupt_folder_threshold", 100)),
-                    debug=self.debug,
-                    rename_compliantly=bool(config.rename_compliantly),
-                    convert_shn=bool(config.convert_shn),
-                    artist_in_album=bool(config.artist_in_album),
-                    delete_extra_tags=bool(getattr(config, "delete_extra_tags", False)),
-                    as_is_artist_name=bool(config.as_is_artist_name),
-                    emit=self.queue.put,
-                )
-            except Exception as exc:
-                error = exc
-            try:
-                self.parent_app.root.after(0, lambda: self._finish_tagging(error, totals))
-            except tk.TclError:
-                pass
-
-        self.worker = threading.Thread(target=worker, daemon=True)
-        self.worker.start()
-
-    def _toggle_pause(self):
-        if not self._processing:
-            return
-        if is_pause_requested():
-            clear_pause()
-            self.pause_button.configure(text="Pause")
-            self.queue.put("Tagging resumed.\n")
-        else:
-            request_pause()
-            self.pause_button.configure(text="Resume")
-            self.queue.put("Tagging paused. The current file operation will finish first.\n")
-
-    def _consume_queue(self):
-        changed = False
-        try:
-            while True:
-                msg = self.queue.get_nowait()
-                self.output.insert(tk.END, msg)
-                self.output.see(tk.END)
-                if self.monitor is not None:
-                    self.monitor.feed(msg)
-                    changed = True
-        except queue.Empty:
-            pass
-        if changed:
-            self._update_progress_display()
-        return changed
-
-    def _finish_tagging(self, error, totals):
-        self._processing = False
-        self.worker = None
-        clear_pause()
-        if self._closed:
-            if getattr(self.parent_app, "active_tagger_window", None) is self:
-                self.parent_app.active_tagger_window = None
-            self.parent_app._update_main_action_states()
-            return
-        self.progress_bar.stop()
-        self.pause_button.configure(text="Pause")
-        self._set_processing_controls(True)
-        self.parent_app._update_main_action_states()
-        if error is not None:
-            self.queue.put(f"ERROR: {error}\n")
-        self._consume_queue()
-        success = error is None and not self._tag_cancel_requested
-        if self.monitor is None:
-            self.monitor = RunMonitor("Tag")
-        if totals:
-            self.monitor.snapshot.folders = int(totals.get("groups", 0))
-            self.monitor.snapshot.tagged_files = int(totals.get("tagged", 0))
-            self.monitor.snapshot.skipped_folders = int(totals.get("skipped", 0))
-            self.monitor.snapshot.errors = max(self.monitor.snapshot.errors, int(totals.get("errors", 0)))
-        self.monitor.finish(success=success)
-        log_issues = collect_current_log_issues(self.tlo_home, ["T"], tagger=True)
-        self.issues = merge_issues(self.monitor.issues, log_issues)
-        self._update_progress_display()
-        _show_completion_dialog(
-            self.window,
-            title="Tagging Complete" if success else "Tagging Stopped",
-            monitor=self.monitor,
-            issues=self.issues,
-            tlo_home=self.tlo_home,
-        )
-
-    def _update_progress_display(self):
-        if self.monitor is None:
-            self.stage_var.set("Ready")
-            self.item_var.set("")
-            self.counts_var.set("")
-            self.elapsed_var.set("Elapsed: 0:00")
-            return
-        snap = self.monitor.snapshot
-        self.stage_var.set(snap.stage)
-        self.item_var.set(snap.current_item)
-        self.elapsed_var.set(f"Elapsed: {format_elapsed(snap.elapsed_seconds)}")
-        self.counts_var.set(
-            f"Folders {snap.folders} | Tagged files {snap.tagged_files} | "
-            f"Skipped {snap.skipped_folders} | Warnings {snap.warnings} | Errors {snap.errors}"
-        )
-
-    def _refresh_elapsed(self):
-        if self.monitor is not None and self._processing:
-            self.monitor.snapshot.elapsed_seconds = time.monotonic() - self.monitor.started
-            self._update_progress_display()
-        try:
-            self.window.after(1000, self._refresh_elapsed)
-        except tk.TclError:
-            pass
-
-    def _request_exit(self):
-        if self._processing:
-            self._tag_cancel_requested = True
-            request_cancel()
-            clear_pause()
-            try:
-                self.queue.put("Tagger quit requested; stopping active tagging work.\n")
-            except Exception as exc:  # noqa: BLE001 - best-effort boundary
-                debug_suppressed_exception(__name__, exc)
-            # Schedule this from the Tk/UI thread before destroying the Tagger
-            # Toplevel. The existing worker completion callback is retained,
-            # but this poll is the fail-safe that releases the main window if a
-            # background-thread root.after() handoff is lost during shutdown.
-            self._schedule_closed_worker_poll()
-            self._destroy_tagger_window(release_main=False)
-            return
-        self._destroy_tagger_window()
-
-    def _schedule_closed_worker_poll(self):
-        try:
-            self.parent_app.root.after(100, self._poll_closed_worker)
-        except tk.TclError:
-            pass
-
-    def _poll_closed_worker(self):
-        worker = self.worker
-        if worker is not None:
-            try:
-                if worker.is_alive():
-                    self._schedule_closed_worker_poll()
-                    return
-            except Exception as exc:  # noqa: BLE001 - best-effort GUI boundary
-                debug_suppressed_exception(__name__, exc)
-
-        self._processing = False
-        self.worker = None
-        if getattr(self.parent_app, "active_tagger_window", None) is self:
-            self.parent_app.active_tagger_window = None
-        try:
-            self.parent_app._update_main_action_states()
-        except Exception as exc:  # noqa: BLE001 - best-effort GUI boundary
-            debug_suppressed_exception(__name__, exc)
-
-    def _destroy_tagger_window(self, release_main=True):
-        self._closed = True
-        clear_pause()
-        if release_main and getattr(self.parent_app, "active_tagger_window", None) is self:
-            self.parent_app.active_tagger_window = None
-        try:
-            self.parent_app._update_main_action_states()
-        except Exception as exc:  # noqa: BLE001 - best-effort boundary
-            debug_suppressed_exception(__name__, exc)
-        try:
-            self.window.destroy()
-        except tk.TclError:
-            pass
-
-    def _drain(self):
-        self._consume_queue()
-        try:
-            self.window.after(100, self._drain)
-        except tk.TclError:
-            pass
 
 
 class ManualUpdatesWindow:
@@ -4387,11 +4088,22 @@ class AddToInventoryWindow:
         title_font = getattr(self.parent_app, "title_font", None) or tkfont.Font(size=12, weight="bold")
         ttk.Label(frm, text=UPDATER_TITLE, font=title_font).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
 
+        self.search_path_var = tk.StringVar(value=os.path.join(self.config.TLOHome, "readyForXfer"))
         self.volume_var = tk.StringVar(value=getattr(self.config, "current_volume_label", "") or "")
         self.check_dups_var = tk.BooleanVar(value=True)
         self.volume_status_var = tk.StringVar(value="")
         self.status_var = tk.StringVar(value="Ready")
         self.elapsed_var = tk.StringVar(value="Elapsed: 0:00")
+
+        ttk.Label(frm, text="Search Path").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.search_path_entry = ttk.Entry(frm, textvariable=self.search_path_var, width=56)
+        self.search_path_entry.grid(row=1, column=1, columnspan=2, sticky="ew", pady=4)
+        self.search_path_drop_status = enable_folder_path_drop(
+            self.search_path_entry,
+            self.search_path_var,
+            field_label="Search Path",
+            on_error=lambda msg: messagebox.showwarning("TLO Inventory Updater", msg, parent=self.window),
+        )
 
         ttk.Label(frm, text="Current Backup/Storage Drive and Volume").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
         ttk.Entry(frm, textvariable=self.volume_var, width=56).grid(row=2, column=1, columnspan=2, sticky="ew", pady=4)
@@ -4436,6 +4148,7 @@ class AddToInventoryWindow:
         self.config.compliant = values["compliant"]
         self.config.compliant_artist_mode = "as-is" if values["as_is_artist_name"] else "master"
         self.config.as_is_artist_name = values["as_is_artist_name"]
+        self.config.proper_grammar = bool(values.get("proper_grammar", False))
         self.config.tag_during_inventory = values["tag_during_inventory"]
         # Add Shows stages material inside TLOHome and does not run either
         # Full Inventory copy mode. Preserve those main selections only for
@@ -4448,24 +4161,37 @@ class AddToInventoryWindow:
         self.config.rename_compliantly = values["rename_compliantly"]
         self.config.convert_shn = values["convert_shn"]
         self.config.artist_in_album = values["artist_in_album"]
-        self.config.delete_extra_tags = bool(values.get("delete_extra_tags", False))
+        self.config.delete_extra_tags = (
+            bool(values.get("delete_extra_tags", False))
+            and bool(values.get("tag_during_inventory") or values.get("tag_copy_during_inventory") or values.get("tag_copy_and_delete_enabled"))
+        )
         self.config.etree_lookup = values["etree_lookup"]
         self.config.setlistfm_lookup = values["setlistfm_lookup"]
         self.config.setlistfm_upgrade = bool(values.get("setlistfm_upgrade", False))
         self.config.thorough_setlist_matching = bool(values.get("thorough_setlist_matching", False))
         if self.config.setlistfm_lookup and self.config.setlistfm_upgrade:
-            self.config.setlistfm_min_interval_seconds = 1.0 / 14.0
+            self.config.setlistfm_min_interval_seconds = 1.0 / UPGRADE_REQUESTS_PER_SECOND
             self.config.setlistfm_max_calls = 0
-            self.config.setlistfm_max_calls_per_day = 48000
+            self.config.setlistfm_max_calls_per_day = UPGRADE_MAX_REQUESTS_PER_DAY
         else:
-            self.config.setlistfm_min_interval_seconds = 0.600
-            self.config.setlistfm_max_calls = 1400
+            self.config.setlistfm_min_interval_seconds = MIN_REQUEST_INTERVAL_SECONDS
+            self.config.setlistfm_max_calls = MAX_REQUESTS_PER_RUN
             self.config.setlistfm_max_calls_per_day = 0
         self.config.current_volume_label = self.volume_var.get().strip()
         self.config.main_window_dry_run = values["dry_run"]
         self.config.add_shows_dry_run = values["dry_run"]
         self.config.main_window_checkbox_values = dict(values)
         return self.config
+
+    def _search_path_validation(self):
+        raw = self.search_path_var.get().strip()
+        if not raw:
+            return "error", "Choose a Search Path.", ""
+        status = validate_tag_path(raw)
+        if status.valid:
+            return "ok", f"Search Path is ready: {status.normalized}", status.normalized
+        message = str(status.message or "Invalid Search Path.").replace("Tagging Path", "Search Path")
+        return "error", message, str(status.normalized or "")
 
     def _volume_validation(self):
         current_volume = self.volume_var.get().strip()
@@ -4484,6 +4210,12 @@ class AddToInventoryWindow:
 
     def _set_processing_controls(self, enabled):
         base_state = "normal" if enabled else "disabled"
+        search_entry = getattr(self, "search_path_entry", None)
+        if search_entry is not None:
+            try:
+                search_entry.configure(state=base_state)
+            except tk.TclError:
+                pass
         for button_name in ("process_dups_button",):
             button = getattr(self, button_name, None)
             if button is not None:
@@ -4572,15 +4304,16 @@ class AddToInventoryWindow:
     def _bootlist_path(self):
         return os.path.join(self.config.TLOHome, "bootlist.csv")
 
-    def _confirm_first_add_shows_run(self, current_volume):
+    def _confirm_first_add_shows_run(self, current_volume, search_path=None):
         if os.path.exists(self._bootlist_path()):
             return True
+        search_path = str(search_path or os.path.join(self.config.TLOHome, "readyForXfer"))
         if not current_volume:
             messagebox.showwarning(
                 "TLO Inventory Updater",
                 (
                     "No existing bootlist.csv was found. Add Shows can create a new bootlist "
-                    "from readyForXfer, but this is normally used after a full inventory. "
+                    f"from {search_path}, but this is normally used after a full inventory. "
                     "Enter the Current Backup/Storage Drive and Volume before continuing."
                 ),
                 parent=self.window,
@@ -4590,20 +4323,19 @@ class AddToInventoryWindow:
             "TLO Inventory Updater",
             (
                 "No existing bootlist.csv was found. Add Shows can create a new bootlist "
-                "from readyForXfer, but this is normally used after a full inventory. "
+                f"from {search_path}, but this is normally used after a full inventory. "
                 "Continue with Add Shows as the first inventory output?"
             ),
             parent=self.window,
         )
 
-    def _new_show_review_lines(self, current_volume, check_duplicates, *, dry_run):
-        ready = os.path.join(self.config.TLOHome, "readyForXfer")
+    def _new_show_review_lines(self, current_volume, check_duplicates, search_path, *, dry_run):
         staged = os.path.join(self.config.TLOHome, "staged")
         dups = os.path.join(self.config.TLOHome, "dups")
         lines = operation_review_lines(
             self.config,
             operation="Add Shows - Process New Shows",
-            path_text=ready,
+            path_text=search_path,
             dry_run=dry_run,
             main_checkbox_source=self.config.main_window_checkbox_values,
             original_files_may_change=True,
@@ -4613,7 +4345,7 @@ class AddToInventoryWindow:
             f"Potential duplicate destination: {dups}",
             f"Current storage volume: {current_volume or '(blank)'}",
             f"Check for Duplicates: {'Yes' if check_duplicates else 'No'}",
-            f"Folders will be moved from readyForXfer: {'No' if dry_run else 'Yes'}",
+            f"Folders will be moved from Search Path: {'No' if dry_run else 'Yes'}",
         ]
         return lines
 
@@ -4622,9 +4354,13 @@ class AddToInventoryWindow:
         current_volume = self.volume_var.get().strip()
         check_duplicates = bool(self.check_dups_var.get())
         dry_run = self._current_dry_run()
-        if not dry_run and not self._confirm_first_add_shows_run(current_volume):
+        search_level, search_message, search_path = self._search_path_validation()
+        if search_level == "error":
+            messagebox.showerror("TLO Inventory Updater", search_message, parent=self.window)
             return
-        review_lines = self._new_show_review_lines(current_volume, check_duplicates, dry_run=dry_run)
+        if not dry_run and not self._confirm_first_add_shows_run(current_volume, search_path):
+            return
+        review_lines = self._new_show_review_lines(current_volume, check_duplicates, search_path, dry_run=dry_run)
         if not _show_operation_review_and_log(
             self.window,
             config=self.config,
@@ -4641,6 +4377,7 @@ class AddToInventoryWindow:
                 preview_func=lambda cancel_check: preview_add_shows(
                     self.config,
                     mode="new",
+                    search_path=search_path,
                     check_duplicates=check_duplicates,
                     cancel_check=cancel_check,
                 ),
@@ -4652,6 +4389,7 @@ class AddToInventoryWindow:
                 self.config,
                 current_volume=current_volume,
                 check_duplicates=check_duplicates,
+                search_path=search_path,
             )
 
         self._start_background_task("Process New Shows", worker, self._show_process_new_result)
@@ -4924,12 +4662,20 @@ class DuplicateHandlerWindow:
 
     def _process_folders(self):
         try:
-            process_duplicate_folder(
+            result = process_duplicate_folder(
                 self.config,
                 self.item,
                 self._selected_rows(),
                 current_volume=self.updater_window.volume_var.get().strip(),
             )
+            skipped = int((result or {}).get("delete_commands_skipped", 0) or 0)
+            if skipped:
+                messagebox.showwarning(
+                    "TLO Handle Duplicates",
+                    f"{skipped} old duplicate path(s) could not be safely translated for this platform. "
+                    "No delete command was written for those paths and their bootlist rows were retained.",
+                    parent=self.window,
+                )
         except Exception as exc:
             messagebox.showerror("TLO Handle Duplicates", str(exc), parent=self.window)
             return
@@ -4959,7 +4705,7 @@ def main() -> int:
     root, _drop_provider = create_tk_root(tk)
     root.withdraw()
     app = App(root, cli_args=cli_args)
-    root.deiconify()
+    app._show_main_window()
     try:
         root.mainloop()
     except KeyboardInterrupt:

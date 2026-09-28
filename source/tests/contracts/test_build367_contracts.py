@@ -40,17 +40,17 @@ def test_build367_source_excludes_holding_folder_and_avoids_overwrite():
 
 
 def test_build367_requirements_define_partition_root_move_behavior():
-    text = _docx_text("TLO_Inventory_Requirements_Working_v493.docx")
+    text = _docx_text("TLO_Inventory_Requirements_Working_v510.docx")
     assert "folder named duplicates at the root of the partition" in text
     assert "shall create it before moving qualifying duplicates" in text
     assert "moved as one complete directory tree" in text
     assert "shall not overwrite" in text
     assert "exclude the duplicates holding folder from duplicate discovery" in text
-    assert "Recycle Bin" not in text[text.find("18. Duplicate Cleanup Utility Requirements"):text.find("Appendix", text.find("18. Duplicate Cleanup Utility Requirements"))]
+    assert "Recycle Bin" not in text[text.find("18. Duplicate Cleanup Utility Requirements"):text.find("19. Research Utility Requirements", text.find("18. Duplicate Cleanup Utility Requirements"))]
 
 
 def test_build367_manual_documents_partition_root_move_behavior():
-    text = (ROOT / "TLO_Inventory_User_Manual_v493.rtf").read_text(encoding="utf-8", errors="ignore")
+    text = (ROOT / "TLO_Inventory_User_Manual_v510.rtf").read_text(encoding="utf-8", errors="ignore")
     assert "folder named duplicates at the root of the partition" in text
     assert "creates that folder when it does not already exist" in text
     assert "moves the entire qualifying duplicate folder tree" in text

@@ -1,4 +1,4 @@
-__version__ = "v493"
+__version__ = "v510"
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
 import os
@@ -46,6 +46,7 @@ def _config_snapshot(config, force_silent=False):
         "compliant": config.compliant,
         "compliant_artist_mode": getattr(config, "compliant_artist_mode", "master"),
         "as_is_artist_name": getattr(config, "as_is_artist_name", False),
+        "proper_grammar": getattr(config, "proper_grammar", False),
         "tag_during_inventory": getattr(config, "tag_during_inventory", False),
         "tag_copy_during_inventory": getattr(config, "tag_copy_during_inventory", False),
         "tag_copy_destination": getattr(config, "tag_copy_destination", ""),
@@ -68,6 +69,7 @@ def _config_snapshot(config, force_silent=False):
         "current_log_mode": "w",
         "current_run_log_tokens": [],
         "current_metadata_records": [],
+        "current_metadata_records_ready": False,
         "newly_allocated_log_tokens": [],
         "cancel_requested": False,
         "performance_mode": config.performance_mode,
@@ -356,6 +358,7 @@ def _run_parallel_paths(config, volume_groups, worker_count):
 
 def walk_trees(config):
     config.current_corruption_removed_paths = []
+    config.current_metadata_records_ready = False
     if is_cancel_requested() or getattr(config, "cancel_requested", False):
         raise KeyboardInterrupt
     inventory_items = prepare_inventory_items(config)
@@ -485,6 +488,10 @@ def walk_trees(config):
     # reused log token can include unrelated historical records when a child path
     # is re-inventoried under a broader prior group log.
     config.current_metadata_records = list(all_metadata_records)
+    # An empty list is still authoritative once scanning has completed.  This
+    # prevents postprocess from rereading a reused historical meta log token
+    # when the current append/non-overlapping path contains no shows.
+    config.current_metadata_records_ready = True
     config.current_show_groups_prepared = int(total_show_groups_prepared)
     config.current_corruption_groups_removed = int(total_corruption_groups_removed)
 

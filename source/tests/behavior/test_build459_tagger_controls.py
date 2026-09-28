@@ -23,9 +23,11 @@ def _load_cli():
 
 
 def test_cli_exposes_lookup_thorough_and_corruption_controls(monkeypatch):
+    monkeypatch.setenv("SETLISTFM_API_KEY", "test-key")
     monkeypatch.setenv("SETLISTFMUPGRADE_API_KEY", "test-key")
     cli = _load_cli()
     args = cli._parse_args([
+        "/tmp/tags",
         "--etree-lookup",
         "--setlistfm-lookup",
         "--setlistfm-upgrade",
@@ -54,6 +56,7 @@ def test_cli_preserves_setlistfm_dependency_and_corruption_validation():
 
 
 def test_build_tagger_config_carries_lookup_limits_thorough_and_corruption(tmp_path, monkeypatch):
+    monkeypatch.setenv("SETLISTFM_API_KEY", "test-key")
     monkeypatch.setenv("SETLISTFMUPGRADE_API_KEY", "test-key")
     (tmp_path / "readyForXfer").mkdir()
     cfg = taglib.build_tagger_config(
@@ -126,28 +129,24 @@ def test_process_tagging_group_skips_when_corruption_is_unverifiable(monkeypatch
     assert any("corruption status unverifiable" in line for line in output)
 
 
-def test_embedded_tag_window_passes_all_four_control_families_to_run_tagger():
+def test_main_window_tag_uses_shared_config_and_job_runner():
     source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
-    start = source.index("totals = run_tagger(")
-    block = source[start:source.index("emit=self.queue.put", start)]
-    for token in (
-        "setlistfm_lookup=",
-        "setlistfm_upgrade=",
-        "thorough_setlist_matching=",
-        "corrupt_files=",
-        "corrupt_folders=",
-        "corrupt_folder_threshold=",
-    ):
-        assert token in block
+    start = source.index("    def _start_tagging_from_main(self):")
+    end = source.index("    def _open_manual_updates(self):", start)
+    block = source[start:end]
+    assert "config = self._build_config()" in block
+    assert "jobs = self._main_tag_jobs(config)" in block
+    assert "run_tagger_jobs(config, jobs, emit=self.queue.put)" in block
+    assert "class TaggerWindow" not in source
 
 
 def test_build459_documentation_covers_standalone_tag_option_parity():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v493.docx").paragraphs)
-    manual = (ROOT / "TLO_Inventory_User_Manual_v493.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v510.docx").paragraphs)
+    manual = (ROOT / "TLO_Inventory_User_Manual_v510.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8")
-    assert "Current document version: v493 (v1.7 Build 493)." in req
+    assert "Current document version: v510 (TLO v1.7)." in req
     assert "--setlistfm-upgrade" in req and "--corrupt-folder-threshold PERCENT" in req
     assert "Corruption is assessed before mutation with the same fail-closed rules as Inventory" in manual
     assert "Does standalone tlo-tag use the same setlist.fm" in faq

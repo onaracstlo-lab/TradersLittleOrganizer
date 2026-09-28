@@ -1,4 +1,4 @@
-__version__ = "v493"
+__version__ = "v510"
 import argparse
 import sys
 import os
@@ -54,6 +54,7 @@ class Config:
     compliant: bool = False
     compliant_artist_mode: str = "master"
     as_is_artist_name: bool = False
+    proper_grammar: bool = False
     tag_during_inventory: bool = False
     tag_copy_during_inventory: bool = False
     tag_copy_destination: str = ""
@@ -81,6 +82,7 @@ class Config:
     current_log_mode: str = "w"
     current_run_log_tokens: list[str] = field(default_factory=list)
     current_metadata_records: list = field(default_factory=list)
+    current_metadata_records_ready: bool = False
     current_show_groups_prepared: int = 0
     current_corruption_groups_removed: int = 0
     current_corruption_removed_paths: list[str] = field(default_factory=list)
@@ -145,8 +147,6 @@ def _validate_tag_copy_values(values: dict, parser=None) -> None:
         raise ValueError(message)
 
     copy_delete_destination = str(values.get("tag_copy_and_delete_path") or "").strip()
-    copy_delete_enabled = bool(copy_delete_destination)
-
     if bool(values.get("tag_copy_during_inventory", False)):
         destination = str(values.get("tag_copy_destination") or "").strip()
         if not destination:
@@ -186,6 +186,7 @@ def build_inventory_parser() -> argparse.ArgumentParser:
         "compliant",
         "compliant_artist_mode",
         "as_is_artist_name",
+        "proper_grammar",
         "tag_during_inventory",
         "tag_copy_during_inventory",
         "tag_copy_destination",
@@ -281,6 +282,7 @@ def build_config():
         compliant=bool(values.get("compliant", False)),
         compliant_artist_mode=values.get("compliant_artist_mode", "master") or "master",
         as_is_artist_name=bool(values.get("as_is_artist_name", False)),
+        proper_grammar=bool(values.get("proper_grammar", False)),
         tag_during_inventory=bool(values.get("tag_during_inventory", False)),
         tag_copy_during_inventory=bool(values.get("tag_copy_during_inventory", False)),
         tag_copy_destination=(values.get("tag_copy_destination") or ""),

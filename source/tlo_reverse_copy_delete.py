@@ -8,7 +8,7 @@ and name without changing audio tags.
 
 from __future__ import annotations
 
-__version__ = "v493"
+__version__ = "v510"
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -737,9 +737,13 @@ def find_reverse_records(
     return selection.tlo_home, selection.original_root, selection.moved_root, list(selection.records)
 
 
+def _raise_verification_walk_error(error: OSError) -> None:
+    raise error
+
+
 def _file_size_map(root: str) -> dict[str, int]:
     result: dict[str, int] = {}
-    for current_dir, _dir_names, file_names in os.walk(root):
+    for current_dir, _dir_names, file_names in os.walk(root, onerror=_raise_verification_walk_error):
         for file_name in file_names:
             full_path = os.path.join(current_dir, file_name)
             relative = os.path.normcase(os.path.normpath(os.path.relpath(full_path, root)))
@@ -749,7 +753,7 @@ def _file_size_map(root: str) -> dict[str, int]:
 
 def _directory_path_set(root: str) -> set[str]:
     result: set[str] = set()
-    for current_dir, dir_names, _file_names in os.walk(root):
+    for current_dir, dir_names, _file_names in os.walk(root, onerror=_raise_verification_walk_error):
         for dir_name in dir_names:
             full_path = os.path.join(current_dir, dir_name)
             relative = os.path.normcase(os.path.normpath(os.path.relpath(full_path, root)))

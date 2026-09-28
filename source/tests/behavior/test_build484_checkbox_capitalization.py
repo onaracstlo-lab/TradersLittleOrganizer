@@ -26,7 +26,7 @@ def test_build484_main_checkbox_labels_are_exact():
         "setlistfm_upgrade": "setlist.fm Upgrade",
         "as_is_artist_name": "As-Is Artist Name",
         "tag_copy_and_delete_enabled": "Tag Copy/Delete Original",
-        "thorough_setlist_matching": "Thorough setlist Matching",
+        "thorough_setlist_matching": "Thorough Setlist Matching",
         "delete_extra_tags": "Delete Extra Tags",
     }
     assert {field: OPTIONS_BY_FIELD[field].gui_label for field in expected} == expected
@@ -36,7 +36,7 @@ def test_build484_wrapped_and_action_specific_checkbox_text_is_exact():
     source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
     search_source = (ROOT / "tlo-gsi.py").read_text(encoding="utf-8")
 
-    assert 'checkbox_text = "Thorough setlist\\nMatching"' in source
+    assert 'checkbox_text = "Thorough Setlist\\nMatching"' in source
     assert 'checkbox_text = "Delete Extra\\nTags"' in source
     assert 'text="Dry Run"' in source
     assert 'text="Update Tags"' in source

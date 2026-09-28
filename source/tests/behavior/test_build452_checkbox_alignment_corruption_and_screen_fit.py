@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("tkinter")
 from tlo_gui_shortcuts import bounded_initial_window_size
 
 pytestmark = pytest.mark.behavior
@@ -53,12 +54,10 @@ def test_build452_initial_window_size_never_exceeds_safe_screen_area():
     assert bounded_initial_window_size(2000, 2000, 1280, 1024) == (1232, 928)
 
 
-def test_build452_main_launch_is_hidden_until_screen_fit_is_applied():
+def test_build452_main_launch_is_hidden_during_construction_and_screen_fit_remains_enabled():
     source = _source()
     main = source[source.index("def main() -> int:"):]
     assert 'root.withdraw()' in main
     assert 'app = App(root, cli_args=cli_args)' in main
-    assert 'root.deiconify()' in main
-    init = source[source.index("class App:"):source.index("    def _configure_gui_fonts", source.index("class App:"))]
-    assert 'self._build()' in init
-    assert 'self._fit_initial_window_to_screen()' in init
+    assert 'app._show_main_window()' in main
+    assert 'self._fit_initial_window_to_screen()' in source

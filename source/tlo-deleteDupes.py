@@ -1,6 +1,6 @@
 """Repair corrupt FLACs from duplicate copies, then move duplicates to a partition holding folder."""
 
-__version__ = "v493"
+__version__ = "v510"
 
 import argparse
 import hashlib
@@ -19,6 +19,7 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple
 from console_output_lib import console_emit
 from tlo_path_inputs import normalize_platform_input_path, resolve_tlo_home, strip_optional_quotes
 from tlo_text_utils import normalized_compare_value
+from tlo_path_policy import is_phase1_pruned_directory
 
 
 _COPY_SUFFIX_RE = re.compile(r"^(?P<base>.+?)\s+\(copy\s*(?P<number>[1-9]\d*)\)$", re.IGNORECASE)
@@ -115,7 +116,7 @@ def _prune_excluded_dir_names(current_dir: str, dir_names: List[str], excluded_p
     kept = []
     for dir_name in dir_names:
         child = os.path.join(current_dir, dir_name)
-        if _normalized_path_key(child) in excluded:
+        if is_phase1_pruned_directory(dir_name) or _normalized_path_key(child) in excluded:
             continue
         kept.append(dir_name)
     dir_names[:] = kept
@@ -168,6 +169,8 @@ def _scan_tree(root: str) -> TreeManifest:
                     symlinks[relative] = os.readlink(full_path)
                     continue
                 if entry.is_dir(follow_symlinks=False):
+                    if is_phase1_pruned_directory(entry.name):
+                        continue
                     directories.add(relative)
                     visit(full_path)
                     continue

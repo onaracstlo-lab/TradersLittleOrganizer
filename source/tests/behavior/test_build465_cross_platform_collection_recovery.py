@@ -12,7 +12,7 @@ pytestmark = pytest.mark.behavior
 def _write_windows_journal(container: Path, original_parent: str, names):
     payload = {
         "schema": 1,
-        "temporary_path": rf"E:\\boots\\.tlo-collection-interrupted",
+        "temporary_path": r"E:\\boots\\.tlo-collection-interrupted",
         "final_path": original_parent + "\\" + names[0],
         "generated_info": "info.txt",
         "members": [

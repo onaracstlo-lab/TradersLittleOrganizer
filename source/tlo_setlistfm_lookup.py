@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from tlo_diagnostics import debug_suppressed_exception
 
+import hmac
 import json
 import os
 import re
@@ -29,10 +30,11 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from tlo_network_io import MAX_ERROR_RESPONSE_BYTES, MAX_METADATA_RESPONSE_BYTES, ResponseTooLargeError, read_bounded_text
 
-__version__ = "v493"
+__version__ = "v510"
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 ENV_UPGRADE_API_KEY = "SETLISTFMUPGRADE_API_KEY"
+ENV_UPGRADE_API_KEY_ALIASES = ("SETLISTFM_UPGRADE_API_KEY",)
 MIN_REQUEST_INTERVAL_SECONDS = 0.600
 MAX_REQUESTS_PER_RUN = 1400
 UPGRADE_REQUESTS_PER_SECOND = 14
@@ -113,23 +115,128 @@ def convert_date_for_api(date_text: str) -> str:
     return parsed.strftime("%d-%m-%Y")
 
 
+def _persistent_windows_environment_value(name: str) -> str:
+    """Read a persisted Windows environment value when the process snapshot is stale.
+
+    Windows shells and desktop processes keep a copy of their environment. A
+    variable added through System Properties or ``setx`` can therefore exist in
+    the current User/System environment but be absent from a child launched by
+    an older parent process. This helper checks those persistent locations
+    without logging or exposing the value.
+    """
+    if os.name != "nt":
+        return ""
+    try:
+        import winreg
+    except ImportError:
+        return ""
+
+    locations = (
+        (winreg.HKEY_CURRENT_USER, r"Environment"),
+        (winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
+    )
+    for hive, subkey in locations:
+        try:
+            with winreg.OpenKey(hive, subkey) as key:
+                value, kind = winreg.QueryValueEx(key, name)
+        except (FileNotFoundError, OSError):
+            continue
+        text = str(value or "").strip()
+        if text and kind == getattr(winreg, "REG_EXPAND_SZ", object()):
+            try:
+                text = str(winreg.ExpandEnvironmentStrings(text)).strip()
+            except (AttributeError, OSError):
+                text = os.path.expandvars(text).strip()
+        if text:
+            return text
+    return ""
+
+
+def _environment_value(name: str, aliases: Iterable[str] = ()) -> str:
+    """Return the first non-empty process value, then persisted Windows fallback.
+
+    An explicit CMD/PowerShell/session value has normal environment precedence.
+    Persisted User/System values are a fallback for variables missing from an
+    older parent process environment snapshot.
+    """
+    names = (name, *tuple(aliases or ()))
+    for candidate in names:
+        value = os.environ.get(candidate, "").strip()
+        if value:
+            return value
+    for candidate in names:
+        value = _persistent_windows_environment_value(candidate)
+        if value:
+            return value
+    return ""
+
+
+def _first_process_value(names: Iterable[str]) -> tuple[str, str]:
+    for candidate in names:
+        value = os.environ.get(candidate, "").strip()
+        if value:
+            return value, f"process:{candidate}"
+    return "", ""
+
+
+def _first_persistent_value(names: Iterable[str]) -> tuple[str, str]:
+    for candidate in names:
+        value = _persistent_windows_environment_value(candidate)
+        if value:
+            return value, f"persistent:{candidate}"
+    return "", ""
+
+
+def _resolve_api_key_pair() -> tuple[str, str, str, str]:
+    """Resolve normal/upgrade keys with process-first tier semantics.
+
+    Explicit process values remain authoritative. A persisted Windows value may
+    fill only a variable that is absent from the process environment. Source
+    names are returned for non-secret diagnostics/tests, never the key values.
+    """
+    normal, normal_source = _first_process_value((ENV_API_KEY,))
+    upgrade_names = (ENV_UPGRADE_API_KEY, *tuple(ENV_UPGRADE_API_KEY_ALIASES))
+    upgrade, upgrade_source = _first_process_value(upgrade_names)
+    if not normal:
+        normal, normal_source = _first_persistent_value((ENV_API_KEY,))
+    if not upgrade:
+        upgrade, upgrade_source = _first_persistent_value(upgrade_names)
+    return normal, upgrade, normal_source, upgrade_source
+
+
 def api_key_available() -> bool:
-    """Return whether a non-empty setlist.fm API key is available in the environment."""
-    return bool(os.environ.get(ENV_API_KEY, "").strip())
+    """Return whether a usable setlist.fm API key is available."""
+    normal, _upgrade, _normal_source, _upgrade_source = _resolve_api_key_pair()
+    return bool(normal) and not _key_has_invalid_characters(normal)
+
+
+def _key_has_invalid_characters(value: str) -> bool:
+    """Return True unless a key is printable ASCII with no whitespace."""
+    text = str(value or "")
+    return any(ord(ch) < 33 or ord(ch) > 126 or ch.isspace() for ch in text)
+
+
+def upgrade_api_key_status() -> str:
+    """Return a non-secret status describing the setlist.fm upgrade gate."""
+    normal, upgrade, _normal_source, _upgrade_source = _resolve_api_key_pair()
+    if not normal:
+        return "missing-normal"
+    if not upgrade:
+        return "missing-upgrade"
+    if _key_has_invalid_characters(normal) or _key_has_invalid_characters(upgrade):
+        return "invalid-characters"
+    if not hmac.compare_digest(normal.encode("utf-8"), upgrade.encode("utf-8")):
+        return "mismatch"
+    return "available"
 
 
 def upgrade_api_key_available() -> bool:
-    """Return whether the explicit setlist.fm upgrade-enable key is available.
-
-    The upgrade variable is intentionally separate from the normal setlist.fm
-    credential so upgraded rate limits cannot be enabled accidentally. The
-    value is expected to be the same API key stored in SETLISTFM_API_KEY.
-    """
-    return bool(os.environ.get(ENV_UPGRADE_API_KEY, "").strip())
+    """Return True only when normal and upgrade variables hold the same API key."""
+    return upgrade_api_key_status() == "available"
 
 
 def get_api_key() -> str:
-    api_key = os.environ.get(ENV_API_KEY, "").strip()
+    api_key, _upgrade, _normal_source, _upgrade_source = _resolve_api_key_pair()
     if not api_key:
         raise SetlistFMError(f"Missing API key. Set {ENV_API_KEY} before enabling setlist.fm lookup.")
     return api_key
@@ -311,6 +418,7 @@ def wait_for_rate_limit(
             stale_after=stale_after,
             timeout_seconds=lock_timeout_seconds,
         )
+        held_lock = True
         try:
             state = _read_rate_state(state_file)
             counts = state.setdefault("counts", {})
@@ -343,6 +451,7 @@ def wait_for_rate_limit(
                 # behind a lock holder that is only sleeping.
                 try:
                     os.rmdir(lock_dir)
+                    held_lock = False
                 except Exception as exc:  # noqa: BLE001 - best-effort boundary
                     debug_suppressed_exception(__name__, exc)
                 time.sleep(wait_time)
@@ -367,10 +476,11 @@ def wait_for_rate_limit(
             _write_rate_state(state_file, state)
             return call_number
         finally:
-            try:
-                os.rmdir(lock_dir)
-            except Exception as exc:  # noqa: BLE001 - best-effort boundary
-                debug_suppressed_exception(__name__, exc)
+            if held_lock:
+                try:
+                    os.rmdir(lock_dir)
+                except Exception as exc:  # noqa: BLE001 - best-effort boundary
+                    debug_suppressed_exception(__name__, exc)
 
 def api_get(
     path: str,
@@ -385,6 +495,8 @@ def api_get(
     tlo_home: str = "",
     lock_timeout_seconds: float = RATE_LIMIT_LOCK_TIMEOUT_SECONDS,
 ) -> Dict[str, Any]:
+    if not api_key or _key_has_invalid_characters(api_key):
+        raise SetlistFMError("setlist.fm key contains invalid characters.")
     wait_for_rate_limit(
         min_interval_seconds,
         max_calls=max_calls,
@@ -396,18 +508,17 @@ def api_get(
     query = urllib.parse.urlencode(params)
     url = f"{API_BASE}{path}?{query}"
 
-    request = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/json",
-            "Accept-Language": "en",
-            "x-api-key": api_key,
-            "User-Agent": USER_AGENT,
-        },
-        method="GET",
-    )
-
     try:
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "Accept-Language": "en",
+                "x-api-key": api_key,
+                "User-Agent": USER_AGENT,
+            },
+            method="GET",
+        )
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             body = read_bounded_text(response, MAX_METADATA_RESPONSE_BYTES, label="setlist.fm response")
     except urllib.error.HTTPError as exc:
@@ -417,6 +528,8 @@ def api_get(
         raise SetlistFMError(str(exc)) from exc
     except urllib.error.URLError as exc:
         raise SetlistFMError(f"setlist.fm API request failed: {exc.reason}") from exc
+    except (UnicodeError, ValueError) as exc:
+        raise SetlistFMError("setlist.fm request could not be constructed from the configured key or parameters.") from exc
 
     try:
         return json.loads(body)
