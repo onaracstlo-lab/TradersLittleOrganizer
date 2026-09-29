@@ -1,6 +1,6 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v512"
+__version__ = "v514"
 
 from tlo_diagnostics import debug_suppressed_exception
 from tlo_text_utils import read_text_file_full

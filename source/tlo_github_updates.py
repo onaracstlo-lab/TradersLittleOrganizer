@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from tlo_diagnostics import debug_suppressed_exception
 
-__version__ = "v512"
+__version__ = "v514"
 
 import datetime as _dt
 import hashlib
@@ -27,12 +27,16 @@ from typing import Any
 
 from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION, OFFICIAL_GITHUB_OWNER, OFFICIAL_GITHUB_REPO, PUBLIC_VERSION
 from tlo_network_io import MAX_METADATA_RESPONSE_BYTES, read_bounded_text
+from tlo_update_trust import pinned_key_configured, verify_metadata_signature
 
 DEFAULT_REPO_OWNER = OFFICIAL_GITHUB_OWNER
 DEFAULT_REPO_NAME = OFFICIAL_GITHUB_REPO
 SETTINGS_FILE_NAME = "update-settings.json"
 AUTO_CHECK_INTERVAL_HOURS = 24
 MAX_UPDATE_ASSET_BYTES = 1024 * 1024 * 1024  # 1 GiB hard safety ceiling
+SIGNED_METADATA_ASSET_NAME = "TLO_UPDATE_METADATA.json"
+SIGNED_METADATA_SIGNATURE_ASSET_NAME = "TLO_UPDATE_METADATA.sig"
+SIGNED_METADATA_SCHEMA = 1
 DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 USER_AGENT = f"TLO-update-checker/{DISPLAY_VERSION.replace(' ', '-') }"
 ALLOWED_DOWNLOAD_HOSTS = {
@@ -323,6 +327,80 @@ def _downloads_dir() -> Path:
         return candidate
     except Exception:
         return Path.home()
+
+
+def _release_asset_by_name(release: dict[str, Any], name: str) -> dict[str, Any] | None:
+    for asset in _matching_assets(release):
+        if _asset_name(asset) == name:
+            return asset
+    return None
+
+
+def _fetch_small_release_asset(asset: dict[str, Any], *, label: str, max_bytes: int = MAX_METADATA_RESPONSE_BYTES) -> bytes:
+    url = _asset_download_url(asset)
+    if not url or not _download_host_allowed(url):
+        raise ValueError(f"{label} does not have an allowed GitHub download URL.")
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with _open_download_url(request, timeout=20) as response:
+        payload = response.read(max_bytes + 1)
+    if len(payload) > max_bytes:
+        raise ValueError(f"{label} exceeds the metadata safety limit.")
+    return payload
+
+
+def _load_verified_release_metadata(release: dict[str, Any]) -> dict[str, Any]:
+    if not pinned_key_configured():
+        raise ValueError("This TLO build does not contain a pinned update-signing public key; secure update checks are disabled.")
+    metadata_asset = _release_asset_by_name(release, SIGNED_METADATA_ASSET_NAME)
+    signature_asset = _release_asset_by_name(release, SIGNED_METADATA_SIGNATURE_ASSET_NAME)
+    if metadata_asset is None or signature_asset is None:
+        raise ValueError("The latest TLO release is not locally signed; refusing update metadata from GitHub alone.")
+    try:
+        metadata = json.loads(_fetch_small_release_asset(metadata_asset, label=SIGNED_METADATA_ASSET_NAME).decode("utf-8"))
+        signature_b64 = _fetch_small_release_asset(signature_asset, label=SIGNED_METADATA_SIGNATURE_ASSET_NAME, max_bytes=16384).decode("ascii").strip()
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError("The signed TLO update metadata is malformed.") from exc
+    if not isinstance(metadata, dict) or metadata.get("schema") != SIGNED_METADATA_SCHEMA:
+        raise ValueError("The signed TLO update metadata has an unsupported schema.")
+    if not verify_metadata_signature(metadata, signature_b64):
+        raise ValueError("The TLO update metadata signature does not match the public key pinned in this application.")
+    return metadata
+
+
+def _signed_asset_record(metadata: dict[str, Any], asset_name: str) -> dict[str, Any]:
+    assets = metadata.get("assets")
+    if not isinstance(assets, list):
+        raise ValueError("The signed TLO update metadata does not contain an asset list.")
+    matches = [item for item in assets if isinstance(item, dict) and str(item.get("name") or "") == asset_name]
+    if len(matches) != 1:
+        raise ValueError(f"The selected TLO asset is not uniquely authorized by signed metadata: {asset_name}")
+    record = matches[0]
+    digest = str(record.get("sha256") or "").lower()
+    try:
+        size = int(record.get("size") or 0)
+        build = int(record.get("build") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("The signed TLO asset record contains invalid numeric values.") from exc
+    if not re.fullmatch(r"[a-f0-9]{64}", digest) or size < 1 or build < 1:
+        raise ValueError("The signed TLO asset record is incomplete or invalid.")
+    return record
+
+
+def _apply_signed_asset_metadata(asset: dict[str, Any], metadata: dict[str, Any], *, expected_build: int, expected_kind: str, expected_platform_key: str) -> dict[str, Any]:
+    record = _signed_asset_record(metadata, _asset_name(asset))
+    if int(record["build"]) != int(expected_build):
+        raise ValueError("Signed update metadata build does not match the selected release.")
+    if str(record.get("kind") or "").casefold() != expected_kind:
+        raise ValueError("Signed update metadata package kind does not match the selected release asset.")
+    if str(record.get("platform_key") or "").casefold().replace("-", "_") != expected_platform_key:
+        raise ValueError("Signed update metadata platform/layout does not match this TLO installation.")
+    declared_size = _declared_asset_size(asset)
+    if declared_size and declared_size != int(record["size"]):
+        raise ValueError("GitHub release asset size disagrees with independently signed TLO metadata.")
+    trusted = dict(asset)
+    trusted["size"] = int(record["size"])
+    trusted["digest"] = "sha256:" + str(record["sha256"])
+    return trusted
 
 
 def _expected_digest(asset: dict[str, Any]) -> str:
@@ -704,11 +782,22 @@ def check_for_updates(
     try:
         release = _fetch_latest_release(owner, repo)
         assets = _matching_assets(release)
+        signed_metadata = _load_verified_release_metadata(release)
         latest_build = _extract_build_number(
             release.get("tag_name"),
             release.get("name"),
             " ".join(_asset_name(asset) for asset in assets),
         )
+        try:
+            signed_build = int(signed_metadata.get("build") or 0)
+        except (TypeError, ValueError):
+            signed_build = 0
+        if latest_build is not None and signed_build != latest_build:
+            raise ValueError("The independently signed TLO metadata build does not match the GitHub release build.")
+        signed_tag = str(signed_metadata.get("release_tag") or "")
+        if signed_tag and signed_tag != str(release.get("tag_name") or ""):
+            raise ValueError("The independently signed TLO metadata release tag does not match the GitHub release.")
+        latest_build = signed_build or latest_build
         if latest_build is None:
             settings_warning = _write_last_check(tlo_home)
             message = "The latest GitHub Release did not contain a recognizable TLO build number."
@@ -740,6 +829,9 @@ def check_for_updates(
             )
 
         asset_name = _asset_name(asset)
+        asset = _apply_signed_asset_metadata(
+            asset, signed_metadata, expected_build=latest_build, expected_kind=package_kind, expected_platform_key=platform_key
+        )
         if not download:
             settings_warning = _write_last_check(tlo_home, latest_build)
             kind_text = "update" if package_kind == "update" else "complete distribution"

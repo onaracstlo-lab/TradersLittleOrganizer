@@ -196,14 +196,14 @@ def test_build411_requirements_and_manual_document_candidate_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v512.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v514.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v512.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / "TLO_Inventory_User_Manual_v514.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v512 (TLO v1.7)." in req_text
+    assert "Current document version: v514 (TLO v1.7)." in req_text
     assert "Competing-track-list candidate rule" in req_text
     assert "positive corroboration" in req_text
     assert "missing, generic, unreadable, or unrelated filename/tag value contributes zero" in req_text
     assert "Cramps 1984-06-25" in req_text
-    assert "Version v1.7 Build 512" in manual_text
+    assert "Version v1.7 Build 514" in manual_text
     assert "missing or unrelated filename/tag values are neutral" in manual_text

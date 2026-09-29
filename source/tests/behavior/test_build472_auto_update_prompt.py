@@ -29,6 +29,7 @@ def test_auto_discovery_returns_available_without_downloading(monkeypatch, tmp_p
     }
     monkeypatch.setattr(updates.sys, "platform", "linux")
     monkeypatch.setattr(updates, "_fetch_latest_release", lambda owner, repo: release)
+    monkeypatch.setattr(updates, "_load_verified_release_metadata", lambda release: {"schema": 1, "build": build, "release_tag": release["tag_name"], "assets": [{"name": _asset(build)["name"], "sha256": "a" * 64, "size": 123, "build": build, "kind": "update", "platform_key": "linux"}]})
 
     def must_not_download(*args, **kwargs):
         raise AssertionError("Auto Update discovery must not download before the user says Yes")

@@ -117,14 +117,14 @@ def test_build498_main_gui_and_active_tag_path_carry_proper_grammar_state(tmp_pa
 def test_build498_documentation_records_proper_grammar_contract():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v512.docx").paragraphs)
-    manual = (ROOT / "TLO_Inventory_User_Manual_v512.rtf").read_text(encoding="utf-8", errors="ignore")
-    changes = (ROOT / "CHANGES_v512.txt").read_text(encoding="utf-8")
+    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v514.docx").paragraphs)
+    manual = (ROOT / "TLO_Inventory_User_Manual_v514.rtf").read_text(encoding="utf-8", errors="ignore")
+    changes = (ROOT / "CHANGES_v514.txt").read_text(encoding="utf-8")
 
-    assert "Current document version: v512 (TLO v1.7)." in req
+    assert "Current document version: v514 (TLO v1.7)." in req
     assert "Build 498: Proper Grammar artist naming" in req
     assert "As-Is Artist Name always overrides and suppresses Proper Grammar output conversion" in req
     assert "Kinks, The" in req and "Smith, John" in req
-    assert "Version v1.7 Build 512" in manual
+    assert "Version v1.7 Build 514" in manual
     assert "Proper Grammar is directly beneath As-Is Artist Name and defaults unchecked" in manual
     assert "Carries forward all Build 499 and earlier behavior" in changes

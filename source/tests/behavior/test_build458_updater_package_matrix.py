@@ -139,6 +139,7 @@ def test_build458_check_for_updates_reports_database_refresh(monkeypatch, tmp_pa
     }
     monkeypatch.setattr(U.sys, "platform", "linux")
     monkeypatch.setattr(U, "_fetch_latest_release", lambda owner, repo: release)
+    monkeypatch.setattr(U, "_load_verified_release_metadata", lambda release: {"schema": 1, "build": available_build, "release_tag": release["tag_name"], "assets": [{"name": name, "sha256": "a" * 64, "size": 123, "build": available_build, "kind": "update", "platform_key": "linux"}]})
     monkeypatch.setattr(U, "_downloads_dir", lambda: tmp_path)
 
     def fake_download(_asset_value, destination):
@@ -157,10 +158,10 @@ def test_build458_check_for_updates_reports_database_refresh(monkeypatch, tmp_pa
 def test_build458_current_documentation_describes_package_matrix():
     root = Path(__file__).resolve().parents[2]
     from docx import Document
-    req_text = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v512.docx").paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v512.rtf").read_text(encoding="utf-8", errors="ignore")
+    req_text = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v514.docx").paragraphs)
+    manual = (root / "TLO_Inventory_User_Manual_v514.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = (root / "TLO-FAQ.txt").read_text(encoding="utf-8")
-    assert "Current document version: v512 (TLO v1.7)." in req_text
+    assert "Current document version: v514 (TLO v1.7)." in req_text
     assert "exact matching complete ZIP" in req_text
     assert "databases_included" in req_text
     assert "only the four complete ZIPs" in manual

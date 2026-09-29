@@ -125,11 +125,11 @@ def test_gui_enables_upgrade_from_persistent_environment(monkeypatch):
 def test_build504_documentation_records_both_gui_fixes():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v512.docx").paragraphs)
-    manual = (ROOT / "TLO_Inventory_User_Manual_v512.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v514.docx").paragraphs)
+    manual = (ROOT / "TLO_Inventory_User_Manual_v514.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v512 (TLO v1.7)." in req
+    assert "Current document version: v514 (TLO v1.7)." in req
     assert "disabled/greyed and forced unchecked" in req
     assert "SETLISTFM_UPGRADE_API_KEY" in req
     assert "persisted User/System environment" in req

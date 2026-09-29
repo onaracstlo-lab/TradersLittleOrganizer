@@ -1,7 +1,7 @@
 """Application-level safety helpers for untrusted collection metadata and paths."""
 from __future__ import annotations
 
-__version__ = "v512"
+__version__ = "v514"
 
 import os
 import re

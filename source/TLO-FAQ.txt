@@ -194,3 +194,9 @@ Build 489 note: Help > About now lists support@traderslittleorganizer.com as the
 
 Q: How safe is deleteReplacedFolders.bat/deleteBackupFolders.sh?
 A: Add Shows writes only targets that remain at least one folder below a recognized drive/mount root. Literal .. traversal, bare roots such as E:\\ or /mnt/e, drive-relative E:, TLOHome, and ancestors of TLOHome are rejected. If an older cleanup script already exists when Add Shows starts, Continue archives it under TLOHome/logs and starts a fresh script. On Windows, deleteReplacedFolders.bat records every source as [Volume Label] (or [] when unlabeled) followed by a fully quoted path. The label identifies the volume where the path was found; the script does not require that volume to be connected when it is generated. Before running it, you may edit drive letters and duplicate entries for the master or additional backups. Windows scripts also switch cmd.exe to UTF-8 code page 65001.
+
+Q: How does TLO know an automatic update was authorized by the TLO release owner?
+A: Build 513 and later require TLO_UPDATE_METADATA.json plus TLO_UPDATE_METADATA.sig. The signature must verify with the public key pinned into the application, and the selected ZIP must match the signed name, size, SHA-256, build, package type, and platform/layout. GitHub's own asset digest is no longer the trust anchor.
+
+Q: Where is the update-signing private key stored?
+A: Only on the trusted Windows release computer. New-TLOUpdateSigningKey.ps1 stores it in a Windows-DPAPI-protected file for the current user. It must not be committed, uploaded to GitHub, or copied into release assets. Keep an offline backup of the key files and the Windows profile/recovery material needed to use the DPAPI-protected private key.

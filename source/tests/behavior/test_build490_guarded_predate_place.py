@@ -143,16 +143,16 @@ def test_build490_requirements_and_manual_document_guarded_extension():
     root = Path(__file__).resolve().parents[2]
     req = "\n".join(
         paragraph.text
-        for paragraph in Document(root / "TLO_Inventory_Requirements_Working_v512.docx").paragraphs
+        for paragraph in Document(root / "TLO_Inventory_Requirements_Working_v514.docx").paragraphs
     )
-    manual = (root / "TLO_Inventory_User_Manual_v512.rtf").read_text(
+    manual = (root / "TLO_Inventory_User_Manual_v514.rtf").read_text(
         encoding="utf-8", errors="ignore"
     )
 
-    assert "Current document version: v512 (TLO v1.7)." in req
+    assert "Current document version: v514 (TLO v1.7)." in req
     assert "Todd Snider Skipper's Smokehouse, Tampa, FL 2005-04-16 sdb" in req
     assert "The literal SDB spelling is accepted only inside this guarded fallback" in req
     assert "Compliant mode is unchanged" in req
-    assert "Version v1.7 Build 512" in manual
+    assert "Version v1.7 Build 514" in manual
     assert "Todd Snider Skipper's Smokehouse, Tampa, FL 2005-04-16 sdb" in manual
     assert "Existing Artist Date ... parsing retains precedence, and Compliant mode is unchanged." in manual

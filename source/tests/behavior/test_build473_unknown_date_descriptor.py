@@ -147,12 +147,12 @@ def test_build473_documents_describe_descriptor_as_non_geographic_fallback():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v512.docx")
+    requirements = Document(root / "TLO_Inventory_Requirements_Working_v514.docx")
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v512.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual = (root / "TLO_Inventory_User_Manual_v514.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = (root / "TLO-FAQ.txt").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v512 (TLO v1.7)." in req_text
+    assert "Current document version: v514 (TLO v1.7)." in req_text
     assert "separate non-geographic Descriptor" in req_text
     assert "The Descriptor must never populate Venue, City, Region, Country, or Location." in req_text
     assert "Build 473 - unknown-date descriptor fallback" in manual

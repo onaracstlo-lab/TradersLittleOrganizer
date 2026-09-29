@@ -96,7 +96,7 @@ Traders Little Organizer\u8482\'99}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl252\slmult1\qc\sb0\sa80{\loch
 TLO Inventory User Manual}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl252\slmult1\qc\sb0\sa80{\loch
-Version v1.7 Build 512}
+Version v1.7 Build 514}
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl276\slmult1\loch
 
 \par \pard\plain \s0\rtlch\af12\afs20\alang1033 \ltrch\lang1033\langfe1033\hich\af2\loch\sl276\slmult1\ql\widctlpar\hyphpar0\sb0\sa200\ltrpar\cf0\f2\fs20\lang1033\kerning0\dbch\af10\langfe1033\sl252\slmult1\sb0\sa80\loch
@@ -5666,6 +5666,9 @@ Delete Extra Tags no longer prevents Full Inventory, Tag, Add New Shows, or Manu
 \b Build 507 - destructive cleanup and Copy Request transaction hardening\b0\par
 Add Shows delete scripts reject parent traversal, drive/mount roots, and TLOHome/ancestor targets; old scripts are archived per session and new commands retain/verify the expected volume identity, with Windows UTF-8 code-page setup. Copy Requests persist recoverable pending transactions, hold request/Destination locks, avoid sweeping live concurrent temps, and provide Cancel Copy. RTF parsing is group-aware for TextEdit/WordPad/Word metadata, malformed setlist.fm keys cannot crash startup, Phase 1 prunes shared OS/TLO work directories, and update ZIP inspection rejects unsafe paths, symlinks, and excessive decompression.\par
 \par
+\b Build 514 - Packaging/history correction\b0\par
+Build 514 restores source-bundle process-separation text and carried-forward change history that Build 513 packaging accidentally omitted. There is no runtime behavior change from Build 513; independently signed update metadata remains unchanged.\par
+
 \b Build 512 - Main GUI naming, mode-aware Max Workers, and Copy Request wildcards\b0\par
 The main window title is now TLO Main GUI and the bold heading is Traders Little Organizer\u8482? Main. The automatic Max Workers value now follows the selected Performance Mode: gentle 1, balanced up to 2, fast up to the CPU count, and extreme up to four times the CPU count with a hard automatic ceiling of 64; selecting a mode resets the field to that mode's automatic ceiling, after which you may enter another positive ceiling. Copy Request direct paths ending in * are expanded once when the request is created: c:\\TLO* selects matching top-level folders and c:\\TLO\\* selects the immediate folders inside c:\\TLO without copying c:\\TLO itself. Expanded wildcard paths are saved in the request snapshot for later Continue/Process All passes.\par
 \b Build 511 - Copy Request Path(s) mixed input\b0\par
@@ -5677,3 +5680,6 @@ Corrects Windows Copy Request owner/liveness checks and PID reuse protection, ad
 \b Build 508 - remove obsolete GUI TaggerWindow\b0\par
 Removed the unused legacy TaggerWindow class and its old active-window, child-dialog layout, cancellation, and drag/drop scaffolding. GUI Tag continues to run only from the main Inventory window using the master Path(s), current tag-mode selections, Dry Run, lookup/corruption controls, and shared progress/output surface. The standalone tlo-tag command-line application is unchanged.\par
 }
+\par\b Secure update metadata (Build 513)\b0\par
+TLO now requires independently signed release metadata before its built-in updater will accept a newer GitHub release. GitHub identifies the release and hosts the files, but the trusted asset name, size, SHA-256, build, platform/layout, and package type come from TLO_UPDATE_METADATA.json after its TLO_UPDATE_METADATA.sig signature verifies against the public key pinned into TLO. A missing or invalid signature causes the update check to fail closed. This does not change manual installation of a ZIP you intentionally download yourself.\par
+Release maintainers generate the private signing key only on the trusted Windows release computer. The private key is not uploaded to GitHub or used by GitHub Actions. After normal release ZIPs are published, run Protect-TLORelease.ps1 -Tag <release-tag> locally to download the ZIPs, calculate their hashes, sign the metadata, and upload the signed metadata pair.\par
