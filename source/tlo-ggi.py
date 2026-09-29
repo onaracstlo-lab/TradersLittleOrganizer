@@ -1,6 +1,6 @@
 """Tkinter GUI for configuring and running TLO Inventory, Add Shows, and Tag workflows."""
 
-__version__ = "v511"
+__version__ = "v512"
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -203,7 +203,7 @@ from tlo_ux import (
 )
 
 
-WINDOW_TITLE = versioned_title("TLO Inventory GUI")
+WINDOW_TITLE = versioned_title("TLO Main GUI")
 
 
 def _format_elapsed_time(seconds):
@@ -272,14 +272,20 @@ HELP_TEXT = (
 
 
 def _default_max_workers_for_mode(mode):
-    """Return the GUI worker ceiling, independent of Performance Mode.
-
-    Performance Mode decides how many workers a phase would like to use; Max
-    Workers is only the upper bound.  A phase may use fewer workers whenever
-    its own grouping/serialization rules require that.
-    """
-    del mode
-    return max(1, os.cpu_count() or 1)
+    """Return the automatic Max Workers ceiling for one Performance Mode."""
+    cpu_count = max(1, int(os.cpu_count() or 1))
+    mode = str(mode or "balanced").strip().lower()
+    if mode == "gentle":
+        return 1
+    if mode == "balanced":
+        return min(2, cpu_count)
+    if mode == "fast":
+        return cpu_count
+    if mode == "extreme":
+        # Extreme's postprocess pool is I/O-heavy and intentionally allows up
+        # to four workers per CPU, with the established 64-thread hard cap.
+        return min(cpu_count * 4, 64)
+    return min(2, cpu_count)
 
 
 class _QueueWriter(io.TextIOBase):
@@ -573,7 +579,7 @@ def _parse_gui_command_line(argv=None):
     argv_list = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(
         prog="tlo-ggi.py",
-        description="Launch the TLO Inventory GUI.",
+        description="Launch the TLO Main GUI.",
         add_help=True,
     )
     parser.add_argument("--TLOHome", dest="TLOHome", default="", help="TLOHome directory. Defaults from the TLOHome environment variable when present.")
@@ -912,7 +918,7 @@ class App:
         header_frame = ttk.Frame(frm)
         header_frame.grid(row=row, column=0, columnspan=3, sticky="ew", padx=(4, 4), pady=(0, 1))
         header_frame.columnconfigure(0, weight=1)
-        ttk.Label(header_frame, text="Traders Little Organizer™ Inventory App", font=self.title_font).grid(
+        ttk.Label(header_frame, text="Traders Little Organizer™ Main", font=self.title_font).grid(
             row=0, column=0, sticky="w", padx=(0, 6), pady=0
         )
         ttk.Label(header_frame, text=f"TLOHome: {tlohome_display}", style="Main.TLabel").grid(
@@ -987,6 +993,7 @@ class App:
             style="Main.TCombobox",
         )
         self.performance_combo.grid(row=0, column=1, sticky="w", padx=(0, 4), pady=(0, 1))
+        self.performance_combo.bind("<<ComboboxSelected>>", self._sync_max_workers_to_performance_mode)
 
         ttk.Label(performance_frame, text="Max Workers", style="Main.TLabel").grid(
             row=1, column=0, sticky="w", padx=(0, 6), pady=0
@@ -2328,8 +2335,7 @@ class App:
             self._max_workers_auto_default = False
 
     def _sync_max_workers_to_performance_mode(self, *_args):
-        if not getattr(self, "_max_workers_auto_default", False):
-            return
+        """Reset Max Workers to the selected mode's automatic ceiling."""
         mode = (self.vars["performance_mode"].get() or "balanced").strip().lower()
         self._setting_max_workers_programmatically = True
         try:
@@ -3456,8 +3462,10 @@ class CopyRequestsWindow:
                 "Path(s) accepts semicolon-separated request items, folders/paths, and .txt request files in any mix. "
                 "Repeated drag/drop appends like the main Path(s) field. A .txt file uses the same blank-line/#/REM "
                 "comment convention as toBeInventoried.txt; its usable lines are expanded and saved immediately, so the "
-                "file is not needed again. Request items may be a complete Show Name, Artist, Artist plus yyyy-mm-dd, "
-                "Artist plus yyyy-yyyy/yy-yy range, or a direct path/volume."
+                "file is not needed again. A direct path ending in * expands immediately to matching folders: C:\\TLO* "
+                "matches top-level folders whose names begin with TLO, while C:\\TLO\\* selects the immediate folders "
+                "inside C:\\TLO without copying C:\\TLO itself. Request items may also be a complete Show Name, Artist, "
+                "Artist plus yyyy-mm-dd, Artist plus yyyy-yyyy/yy-yy range, or a direct path/volume."
             ),
             wraplength=700,
             justify="left",

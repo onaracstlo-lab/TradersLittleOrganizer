@@ -48,12 +48,12 @@ def test_build500_source_has_no_old_grammar_identifiers_or_label():
 def test_build500_current_docs_use_proper_grammar_and_current_version():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v511.docx").paragraphs)
-    manual = (ROOT / "TLO_Inventory_User_Manual_v511.rtf").read_text(encoding="utf-8", errors="ignore")
-    changes = (ROOT / "CHANGES_v511.txt").read_text(encoding="utf-8")
-    assert "Current document version: v511 (TLO v1.7)." in req
+    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v512.docx").paragraphs)
+    manual = (ROOT / "TLO_Inventory_User_Manual_v512.rtf").read_text(encoding="utf-8", errors="ignore")
+    changes = (ROOT / "CHANGES_v512.txt").read_text(encoding="utf-8")
+    assert "Current document version: v512 (TLO v1.7)." in req
     assert "Build 498: Proper Grammar artist naming" in req
     assert "Build 500: Proper Grammar terminology" in req
     assert "Proper Grammar" in manual
-    assert "Version v1.7 Build 511" in manual
+    assert "Version v1.7 Build 512" in manual
     assert "--proper-grammar" in changes

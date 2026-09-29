@@ -270,7 +270,7 @@ Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-ta
 Build-OneFile -PythonRunner $PythonRunner -ScriptPath (Find-SourceScript 'tlo-deleteDupes.py') -AdditionalArgs $DeleteDupesArgs
 
 Assert-WindowsExeMatchesSourceIcon -ExePath (Join-Path $TargetDir 'tlo-gsi.exe') -IconPath $SearchIcon -DisplayName 'TLO Search GUI'
-Assert-WindowsExeMatchesSourceIcon -ExePath (Join-Path $TargetDir 'tlo-ggi.exe') -IconPath $InventoryIcon -DisplayName 'TLO Inventory GUI'
+Assert-WindowsExeMatchesSourceIcon -ExePath (Join-Path $TargetDir 'tlo-ggi.exe') -IconPath $InventoryIcon -DisplayName 'TLO Main GUI'
 Assert-WindowsExeMatchesSourceIcon -ExePath (Join-Path $TargetDir 'tlo-tag.exe') -IconPath $TagIcon -DisplayName 'TLO Tagger'
 
 # Optional Authenticode signing. Set TLO_WINDOWS_CERT_SHA1 to the certificate

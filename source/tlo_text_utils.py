@@ -1,6 +1,6 @@
 """Text cleanup utilities for safe titles, ASCII normalization, comparison keys, and full-file reads."""
 
-__version__ = "v511"
+__version__ = "v512"
 import codecs
 import os
 import re

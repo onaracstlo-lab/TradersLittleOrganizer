@@ -167,8 +167,8 @@ def test_build503_direct_copy_preview_counts_direct_bytes_and_gui_enables_copy(t
 
 def test_build503_documentation_describes_direct_copy_and_deconfliction():
     from docx import Document
-    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v511.docx").paragraphs)
-    manual = Path("TLO_Inventory_User_Manual_v511.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v512.docx").paragraphs)
+    manual = Path("TLO_Inventory_User_Manual_v512.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = Path("TLO-FAQ.txt").read_text(encoding="utf-8", errors="ignore")
     assert "direct filesystem path/volume item" in req
     assert "[Volume] path" in req

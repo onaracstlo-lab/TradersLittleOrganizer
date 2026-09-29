@@ -94,5 +94,7 @@ def test_max_workers_is_a_ceiling_while_performance_mode_can_use_fewer(monkeypat
 
     gui = _load_gui()
     monkeypatch.setattr(gui.os, "cpu_count", lambda: 8)
-    assert gui._default_max_workers_for_mode("gentle") == 8
-    assert gui._default_max_workers_for_mode("extreme") == 8
+    assert gui._default_max_workers_for_mode("gentle") == 1
+    assert gui._default_max_workers_for_mode("balanced") == 2
+    assert gui._default_max_workers_for_mode("fast") == 8
+    assert gui._default_max_workers_for_mode("extreme") == 32

@@ -1,0 +1,52 @@
+TLO v1.7 Build 512 - Build Verification
+Verification date: 2026-09-28
+
+Scope
+-----
+Build 512 renames the main window title from TLO Inventory GUI to TLO Main GUI and the bold heading from Traders Little Organizer™ Inventory App to Traders Little Organizer™ Main; makes the automatic Max Workers field reflect the selected Performance Mode ceiling; and adds persisted one-time trailing-* expansion for direct Copy Request paths.
+
+Verification performed
+----------------------
+1. Python compilation
+   python -m compileall -q .
+   PASS
+
+2. Full automated test suite
+   python -m pytest -q -p no:cacheprovider
+   1,602 passed; 1 expected warning from the duplicate-ZIP-member security regression fixture.
+
+3. Requirements compatibility suite
+   python -m pytest -q -p no:cacheprovider test_tlo_requirements.py
+   1,420 passed.
+
+4. Build 512 focused regression suite
+   python -m pytest -q -p no:cacheprovider tests/behavior/test_build512_main_gui_workers_copy_wildcards.py
+   7 passed.
+
+5. Ruff
+   Ruff is not installed in the isolated packaging environment used for this source-bundle verification, so it was not claimed as locally executed here. TLO GitHub Build Process v095 performs the mandatory source gate with the selected build Python using:
+       python -m ruff check --select F821,F822,F823,F541 .
+   That build-process gate remains authoritative for release construction.
+
+6. Requirements document
+   TLO_Inventory_Requirements_Working_v512.docx rendered successfully to 104 pages. All pages were reviewed by contact sheets during Build 512 editing; changed Max Workers, Main GUI, Copy Request wildcard, and revision-index pages were inspected full size. The revision-index heading is current through Build 512. No clipping or layout defect was observed.
+
+7. User Manual
+   TLO_Inventory_User_Manual_v512.rtf rendered successfully to 48 pages. The Performance Modes section, Copy Requests section, Build 512 release note, and surrounding pages were inspected full size. Max Workers startup/selection wording matches the GUI behavior, wildcard examples render correctly, and the Traders Little Organizer™ mark uses valid RTF Unicode escaping.
+
+8. Behavior verified by Build 512 regressions
+   - The main window title is TLO Main GUI plus the public version/build string.
+   - The bold main-window heading is Traders Little Organizer™ Main.
+   - Automatic Max Workers ceilings are gentle = 1, balanced = min(2, CPU count), fast = CPU count, and extreme = min(4 x CPU count, 64), minimum 1.
+   - Selecting a Performance Mode resets Max Workers to that mode's automatic ceiling; the user may then enter another positive ceiling.
+   - c:\TLO* expands once to immediate sibling directories in c:\ whose names begin with TLO.
+   - c:\TLO\* expands once to immediate child directories of c:\TLO and does not copy c:\TLO itself.
+   - Wildcard expansion selects directories only and excludes symbolic-link directories.
+   - The same trailing-* rule applies to path lines expanded from Copy Request .txt inputs.
+   - A new request fails clearly if the wildcard parent is inaccessible or no directory matches.
+   - Expanded wildcard paths are saved in the request snapshot; later Preview/Continue/Process All operations use the saved aggregate and do not revisit or re-expand the original wildcard source.
+   - Windows-form wildcard paths remain Windows-form in the saved aggregate when expanded under WSL.
+
+Packaging
+---------
+Superseded current Build 511 change/verification/manifest files are archived in old-change-logs.zip before removal from the current bundle. Build 512 current filenames and version stamps are aligned.

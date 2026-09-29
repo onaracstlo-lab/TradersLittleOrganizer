@@ -1,6 +1,6 @@
 """Command-line inventory orchestration: startup checks, scan execution, postprocess, cleanup, and timing output."""
 
-__version__ = "v511"
+__version__ = "v512"
 
 import sys
 import time

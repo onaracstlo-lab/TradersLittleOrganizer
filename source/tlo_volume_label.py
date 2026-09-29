@@ -1,4 +1,4 @@
-__version__ = "v511"
+__version__ = "v512"
 import ctypes
 import os
 import re

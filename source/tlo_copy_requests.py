@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-__version__ = "v511"
+__version__ = "v512"
 
 import hashlib
 import json
+import ntpath
 import os
 import re
 import shutil
@@ -268,6 +269,75 @@ def request_lines_from_text(text: str) -> List[str]:
     return result
 
 
+def _expand_trailing_path_wildcard(value: str) -> List[str]:
+    """Expand one direct path ending in ``*`` to matching immediate folders.
+
+    Only the final asterisk is a wildcard. ``C:\\TLO*`` matches sibling
+    folders whose names begin with ``TLO``; ``C:\\TLO\\*`` matches all
+    immediate child folders of ``C:\\TLO``. Files and symbolic-link
+    directories are excluded. The expansion is performed when the request is
+    created so the resolved paths can be persisted in its snapshot.
+    """
+    raw = strip_optional_quotes(value).strip()
+    if not raw.endswith("*"):
+        return [raw]
+    prefix_raw = raw[:-1]
+    if not _looks_like_direct_path(prefix_raw):
+        return [raw]
+
+    children_mode = prefix_raw.endswith(("\\", "/"))
+    if children_mode:
+        scan_parent_raw = prefix_raw.rstrip("\\/")
+        name_prefix = ""
+    else:
+        scan_parent_raw = os.path.dirname(prefix_raw.replace("\\", os.sep) if os.name != "nt" else prefix_raw)
+        # Normalize the whole prefix first so Windows drive input is mapped to
+        # /mnt/<drive> on WSL/Linux before its parent/name are separated.
+        normalized_prefix = normalize_platform_input_path(prefix_raw)
+        scan_parent_raw = os.path.dirname(normalized_prefix)
+        name_prefix = os.path.basename(normalized_prefix)
+
+    try:
+        scan_parent = normalize_platform_input_path(scan_parent_raw) if children_mode else os.path.normpath(scan_parent_raw)
+    except Exception as exc:
+        raise CopyRequestError(f"Cannot normalize Copy Request wildcard path {raw}: {exc}") from exc
+    if not scan_parent or not os.path.isdir(scan_parent):
+        raise CopyRequestError(f"Copy Request wildcard parent is not an accessible folder: {scan_parent or prefix_raw}")
+
+    try:
+        matches = []
+        windows_form = bool(WINDOWS_ROOTED_PATH_RE.match(raw) or UNC_PATH_RE.match(raw))
+        name_prefix_key = name_prefix.casefold() if windows_form else os.path.normcase(name_prefix)
+        windows_base = prefix_raw.rstrip("\\/") if children_mode else ntpath.dirname(prefix_raw)
+        with os.scandir(scan_parent) as entries:
+            for entry in entries:
+                entry_name_key = entry.name.casefold() if windows_form else os.path.normcase(entry.name)
+                if name_prefix and not entry_name_key.startswith(name_prefix_key):
+                    continue
+                try:
+                    if entry.is_dir(follow_symlinks=False) and not entry.is_symlink():
+                        if windows_form:
+                            matches.append(ntpath.normpath(ntpath.join(windows_base, entry.name)))
+                        else:
+                            matches.append(os.path.normpath(entry.path))
+                except OSError:
+                    continue
+    except OSError as exc:
+        raise CopyRequestError(f"Cannot expand Copy Request wildcard path {raw}: {exc}") from exc
+
+    matches.sort(key=lambda path_name: os.path.basename(path_name).casefold())
+    if not matches:
+        raise CopyRequestError(f"Copy Request wildcard path matched no folders: {raw}")
+    return matches
+
+
+def _expand_request_input_items(items: Sequence[str]) -> List[str]:
+    expanded: List[str] = []
+    for item in items:
+        expanded.extend(_expand_trailing_path_wildcard(item))
+    return expanded
+
+
 def aggregate_request_paths_input(request_input: str) -> Tuple[str, List[Dict[str, object]]]:
     """Expand a Copy Request Path(s) field into one persisted request snapshot.
 
@@ -298,19 +368,21 @@ def aggregate_request_paths_input(request_input: str) -> Tuple[str, List[Dict[st
             file_items = request_lines_from_text(text)
             if not file_items:
                 raise CopyRequestError(f"Copy Request .txt file contains no request items: {source_path}")
-            aggregated.extend(file_items)
+            expanded_file_items = _expand_request_input_items(file_items)
+            aggregated.extend(expanded_file_items)
             sources.append({
                 "kind": "file",
                 "input": value,
-                "expanded_items": list(file_items),
+                "expanded_items": list(expanded_file_items),
             })
             continue
 
-        aggregated.append(value)
+        expanded_items = _expand_trailing_path_wildcard(value)
+        aggregated.extend(expanded_items)
         sources.append({
-            "kind": "item",
+            "kind": "wildcard" if expanded_items != [value] else "item",
             "input": value,
-            "expanded_items": [value],
+            "expanded_items": list(expanded_items),
         })
 
     if not aggregated:
