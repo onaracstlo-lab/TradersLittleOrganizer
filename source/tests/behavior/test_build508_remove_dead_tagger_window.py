@@ -1,6 +1,6 @@
 """Build 508 regression coverage for removal of the unused TaggerWindow GUI."""
 
-__version__ = "v514"
+__version__ = "v517"
 
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path

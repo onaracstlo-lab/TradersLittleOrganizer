@@ -124,8 +124,8 @@ def test_build487_hamburger_has_redundancy_groups_and_no_main_button():
 
 def test_build487_documentation_covers_ordered_redundancy_and_unquoted_paths():
     from docx import Document
-    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v514.docx").paragraphs)
-    manual = Path("TLO_Inventory_User_Manual_v514.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v517.docx").paragraphs)
+    manual = Path("TLO_Inventory_User_Manual_v517.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = Path("TLO-FAQ.txt").read_text(encoding="utf-8")
     assert "Build 487: ordered redundancy groups for equivalent source volumes" in req
     assert "Declaration order is source precedence" in req

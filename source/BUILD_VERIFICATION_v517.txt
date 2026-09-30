@@ -1,0 +1,24 @@
+TLO v1.7 Build 517 - Build Verification
+
+Purpose
+Build 517 corrects source-publication hygiene after Build 516 accidentally included temporary requirements-document work files. Runtime behavior is unchanged from Build 516.
+
+Packaging/source hygiene verified
+- Source root contains exactly one current requirements document: TLO_Inventory_Requirements_Working_v517.docx.
+- No *.tmp.docx requirements work file is present.
+- No reqNNN*.docx scratch requirements file is present.
+- Build 517 regression tests enforce the same rules before GitHub publication.
+- The independently versioned GitHub Build Process v098 publication guard remains unchanged and provides an additional release-stage check.
+
+Validation
+- Full pytest suite: 1613 passed, 1 expected warning from the duplicate-ZIP-member security regression.
+- Python compileall: PASS.
+- Requirements document render/visual QA: PASS; 106 pages rendered and reviewed after Build 517 edits.
+- Source-publication root inventory check: PASS.
+- Final ZIP integrity and publication-content check: PASS.
+- SHA-256 bundle manifest regenerated after final edits.
+
+Version/package alignment
+- Public version: TLO v1.7 Build 517.
+- Source bundle: music_inventory_flat_bundle_v517.zip.
+- GitHub Build Process remains independently versioned at v098; no build-process change is required for Build 517.

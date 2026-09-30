@@ -1,6 +1,6 @@
 """Build 514 main-GUI naming, mode worker ceilings, and Copy Request wildcard paths."""
 
-__version__ = "v514"
+__version__ = "v517"
 
 import os
 from pathlib import Path
@@ -106,8 +106,8 @@ def test_build512_wildcard_requires_accessible_parent_and_at_least_one_folder(tm
 def test_build512_documentation_contracts():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v514.docx").paragraphs)
-    manual = Path("TLO_Inventory_User_Manual_v514.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v517.docx").paragraphs)
+    manual = Path("TLO_Inventory_User_Manual_v517.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = Path("TLO-FAQ.txt").read_text(encoding="utf-8")
 
     assert "TLO Main GUI followed by the current tlo_version.DISPLAY_VERSION" in req

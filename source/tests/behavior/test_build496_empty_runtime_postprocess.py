@@ -118,11 +118,11 @@ def test_build496_log_fallback_still_works_when_runtime_records_are_not_ready(tm
 def test_build496_documentation_records_empty_runtime_postprocess_fix():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v514.docx").paragraphs)
-    manual = (ROOT / "TLO_Inventory_User_Manual_v514.rtf").read_text(encoding="utf-8", errors="ignore")
-    assert "Current document version: v514 (TLO v1.7)." in req
+    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v517.docx").paragraphs)
+    manual = (ROOT / "TLO_Inventory_User_Manual_v517.rtf").read_text(encoding="utf-8", errors="ignore")
+    assert "Current document version: v517 (TLO v1.7)." in req
     assert "Build 496: Empty current-run metadata must not reread reused historical logs" in req
     assert "that in-memory list is authoritative even when it is empty" in req
-    assert "Version v1.7 Build 514" in manual
+    assert "Version v1.7 Build 517" in manual
     assert "does not reread old metadata from that reused token" in manual
     assert "duplicate bootlist rows" in req or "duplicate existing bootlist rows" in manual

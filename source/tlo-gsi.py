@@ -14,7 +14,7 @@ Tkinter GUI that:
 
 from __future__ import annotations
 
-__version__ = "v514"
+__version__ = "v517"
 
 import csv
 import os
@@ -22,7 +22,6 @@ import sys
 import threading
 import tkinter as tk
 import tkinter.font as tkfont
-import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from tkinter import messagebox, ttk
@@ -35,6 +34,7 @@ except ImportError:
     DISPLAY_VERSION = "version unavailable"
 from tlo_gui_shortcuts import install_global_ctrl_a
 from tlo_gui_shortcuts import configure_centered_ttk_button_text
+from tlo_postprocess import _normalized_setlist_base
 
 try:
     from tlo_github_updates import (
@@ -122,7 +122,7 @@ CSV handling:
 - It ignores the actual header names.
 - It treats the data positionally as 2 columns:
     Show, Volume/Path
-- Setlist filenames are derived from the Show value by removing spaces and punctuation except ampersands, parentheses, and all dash/hyphen characters, then appending .txt.
+- Setlist filenames are derived from the Show value with the same filename normalization used by inventory: spaces and ordinary punctuation are removed, parentheses and ampersands are retained, and hyphens are retained only when they are part of recognized date/date-range tokens.
 - When opening setlists from normal results, the app opens only the directly generated .txt filename.
 
 Search box shortcuts:
@@ -1422,14 +1422,10 @@ def open_setlist_window(parent: tk.Misc, paths: AppPaths, show_name: str) -> Non
 
 
 def make_setlist_filename_from_show(show_name: str) -> str:
-    cleaned = "".join(ch for ch in show_name if is_setlist_filename_char_to_keep(ch))
-    return f"{cleaned}.txt"
-
-
-def is_setlist_filename_char_to_keep(ch: str) -> bool:
-    # Keep letters/numbers, ampersands, parentheses, and all Unicode dash/hyphen characters.
-    # Unicode category "Pd" covers hyphen-minus, en dash, em dash, nonbreaking hyphen, etc.
-    return ch.isalnum() or ch in "&()" or unicodedata.category(ch) == "Pd"
+    # Use the inventory/postprocess filename normalizer so search always opens
+    # exactly the filename inventory creates. Date-token dashes are preserved,
+    # while punctuation elsewhere (for example ``(pre-fm)``) is removed.
+    return f"{_normalized_setlist_base(show_name, fallback='Show')}.txt"
 
 
 def resolve_setlist_path_from_show(paths: AppPaths, show_name: str) -> Path:

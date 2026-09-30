@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from tlo_diagnostics import debug_suppressed_exception
 
-__version__ = "v514"
+__version__ = "v517"
 
 import datetime as _dt
 import hashlib
@@ -782,36 +782,51 @@ def check_for_updates(
     try:
         release = _fetch_latest_release(owner, repo)
         assets = _matching_assets(release)
-        signed_metadata = _load_verified_release_metadata(release)
         latest_build = _extract_build_number(
             release.get("tag_name"),
             release.get("name"),
             " ".join(_asset_name(asset) for asset in assets),
         )
-        try:
-            signed_build = int(signed_metadata.get("build") or 0)
-        except (TypeError, ValueError):
-            signed_build = 0
-        if latest_build is not None and signed_build != latest_build:
-            raise ValueError("The independently signed TLO metadata build does not match the GitHub release build.")
-        signed_tag = str(signed_metadata.get("release_tag") or "")
-        if signed_tag and signed_tag != str(release.get("tag_name") or ""):
-            raise ValueError("The independently signed TLO metadata release tag does not match the GitHub release.")
-        latest_build = signed_build or latest_build
         if latest_build is None:
             settings_warning = _write_last_check(tlo_home)
             message = "The latest GitHub Release did not contain a recognizable TLO build number."
             if settings_warning:
                 message += f"\n\n{settings_warning}"
             return UpdateCheckResult(status="error", title="TLO update check failed", message=message)
+
+        # GitHub release metadata is sufficient to determine that a release is
+        # not newer than the installed build.  Independent signature
+        # verification is required only before accepting a *newer* release as
+        # an update candidate.  This avoids treating older pre-signing
+        # releases as update-security failures (for example, installed Build
+        # 514 while GitHub /releases/latest still points at unsigned Build
+        # 512).
         if latest_build <= BUNDLE_BUILD:
             settings_warning = _write_last_check(tlo_home, latest_build)
-            message = f"Installed: {DISPLAY_VERSION}\nLatest: v{PUBLIC_VERSION} Build {latest_build}"
+            if latest_build < BUNDLE_BUILD:
+                message = (
+                    f"Installed: {DISPLAY_VERSION}\n"
+                    f"Latest published GitHub release: v{PUBLIC_VERSION} Build {latest_build}\n\n"
+                    "No newer TLO release is available."
+                )
+            else:
+                message = f"Installed: {DISPLAY_VERSION}\nLatest: v{PUBLIC_VERSION} Build {latest_build}"
             if settings_warning:
                 message += f"\n\n{settings_warning}"
             return UpdateCheckResult(
                 status="up_to_date", title="TLO is up to date", message=message, latest_build=latest_build,
             )
+
+        signed_metadata = _load_verified_release_metadata(release)
+        try:
+            signed_build = int(signed_metadata.get("build") or 0)
+        except (TypeError, ValueError):
+            signed_build = 0
+        if signed_build != latest_build:
+            raise ValueError("The independently signed TLO metadata build does not match the GitHub release build.")
+        signed_tag = str(signed_metadata.get("release_tag") or "")
+        if signed_tag and signed_tag != str(release.get("tag_name") or ""):
+            raise ValueError("The independently signed TLO metadata release tag does not match the GitHub release.")
 
         asset, package_kind, platform_key = _choose_asset(release, latest_build, tlo_home)
         if not asset:

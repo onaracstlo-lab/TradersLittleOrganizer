@@ -22,10 +22,10 @@ def test_build494_thorough_setlist_gui_label_is_capitalized_exactly():
 def test_build494_documentation_records_display_only_change():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v514.docx").paragraphs)
-    manual = (ROOT / "TLO_Inventory_User_Manual_v514.rtf").read_text(encoding="utf-8", errors="ignore")
-    assert "Current document version: v514 (TLO v1.7)." in req
+    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v517.docx").paragraphs)
+    manual = (ROOT / "TLO_Inventory_User_Manual_v517.rtf").read_text(encoding="utf-8", errors="ignore")
+    assert "Current document version: v517 (TLO v1.7)." in req
     assert "Build 494: Thorough Setlist Matching GUI capitalization" in req
     assert "Thorough Setlist Matching" in req
-    assert "Version v1.7 Build 514" in manual
+    assert "Version v1.7 Build 517" in manual
     assert 'Build 494: The main-window checkbox label is now "Thorough Setlist Matching"' in manual

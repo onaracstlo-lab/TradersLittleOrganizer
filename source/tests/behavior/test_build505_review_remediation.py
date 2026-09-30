@@ -216,7 +216,7 @@ def test_build505_review_documentation_and_packaging_cleanup():
     import re
 
     root = Path(__file__).resolve().parents[2]
-    doc = Document(root / "TLO_Inventory_Requirements_Working_v514.docx")
+    doc = Document(root / "TLO_Inventory_Requirements_Working_v517.docx")
     paragraphs = [p.text for p in doc.paragraphs]
     sec20 = next(i for i, text in enumerate(paragraphs) if text.startswith("20. Destructive Operations Safety"))
     revision = next(i for i, text in enumerate(paragraphs) if text.startswith("21. Revision Index"))
@@ -231,7 +231,7 @@ def test_build505_review_documentation_and_packaging_cleanup():
     assert "exactly the same API key value as SETLISTFM_API_KEY" in req
     assert "Delete extra tags" not in req
 
-    manual = (root / "TLO_Inventory_User_Manual_v514.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual = (root / "TLO_Inventory_User_Manual_v517.rtf").read_text(encoding="utf-8", errors="ignore")
     assert manual.rfind("Build 500:") < manual.rfind("Build 501:") < manual.rfind("Build 502:") < manual.rfind("Build 503:") < manual.rfind("Build 504") < manual.rfind("Build 505")
     assert "ambiguous and you must write [Volume] explicitly" in manual
     assert "System Volume Information" in manual
