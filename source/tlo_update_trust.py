@@ -10,7 +10,7 @@ import hashlib
 import json
 from typing import Any
 
-__version__ = "v517"
+__version__ = "v518"
 
 # Replaced by Run-TLO-GitHub-Build.ps1 from a locally generated public-key JSON.
 # Empty values deliberately fail closed: unsigned/unpinned updates are never accepted.

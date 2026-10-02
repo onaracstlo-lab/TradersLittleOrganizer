@@ -55,16 +55,16 @@ def test_build492_requirements_and_manual_document_common_word_guards():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    req = root / "TLO_Inventory_Requirements_Working_v517.docx"
-    manual = root / "TLO_Inventory_User_Manual_v517.rtf"
+    req = root / "TLO_Inventory_Requirements_Working_v518.docx"
+    manual = root / "TLO_Inventory_User_Manual_v518.rtf"
     assert req.is_file()
     assert manual.is_file()
 
     req_text = "\n".join(p.text for p in Document(req).paragraphs)
     manual_text = manual.read_text(encoding="utf-8", errors="replace")
-    assert "Current document version: v517 (TLO v1.7)" in req_text
+    assert "Current document version: v518 (TLO v1.7)" in req_text
     assert "CO, DE, HI, ID, IN, LA, MA, ME, MO, OH, OK, OR, and PA" in req_text
     assert "ON/Ontario" in req_text
-    assert "Version v1.7 Build 517" in manual_text
+    assert "Version v1.7 Build 518" in manual_text
     assert "IN, HI, OR, MA, OK, OH, ME, ID, PA, LA, MO, CO, and DE" in manual_text
     assert "ON/Ontario" in manual_text

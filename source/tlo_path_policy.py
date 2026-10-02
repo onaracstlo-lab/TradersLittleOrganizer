@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "v517"
+__version__ = "v518"
 
 # Operating-system maintained directories that are not part of a music
 # collection.  Callers decide whether exclusions are root-only or recursive.

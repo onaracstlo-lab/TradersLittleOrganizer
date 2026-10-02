@@ -138,8 +138,8 @@ def test_build491_requirements_and_manual_document_changes():
     root = Path(__file__).resolve().parents[2]
     from docx import Document
 
-    req = root / "TLO_Inventory_Requirements_Working_v517.docx"
-    manual = root / "TLO_Inventory_User_Manual_v517.rtf"
+    req = root / "TLO_Inventory_Requirements_Working_v518.docx"
+    manual = root / "TLO_Inventory_User_Manual_v518.rtf"
     assert req.is_file()
     assert manual.is_file()
 
@@ -151,7 +151,7 @@ def test_build491_requirements_and_manual_document_changes():
     assert "deleteReplacedFolders.bat" in req_text
     assert "deleteBackupFolders.sh" in req_text
     assert "BC" in req_text and "ON" in req_text
-    assert "Version v1.7 Build 517" in manual_text
+    assert "Version v1.7 Build 518" in manual_text
     assert "info-gen.txt" in manual_text
     assert "deleteReplacedFolders.bat" in manual_text
     assert "deleteBackupFolders.sh" in manual_text

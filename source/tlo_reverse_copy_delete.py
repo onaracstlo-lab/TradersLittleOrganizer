@@ -8,7 +8,7 @@ and name without changing audio tags.
 
 from __future__ import annotations
 
-__version__ = "v517"
+__version__ = "v518"
 
 from dataclasses import dataclass
 from datetime import datetime

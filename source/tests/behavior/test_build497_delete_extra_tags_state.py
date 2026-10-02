@@ -104,12 +104,12 @@ def test_build497_gui_wires_initial_state_sync_after_tag_mode_exclusivity():
 def test_build497_documentation_records_delete_extra_tags_gui_state_rule():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v517.docx").paragraphs)
-    manual = (ROOT / "TLO_Inventory_User_Manual_v517.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v518.docx").paragraphs)
+    manual = (ROOT / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v517 (TLO v1.7)." in req
+    assert "Current document version: v518 (TLO v1.7)." in req
     assert "Build 497: Delete Extra Tags GUI availability" in req
     assert "The main-GUI checkbox is disabled/greyed and forced unchecked whenever Tag in Place, Tag Copy, and Tag Copy/Delete Original are all unchecked" in req
-    assert "Version v1.7 Build 517" in manual
+    assert "Version v1.7 Build 518" in manual
     assert "Delete Extra Tags is greyed out and unchecked whenever Tag in Place, Tag Copy, and Tag Copy/Delete Original are all unchecked" in manual
     assert "The three tag modes remain mutually exclusive" in req

@@ -1,0 +1,24 @@
+TLO v1.7 Build 518 - Build Verification
+
+Purpose
+Build 518 replaces the packaged inventory-app icon artwork with the supplied TLO Main icon and regenerates the packaged inventory icon resources in all required formats. Runtime behavior is otherwise unchanged from Build 517.
+
+Packaged icon resources verified
+- icons/tlo-inventory-icon.png now contains the supplied TLO Main artwork.
+- icons/tlo-inventory-icon.ico was regenerated as a multi-size DIB/BMP-based Windows icon.
+- icons/tlo-inventory-icon.icns was regenerated as the packaged macOS inventory icon.
+- Existing build scripts and asset names remain unchanged for minimal disruption.
+- The independently versioned GitHub Build Process v098 publication guard remains unchanged.
+
+Validation
+- Full pytest suite: 1616 passed, 1 expected warning from the duplicate-ZIP-member security regression.
+- Python compileall: PASS.
+- Requirements/User Manual open-read smoke check: PASS.
+- Icon asset regeneration: PASS.
+- Final ZIP integrity and publication-content check: PASS.
+- SHA-256 bundle manifest regenerated after final edits.
+
+Version/package alignment
+- Public version: TLO v1.7 Build 518.
+- Source bundle: music_inventory_flat_bundle_v518.zip.
+- GitHub Build Process remains independently versioned at v098; no build-process change is required for Build 518.

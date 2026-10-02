@@ -30,7 +30,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from tlo_network_io import MAX_ERROR_RESPONSE_BYTES, MAX_METADATA_RESPONSE_BYTES, ResponseTooLargeError, read_bounded_text
 
-__version__ = "v517"
+__version__ = "v518"
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 ENV_UPGRADE_API_KEY = "SETLISTFMUPGRADE_API_KEY"

@@ -9,7 +9,7 @@ from docx import Document
 
 pytestmark = pytest.mark.contract
 ROOT = Path(__file__).resolve().parents[2]
-REQ = ROOT / "TLO_Inventory_Requirements_Working_v517.docx"
+REQ = ROOT / "TLO_Inventory_Requirements_Working_v518.docx"
 
 
 def _paragraphs():
@@ -28,7 +28,7 @@ def test_build502_page1_title_purpose_and_country_note_are_current():
         "The goal is to identify performance Artist, Date, Venue, Location (City, State/Region, and Country*) and disk storage location of each show, provide a collection of setlist files and make the data linked and searchable."
     )
     assert paragraphs[2] == "*Only if the country is not the United States"
-    assert "Current document version: v517 (TLO v1.7)." in _text()
+    assert "Current document version: v518 (TLO v1.7)." in _text()
 
 
 def test_build502_removes_development_and_relative_wording_from_normative_text():
@@ -69,10 +69,10 @@ def test_build502_revision_index_is_navigational_and_bounded():
 
 def test_build502_current_package_names_and_version_are_aligned():
     import tlo_version as V
-    assert V.VERSION == "v517"
+    assert V.VERSION == "v518"
     assert V.BUNDLE_BUILD == 517
-    assert V.DISPLAY_VERSION == "v1.7 Build 517"
+    assert V.DISPLAY_VERSION == "v1.7 Build 518"
     assert REQ.is_file()
-    assert (ROOT / "TLO_Inventory_User_Manual_v517.rtf").is_file()
-    assert (ROOT / "SOURCE_BUNDLE_README_v517.txt").is_file()
-    assert (ROOT / "CHANGES_v517.txt").is_file()
+    assert (ROOT / "TLO_Inventory_User_Manual_v518.rtf").is_file()
+    assert (ROOT / "SOURCE_BUNDLE_README_v518.txt").is_file()
+    assert (ROOT / "CHANGES_v518.txt").is_file()

@@ -1,6 +1,6 @@
 """Path and TLOHome input normalization shared by CLI, GUI, and tagging entry points."""
 
-__version__ = "v517"
+__version__ = "v518"
 
 import argparse
 import os
