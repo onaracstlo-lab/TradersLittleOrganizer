@@ -6,13 +6,12 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v468"
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def _source() -> str:
-    return (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    return (ROOT / "tlo-main.py").read_text(encoding="utf-8")
 
 
 def test_build444_corruption_dropdowns_remain_compact_under_current_layout():

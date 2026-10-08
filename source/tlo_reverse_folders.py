@@ -1,10 +1,12 @@
 """Folder-only reversal for logged TLO rename/copy/copy-delete operations."""
 from __future__ import annotations
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 from dataclasses import dataclass
 from datetime import datetime
+import hashlib
 import os
 import re
 import shutil
@@ -13,7 +15,6 @@ from typing import Callable, Iterable, Optional
 from logging_lib import ensure_logs_dir
 from tlo_file_listing import scandir_matching_files
 from tlo_path_inputs import normalize_platform_input_path, resolve_tlo_home, strip_optional_quotes
-from tlo_tree_compare import directory_trees_exactly_match
 
 
 class ReverseFoldersError(RuntimeError):
@@ -206,6 +207,71 @@ def _relative_file_names(root: str) -> set[str]:
     return found
 
 
+def _same_filesystem(path_name: str, parent: str) -> bool:
+    return os.stat(path_name).st_dev == os.stat(parent).st_dev
+
+
+def _sha256(path_name: str) -> str:
+    digest = hashlib.sha256()
+    with open(path_name, "rb") as infile:
+        for block in iter(lambda: infile.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _tree_manifest_preserving_symlinks(root: str):
+    directories: set[str] = set()
+    files: dict[str, tuple[int, str]] = {}
+    links: dict[str, str] = {}
+    for current, dir_names, file_names in os.walk(root, topdown=True, followlinks=False, onerror=_raise_walk_error):
+        for name in list(dir_names):
+            full = os.path.join(current, name)
+            relative = os.path.normcase(os.path.normpath(os.path.relpath(full, root)))
+            if os.path.islink(full):
+                links[relative] = os.readlink(full)
+                dir_names.remove(name)
+            else:
+                directories.add(relative)
+        for name in file_names:
+            full = os.path.join(current, name)
+            relative = os.path.normcase(os.path.normpath(os.path.relpath(full, root)))
+            if os.path.islink(full):
+                links[relative] = os.readlink(full)
+                continue
+            if not os.path.isfile(full):
+                raise OSError(f"unsupported non-file entry during reversal verification: {full}")
+            files[relative] = (os.path.getsize(full), _sha256(full))
+    return directories, files, links
+
+
+def _trees_exactly_match_preserving_symlinks(left_root: str, right_root: str) -> bool:
+    try:
+        return _tree_manifest_preserving_symlinks(left_root) == _tree_manifest_preserving_symlinks(right_root)
+    except OSError:
+        return False
+
+
+def _possible_post_copy_replacements(op: FolderOperation) -> list[str]:
+    """Return copied files whose timestamps indicate modification after the logged run.
+
+    Tag Copy intentionally changes tag bytes after the folder copy, so byte/size
+    equality is not a safe deletion gate.  The tag log is written through the run;
+    a destination file newer than that completed log, with a timestamp different
+    from its source peer, is therefore treated conservatively as a possible later
+    user replacement.
+    """
+    log_mtime_ns = os.stat(op.log_path).st_mtime_ns
+    suspicious: list[str] = []
+    for relative in sorted(_relative_file_names(op.destination)):
+        source = os.path.join(op.source, relative)
+        destination = os.path.join(op.destination, relative)
+        source_stat = os.stat(source, follow_symlinks=False)
+        destination_stat = os.stat(destination, follow_symlinks=False)
+        if destination_stat.st_mtime_ns > log_mtime_ns and destination_stat.st_mtime_ns != source_stat.st_mtime_ns:
+            suspicious.append(relative)
+    return suspicious
+
+
 def _append_audit(tlo_home: str, lines: Iterable[str]) -> str:
     target = os.path.join(ensure_logs_dir(tlo_home), "reverseFolders.log")
     stamp = datetime.now().astimezone().strftime("%Y-%m-%d %I:%M:%S %p %Z").lstrip("0")
@@ -215,6 +281,14 @@ def _append_audit(tlo_home: str, lines: Iterable[str]) -> str:
             out.write(str(line).rstrip("\r\n") + "\n")
         out.write("\n")
     return target
+
+
+def _reverse_partial_path(source: str) -> str:
+    """Return the pruned TLO-owned sibling used for cross-filesystem restore."""
+    source = os.path.normpath(str(source or ""))
+    parent = os.path.dirname(source)
+    leaf = os.path.basename(source) or "TLO"
+    return os.path.join(parent, f".tlo-restore-{leaf}")
 
 
 def reverse_folder_operations(
@@ -261,6 +335,16 @@ def reverse_folder_operations(
                     result.conflicts += 1
                     report(f"CONFLICT: {prefix}: copy contents no longer have the same relative file set; copy left untouched | {op.destination}")
                     continue
+                suspicious = _possible_post_copy_replacements(op)
+                if suspicious:
+                    result.conflicts += 1
+                    sample = ", ".join(suspicious[:5])
+                    suffix = "" if len(suspicious) <= 5 else f" (+{len(suspicious) - 5} more)"
+                    report(
+                        f"CONFLICT: {prefix}: possible post-copy replacement(s) detected; copy left untouched | "
+                        f"{sample}{suffix} | {op.destination}"
+                    )
+                    continue
             except OSError as exc:
                 result.errors += 1
                 report(f"ERROR: {prefix}: {exc}")
@@ -273,7 +357,7 @@ def reverse_folder_operations(
                 shutil.rmtree(op.destination)
                 result.reversed += 1
                 report(f"REMOVED_COPY: {op.destination} (original retained at {op.source})")
-            except Exception as exc:
+            except (OSError, ReverseFoldersError, shutil.Error) as exc:
                 result.errors += 1
                 report(f"ERROR: {prefix}: {exc}")
             continue
@@ -296,22 +380,22 @@ def reverse_folder_operations(
             os.makedirs(parent, exist_ok=True)
             if os.path.lexists(op.source):
                 raise ReverseFoldersError("original path appeared during reversal")
-            same_fs = os.stat(op.destination).st_dev == os.stat(parent).st_dev
+            same_fs = _same_filesystem(op.destination, parent)
             if same_fs:
                 os.rename(op.destination, op.source)
             else:
-                temp = op.source + ".tlo-reverse-partial"
+                temp = _reverse_partial_path(op.source)
                 if os.path.lexists(temp):
                     raise ReverseFoldersError(f"temporary reverse path already exists: {temp}")
-                shutil.copytree(op.destination, temp, symlinks=False)
-                if not directory_trees_exactly_match(op.destination, temp):
+                shutil.copytree(op.destination, temp, symlinks=True)
+                if not _trees_exactly_match_preserving_symlinks(op.destination, temp):
                     shutil.rmtree(temp, ignore_errors=True)
                     raise ReverseFoldersError("cross-filesystem reverse verification failed")
                 os.rename(temp, op.source)
                 shutil.rmtree(op.destination)
             result.reversed += 1
             report(f"RESTORED_{op.operation.upper()}: {op.destination} -> {op.source}")
-        except Exception as exc:
+        except (OSError, ReverseFoldersError, shutil.Error) as exc:
             result.errors += 1
             report(f"ERROR: {prefix}: {exc}")
 

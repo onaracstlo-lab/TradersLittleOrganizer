@@ -1,10 +1,14 @@
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 import ctypes
+import ntpath
 import os
 import re
 import shutil
 import subprocess
 from dataclasses import dataclass
+
+from tlo_security import windows_directory_from_api
 
 
 @dataclass(frozen=True)
@@ -186,11 +190,40 @@ def _wsl_drive_letter_for_path(path_text: str) -> str:
     return ''
 
 
-def _powershell_disk_number_for_drive(drive_letter: str, executable: str = 'powershell') -> str:
-    drive_letter = (drive_letter or '').strip().upper()[:1]
-    if not drive_letter:
+def _trusted_native_powershell_executable() -> str:
+    """Locate native PowerShell solely beneath the Windows API directory.
+
+    Neither PATH, the current directory, nor environment-provided Windows
+    directory values are trusted as an executable search path. An unavailable
+    or malformed API result fails closed; physical disk affinity is optional.
+    """
+    try:
+        windows_dir = ntpath.normpath(windows_directory_from_api())
+    except (OSError, ValueError, TypeError):
         return ''
-    ps = shutil.which(executable) or (shutil.which(executable + '.exe') if not executable.endswith('.exe') else '')
+    drive, tail = ntpath.splitdrive(windows_dir)
+    if not re.fullmatch(r'[a-zA-Z]:', drive) or not tail.startswith('\\'):
+        return ''
+    return ntpath.join(windows_dir, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+
+
+def _powershell_disk_number_for_drive(
+    drive_letter: str, executable: str = 'powershell', *, native_trusted: bool = False,
+) -> str:
+    drive_letter = (drive_letter or '').strip().upper()
+    if not re.fullmatch(r'[A-Z]', drive_letter):
+        return ''
+    if native_trusted:
+        # The native caller must pass an API-derived absolute Windows path.
+        # Never fall back to shutil.which or to a bare executable name.
+        drive, tail = ntpath.splitdrive(executable or '')
+        if not re.fullmatch(r'[a-zA-Z]:', drive) or not tail.startswith('\\'):
+            return ''
+        ps = executable
+    else:
+        # WSL invokes Windows interoperability executables using Linux PATH.
+        # This is deliberately separate from native Windows executable trust.
+        ps = shutil.which(executable) or (shutil.which(executable + '.exe') if not executable.endswith('.exe') else '')
     if not ps:
         return ''
     command_text = (
@@ -203,7 +236,12 @@ def _powershell_disk_number_for_drive(drive_letter: str, executable: str = 'powe
 
 
 def _windows_physical_drive_id(path_text: str) -> str:
-    disk = _powershell_disk_number_for_drive(_windows_drive_letter_for_path(path_text), 'powershell')
+    ps = _trusted_native_powershell_executable()
+    if not ps:
+        return ''
+    disk = _powershell_disk_number_for_drive(
+        _windows_drive_letter_for_path(path_text), ps, native_trusted=True,
+    )
     return f"windows-disk:{disk}" if disk else ''
 
 

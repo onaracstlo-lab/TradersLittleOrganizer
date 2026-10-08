@@ -4,15 +4,14 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v499"
 
 
 def _gui_module():
     import importlib.util
     from pathlib import Path
 
-    path = Path(__file__).resolve().parents[2] / "tlo-ggi.py"
-    spec = importlib.util.spec_from_file_location("tlo_ggi_build499", path)
+    path = Path(__file__).resolve().parents[2] / "tlo-main.py"
+    spec = importlib.util.spec_from_file_location("tlo_main_build499", path)
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
     spec.loader.exec_module(module)
@@ -81,7 +80,7 @@ def test_build499_idle_stabilizer_recovers_withdrawn_or_iconic_root():
 def test_build499_main_uses_mapped_startup_helper_instead_of_raw_deiconify():
     from pathlib import Path
 
-    source = (Path(__file__).resolve().parents[2] / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (Path(__file__).resolve().parents[2] / "tlo-main.py").read_text(encoding="utf-8")
     main = source[source.index("def main() -> int:"):]
     assert "root.withdraw()" in main
     assert "app = App(root, cli_args=cli_args)" in main

@@ -6,13 +6,12 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v468"
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def _source() -> str:
-    return (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    return (ROOT / "tlo-main.py").read_text(encoding="utf-8")
 
 
 def test_build453_wrapped_tag_copy_spans_rows_without_pushing_thorough_down():

@@ -1,10 +1,8 @@
 """Build 375 Research CLI/GUI and log-search behavior."""
 
-__version__ = "v468"
 
 from pathlib import Path
 import importlib.util
-import os
 import sys
 
 import pytest
@@ -199,7 +197,7 @@ def test_inventory_gui_research_button_opens_input_and_results(tmp_path, monkeyp
     except Exception as exc:
         pytest.skip(f"Tk display unavailable: {exc}")
 
-    gui = _load_hyphen_module("tlo-ggi.py", "tlo_ggi_build369_research_gui")
+    gui = _load_hyphen_module("tlo-main.py", "tlo_main_build369_research_gui")
     _write_logs(tmp_path)
     try:
         root.withdraw()

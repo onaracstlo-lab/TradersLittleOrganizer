@@ -1,6 +1,6 @@
 """Build 420 regressions for Thorough Setlist Matching."""
+from tests import _release_artifacts as RA
 
-__version__ = "v468"
 
 from types import SimpleNamespace
 
@@ -204,12 +204,12 @@ def test_review_note_explains_normal_setlistfm_limits_when_thorough_without_upgr
     )
     lines = operation_review_lines(config, operation="Full Inventory", dry_run=False)
     assert any("normal 600-ms / 1,400-call limits" in line for line in lines)
-    assert any("setlist.fm upgrade provides broader/faster" in line for line in lines)
+    assert any("setlist.fm Upgrade provides broader/faster" in line for line in lines)
 
 def test_gui_explanation_mentions_normal_setlistfm_limits():
-    source = __import__("pathlib").Path(__file__).resolve().parents[2].joinpath("tlo-ggi.py").read_text(encoding="utf-8")
+    source = __import__("pathlib").Path(__file__).resolve().parents[2].joinpath("tlo-main.py").read_text(encoding="utf-8")
     assert "normal 600-ms / 1,400-call limits" in source
-    assert "unless setlist.fm upgrade is enabled" in source
+    assert "unless setlist.fm Upgrade is enabled" in source
 
 
 def test_thorough_material_cross_source_tie_reports_ambiguity(monkeypatch, tmp_path):
@@ -259,9 +259,9 @@ def test_build420_documents_lock_thorough_coverage_vs_authority_contract():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v518.docx")
+    requirements = Document(root / RA.REQUIREMENTS_FILENAME)
     req_text = "\n".join(paragraph.text for paragraph in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="replace")
+    manual_text = (root / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="replace")
 
     assert "Thorough Setlist Matching rule" in req_text
     assert "normal 600-millisecond / 1,400-call limits" in req_text

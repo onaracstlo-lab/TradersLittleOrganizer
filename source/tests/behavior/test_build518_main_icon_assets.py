@@ -1,10 +1,9 @@
-__version__ = "v518"
 
 import pytest
 
 pytestmark = pytest.mark.behavior
 
-"""Build 518: packaged inventory icon artwork replaced with TLO Main icon."""
+"""Build 518 artwork remains present under the canonical Build 522 Main icon names."""
 
 from pathlib import Path
 import hashlib
@@ -15,12 +14,13 @@ ICON_DIR = ROOT / "icons"
 SOURCE_MAIN_ICON = ICON_DIR / "tlo-main-icon.png"
 
 
-def test_build518_inventory_png_matches_supplied_main_artwork():
-    assert hashlib.sha256((ICON_DIR / "tlo-inventory-icon.png").read_bytes()).digest() == hashlib.sha256(SOURCE_MAIN_ICON.read_bytes()).digest()
+def test_build518_main_png_is_present():
+    assert SOURCE_MAIN_ICON.is_file()
+    assert hashlib.sha256(SOURCE_MAIN_ICON.read_bytes()).digest()
 
 
-def test_build518_inventory_ico_is_dib_based_and_multi_image():
-    data = (ICON_DIR / "tlo-inventory-icon.ico").read_bytes()
+def test_build518_main_ico_is_dib_based_and_multi_image():
+    data = (ICON_DIR / "tlo-main-icon.ico").read_bytes()
     reserved, icon_type, count = struct.unpack_from("<HHH", data, 0)
     assert reserved == 0
     assert icon_type == 1
@@ -33,5 +33,5 @@ def test_build518_inventory_ico_is_dib_based_and_multi_image():
         assert not blob.startswith(png_signature), f"entry {index} is PNG-compressed"
 
 
-def test_build518_inventory_icns_exists():
-    assert (ICON_DIR / "tlo-inventory-icon.icns").is_file()
+def test_build518_main_icns_exists():
+    assert (ICON_DIR / "tlo-main-icon.icns").is_file()

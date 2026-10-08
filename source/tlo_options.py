@@ -1,4 +1,5 @@
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 import argparse
 from dataclasses import dataclass
@@ -133,6 +134,11 @@ OPTIONS = [
         help="Prefer a DB-backed last-name-first or article-suffix alias for output naming when available. As-Is Artist Name overrides this preference.",
     ),
     Option(
+        "deep_audio_check", "--deep-audio-check", "flag",
+        gui="checkbox", gui_label="Deep Audio Check", gui_row=4, gui_col=1,
+        help="Decode each complete audio stream with TLO's bundled ffmpeg during corruption validation. Slower; default off.",
+    ),
+    Option(
         "tag_during_inventory", "--tag-during-inventory", "flag",
         gui="checkbox", gui_label="Tag In Place", gui_row=0, gui_col=2,
         help="Tag audio files in place during Full Inventory and supported Add Shows processing, writing success results to tagsN.txt and errors to tageN.txt under TLOHome/logs.",
@@ -140,7 +146,7 @@ OPTIONS = [
     Option(
         "tag_copy_during_inventory", "--tag-copy-during-inventory", "flag",
         gui="checkbox", gui_label="Tag Copy", gui_row=1, gui_col=2,
-        help="During Full Inventory, copy each identified music folder to --tag-copy-destination, verify the copy by file size, and tag the copy instead of the original.",
+        help="During Full Inventory, copy each identified music folder to --tag-copy-destination, verify its recursive paths, folder structure, and file sizes, and tag the copy instead of the original.",
     ),
     Option(
         "rename_compliantly", "--rename-compliantly", "flag",
@@ -160,17 +166,17 @@ OPTIONS = [
     Option(
         "tag_copy_destination", "--tag-copy-destination", "text",
         default="", metavar="DIR",
-        help="Destination parent directory for Tag Copy. The GUI asks for this after Inventory is started.",
+        help="Destination parent directory used with --tag-copy-during-inventory.",
     ),
     Option(
         "tag_copy_and_delete_enabled", "--tag-copy-delete-original", "flag",
         gui="checkbox", gui_label="Tag Copy/Delete Original", gui_row=2, gui_col=2,
-        help="In the GUI, ask for the destination after Inventory is started. Same-partition transfers are directory moves with no size comparison; cross-partition transfers are copied and verified by file size before the original is removed.",
+        help="Select Tag Copy/Delete Original mode. Same-partition transfers are directory moves with no size comparison; cross-partition transfers require matching relative paths, folder structure, file sizes, and SHA-256 contents before source deletion.",
     ),
     Option(
         "tag_copy_and_delete_path", "--tag-copy-and-delete", "text",
         default="", metavar="DIR",
-        help="Inventory-time destination parent directory. Same-partition transfers use a directory move without size checks. Cross-partition transfers copy and verify every file by size before deleting the original and inventorying the destination.",
+        help="Inventory-time destination parent directory. Same-partition transfers use a directory move without size checks. Cross-partition transfers verify the copied relative paths, folder structure, file sizes, and SHA-256 contents before deleting the original and inventorying the destination.",
     ),
     Option(
         "etree_lookup", "--etree-lookup", "flag",
@@ -237,7 +243,7 @@ OPTIONS = [
         default="", metavar="STRING", gui="entry", gui_label="Path(s)",
         help=(
             "Required inventory input. Accepts one or more semicolon-separated path entries using the same "
-            "optional [Volume], --$slam, --$copy, and --$copy-delete grammar as an inventory-control text file. "
+            "optional [Volume], --/slam, --/copy, and --/copy-delete grammar as an inventory-control text file. "
             "An entry ending in .txt is read as an inventory-control text file using the former toBeInventoried.txt format."
         ),
     ),

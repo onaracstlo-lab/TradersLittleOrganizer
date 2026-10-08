@@ -1,10 +1,10 @@
-"""Compatibility test entry point for TLO GitHub Build Process v074.
+"""Backward-compatibility subset entry point for historical/direct callers.
 
-The categorized suite lives under tests/. Importing the tests here preserves the
-existing CI command: python -m pytest -q test_tlo_requirements.py.
+The authoritative release regression suite is discovered from the source root with
+``python -m pytest -q -p no:cacheprovider``. This module imports a historical
+compatibility subset only; it must not be used as the sole official release gate.
 """
 
-__version__ = "v518"
 
 from tests.contracts.test_legacy_contracts import *  # noqa: F401,F403
 from tests.contracts.test_build364_contracts import *  # noqa: F401,F403
@@ -44,8 +44,6 @@ except ImportError:
 else:
     from tests.behavior.test_gui_behavior import *  # noqa: F401,F403
 
-from tests.behavior.test_reverse_copy_delete_build383 import *  # noqa: F401,F403
-from tests.behavior.test_reverse_copy_delete_build384 import *  # noqa: F401,F403
 from tests.behavior.test_build386_features import *  # noqa: F401,F403
 from tests.behavior.test_build387_features import *  # noqa: F401,F403
 from tests.behavior.test_build388_features import *  # noqa: F401,F403

@@ -1,8 +1,10 @@
 """Build 511 Copy Request Path(s) mixed-input and snapshot persistence."""
+from tests._release_artifacts import release_history
+from tests import _release_artifacts as RA
 
-__version__ = "v518"
 
 from pathlib import Path
+ROOT = Path(__file__).resolve().parents[2]
 
 import pytest
 
@@ -80,7 +82,7 @@ def test_build511_txt_comments_match_tobeinventoried_convention(tmp_path):
 
 
 def test_build511_gui_labels_field_paths_and_uses_append_drop_and_snapshot_creation():
-    source = Path("tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     start = source.index("    def _new_request(self):")
     end = source.index("    def _prepare_request_for_continue", start)
     block = source[start:end]
@@ -95,14 +97,13 @@ def test_build511_gui_labels_field_paths_and_uses_append_drop_and_snapshot_creat
 def test_build511_documentation_contracts():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v518.docx").paragraphs)
-    manual = Path("TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
-    faq = Path("TLO-FAQ.txt").read_text(encoding="utf-8")
+    req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
+    faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8")
 
     assert "REQ-COPY-006" in req
     assert "Path(s) may mix plain request text, direct filesystem path/volume items, and .txt request files" in req
     assert "must be sufficient for all later Preview, Continue, Process All, report, and resume operations without rereading the source .txt files" in req
-    assert "The first input is Path(s)" in manual
-    assert "the source .txt file does not need to remain present or unchanged" in manual
+    assert 'The first input is Path(s)' in release_history()
+    assert 'the source .txt file does not need to remain present or unchanged' in release_history()
     assert "Q: What can I put in Copy Request Path(s)?" in faq
     assert "c:\\tmpBoots; c:\\tlo\\copyMe.txt; Allman Brothers Band" in faq

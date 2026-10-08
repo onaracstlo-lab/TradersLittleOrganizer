@@ -1,6 +1,5 @@
 """Build 484: checkbox display text uses requested capitalization only."""
 
-__version__ = "v484"
 
 from pathlib import Path
 
@@ -33,8 +32,8 @@ def test_build484_main_checkbox_labels_are_exact():
 
 
 def test_build484_wrapped_and_action_specific_checkbox_text_is_exact():
-    source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
-    search_source = (ROOT / "tlo-gsi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
+    search_source = (ROOT / "tlo-search.py").read_text(encoding="utf-8")
 
     assert 'checkbox_text = "Thorough Setlist\\nMatching"' in source
     assert 'checkbox_text = "Delete Extra\\nTags"' in source

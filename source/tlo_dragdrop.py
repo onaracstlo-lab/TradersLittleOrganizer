@@ -1,11 +1,12 @@
-__version__ = "v518"
-
 """Native-Windows-only drag-and-drop helpers for the TLO Tk GUI.
 
 Tk itself has no built-in file-drop support.  TLO release builds for native
 Windows are expected to include tkinterdnd2/TkDND via PyInstaller.  WSL and
 regular Linux deliberately do not try to enable this feature.
 """
+
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 from tlo_diagnostics import debug_suppressed_exception
 import os

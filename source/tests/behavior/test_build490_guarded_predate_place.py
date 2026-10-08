@@ -1,4 +1,5 @@
 """Build 490 regressions for guarded non-compliant Artist + Place + Date tails."""
+from tests import _release_artifacts as RA
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,7 +11,6 @@ import tlo_phase23_v2 as P
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v497"
 
 
 def _matcher():
@@ -143,16 +143,14 @@ def test_build490_requirements_and_manual_document_guarded_extension():
     root = Path(__file__).resolve().parents[2]
     req = "\n".join(
         paragraph.text
-        for paragraph in Document(root / "TLO_Inventory_Requirements_Working_v518.docx").paragraphs
+        for paragraph in Document(root / RA.REQUIREMENTS_FILENAME).paragraphs
     )
-    manual = (root / "TLO_Inventory_User_Manual_v518.rtf").read_text(
+    manual = (root / RA.MANUAL_FILENAME).read_text(
         encoding="utf-8", errors="ignore"
     )
 
-    assert "Current document version: v518 (TLO v1.7)." in req
     assert "Todd Snider Skipper's Smokehouse, Tampa, FL 2005-04-16 sdb" in req
     assert "The literal SDB spelling is accepted only inside this guarded fallback" in req
     assert "Compliant mode is unchanged" in req
-    assert "Version v1.7 Build 518" in manual
     assert "Todd Snider Skipper's Smokehouse, Tampa, FL 2005-04-16 sdb" in manual
     assert "Existing Artist Date ... parsing retains precedence, and Compliant mode is unchanged." in manual

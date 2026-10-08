@@ -1,6 +1,7 @@
 """Postprocess metadata logs into setlist files, bootlist.csv, duplicate/group outputs, and summary/unidentified-show files."""
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 import csv
 import hashlib
 import json
@@ -20,15 +21,12 @@ from tlo_text_utils import compact_ws, read_text_file_full, setlist_text_request
 from tlo_security import is_safe_local_regular_file, is_network_or_device_path
 from tlo_runtime_control import throttle_point, is_cancel_requested, normalize_performance_mode
 from tlo_bootlist_volume_policy import (
-    filter_rows_for_volume_actions,
     format_volume_path,
     parse_volume_path_value,
     read_bootlist_rows,
     path_is_same_or_under,
     normalize_path_for_compare,
     volume_key,
-    write_bootlist_rows,
-    normalize_volume_action,
 )
 
 PLACEHOLDER_SETLIST_TEXT = "*** No setlist found ***"
@@ -287,12 +285,17 @@ def _setlist_source_paths_from_record(record: Dict[str, str]) -> List[str]:
     return ordered
 
 DATE_OR_RANGE_TOKEN_RE = re.compile(
-    r"(?<!\d)(?:"
+    r"(?<![0-9xX])(?:"
     r"(?P<ymd>(?:19|20)\d{2}(?:\s*[-_.]\s*|\s+)\d{1,2}(?:\s*[-_.]\s*|\s+)\d{1,2})"
+    # Canonical partial dates written into SHOW_NAME by inventory.  Preserve
+    # their separators exactly like the structured DATE field does.  The forms
+    # below mirror TLO's accepted right-suffix placeholder dates, including
+    # 1973-12-xx, 2001-04-1x, 2004-0x-xx, 202x-xx-xx, and xxxx-xx-xx.
+    r"|(?P<partial>(?:(?:19|20)\d{2}-(?:(?:0[1-9]|1[0-2])-(?:[0-3][xX]|[xX]{2})|(?:0[xX]|1[xX]|[xX]{2})-[xX]{2})|(?:(?:19|20)(?:\d[xX]|[xX]{2})|[xX]{4})-[xX]{2}-[xX]{2}))"
     r"|(?P<yrange>(?:19|20)\d{2}[-_](?:19|20)\d{2})"
     r"|(?P<fourplus>(?:19|20)\d{2}[ -]\d{4})"
     r"|(?P<compact>(?:19|20)\d{6})"
-    r")(?!\d)"
+    r")(?![0-9xX])"
 )
 
 
@@ -551,6 +554,20 @@ def _candidate_setlist_name(base: str, suffix: str = "") -> str:
     allowed_base_len = max(1, MAX_FILENAME_CHARS - len(SETLIST_EXTENSION) - len(suffix))
     candidate_base = (base or "Show")[:allowed_base_len] or "Show"
     return f"{candidate_base}{suffix}{SETLIST_EXTENSION}"
+
+
+def setlist_filename_from_show_name(show_name: str, fallback: str = "Show") -> str:
+    """Return the direct setlist filename for a bootlist Show value.
+
+    Search must not maintain a second filename-normalization algorithm.  Route
+    through the same record/base/truncation/candidate helpers used when
+    postprocess originally creates exported setlist filenames.  A Show-only
+    synthetic record deliberately selects _setlist_base_from_record's direct
+    SHOW_NAME path.
+    """
+    record = {"show_name": str(show_name or "")}
+    base = _truncate_setlist_base(_setlist_base_from_record(record, fallback=fallback))
+    return _candidate_setlist_name(base)
 
 
 def _known_setlist_names(setlists_dir: str, used: set) -> set:

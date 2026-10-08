@@ -12,7 +12,7 @@ Arguments:
   SOURCE_ROOT    Directory containing the TLO Python sources. Defaults to the
                  directory containing this script.
   DIST_ROOT      Output release tree. Defaults to:
-                 $HOME/tloDist-V1.6Build<BUNDLE_NUMBER>
+                 $HOME/tloDist-V<PUBLIC_VERSION>Build<BUNDLE_NUMBER>
 USAGE
 }
 
@@ -29,11 +29,19 @@ BUNDLE_NUMBER="$1"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 SOURCE_ROOT="${2:-$SCRIPT_DIR}"
-DIST_ROOT="${3:-$HOME/tloDist-V1.6Build${BUNDLE_NUMBER}}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 [[ -d "$SOURCE_ROOT" ]] || fail "SOURCE_ROOT does not exist: $SOURCE_ROOT"
 SOURCE_ROOT="$(cd -- "$SOURCE_ROOT" && pwd -P)"
+VERSION_FILE="${SOURCE_ROOT}/tlo_version.py"
+[[ -f "$VERSION_FILE" ]] || fail "Required version module not found: $VERSION_FILE"
+PUBLIC_VERSION="$(awk -F'"' '/^PUBLIC_VERSION[[:space:]]*=[[:space:]]*"[0-9]+(\.[0-9]+)*"[[:space:]]*$/ { print $2; exit }' "$VERSION_FILE")"
+[[ -n "$PUBLIC_VERSION" ]] || fail "Could not read PUBLIC_VERSION from $VERSION_FILE"
+SOURCE_BUNDLE_BUILD="$(awk '/^BUNDLE_BUILD[[:space:]]*=[[:space:]]*[0-9]+[[:space:]]*$/ { print $3; exit }' "$VERSION_FILE")"
+[[ -n "$SOURCE_BUNDLE_BUILD" ]] || fail "Could not read BUNDLE_BUILD from $VERSION_FILE"
+[[ "$BUNDLE_NUMBER" == "$SOURCE_BUNDLE_BUILD" ]] || fail "Bundle number mismatch: supplied $BUNDLE_NUMBER but tlo_version.BUNDLE_BUILD is $SOURCE_BUNDLE_BUILD."
+DIST_ROOT="${3:-$HOME/tloDist-V${PUBLIC_VERSION}Build${BUNDLE_NUMBER}}"
+
 mkdir -p -- "$DIST_ROOT"
 DIST_ROOT="$(cd -- "$DIST_ROOT" && pwd -P)"
 
@@ -41,10 +49,15 @@ TARGET_DIR="${DIST_ROOT}/apps/Linux"
 REPORT_DIR="${DIST_ROOT}/scan-reports"
 REPORT_PATH="${REPORT_DIR}/linux.json"
 SCAN_SCRIPT="${SOURCE_ROOT}/scan_release_artifacts.py"
+VERIFY_ENV_SCRIPT="${SOURCE_ROOT}/verify_build_environment.py"
+PREPARE_FFMPEG_SCRIPT="${SOURCE_ROOT}/prepare_ffmpeg.py"
 BUILD_ROOT="${DIST_ROOT}/.build-Linux"
+TOOL_RECEIPT="${REPORT_DIR}/linux-build-tool-versions.txt"
 
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || fail "Python executable not found: $PYTHON_BIN"
-"$PYTHON_BIN" -m PyInstaller --version >/dev/null 2>&1 || fail "PyInstaller is not installed for $PYTHON_BIN."
+[[ -f "$VERIFY_ENV_SCRIPT" ]] || fail "Required build-environment verifier not found: $VERIFY_ENV_SCRIPT"
+[[ -f "$PREPARE_FFMPEG_SCRIPT" ]] || fail "Required ffmpeg preparation utility not found: $PREPARE_FFMPEG_SCRIPT"
+"$PYTHON_BIN" "$VERIFY_ENV_SCRIPT" || fail "Pinned Linux build environment verification failed."
 [[ -f "$SCAN_SCRIPT" ]] || fail "Required scan utility not found: $SCAN_SCRIPT"
 
 find_script() {
@@ -67,6 +80,12 @@ trap cleanup EXIT
 rm -rf -- "$TARGET_DIR" "$BUILD_ROOT"
 mkdir -p -- "$TARGET_DIR" "$REPORT_DIR" "$BUILD_ROOT"
 
+FFMPEG_STAGE="${BUILD_ROOT}/tlo_ffmpeg_bin"
+"$PYTHON_BIN" "$PREPARE_FFMPEG_SCRIPT"     --platform linux     --output-dir "$FFMPEG_STAGE"     --cache-dir "${BUILD_ROOT}/ffmpeg-cache" || fail "Pinned ffmpeg preparation failed."
+FFMPEG_BINARY="${FFMPEG_STAGE}/ffmpeg"
+[[ -f "$FFMPEG_BINARY" && -x "$FFMPEG_BINARY" ]] || fail "Prepared ffmpeg binary is missing: $FFMPEG_BINARY"
+FFMPEG_ADD_BINARY="${FFMPEG_BINARY}:tlo_ffmpeg_bin"
+
 build_one() {
     local script_path="$1"
     shift
@@ -88,19 +107,30 @@ build_one() {
 }
 
 build_one "$(find_script search-artist-db.py)" --windowed
-build_one "$(find_script tlo-gsi.py)" --windowed
-build_one "$(find_script tlo-gi.py)"
+build_one "$(find_script tlo-search.py)" --windowed
+build_one "$(find_script tlo-gi.py)" \
+    --collect-all mutagen \
+    --add-binary "$FFMPEG_ADD_BINARY"
 build_one "$(find_script tlo-research.py)"
 build_one "$(find_script tlo-reverse.py)"
-build_one "$(find_script tlo-ggi.py)" --windowed \
+build_one "$(find_script tlo-main.py)" --windowed \
     --collect-all mutagen \
-    --collect-all imageio_ffmpeg \
+    --add-binary "$FFMPEG_ADD_BINARY" \
     --collect-all tkinterdnd2
 build_one "$(find_script tlo-tag.py)" \
     --collect-all mutagen \
-    --collect-all imageio_ffmpeg
+    --add-binary "$FFMPEG_ADD_BINARY"
 build_one "$(find_script tlo-deleteDupes.py)" \
-    --collect-all imageio_ffmpeg
+    --add-binary "$FFMPEG_ADD_BINARY"
+
+IMAGEIO_FFMPEG_EXE=/bin/true TLO_PACKAGING_SMOKE_TEST=1 "${TARGET_DIR}/tlo-gi" || fail "Frozen tlo-gi packaging smoke test failed."
+
+{
+    "$PYTHON_BIN" --version
+    "$PYTHON_BIN" -m PyInstaller --version | sed 's/^/PyInstaller /'
+    "$FFMPEG_BINARY" -version | head -n 1
+    printf 'requirements-build.txt sha256 %s\n' "$(sha256sum "${SOURCE_ROOT}/requirements-build.txt" | awk '{print $1}')"
+} > "$TOOL_RECEIPT"
 
 "$PYTHON_BIN" "$SCAN_SCRIPT" \
     --platform linux \

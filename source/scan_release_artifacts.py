@@ -13,6 +13,7 @@ import datetime as dt
 import hashlib
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -23,13 +24,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
-REPORT_VERSION = 1
+REPORT_VERSION = 2
 PLATFORMS = ("windows", "macos", "linux", "final")
 DEFAULT_TIMEOUT_SECONDS = 3600
 DEFAULT_SETTLE_SECONDS = 2.0
 OUTPUT_TAIL_LIMIT = 12000
+APPROVED_SCANNER_IDS = {"microsoft-defender", "clamav", "norton"}
+CUSTOM_SCANNER_IDS = {"norton"}
+NORTON_EXECUTABLE_NAMES = {"nscan.exe", "navw32.exe", "nortonsecurity.exe", "norton.exe"}
+NORTON_SIGNER_FRAGMENTS = ("norton", "gen digital", "symantec")
 
 
 @dataclass(frozen=True)
@@ -126,12 +132,13 @@ def locate_defender() -> Path | None:
 def builtin_scanner_command(
     platform_name: str,
     artifact_dir: Path,
-) -> tuple[str, list[str]] | None:
+) -> tuple[str, str, list[str]] | None:
     if platform_name == "windows" or (platform_name == "final" and os.name == "nt"):
         defender = locate_defender()
         if defender is None:
             return None
         return (
+            "microsoft-defender",
             "Microsoft Defender",
             [
                 str(defender),
@@ -147,6 +154,7 @@ def builtin_scanner_command(
     clamscan = shutil.which("clamscan")
     if clamscan:
         return (
+            "clamav",
             "ClamAV",
             [
                 clamscan,
@@ -170,7 +178,12 @@ def quote_for_shell(value: str) -> str:
 
 
 def _custom_scanner_command(template: str, artifact_dir: Path, *, windows: bool | None = None):
-    """Return (command, env) without injecting a Windows path into cmd text."""
+    """Legacy command materializer retained for the Build 404 injection contract.
+
+    Build 550 custom Norton execution no longer uses this shell-oriented helper;
+    it resolves the executable and executes argv directly through
+    _prepare_custom_scanner().
+    """
     use_windows = os.name == "nt" if windows is None else bool(windows)
     if use_windows:
         env = os.environ.copy()
@@ -179,13 +192,142 @@ def _custom_scanner_command(template: str, artifact_dir: Path, *, windows: bool 
     return template.replace("{path}", quote_for_shell(str(artifact_dir))), None
 
 
+def _parse_custom_scanner_spec(spec: str) -> tuple[str, str]:
+    """Return an approved scanner identity and command template."""
+    identity, separator, template = str(spec or "").partition("::")
+    identity = identity.strip().casefold()
+    template = template.strip()
+    if not separator or not identity or not template:
+        raise ValueError("Custom scanners must use APPROVED_ID::COMMAND syntax.")
+    if identity not in CUSTOM_SCANNER_IDS:
+        raise ValueError(f"Custom scanner identity is not approved for official TLO receipts: {identity or '<blank>'}")
+    argv = _split_custom_scanner_template(template)
+    invoked_name = re.split(r"[\\/]", argv[0])[-1].casefold()
+    if identity == "norton" and invoked_name not in NORTON_EXECUTABLE_NAMES:
+        raise ValueError("The Norton scanner command must invoke a recognized Norton scanner executable first.")
+    return identity, template
+
+
+def _split_custom_scanner_template(template: str, *, windows: bool | None = None) -> list[str]:
+    """Split a custom scanner template into argv without invoking a shell."""
+    use_windows = os.name == "nt" if windows is None else bool(windows)
+    try:
+        parts = shlex.split(template, posix=not use_windows)
+    except ValueError as exc:
+        raise ValueError(f"Invalid custom scanner command: {exc}") from exc
+    cleaned = [part[1:-1] if use_windows and len(part) >= 2 and part[0] == part[-1] == '"' else part for part in parts]
+    if not cleaned:
+        raise ValueError("Custom scanner command is empty.")
+    if "{path}" not in cleaned:
+        raise ValueError("Custom scanner command must contain {path} as its own argument.")
+    if any("{path}" in part and part != "{path}" for part in cleaned):
+        raise ValueError("Custom scanner {path} placeholder must be a separate argument.")
+    return cleaned
+
+
+def _resolve_executable(token: str) -> Path:
+    expanded = os.path.expandvars(os.path.expanduser(token))
+    candidate = Path(expanded)
+    if candidate.parent != Path(".") or candidate.is_absolute():
+        resolved = candidate.resolve(strict=False)
+        if not resolved.is_file():
+            raise ValueError(f"Custom scanner executable not found: {token}")
+        return resolved
+    located = shutil.which(expanded)
+    if not located:
+        raise ValueError(f"Custom scanner executable not found on PATH: {token}")
+    return Path(located).resolve()
+
+
+def _norton_trusted_install_root(path: Path) -> bool:
+    """Require Norton to resolve under a standard Program Files tree on Windows."""
+    if os.name != "nt":
+        return True
+    roots = []
+    for name in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"):
+        value = os.environ.get(name)
+        if value:
+            roots.append(Path(value).resolve(strict=False))
+    return any(_is_relative_to(path, root) for root in roots)
+
+
+def _windows_authenticode_identity(path: Path) -> dict[str, object]:
+    """Return Authenticode status and signer identity for a Windows executable."""
+    if os.name != "nt":
+        return {"status": "not-applicable", "signer_subject": None}
+    powershell = shutil.which("powershell.exe") or shutil.which("powershell")
+    if not powershell:
+        raise RuntimeError("PowerShell is required to validate the Norton Authenticode signature.")
+    script = (
+        "$s=Get-AuthenticodeSignature -LiteralPath $args[0];"
+        "$o=[pscustomobject]@{Status=$s.Status.ToString();Subject=if($s.SignerCertificate){$s.SignerCertificate.Subject}else{$null}};"
+        "$o|ConvertTo-Json -Compress"
+    )
+    try:
+        completed = subprocess.run(
+            [powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, str(path)],
+            shell=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"Could not validate Norton Authenticode signature: {exc}") from exc
+    if completed.returncode != 0:
+        raise RuntimeError(f"Could not validate Norton Authenticode signature: {completed.stderr[-2000:]}")
+    try:
+        payload = json.loads(completed.stdout.strip())
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("PowerShell returned invalid Authenticode status data.") from exc
+    status = str(payload.get("Status") or "")
+    subject = payload.get("Subject")
+    if status.casefold() != "valid":
+        raise ValueError(f"Norton executable does not have a valid Authenticode signature: {status or 'unknown'}")
+    if not subject or not any(fragment in str(subject).casefold() for fragment in NORTON_SIGNER_FRAGMENTS):
+        raise ValueError(f"Norton executable signer is not recognized as an approved Norton signer: {subject or '<missing>'}")
+    return {"status": status, "signer_subject": str(subject)}
+
+
+def _prepare_custom_scanner(
+    scanner_id: str,
+    template: str,
+    artifact_dir: Path,
+) -> tuple[list[str], dict[str, object]]:
+    """Resolve, validate and materialize a custom scanner command."""
+    argv = _split_custom_scanner_template(template)
+    executable = _resolve_executable(argv[0])
+    if scanner_id == "norton":
+        if executable.name.casefold() not in NORTON_EXECUTABLE_NAMES:
+            raise ValueError(
+                "The executable actually invoked for a Norton receipt must be a recognized Norton scanner executable."
+            )
+        if not _norton_trusted_install_root(executable):
+            raise ValueError("Norton executable must resolve inside a standard Program Files directory.")
+        authenticode = _windows_authenticode_identity(executable)
+    else:
+        raise ValueError(f"Unsupported custom scanner identity: {scanner_id}")
+
+    command = [str(executable)] + [str(artifact_dir) if part == "{path}" else part for part in argv[1:]]
+    identity = {
+        "executable_path": str(executable),
+        "executable_sha256": sha256_file(executable),
+        "authenticode_status": authenticode["status"],
+        "authenticode_signer_subject": authenticode["signer_subject"],
+    }
+    return command, identity
+
+
 def run_scanner(
+    scanner_id: str,
     name: str,
     command: list[str] | str,
     *,
     shell: bool,
     timeout_seconds: int,
     env: dict[str, str] | None = None,
+    scanner_identity: dict[str, object] | None = None,
 ) -> dict[str, object]:
     started = dt.datetime.now(dt.timezone.utc)
     started_monotonic = time.monotonic()
@@ -216,7 +358,10 @@ def run_scanner(
     output = completed.stdout or ""
     display_command = command if isinstance(command, str) else shlex.join(command)
 
+    if scanner_id not in APPROVED_SCANNER_IDS:
+        raise ValueError(f"Scanner identity is not approved: {scanner_id}")
     record: dict[str, object] = {
+        "scanner_id": scanner_id,
         "name": name,
         "command": display_command,
         "started_utc": started.isoformat(timespec="seconds"),
@@ -224,6 +369,8 @@ def run_scanner(
         "return_code": completed.returncode,
         "output_tail": output[-OUTPUT_TAIL_LIMIT:],
     }
+    if scanner_identity:
+        record.update(scanner_identity)
 
     if completed.returncode != 0:
         raise RuntimeError(
@@ -297,22 +444,23 @@ def scan(
             run_scanner(
                 builtin[0],
                 builtin[1],
+                builtin[2],
                 shell=False,
                 timeout_seconds=timeout_seconds,
             )
         )
 
-    for index, template in enumerate(custom_scanners, start=1):
-        if not template.strip():
-            raise ValueError(f"Custom scanner {index} is empty.")
-        command, scanner_env = _custom_scanner_command(template, artifact_dir)
+    for index, scanner_spec in enumerate(custom_scanners, start=1):
+        scanner_id, template = _parse_custom_scanner_spec(scanner_spec)
+        command, scanner_identity = _prepare_custom_scanner(scanner_id, template, artifact_dir)
         scanner_records.append(
             run_scanner(
-                f"Custom scanner {index}",
+                scanner_id,
+                f"Norton scanner {index}",
                 command,
-                shell=True,
+                shell=False,
                 timeout_seconds=timeout_seconds,
-                env=scanner_env,
+                scanner_identity=scanner_identity,
             )
         )
 
@@ -337,7 +485,7 @@ def scan(
         "report_version": REPORT_VERSION,
         "status": "clean",
         "platform": platform_name,
-        "artifact_root": str(artifact_dir),
+        "artifact_root": artifact_dir.name,
         "generated_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "scanner_timeout_seconds": timeout_seconds,
         "post_scan_settle_seconds": settle_seconds,
@@ -366,8 +514,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="append",
         default=[],
         help=(
-            "Additional scanner command. Use {path} where the shell-quoted "
-            "artifact directory belongs. May be repeated."
+            "Approved custom scanner in APPROVED_ID::COMMAND form. Only Norton is accepted "
+            "as a custom identity; use {path} where the artifact directory belongs. May be repeated."
         ),
     )
     parser.add_argument(

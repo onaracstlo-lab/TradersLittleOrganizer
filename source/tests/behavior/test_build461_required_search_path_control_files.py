@@ -10,7 +10,6 @@ from tlo_ux import _inventory_roots, validate_search_path
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v468"
 
 
 def _touch_music(root: Path, name: str = "01.flac") -> Path:
@@ -25,7 +24,7 @@ def test_build476_semicolon_search_path_uses_inventory_line_grammar(tmp_path):
     copies = tmp_path / "copies"
     copies.mkdir()
 
-    value = f"{one} --$slam Artist One; {two} --$copy {copies} --$slam Artist Two"
+    value = f"{one} --/slam Artist One; {two} --/copy {copies} --/slam Artist Two"
     parsed = IL.parse_search_path_input(value)
 
     assert parsed[0] == (str(one), str(one), "Artist One", "")
@@ -45,7 +44,7 @@ def test_build461_inline_and_separate_slam_are_rejected_as_ambiguous(tmp_path):
     one = _touch_music(tmp_path / "one")
 
     with pytest.raises(ValueError, match="separate Slam"):
-        IL.parse_search_path_input(f"{one} --$slam One", slam_override="Two")
+        IL.parse_search_path_input(f"{one} --/slam One", slam_override="Two")
 
 
 def test_build461_arbitrary_txt_search_path_uses_former_tobeinventoried_parser(tmp_path):
@@ -56,9 +55,9 @@ def test_build461_arbitrary_txt_search_path_uses_former_tobeinventoried_parser(t
     control = tmp_path / "my-next-run.txt"
     control.write_text(
         "# any .txt filename is valid\n"
-        f"{one} --$slam Artist One\n"
+        f"{one} --/slam Artist One\n"
         "REM second path follows\n"
-        f"{two} --$copy-delete {copies} --$slam Artist Two\n",
+        f"{two} --/copy-delete {copies} --/slam Artist Two\n",
         encoding="utf-8",
     )
 
@@ -73,7 +72,7 @@ def test_build461_txt_control_file_can_be_combined_with_other_search_path_entrie
     two = _touch_music(tmp_path / "two")
     three = _touch_music(tmp_path / "three")
     control = tmp_path / "roots.txt"
-    control.write_text(f"{one}\n{two} --$slam Artist Two\n", encoding="utf-8")
+    control.write_text(f"{one}\n{two} --/slam Artist Two\n", encoding="utf-8")
 
     parsed = IL.parse_search_path_input(f"{control};{three}")
 
@@ -163,7 +162,7 @@ def test_build461_inventory_cli_requires_search_path(monkeypatch):
 
 
 def test_build461_main_gui_label_and_slam_width_contract():
-    source = Path(__file__).resolve().parents[2].joinpath("tlo-ggi.py").read_text(encoding="utf-8")
+    source = Path(__file__).resolve().parents[2].joinpath("tlo-main.py").read_text(encoding="utf-8")
 
     assert 'text="Path(s)"' in source
     assert 'text="Search Path\\n(optional/override)"' not in source
@@ -177,7 +176,7 @@ def test_build461_runtime_loader_expands_required_search_path_not_tlohome_templa
     stale = _touch_music(tmp_path / "stale")
     (tmp_path / "toBeInventoried.txt").write_text(f"{stale}\n", encoding="utf-8")
     control = tmp_path / "run-roots.txt"
-    control.write_text(f"{two} --$slam Artist Two\n", encoding="utf-8")
+    control.write_text(f"{two} --/slam Artist Two\n", encoding="utf-8")
     config = SimpleNamespace(
         TLOHome=str(tmp_path),
         search_path_override=f"{one};{control}",

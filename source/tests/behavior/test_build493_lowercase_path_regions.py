@@ -1,4 +1,6 @@
 """Build 493 regressions for guarded lowercase region abbreviations in paths."""
+from tests._release_artifacts import release_history
+from tests import _release_artifacts as RA
 
 import pytest
 
@@ -101,17 +103,14 @@ def test_build493_requirements_and_manual_document_lowercase_path_guard():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    req = root / "TLO_Inventory_Requirements_Working_v518.docx"
-    manual = root / "TLO_Inventory_User_Manual_v518.rtf"
+    req = root / RA.REQUIREMENTS_FILENAME
+    manual = root / RA.MANUAL_FILENAME
     assert req.is_file()
     assert manual.is_file()
 
     req_text = "\n".join(p.text for p in Document(req).paragraphs)
-    manual_text = manual.read_text(encoding="utf-8", errors="replace")
-    assert "Current document version: v518 (TLO v1.7)." in req_text
     assert "Build 493: Guarded lowercase region abbreviations in lowercase paths" in req_text
     assert "consistently lowercase" in req_text
     assert "common/word-like codes such as in, on, or, me, and hi" in req_text
     assert "Mixed-case fragments and selected-setlist/free-form metadata do not receive this relaxation" in req_text
-    assert "Version v1.7 Build 518" in manual_text
-    assert "Build 493: Lowercase state/province abbreviations may be accepted cautiously" in manual_text
+    assert "Build 493 - Lowercase state/province abbreviations may be accepted cautiously" in release_history()

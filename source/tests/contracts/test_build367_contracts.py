@@ -1,6 +1,6 @@
 """Build 375 partition-root duplicate holding-folder contracts."""
+from tests import _release_artifacts as RA
 
-__version__ = "v468"
 
 from pathlib import Path
 from zipfile import ZipFile
@@ -40,7 +40,7 @@ def test_build367_source_excludes_holding_folder_and_avoids_overwrite():
 
 
 def test_build367_requirements_define_partition_root_move_behavior():
-    text = _docx_text("TLO_Inventory_Requirements_Working_v518.docx")
+    text = _docx_text(RA.REQUIREMENTS_FILENAME)
     assert "folder named duplicates at the root of the partition" in text
     assert "shall create it before moving qualifying duplicates" in text
     assert "moved as one complete directory tree" in text
@@ -50,7 +50,7 @@ def test_build367_requirements_define_partition_root_move_behavior():
 
 
 def test_build367_manual_documents_partition_root_move_behavior():
-    text = (ROOT / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
+    text = (ROOT / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
     assert "folder named duplicates at the root of the partition" in text
     assert "creates that folder when it does not already exist" in text
     assert "moves the entire qualifying duplicate folder tree" in text
@@ -61,7 +61,8 @@ def test_build367_packaging_no_longer_collects_send2trash():
     for name in ("createWindowsDist.ps1", "createLinuxDist.sh", "createMacOSDist.sh"):
         text = (ROOT / name).read_text(encoding="utf-8")
         assert "tlo-deleteDupes.py" in text
-        assert "imageio_ffmpeg" in text
+        assert "tlo_ffmpeg_bin" in text
+        assert "--add-binary" in text
         assert "send2trash" not in text
 
 

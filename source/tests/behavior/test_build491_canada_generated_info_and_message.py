@@ -1,4 +1,6 @@
 """Build 491 regressions for Canadian regions, marker info-gen files, and GUI wording."""
+from tests._release_artifacts import release_history
+from tests import _release_artifacts as RA
 
 import importlib.util
 import json
@@ -14,12 +16,11 @@ from tlo_constants import CANADIAN_REGION_CODES
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v497"
 
 
 def _load_gui_module():
     root = Path(__file__).resolve().parents[2]
-    spec = importlib.util.spec_from_file_location("tlo_ggi_build491", root / "tlo-ggi.py")
+    spec = importlib.util.spec_from_file_location("tlo_main_build491", root / "tlo-main.py")
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
     spec.loader.exec_module(module)
@@ -129,7 +130,7 @@ def test_build491_marker_with_other_content_remains_original_and_does_not_create
 
 def test_build491_backup_alert_names_platform_delete_backup_script():
     root = Path(__file__).resolve().parents[2]
-    source = (root / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (root / "tlo-main.py").read_text(encoding="utf-8")
     assert "_backup_alert_message(script_path)" in source
     assert "deleteBackupFolders.txt already exists" not in source
 
@@ -138,8 +139,8 @@ def test_build491_requirements_and_manual_document_changes():
     root = Path(__file__).resolve().parents[2]
     from docx import Document
 
-    req = root / "TLO_Inventory_Requirements_Working_v518.docx"
-    manual = root / "TLO_Inventory_User_Manual_v518.rtf"
+    req = root / RA.REQUIREMENTS_FILENAME
+    manual = root / RA.MANUAL_FILENAME
     assert req.is_file()
     assert manual.is_file()
 
@@ -151,7 +152,6 @@ def test_build491_requirements_and_manual_document_changes():
     assert "deleteReplacedFolders.bat" in req_text
     assert "deleteBackupFolders.sh" in req_text
     assert "BC" in req_text and "ON" in req_text
-    assert "Version v1.7 Build 518" in manual_text
-    assert "info-gen.txt" in manual_text
+    assert 'info-gen.txt' in release_history()
     assert "deleteReplacedFolders.bat" in manual_text
     assert "deleteBackupFolders.sh" in manual_text

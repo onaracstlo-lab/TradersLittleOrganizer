@@ -6,18 +6,17 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v468"
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def _source() -> str:
-    return (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    return (ROOT / "tlo-main.py").read_text(encoding="utf-8")
 
 
 def _load_gui_module():
     from tests import _legacy_suite as legacy
-    return legacy._load_local_module("tlo-ggi.py", "tlo_ggi_build447")
+    return legacy._load_local_module("tlo-main.py", "tlo_main_build447")
 
 
 def test_build447_thorough_info_does_not_claim_etreedb_when_unchecked():

@@ -1,6 +1,5 @@
 """Build 382 regressions for structured unlabeled setlist artist evidence."""
 
-__version__ = "v468"
 
 from types import SimpleNamespace
 
@@ -148,7 +147,6 @@ def test_build382_unmatched_structured_header_cannot_override_path_artist(tmp_pa
 
 
 def test_build382_structured_setlist_resolves_generic_path_artist_conflict(tmp_path):
-    import os
     import tlo_phase23_v2 as phase
 
     setlist = _write_kinky_setlist(tmp_path)

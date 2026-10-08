@@ -1,6 +1,7 @@
 """Manual folder-name corrections with coordinated bootlist/setlist updates."""
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 import copy
 import ntpath
@@ -10,6 +11,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Sequence, Tuple
 
 from tlo_folder_rename import rename_folder_exact_case, same_existing_entry
+from tlo_diagnostics import debug_suppressed_exception
 from tlo_inventory_update import (
     _build_single_folder_group,
     _record_namespace_from_dict,
@@ -458,22 +460,44 @@ def apply_folder_manual_update(
             })
         write_bootlist(config.TLOHome, kept)
     except Exception as exc:
+        rollback_failures: List[str] = []
         if generated and os.path.isfile(generated):
             try:
                 os.remove(generated)
-            except OSError:
-                pass
-        _restore_setlists(snapshots)
+            except OSError as cleanup_exc:
+                debug_suppressed_exception("Manual Updates generated-setlist rollback", cleanup_exc)
+                rollback_failures.append(
+                    f"generated setlist could not be removed: {generated} ({cleanup_exc})"
+                )
+        try:
+            _restore_setlists(snapshots)
+        except OSError as restore_exc:
+            debug_suppressed_exception("Manual Updates setlist rollback", restore_exc)
+            rollback_failures.append(f"prior setlist files could not be fully restored ({restore_exc})")
         try:
             write_bootlist(config.TLOHome, old_rows_all)
-        except Exception:
-            pass
+        except Exception as bootlist_exc:
+            debug_suppressed_exception("Manual Updates bootlist rollback", bootlist_exc)
+            rollback_failures.append(
+                f"bootlist.csv could not be restored: {os.path.join(config.TLOHome, 'bootlist.csv')} ({bootlist_exc})"
+            )
         if renamed_by_tlo and os.path.isdir(target) and not os.path.exists(original):
             try:
                 rename_folder_exact_case(target, original)
-            except Exception:
-                pass
+            except OSError as rename_exc:
+                debug_suppressed_exception("Manual Updates folder rollback", rename_exc)
+                if os.path.isdir(target):
+                    current_location = target
+                elif os.path.isdir(original):
+                    current_location = original
+                else:
+                    current_location = "<folder location could not be determined>"
+                rollback_failures.append(
+                    f"folder rename could not be undone; current folder location: {current_location} ({rename_exc})"
+                )
         detail = str(exc).strip() or exc.__class__.__name__
+        if rollback_failures:
+            detail += " Automatic rollback was incomplete: " + "; ".join(rollback_failures) + "."
         if tags_attempted:
             detail += " Tag writes may already have been applied; Manual Updates does not roll audio tags back."
         if isinstance(exc, ManualUpdateError):
@@ -557,23 +581,37 @@ def apply_unidentified_manual_update(
         write_bootlist(config.TLOHome, rows)
         _remove_unidentified_show_path(config.TLOHome, matched_unidentified)
     except Exception as exc:
+        rollback_failures: List[str] = []
         if generated and os.path.isfile(generated):
             try:
                 os.remove(generated)
-            except OSError:
-                pass
+            except OSError as cleanup_exc:
+                debug_suppressed_exception("Manual Updates unidentified generated-setlist rollback", cleanup_exc)
+                rollback_failures.append(
+                    f"generated setlist could not be removed: {generated} ({cleanup_exc})"
+                )
         try:
             write_bootlist(config.TLOHome, old_rows)
-        except Exception:
-            pass
+        except Exception as bootlist_exc:
+            debug_suppressed_exception("Manual Updates unidentified bootlist rollback", bootlist_exc)
+            rollback_failures.append(
+                f"bootlist.csv could not be restored: {os.path.join(config.TLOHome, 'bootlist.csv')} ({bootlist_exc})"
+            )
         try:
             if unidentified_existed:
                 _atomic_write_bytes(unidentified_file, unidentified_snapshot)
             elif os.path.isfile(unidentified_file):
                 os.remove(unidentified_file)
-        except Exception:
-            pass
+        except Exception as unidentified_exc:
+            debug_suppressed_exception("Manual Updates unidentifiedShows rollback", unidentified_exc)
+            state = "present" if os.path.isfile(unidentified_file) else "missing"
+            rollback_failures.append(
+                f"unidentifiedShows.txt could not be restored: {unidentified_file} "
+                f"(current state: {state}; {unidentified_exc})"
+            )
         detail = str(exc).strip() or exc.__class__.__name__
+        if rollback_failures:
+            detail += " Automatic rollback was incomplete: " + "; ".join(rollback_failures) + "."
         if tags_attempted:
             detail += " Tag writes may already have been applied; Manual Updates does not roll audio tags back."
         if isinstance(exc, ManualUpdateError):

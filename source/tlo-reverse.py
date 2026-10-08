@@ -2,10 +2,10 @@
 """Reverse logged TLO folder operations. Audio tags are never changed."""
 from __future__ import annotations
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 import argparse
-import os
 import sys
 
 from tlo_reverse_folders import ReverseFoldersError, prepare_reverse_plan, reverse_folder_operations

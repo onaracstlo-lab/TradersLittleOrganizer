@@ -6,12 +6,13 @@ or location, so collections, sessions, broadcasts, releases, and similar
 material can retain a useful identity without inventing geographic metadata.
 """
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 import os
 import re
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence
+from typing import List, Sequence
 
 from tlo_setlist_metadata_lookup import is_setlist_metadata_scan_boundary, looks_like_sentence_prose_line
 from tlo_text_utils import compact_ws, normalized_compare_value, read_text_file_full, standard_ascii_text

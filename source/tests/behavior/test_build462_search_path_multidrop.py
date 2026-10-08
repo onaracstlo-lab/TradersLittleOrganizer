@@ -1,3 +1,4 @@
+from tests import _release_artifacts as RA
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -7,12 +8,13 @@ import pytest
 import tlo_dragdrop as DD
 
 pytestmark = pytest.mark.behavior
-__version__ = "v468"
 
 
 class _FakeTk:
     def __init__(self):
-        import tkinter as tk
+        tk = pytest.importorskip(
+            "tkinter", reason="Tkinter is required for Tcl drag/drop payload parsing"
+        )
         self._tcl = tk.Tcl()
 
     def splitlist(self, value):
@@ -158,14 +160,13 @@ def test_build462_documentation_records_cumulative_multidrop_behavior():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    req = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v518.docx").paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document(root / RA.REQUIREMENTS_FILENAME).paragraphs)
+    manual = (root / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
     faq = (root / "TLO-FAQ.txt").read_text(encoding="utf-8")
 
-    assert "Current document version: v518 (TLO v1.7)." in req
     assert "Repeated drag actions are cumulative" in req
     assert "complete file list supplied by File Explorer" in req
     assert "A;B;C;D" in req
     assert "processes the complete Windows drag payload" in manual
     assert "Each drag appends its items to the existing Search Path value" in manual
-    assert "Build 463 corrects the Windows TkDND handling" in faq
+    assert "The Windows TkDND handling ensures that every folder or .txt control file selected in one drag is retained" in faq

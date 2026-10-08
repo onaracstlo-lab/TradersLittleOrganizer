@@ -1,6 +1,7 @@
 """Phase 2/3 metadata extraction, compliant/non-compliant path parsing, online lookup merging, grouping, and inventory-time tagging orchestration."""
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 from tlo_diagnostics import debug_suppressed_exception
 from tlo_text_utils import read_text_file_full
@@ -22,7 +23,7 @@ from tlo_wrapper_rules import (
     split_parenthesized_numeric_part_suffix,
 )
 from tlo_complete_path_log import load_complete_path_lines
-from tlo_setlist_file_selection import find_setlist_file_for_music_dir, find_setlist_files_for_music_dir
+from tlo_setlist_file_selection import find_setlist_files_for_music_dir
 from tlo_artist_db import (
     ArtistMatcher,
     artist_search_variants,
@@ -38,13 +39,11 @@ from tlo_constants import (
     COUNTRY_SEARCH_TERMS,
     MONTH_NAME_CASED_PATTERN,
     MONTHS,
-    ORDINAL_SUFFIX,
     QUALIFIER_PATTERNS,
     AMBIGUOUS_CANADIAN_REGION_CODES,
     CANADIAN_REGION_ALIASES,
     CANADIAN_REGION_CODES,
     REGION_CODES,
-    US_STATE_CODES,
     US_STATE_ALIASES,
     LOCATION_CONNECTIVE_WORDS,
     LOWERCASE_COMMON_STATE_CODES,
@@ -54,8 +53,8 @@ from tlo_models import Candidate, ShowMetadata
 from tlo_show_descriptor import extract_fallback_descriptor
 from tlo_text_utils import compact_ws, normalized_compare_value, standard_ascii_text
 from tlo_security import escape_structured_log_text
-from tlo_etree_lookup import ETreeDBError, lookup_venue_and_location
-from tlo_setlistfm_lookup import SetlistFMError, collect_setlists_by_performance as collect_setlistfm_setlists_by_performance, is_us_country, lookup_venue_and_location as lookup_setlistfm_venue_and_location
+from tlo_etree_lookup import lookup_venue_and_location
+from tlo_setlistfm_lookup import collect_setlists_by_performance as collect_setlistfm_setlists_by_performance, is_us_country, lookup_venue_and_location as lookup_setlistfm_venue_and_location
 from tlo_setlist_metadata_lookup import extract_setlist_venue_location, is_setlist_metadata_scan_boundary, explicit_metadata_match, looks_like_sentence_prose_line
 from tlo_runtime_control import throttle_point
 from tlo_options import defensive_corruption_policy_values
@@ -142,6 +141,11 @@ COMPACT_YMD_RE = re.compile(rf"(?<![0-9xX])(?P<year>{YEAR4_TOKEN_RE_TEXT})(?P<mo
 COMPACT_YEAR_MONTH_OR_RANGE_RE = re.compile(rf"(?<![0-9xX])(?P<year>{YEAR4_FULL_RE_TEXT})(?P<tail>\d{{2}})(?![0-9xX])")
 COMPACT_YEAR_RANGE_RE = re.compile(r"a^")  # Disabled: ranges must be dash/underscore-delimited, except yyyyYY ambiguity handled above.
 MAX_YEAR_RANGE_SPAN = 5
+# Build 552: bound date analysis to the trailing portion of arbitrarily long
+# complete paths/pasted text. A normal filesystem component is much shorter,
+# while the show date is expected near the leaf. This prevents adversarial
+# repeated separators from driving range regex backtracking quadratically.
+DATE_ANALYSIS_MAX_CHARS = 1024
 THE_PREFIX_RE = re.compile(r"^(?:the|a)\s+", re.IGNORECASE)
 THE_SUFFIX_RE = re.compile(r",\s*(?:the|a)$", re.IGNORECASE)
 ORDINAL_RE = re.compile(r"(?i)(\d{1,2})(?:st|nd|rd|th)$")
@@ -1669,6 +1673,15 @@ def _normalize_same_month_day_range(year: str, month: str, day_sequence: str) ->
     return f"{year_norm}-{month_norm}-{day_numbers[0]:02d}"
 
 
+def _date_analysis_window(text: str) -> tuple[str, int]:
+    """Return the bounded trailing date-analysis window and source offset."""
+    value = str(text or "")
+    if len(value) <= DATE_ANALYSIS_MAX_CHARS:
+        return value, 0
+    offset = len(value) - DATE_ANALYSIS_MAX_CHARS
+    return value[offset:], offset
+
+
 def _same_month_day_range_candidates(text: str) -> List[Dict[str, str]]:
     """Return range-shaped date candidates, including invalid ones for blocking.
 
@@ -1676,7 +1689,7 @@ def _same_month_day_range_candidates(text: str) -> List[Dict[str, str]]:
     date parser cannot silently accept only the first yyyy-mm-dd (or first
     textual date) from a descending or impossible range.
     """
-    value = str(text or "")
+    value, base_offset = _date_analysis_window(text)
     if not value:
         return []
     rows: List[Dict[str, str]] = []
@@ -1688,15 +1701,17 @@ def _same_month_day_range_candidates(text: str) -> List[Dict[str, str]]:
         # candidate becomes a multi-day range only when its month is plausible.
         if not month_norm or not month_norm.isdigit():
             return
-        key = (match.start(), match.end())
+        start = match.start() + base_offset
+        end = match.end() + base_offset
+        key = (start, end)
         if key in seen:
             return
         seen.add(key)
         rows.append({
             "raw": match.group(0),
             "normalized": _normalize_same_month_day_range(year, month_norm, days),
-            "start": match.start(),
-            "end": match.end(),
+            "start": start,
+            "end": end,
             "date_range_kind": "same_month_day",
         })
 
@@ -1818,8 +1833,10 @@ def _append_date_result(results: List[Dict[str, str]], seen: set, raw: str, norm
 
 
 def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_month_day_exception: bool = False) -> List[Dict[str, str]]:
-    if not text:
+    source_text = str(text or "")
+    if not source_text:
         return []
+    text, base_offset = _date_analysis_window(source_text)
     results: List[Dict[str, str]] = []
     seen = set()
 
@@ -1954,6 +1971,10 @@ def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_mo
         normalized_date = _normalize_four_plus_four_date_candidate(match.group("year"), monthday, separator)
         _append_date_result(results, seen, match.group(0), normalized_date, match.start(), match.end())
 
+    if base_offset:
+        for item in results:
+            item["start"] = int(item["start"]) + base_offset
+            item["end"] = int(item["end"]) + base_offset
     results.sort(key=lambda item: (item["start"], item["end"], item["normalized"]))
     return results
 
@@ -2009,8 +2030,10 @@ def _find_compliant_primary_date_matches(text: str) -> List[Dict[str, str]]:
     ranges, compact dates, month-name dates, or end-first dates do not win when
     the compliant form is present.
     """
-    if not text:
+    source_text = str(text or "")
+    if not source_text:
         return []
+    text, base_offset = _date_analysis_window(source_text)
     results: List[Dict[str, str]] = []
     seen = set()
     day_range_candidates = _same_month_day_range_candidates(text)
@@ -2037,6 +2060,10 @@ def _find_compliant_primary_date_matches(text: str) -> List[Dict[str, str]]:
             continue
         normalized = _normalize_dashed_year_range(match.group("range"))
         _append_date_result(results, seen, match.group(0), normalized, match.start(), match.end(), date_source_kind="compliant_primary_range")
+    if base_offset:
+        for item in results:
+            item["start"] = int(item["start"]) + base_offset
+            item["end"] = int(item["end"]) + base_offset
     results.sort(key=lambda item: (item["start"], item["end"], item["normalized"]))
     return results
 
@@ -3643,7 +3670,7 @@ def _setlist_may_override_weak_path_artist(
 
     This is intentionally narrower than the venue/location path override.  Only
     artist values produced by generic path-pattern/subdirectory scanning are
-    replaceable.  Explicit folder-pattern artist rules, audio tags, $slam,
+    replaceable.  Explicit folder-pattern artist rules, audio tags, /slam,
     commercial-release rules, setlist filenames, and other non-path sources
     remain authoritative over an unlabeled setlist header.
     """
@@ -4271,14 +4298,14 @@ def _format_switches_log_line(config, action: str = "Full Inventory") -> str:
     """Return the per-entry settings line written to meta*.log.
 
     The generic Tag value means that a tagging-mode mutation is active for this
-    specific item: Tag in Place, Tag Copy, or Tag Copy/Delete Original. Convert
+    specific item: Tag In Place, Tag Copy, or Tag Copy/Delete Original. Convert
     shn is reported separately because it may run without tagging. Per-path
-    --$copy and --$copy-delete directives are included in the effective values
+    --/copy and --/copy-delete directives are included in the effective values
     without persisting any additional state.
     """
     action_text = compact_ws(action or "Full Inventory")
     if action_text.casefold() == "add shows":
-        # Add Shows intentionally honors Tag in Place and Convert shn only; Tag
+        # Add Shows intentionally honors Tag In Place and Convert shn only; Tag
         # Copy and Tag Copy/Delete Original are inventory-time transfer modes and
         # are not active for Add Shows entries.
         copy_delete_enabled = False
@@ -4296,7 +4323,7 @@ def _format_switches_log_line(config, action: str = "Full Inventory") -> str:
         f"Action: {action_text}",
         f"Compliant: {_yes_no(getattr(config, 'compliant', False))}",
         f"Tag: {_yes_no(tag_enabled)}",
-        f"Tag in Place: {_yes_no(tag_in_place_enabled)}",
+        f"Tag In Place: {_yes_no(tag_in_place_enabled)}",
         f"Tag Copy: {_yes_no(tag_copy_enabled)}",
         f"Tag Copy/Delete Original: {_yes_no(copy_delete_enabled)}",
         f"Rename Compliantly: {_yes_no(getattr(config, 'rename_compliantly', False))}",
@@ -4307,7 +4334,7 @@ def _format_switches_log_line(config, action: str = "Full Inventory") -> str:
         f"Proper Grammar: {_yes_no(bool(getattr(config, 'proper_grammar', False)))}",
         f"etreeDB: {_yes_no(getattr(config, 'etree_lookup', False))}",
         f"setlist.fm: {_yes_no(getattr(config, 'setlistfm_lookup', False))}",
-        f"setlist.fm upgrade: {_yes_no(getattr(config, 'setlistfm_upgrade', False))}",
+        f"setlist.fm Upgrade: {_yes_no(getattr(config, 'setlistfm_upgrade', False))}",
         f"Thorough Setlist Matching: {_yes_no(getattr(config, 'thorough_setlist_matching', False))}",
     ]
     if bool(getattr(config, "compliant", False)):
@@ -6773,6 +6800,11 @@ def _record_is_unidentified_for_mutation(record, unresolved_reasons: Sequence[st
     return any("unable to create show name" in reason for reason in lowered)
 
 
+def _corruption_tag_write_check_enabled(config, tag_during_inventory: bool) -> bool:
+    """Return whether pre-mutation corruption validation may write a probe tag."""
+    return bool(tag_during_inventory and not getattr(config, "dry_run", False))
+
+
 def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMatcher]) -> List[ShowMetadata]:
     groups = _build_groups_from_search_path(config, config.current_search_path)
     config.current_search_groups_prepared = len(groups)
@@ -6788,8 +6820,8 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
     path_copy_delete_destination = str(getattr(config, "current_path_copy_delete_destination", "") or "").strip()
     global_copy_delete_path = str(getattr(config, "tag_copy_and_delete_path", "") or "").strip()
 
-    # A filled global Tag Copy and Delete Path overrides any per-path --$copy or
-    # --$copy-delete directive.  Otherwise a per-path directive overrides the
+    # A filled global Tag Copy and Delete Path overrides any per-path --/copy or
+    # --/copy-delete directive.  Otherwise a per-path directive overrides the
     # global Tag Copy checkbox/destination for this one search path.
     tag_copy_and_delete_path = global_copy_delete_path or path_copy_delete_destination
     tag_copy_and_delete_enabled = bool(tag_copy_and_delete_path)
@@ -6859,6 +6891,8 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
             corrupt_files=safe_corrupt_files,
             corrupt_folders=safe_corrupt_folders,
             folder_threshold=safe_corrupt_threshold,
+            check_tag_write=_corruption_tag_write_check_enabled(config, tag_during_inventory),
+            deep_audio_check=bool(getattr(config, "deep_audio_check", False)),
         )
         corruption_unverifiable = corruption_outcome.unverifiable
         if corruption_outcome.show_removed:
@@ -6944,7 +6978,7 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
             copy_delete_inventory_groups.append(inventory_group)
         if tag_during_inventory and tag_group_ready and not unidentified_for_mutation:
             try:
-                from tlo_tag_lib import tag_group_with_record, merge_tag_stats, emit_tag_fallback_summary
+                from tlo_tag_lib import tag_group_with_record, merge_tag_stats
 
                 def _tag_log_emit(text: str) -> None:
                     line = str(text or "").rstrip("\r\n")

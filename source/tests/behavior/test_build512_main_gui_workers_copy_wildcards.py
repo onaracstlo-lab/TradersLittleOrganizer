@@ -1,9 +1,11 @@
 """Build 514 main-GUI naming, mode worker ceilings, and Copy Request wildcard paths."""
+from tests._release_artifacts import release_history
+from tests import _release_artifacts as RA
 
-__version__ = "v518"
 
 import os
 from pathlib import Path
+ROOT = Path(__file__).resolve().parents[2]
 
 import pytest
 
@@ -14,7 +16,7 @@ import tlo_copy_requests as CR
 
 def _load_gui_module():
     import importlib.util
-    spec = importlib.util.spec_from_file_location("tlo_ggi_build512", Path("tlo-ggi.py"))
+    spec = importlib.util.spec_from_file_location("tlo_main_build512", ROOT / "tlo-main.py")
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
@@ -22,7 +24,7 @@ def _load_gui_module():
 
 
 def test_build512_main_window_uses_main_naming():
-    source = Path("tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     assert 'WINDOW_TITLE = versioned_title("TLO Main GUI")' in source
     assert 'text="Traders Little Organizer™ Main"' in source
     assert 'WINDOW_TITLE = versioned_title("TLO Inventory GUI")' not in source
@@ -40,7 +42,7 @@ def test_build512_max_workers_automatic_value_matches_selected_mode(monkeypatch)
     monkeypatch.setattr(gui.os, "cpu_count", lambda: 32)
     assert gui._default_max_workers_for_mode("extreme") == 64
 
-    source = Path("tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     assert 'self.performance_combo.bind("<<ComboboxSelected>>", self._sync_max_workers_to_performance_mode)' in source
 
 
@@ -106,18 +108,17 @@ def test_build512_wildcard_requires_accessible_parent_and_at_least_one_folder(tm
 def test_build512_documentation_contracts():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v518.docx").paragraphs)
-    manual = Path("TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
-    faq = Path("TLO-FAQ.txt").read_text(encoding="utf-8")
+    req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
+    faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8")
 
     assert "TLO Main GUI followed by the current tlo_version.DISPLAY_VERSION" in req
     assert "Traders Little Organizer™ Main" in req
     assert "gentle = 1; balanced = min(2, CPU count); fast = CPU count; extreme = min(4 × CPU count, 64)" in req
     assert "C:\\TLO* selects every immediate directory" in req
     assert "C:\\TLO\\* selects every immediate child directory" in req
-    assert "Build 512 - Main GUI naming, mode-aware Max Workers, and Copy Request wildcards" in manual
-    assert r"c:\\TLO* selects each immediate folder" in manual
-    assert r"c:\\TLO\\* selects the immediate folders inside" in manual
+    assert "Build 512 - Main GUI naming, mode-aware Max Workers, and Copy Request wildcards" in release_history()
+    assert r"c:\TLO* selects each immediate folder" in release_history()
+    assert r"c:\TLO\* selects the immediate folders inside" in release_history()
     assert "Q: What does Max Workers mean?" in faq
     assert "c:\\TLO* selects each immediate folder" in faq
     assert "c:\\TLO\\* selects the immediate folders inside" in faq

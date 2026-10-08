@@ -1,5 +1,5 @@
 """Build 458 regressions for exact release-package/update handling."""
-__version__ = "v468"
+from tests import _release_artifacts as RA
 
 import json
 import zipfile
@@ -37,6 +37,9 @@ def _write_package(path: Path, *, kind: str, platform_key: str, build: int, data
     }
     if kind == "update":
         manifest["build"] = build
+        manifest["safe_update"] = True
+        manifest["requires_complete_install"] = False
+        manifest["protected_paths"] = list(U.UPDATE_PROTECTED_PATHS) + ([] if databases else ["TLO_DBs/"])
     else:
         manifest["build_number"] = build
     with zipfile.ZipFile(path, "w") as archive:
@@ -114,6 +117,8 @@ def test_build458_partial_or_extra_database_payload_is_rejected(tmp_path):
     manifest = {
         "kind": "update", "build": 459, "platform_key": "linux", "packaging_mode": "native",
         "databases_included": False, "database_files": [],
+        "safe_update": True, "requires_complete_install": False,
+        "protected_paths": list(U.UPDATE_PROTECTED_PATHS) + ["TLO_DBs/"],
     }
     with zipfile.ZipFile(package, "w") as archive:
         archive.writestr("UPDATE_MANIFEST.json", json.dumps(manifest))
@@ -158,10 +163,9 @@ def test_build458_check_for_updates_reports_database_refresh(monkeypatch, tmp_pa
 def test_build458_current_documentation_describes_package_matrix():
     root = Path(__file__).resolve().parents[2]
     from docx import Document
-    req_text = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v518.docx").paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
+    req_text = "\n".join(p.text for p in Document(root / RA.REQUIREMENTS_FILENAME).paragraphs)
+    manual = (root / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
     faq = (root / "TLO-FAQ.txt").read_text(encoding="utf-8")
-    assert "Current document version: v518 (TLO v1.7)." in req_text
     assert "exact matching complete ZIP" in req_text
     assert "databases_included" in req_text
     assert "only the four complete ZIPs" in manual

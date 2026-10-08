@@ -1,4 +1,5 @@
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 from console_output_lib import console_print
 from initial_dir_walk_lib import initial_dir_walk
 from tlo_complete_path_log import compact_complete_path_log
@@ -6,7 +7,7 @@ from inventory_parser_lib import Config
 from logging_lib import setup_logging
 from tlo_artist_db import load_artist_matcher
 from tlo_phase23_v2 import process_groups_for_search_path_v2
-from tlo_runtime_control import throttle_point, wait_if_paused, apply_process_priority
+from tlo_runtime_control import wait_if_paused, apply_process_priority
 from tlo_sibling_collections import (
     assert_no_interrupted_sibling_consolidations,
     consolidate_sibling_collections,

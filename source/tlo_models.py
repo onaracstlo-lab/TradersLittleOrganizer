@@ -1,4 +1,5 @@
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 from dataclasses import dataclass, field
 from typing import Dict, List
 

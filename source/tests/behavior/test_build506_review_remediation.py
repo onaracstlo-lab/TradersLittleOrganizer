@@ -1,6 +1,5 @@
 """Build 506 remediation for the v505 targeted review findings."""
 
-__version__ = "v518"
 
 import importlib.util
 import os
@@ -11,6 +10,7 @@ from pathlib import Path
 import pytest
 
 pytestmark = pytest.mark.behavior
+ROOT = Path(__file__).resolve().parents[2]
 
 import tlo_copy_requests as CR
 import tlo_setlistfm_lookup as sfm
@@ -49,7 +49,7 @@ class _V:
 
 def _gui_probe(tmp_path, monkeypatch, tag_field):
     pytest.importorskip("tkinter")
-    spec = importlib.util.spec_from_file_location("tlo_ggi_build506", "tlo-ggi.py")
+    spec = importlib.util.spec_from_file_location("tlo_main_build506", ROOT / "tlo-main.py")
     gui = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(gui)
     home = tmp_path / f"home-{tag_field}"
@@ -271,7 +271,7 @@ def test_build506_process_environment_precedes_persisted_windows_fallback(monkey
 
 
 def test_build506_upgrade_status_explains_missing_and_mismatched_keys(tmp_path, monkeypatch):
-    spec = importlib.util.spec_from_file_location("tlo_ggi_build506_status", "tlo-ggi.py")
+    spec = importlib.util.spec_from_file_location("tlo_main_build506_status", ROOT / "tlo-main.py")
     gui = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(gui)
 

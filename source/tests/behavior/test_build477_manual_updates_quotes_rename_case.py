@@ -9,14 +9,13 @@ import tlo_phase23_v2 as P23
 from tlo_models import ShowMetadata
 
 pytestmark = pytest.mark.behavior
-__version__ = "v478"
 
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_build477_manual_updates_new_name_drop_does_not_require_original_folder():
-    source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     start = source.index("    def _new_name_drop_enabled(self):")
     end = source.index("    def _original_changed", start)
     method = source[start:end]

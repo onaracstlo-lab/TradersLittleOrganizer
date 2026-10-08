@@ -1,6 +1,6 @@
 """Build 498 regressions for the main-GUI Proper Grammar artist-name preference."""
+from tests import _release_artifacts as RA
 
-__version__ = "v499"
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -103,7 +103,7 @@ def test_build498_main_gui_and_active_tag_path_carry_proper_grammar_state(tmp_pa
     assert values["proper_grammar"] is True
     config = build_tagger_config(tlo_home=str(tmp_path), proper_grammar=True)
     assert config.proper_grammar is True
-    source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     assert 'proper_grammar=bool(getattr(self.bool_vars.get("proper_grammar"), "get", lambda: False)())' in source
     assert "class TaggerWindow" not in source
     start = source.index("    def _start_tagging_from_main(self):")
@@ -117,14 +117,12 @@ def test_build498_main_gui_and_active_tag_path_carry_proper_grammar_state(tmp_pa
 def test_build498_documentation_records_proper_grammar_contract():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v518.docx").paragraphs)
-    manual = (ROOT / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
-    changes = (ROOT / "CHANGES_v518.txt").read_text(encoding="utf-8")
+    req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
+    manual = (ROOT / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
+    changes = (ROOT / RA.CHANGES_FILENAME).read_text(encoding="utf-8")
 
-    assert "Current document version: v518 (TLO v1.7)." in req
     assert "Build 498: Proper Grammar artist naming" in req
     assert "As-Is Artist Name always overrides and suppresses Proper Grammar output conversion" in req
     assert "Kinks, The" in req and "Smith, John" in req
-    assert "Version v1.7 Build 518" in manual
     assert "Proper Grammar is directly beneath As-Is Artist Name and defaults unchecked" in manual
     assert "Carries forward all Build 499 and earlier behavior" in changes

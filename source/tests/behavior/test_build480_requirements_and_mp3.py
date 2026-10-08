@@ -2,7 +2,6 @@
 
 from pathlib import Path
 import importlib.util
-from types import SimpleNamespace
 
 import pytest
 
@@ -14,7 +13,7 @@ pytestmark = pytest.mark.behavior
 
 def _load_gui():
     root = Path(__file__).resolve().parents[2]
-    spec = importlib.util.spec_from_file_location("tlo_ggi_build480", root / "tlo-ggi.py")
+    spec = importlib.util.spec_from_file_location("tlo_main_build480", root / "tlo-main.py")
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)

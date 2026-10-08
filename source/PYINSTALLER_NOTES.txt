@@ -1,7 +1,11 @@
-PyInstaller note for SHN conversion
+PyInstaller note for FFmpeg / SHN conversion
 
 TLO does not ask the user to install ffmpeg, shorten, shntool, or another SHN converter.
 
-When building a native release, include imageio-ffmpeg with its package data so imageio_ffmpeg.get_ffmpeg_exe() resolves the bundled converter at runtime. If the package data is missing, --convert-shn records a clear conversion error and leaves the SHN/SHNF source file unchanged.
+Build 535 removes imageio-ffmpeg from native packaging. Native builders must run prepare_ffmpeg.py for the target platform/architecture. The helper downloads the exact FFmpeg 9.0.2 static release asset listed in its manifest, verifies the pinned SHA-256 before extraction, validates the reported ffmpeg version, and stages the executable for PyInstaller as tlo_ffmpeg_bin/ffmpeg[.exe].
 
-Install imageio-ffmpeg in the build environment and collect the package binary/data files. Exact PyInstaller collect flags may vary by PyInstaller version. The supported GitHub build process already carries the required collection settings.
+The TLO runtime resolver never consults IMAGEIO_FFMPEG_EXE, conda, PATH, or a current-directory ffmpeg. Frozen applications resolve only the packaged tlo_ffmpeg_bin executable and fail closed when it is absent or outside the permitted packaged roots.
+
+Build environments are pinned by requirements-build.txt and verify_build_environment.py. Native builders must install the lock with --require-hashes, use CPython 3.13.16 and PyInstaller 6.22.3, and run the packaging smoke test before scanning/packaging. The smoke test intentionally sets a hostile IMAGEIO_FFMPEG_EXE value to verify that it is ignored.
+
+The official GitHub build process additionally runs audit_build_requirements.py and records Python, PyInstaller, FFmpeg, and requirements-lock identity in the platform build receipt.

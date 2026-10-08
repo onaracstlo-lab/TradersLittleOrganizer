@@ -1,8 +1,8 @@
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 import argparse
 import multiprocessing
-import sys
 
 from console_output_lib import console_emit
 if __name__ == "__main__":
@@ -17,7 +17,7 @@ from tlo_ux import operation_review_lines
 
 def _parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        prog="tlo-tag.py",
+        prog="tlo-tag",
         description="Tag audio files beneath a required search folder.",
     )
     parser.add_argument("--TLOHome", dest="TLOHome", default="", metavar="DIR", help="TLOHome directory. Defaults from the TLOHome environment variable when present.")
@@ -37,6 +37,7 @@ def _parse_args(argv=None):
         "delete_extra_tags",
         "as_is_artist_name",
         "proper_grammar",
+        "deep_audio_check",
     ))
     parser.set_defaults(corrupt_folders="never")
     tagger_help = {
@@ -47,7 +48,7 @@ def _parse_args(argv=None):
         "thorough_setlist_matching": "Collect and compare additional local and enabled online setlist candidates during tagging.",
         "rename_compliantly": "Rename an identified folder using the resolved Show Name before tagging it in place. Mutually exclusive with --compliant.",
         "convert_shn": "Convert .shn/.shnf files in the selected search folder to .flac; delete a source only after successful verified conversion.",
-        "corrupt_folders": "Corrupt-folder handling: never keeps corrupt folders, all removes only 100% corrupt folders, and threshold uses --corrupt-folder-threshold. Default never (keep corrupt folders).",
+        "corrupt_folders": "Corrupt-folder handling: never keeps corrupt folders, all removes only 100%% corrupt folders, and threshold uses --corrupt-folder-threshold. Default never (keep corrupt folders).",
     }
     for action in parser._actions:
         if action.dest in tagger_help:
@@ -94,6 +95,7 @@ def main(argv=None) -> int:
             delete_extra_tags=bool(args.delete_extra_tags),
             as_is_artist_name=bool(args.as_is_artist_name),
             proper_grammar=bool(args.proper_grammar),
+            deep_audio_check=bool(args.deep_audio_check),
         )
         review_config.tag_during_inventory = True
         review_config.tag_copy_during_inventory = False
@@ -126,6 +128,7 @@ def main(argv=None) -> int:
             delete_extra_tags=bool(args.delete_extra_tags),
             as_is_artist_name=bool(args.as_is_artist_name),
             proper_grammar=bool(args.proper_grammar),
+            deep_audio_check=bool(args.deep_audio_check),
             emit=lambda text: console_emit(str(text), end="" if str(text).endswith("\n") else "\n"),
         )
         return 0

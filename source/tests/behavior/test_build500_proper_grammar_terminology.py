@@ -1,6 +1,6 @@
 """Build 500 regressions for Proper Grammar terminology and unreleased CLI cleanup."""
+from tests import _release_artifacts as RA
 
-__version__ = "v500"
 
 import argparse
 from pathlib import Path
@@ -34,7 +34,7 @@ def test_build500_cli_accepts_only_proper_grammar_spelling():
 
 def test_build500_source_has_no_old_grammar_identifiers_or_label():
     targets = [
-        "tlo_options.py", "tlo_ux.py", "tlo-ggi.py", "tlo_phase23_v2.py",
+        "tlo_options.py", "tlo_ux.py", "tlo-main.py", "tlo_phase23_v2.py",
         "tlo_tag_lib.py", "tlo_artist_db.py", "inventory_parser_lib.py", "walk_trees_lib.py",
     ]
     combined = "\n".join((ROOT / name).read_text(encoding="utf-8") for name in targets)
@@ -48,12 +48,10 @@ def test_build500_source_has_no_old_grammar_identifiers_or_label():
 def test_build500_current_docs_use_proper_grammar_and_current_version():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v518.docx").paragraphs)
-    manual = (ROOT / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
-    changes = (ROOT / "CHANGES_v518.txt").read_text(encoding="utf-8")
-    assert "Current document version: v518 (TLO v1.7)." in req
+    req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
+    manual = (ROOT / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
+    changes = (ROOT / RA.CHANGES_FILENAME).read_text(encoding="utf-8")
     assert "Build 498: Proper Grammar artist naming" in req
     assert "Build 500: Proper Grammar terminology" in req
     assert "Proper Grammar" in manual
-    assert "Version v1.7 Build 518" in manual
     assert "--proper-grammar" in changes

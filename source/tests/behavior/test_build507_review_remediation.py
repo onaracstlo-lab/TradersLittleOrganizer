@@ -1,5 +1,4 @@
 import json
-import os
 import stat
 import sys
 import zipfile
@@ -126,7 +125,7 @@ def test_build507_delete_script_has_utf8_and_volume_guard(tmp_path):
     assert IU._append_delete_command(str(bat), r"E:\boots\Björk", "Backup-1")
     text = bat.read_text(encoding="utf-8")
     assert "chcp 65001 >nul" in text
-    assert 'REM [Backup-1] "E:\\boots\\Björk"' in text
+    assert 'REM "[Backup-1]" "E:\\boots\\Björk"' in text
     assert "vol E:" not in text and "findstr" not in text
     assert "Björk" in text
 

@@ -1,0 +1,37 @@
+TLO v1.7 Build 564 - Reviewed Dead-Code Retirements
+====================================================
+
+Removed after checking both source and historical test references:
+  tlo_inventory_update.open_paths
+    Unused in production; four historical tests were rewritten to exercise the
+    real tlo_ux.open_path GUI helper. The removed RTF branch executed the
+    registered document handler. The surviving helper selects files through
+    Explorer on Windows and refuses device/network and symlink paths.
+  tlo_inventory_update._is_safe_delete_rooted_path
+    Unused wrapper around the retained _canonical_safe_delete_path.
+  tlo_github_updates._detect_platform_key
+    Unused compatibility wrapper; active detection calls
+    _detect_installed_platform_key.
+  tlo_setlistfm_lookup._environment_value
+    Unused compatibility wrapper; active key resolution uses explicit process
+    and persistent lookup functions.
+
+The separately duplicated post-download package inspection, settings write,
+status, and user message handling in tlo_github_updates.py was consolidated
+into _download_and_report_verified_asset. The existing signed-metadata gate,
+asset digest check, package content validation and error boundaries remain.
+
+Non-retirements: The review's estimated 52 unreferenced and 21 test-only
+functions were observations from static analysis, not an authorization to
+remove all of them. Additional apparent candidates may be dynamically loaded,
+called through entry points, or provide supported direct-script behavior.
+They were not removed without caller and failure-path evidence. There is no
+broad vulture-zero release gate: this build adds a deterministic checked
+retired-symbol contract to the standard test suite instead.
+
+Executable coverage added: the active GUI opener, live Tag Copy and
+Copy/Delete staging failure boundaries, reversible FLAC tag write, the
+header-only non-write path, and updater package-inspection/persistence order.
+
+Build Process v108 unchanged. Ruff 0.16.10 and native Windows/macOS behavior
+must still be independently attested before release.

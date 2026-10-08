@@ -1,6 +1,5 @@
 """Build 472: Auto Update discovers first and downloads only after Yes."""
 
-__version__ = "v472"
 
 from pathlib import Path
 
@@ -95,7 +94,7 @@ def test_yes_path_downloads_pending_verified_asset(monkeypatch, tmp_path):
 
 def test_gui_auto_update_contract_uses_yes_skip_and_discovery_only():
     root = Path(__file__).resolve().parents[2]
-    for name in ("tlo-ggi.py", "tlo-gsi.py"):
+    for name in ("tlo-main.py", "tlo-search.py"):
         text = (root / name).read_text(encoding="utf-8")
         assert 'text="Yes"' in text
         assert 'text="Skip"' in text

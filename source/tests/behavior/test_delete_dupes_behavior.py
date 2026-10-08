@@ -1,6 +1,5 @@
 """Behavior tests for the tlo-deleteDupes main."""
 
-__version__ = "v468"
 
 import importlib.util
 from pathlib import Path
@@ -86,7 +85,8 @@ def test_any_recursive_structure_name_or_size_difference_is_not_trashed(tmp_path
 
     trashed = []
     count = module.delete_duplicate_copy_directories(
-        str(root), str(home), trash_func=lambda path: trashed.append(path), emit=lambda *a, **k: None
+        str(root), str(home), trash_func=lambda path: trashed.append(path), emit=lambda *a, **k: None,
+        ffmpeg_executable="fake-ffmpeg", health_check=lambda *_a, **_k: True,
     )
     assert count == 0
     assert trashed == []
@@ -104,7 +104,8 @@ def test_copy_without_unsuffixed_original_is_never_trashed(tmp_path):
     _write(copy / "01.flac", b"abcd")
     trashed = []
     count = module.delete_duplicate_copy_directories(
-        str(root), str(home), trash_func=lambda path: trashed.append(path), emit=lambda *a, **k: None
+        str(root), str(home), trash_func=lambda path: trashed.append(path), emit=lambda *a, **k: None,
+        ffmpeg_executable="fake-ffmpeg", health_check=lambda *_a, **_k: True,
     )
     assert count == 0
     assert trashed == []

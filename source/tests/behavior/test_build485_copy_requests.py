@@ -1,15 +1,16 @@
 """Build 485 persistent multi-pass Copy Request workflow."""
+from tests._release_artifacts import release_history
+from tests import _release_artifacts as RA
 
-__version__ = "v497"
 
 import pytest
 
 pytestmark = pytest.mark.behavior
 
-import json
 import os
 import sqlite3
 from pathlib import Path
+ROOT = Path(__file__).resolve().parents[2]
 
 import tlo_copy_requests as CR
 from tlo_bootlist_volume_policy import format_volume_path, write_bootlist_rows
@@ -244,7 +245,7 @@ def test_build485_request_reports_keep_copied_pending_and_failed_lists(tmp_path)
 
 
 def test_build485_gui_exposes_copy_request_manager_and_process_all():
-    source = Path("tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     assert 'label="Copy Requests"' in source
     assert "class CopyRequestsWindow" in source
     assert 'text="Process All Active Requests"' in source
@@ -334,18 +335,18 @@ def test_build485_explicit_empty_roots_stays_disconnected_and_volume_counts_uniq
 def test_build485_documents_describe_persistent_copy_requests_and_closed_state():
     from docx import Document
 
-    requirements = Document("TLO_Inventory_Requirements_Working_v518.docx")
+    requirements = Document(ROOT / RA.REQUIREMENTS_FILENAME)
     requirement_text = "\n".join(paragraph.text for paragraph in requirements.paragraphs)
     assert "Build 485: persistent multi-pass Copy Requests" in requirement_text
     assert "Artist + single date/year" in requirement_text
     assert "Artist + increasing year range using the established yy-yy wraparound rule" in requirement_text
     assert "Requests are Open until complete or explicitly Closed" in requirement_text
 
-    manual = Path("TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8")
-    assert "Build 485 persistent Copy Requests" in manual
+    manual = (ROOT / RA.MANUAL_FILENAME).read_text(encoding="utf-8")
+    assert "Build 485 - persistent multi-pass Copy Requests" in release_history()
     assert "Grateful Dead 1977" in manual
-    assert "Closed" in manual
+    assert 'Closed' in release_history()
 
-    faq = Path("TLO-FAQ.txt").read_text(encoding="utf-8")
+    faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8")
     assert "Process All Active Requests" in faq
     assert "calendar year (yyyy)" in faq

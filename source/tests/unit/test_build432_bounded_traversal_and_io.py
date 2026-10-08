@@ -1,5 +1,4 @@
 """Build 432 iterative traversal and bounded-wait/network regressions."""
-__version__ = "v468"
 
 import importlib.util
 import io
@@ -70,8 +69,8 @@ def test_bounded_response_rejects_one_byte_over_limit():
 
 
 def test_gui_thread_wait_has_finite_timeout(monkeypatch):
-    path=Path(__file__).resolve().parents[2]/'tlo-ggi.py'
-    spec=importlib.util.spec_from_file_location('tlo_ggi_build432', path)
+    path=Path(__file__).resolve().parents[2]/'tlo-main.py'
+    spec=importlib.util.spec_from_file_location('tlo_main_build432', path)
     gui=importlib.util.module_from_spec(spec); spec.loader.exec_module(gui)
     monkeypatch.setattr(gui, 'GUI_THREAD_CALLBACK_TIMEOUT_SECONDS', 0.01)
 

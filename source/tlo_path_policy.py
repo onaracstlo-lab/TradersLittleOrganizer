@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 # Operating-system maintained directories that are not part of a music
 # collection.  Callers decide whether exclusions are root-only or recursive.
@@ -19,6 +20,7 @@ OS_MANAGED_DIR_NAMES = frozenset({
 # case-insensitive and recursive in Phase 1.
 TLO_TEMP_DIR_PREFIXES = (
     ".tlo-collection-",
+    ".tlo-case-rename-",
     ".tlo-copy-",
     ".tlo-partial-",
     ".tlo-restore-",

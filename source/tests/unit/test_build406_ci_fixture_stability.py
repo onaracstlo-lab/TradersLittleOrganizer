@@ -1,6 +1,5 @@
 """Build 406 regression-fixture stability checks."""
 
-__version__ = "v468"
 
 from pathlib import Path
 
@@ -32,5 +31,5 @@ def test_fixture_neutralization_is_classifier_only_not_trash_suppression():
     source = LEGACY.read_text(encoding="utf-8")
     start = source.index("def _disable_corruption_for_non_corruption_test")
     body = source[start : start + 900]
-    assert 'monkeypatch.setattr(C, "classify_audio_paths", lambda paths: ([], []))' in body
+    assert 'monkeypatch.setattr(C, "classify_audio_paths", lambda paths, **_kwargs: ([], []))' in body
     assert "trash_path" not in body

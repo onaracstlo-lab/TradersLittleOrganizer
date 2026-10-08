@@ -1,8 +1,10 @@
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 import logging
 import os
 import re
 import string
+import tempfile
 from dataclasses import dataclass
 from tlo_security import escape_structured_log_text
 
@@ -246,9 +248,34 @@ def _structured_block_path(block_lines):
     return candidate
 
 
+def _atomic_rewrite_log(path_name, lines):
+    """Rewrite one UTF-8 log atomically while round-tripping undecodable bytes."""
+    path_name = os.path.abspath(path_name)
+    directory = os.path.dirname(path_name) or "."
+    temporary_name = None
+    try:
+        fd, temporary_name = tempfile.mkstemp(prefix=f".{os.path.basename(path_name)}.", suffix=".tmp", dir=directory)
+        with os.fdopen(fd, "w", encoding="utf-8", errors="surrogateescape", newline="") as outfile:
+            outfile.writelines(lines)
+            outfile.flush()
+            os.fsync(outfile.fileno())
+        try:
+            os.chmod(temporary_name, os.stat(path_name).st_mode & 0o7777)
+        except OSError:
+            pass
+        os.replace(temporary_name, path_name)
+        temporary_name = None
+    finally:
+        if temporary_name:
+            try:
+                os.remove(temporary_name)
+            except OSError:
+                pass
+
+
 def _prune_structured_log(path_name, root_paths, end_marker):
     try:
-        with open(path_name, "r", encoding="utf-8", errors="ignore") as infile:
+        with open(path_name, "r", encoding="utf-8", errors="surrogateescape") as infile:
             lines = infile.readlines()
     except OSError:
         return False
@@ -276,8 +303,7 @@ def _prune_structured_log(path_name, root_paths, end_marker):
     if block:
         out.extend(block)
     if changed:
-        with open(path_name, "w", encoding="utf-8", newline="") as outfile:
-            outfile.writelines(out)
+        _atomic_rewrite_log(path_name, out)
     return changed
 
 
@@ -298,14 +324,13 @@ def _line_mentions_pruned_path(line, root_paths):
 
 def _prune_line_log(path_name, root_paths):
     try:
-        with open(path_name, "r", encoding="utf-8", errors="ignore") as infile:
+        with open(path_name, "r", encoding="utf-8", errors="surrogateescape") as infile:
             lines = infile.readlines()
     except OSError:
         return False
     out = [line for line in lines if not _line_mentions_pruned_path(line, root_paths)]
     if len(out) != len(lines):
-        with open(path_name, "w", encoding="utf-8", newline="") as outfile:
-            outfile.writelines(out)
+        _atomic_rewrite_log(path_name, out)
         return True
     return False
 

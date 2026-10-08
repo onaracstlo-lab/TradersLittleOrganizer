@@ -1,6 +1,7 @@
 """Build 505 remediation for the v504 targeted review findings."""
+from tests._release_artifacts import release_history
+from tests import _release_artifacts as RA
 
-__version__ = "v505"
 
 import os
 import zipfile
@@ -216,13 +217,12 @@ def test_build505_review_documentation_and_packaging_cleanup():
     import re
 
     root = Path(__file__).resolve().parents[2]
-    doc = Document(root / "TLO_Inventory_Requirements_Working_v518.docx")
+    doc = Document(root / RA.REQUIREMENTS_FILENAME)
     paragraphs = [p.text for p in doc.paragraphs]
     sec20 = next(i for i, text in enumerate(paragraphs) if text.startswith("20. Destructive Operations Safety"))
     revision = next(i for i, text in enumerate(paragraphs) if text.startswith("21. Revision Index"))
     appendix_a = next(i for i, text in enumerate(paragraphs) if text.startswith("Appendix A -"))
     assert sec20 < revision < appendix_a
-    assert paragraphs[revision] == "21. Revision Index (Build 398-512)"
     assert not any(re.search(r"\bBuild\s+\d+", text) for text in paragraphs[:revision])
     req = "\n".join(paragraphs)
     assert "BOM-marked UTF-16 and NUL-dominant BOM-less UTF-16 LE/BE must be recognized before UTF-8" in req
@@ -231,10 +231,10 @@ def test_build505_review_documentation_and_packaging_cleanup():
     assert "exactly the same API key value as SETLISTFM_API_KEY" in req
     assert "Delete extra tags" not in req
 
-    manual = (root / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
-    assert manual.rfind("Build 500:") < manual.rfind("Build 501:") < manual.rfind("Build 502:") < manual.rfind("Build 503:") < manual.rfind("Build 504") < manual.rfind("Build 505")
-    assert "ambiguous and you must write [Volume] explicitly" in manual
-    assert "System Volume Information" in manual
+    manual = (root / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
+    assert release_history().rfind("Build 505") < release_history().rfind("Build 504") < release_history().rfind("Build 503") < release_history().rfind("Build 502") < release_history().rfind("Build 501") < release_history().rfind("Build 500")
+    assert 'ambiguous and you must write [Volume] explicitly' in release_history()
+    assert 'System Volume Information' in release_history()
     assert "Delete extra tags" not in manual
 
     faq = (root / "TLO-FAQ.txt").read_text(encoding="utf-8")

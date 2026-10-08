@@ -1,14 +1,16 @@
 """Application-level safety helpers for untrusted collection metadata and paths."""
 from __future__ import annotations
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
+import ctypes
 import os
 import re
 
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f\x85\u2028\u2029]")
 _CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r", "\n")
-_WINDOWS_DEVICE_RE = re.compile(r"(?i)^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$")
+_WINDOWS_DEVICE_RE = re.compile(r"(?i)^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\..*)?$")
 
 
 def escape_structured_log_text(value) -> str:
@@ -18,16 +20,18 @@ def escape_structured_log_text(value) -> str:
 
 
 def csv_formula_escape(value) -> str:
-    """Serialize an Excel-facing CSV cell without allowing formula interpretation."""
+    """Serialize an Excel-facing CSV cell while preserving a reversible leading apostrophe."""
     text = str(value or "")
-    if text.startswith(_CSV_FORMULA_PREFIXES):
+    if text.startswith("'") or text.startswith(_CSV_FORMULA_PREFIXES):
         return "'" + text
     return text
 
 
 def csv_formula_unescape(value) -> str:
-    """Reverse only the apostrophe TLO adds for a spreadsheet-dangerous leading character."""
+    """Reverse exactly one TLO-added apostrophe without losing a user's leading apostrophe."""
     text = str(value or "")
+    if text.startswith("''"):
+        return text[1:]
     if len(text) >= 2 and text[0] == "'" and text[1:].startswith(_CSV_FORMULA_PREFIXES):
         return text[1:]
     return text
@@ -37,11 +41,7 @@ def is_network_or_device_path(path_name: str) -> bool:
     """Return True for UNC/device paths that TLO must not launch/read as local files."""
     text = str(path_name or "").strip().replace("/", "\\")
     lowered = text.casefold()
-    return (
-        lowered.startswith("\\\\")
-        or lowered.startswith("\\\\?\\")
-        or lowered.startswith("\\\\.\\")
-    )
+    return lowered.startswith("\\\\")
 
 
 def is_protected_pseudo_path(path_name: str) -> bool:
@@ -75,6 +75,45 @@ def is_safe_local_regular_file(path_name: str, allowed_roots=()) -> bool:
     roots = [str(root or "").strip() for root in allowed_roots if str(root or "").strip()]
     return bool(roots) and any(is_path_within(text, root) for root in roots)
 
+
+
+def windows_directory_from_api() -> str:
+    """Return the trusted Windows directory reported by the operating system.
+
+    Environment variables are intentionally not consulted: helper executable
+    paths are a local trust boundary and must be rooted in the Windows API's
+    own directory result.
+    """
+    if os.name != "nt":
+        raise OSError("Windows directory lookup is only available on Windows.")
+    try:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    except (AttributeError, OSError) as exc:
+        raise OSError("Windows directory API is unavailable.") from exc
+
+    for function_name in ("GetSystemWindowsDirectoryW", "GetWindowsDirectoryW"):
+        getter = getattr(kernel32, function_name, None)
+        if getter is None:
+            continue
+        getter.argtypes = [ctypes.c_wchar_p, ctypes.c_uint]
+        getter.restype = ctypes.c_uint
+        size = 260
+        for _attempt in range(2):
+            buffer = ctypes.create_unicode_buffer(size)
+            length = int(getter(buffer, size))
+            if length <= 0:
+                break
+            if length < size:
+                value = buffer.value.strip()
+                if value:
+                    return value
+                break
+            size = length + 1
+
+    error_code = ctypes.get_last_error()
+    if error_code:
+        raise OSError(error_code, "Windows directory lookup failed.")
+    raise OSError("Windows directory lookup failed.")
 
 def windows_reserved_folder_name(name: str) -> bool:
     """Return True when a leaf would be a reserved Windows DOS device name."""

@@ -1,4 +1,5 @@
 """Build 410 regressions for disc ordering and explicit unnumbered setlists."""
+from tests import _release_artifacts as RA
 
 from pathlib import Path
 
@@ -9,7 +10,6 @@ pytestmark = pytest.mark.behavior
 from inventory_parser_lib import Config
 import tlo_tag_lib as T
 
-__version__ = "v468"
 
 
 COUNTRY_JOE_INFO = """Country Joe Mcdonald-The Red Barn,Deposit,N.Y. U.S.A. 2001-05-26
@@ -187,15 +187,13 @@ def test_build410_requirements_and_manual_document_reported_fix():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v518.docx")
+    requirements = Document(root / RA.REQUIREMENTS_FILENAME)
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual_text = (root / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v518 (TLO v1.7)." in req_text
     assert "Explicit-setlist and disc-order rule" in req_text
     assert "CJM-Disc01,Track01.flac" in req_text
     assert "Thank The Nurse That's Nursing You" in req_text
     assert "later collector notes beginning 1), 2), 3)" in req_text
-    assert "Version v1.7 Build 518" in manual_text
     assert "CJM-Disc01,Track01.flac" in manual_text
 

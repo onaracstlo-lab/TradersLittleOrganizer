@@ -1,6 +1,6 @@
 """Build 497 regressions for Delete Extra Tags GUI availability."""
+from tests import _release_artifacts as RA
 
-__version__ = "v497"
 
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _load_gui():
-    spec = spec_from_file_location("tlo_ggi_build497", ROOT / "tlo-ggi.py")
+    spec = spec_from_file_location("tlo_main_build497", ROOT / "tlo-main.py")
     module = module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -94,7 +94,7 @@ def test_build497_tag_mode_click_keeps_modes_exclusive_and_syncs_delete_extra_ta
 
 
 def test_build497_gui_wires_initial_state_sync_after_tag_mode_exclusivity():
-    source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     assert "def _sync_delete_extra_tags_state" in source
     assert 'widget.configure(state=("normal" if tag_mode_enabled else "disabled"))' in source
     assert "self._reapply_tag_mode_exclusivity()" in source
@@ -104,12 +104,10 @@ def test_build497_gui_wires_initial_state_sync_after_tag_mode_exclusivity():
 def test_build497_documentation_records_delete_extra_tags_gui_state_rule():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v518.docx").paragraphs)
-    manual = (ROOT / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
+    manual = (ROOT / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v518 (TLO v1.7)." in req
     assert "Build 497: Delete Extra Tags GUI availability" in req
-    assert "The main-GUI checkbox is disabled/greyed and forced unchecked whenever Tag in Place, Tag Copy, and Tag Copy/Delete Original are all unchecked" in req
-    assert "Version v1.7 Build 518" in manual
-    assert "Delete Extra Tags is greyed out and unchecked whenever Tag in Place, Tag Copy, and Tag Copy/Delete Original are all unchecked" in manual
+    assert "The main-GUI checkbox is disabled/greyed and forced unchecked whenever Tag In Place, Tag Copy, and Tag Copy/Delete Original are all unchecked" in req
+    assert "Delete Extra Tags is greyed out and unchecked whenever Tag In Place, Tag Copy, and Tag Copy/Delete Original are all unchecked" in manual
     assert "The three tag modes remain mutually exclusive" in req

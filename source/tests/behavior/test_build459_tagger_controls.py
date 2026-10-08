@@ -1,4 +1,5 @@
 """Build 459 standalone/GUI Tag parity for lookup and corruption controls."""
+from tests import _release_artifacts as RA
 
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
@@ -93,15 +94,15 @@ def test_process_tagging_group_applies_corruption_before_tag_mutation(monkeypatc
     monkeypatch.setattr(
         tlo_corruption,
         "handle_group_corruption",
-        lambda cfg, grp, rec, corrupt_files, corrupt_folders, folder_threshold: (
-            calls.append((corrupt_files, corrupt_folders, folder_threshold))
+        lambda cfg, grp, rec, corrupt_files, corrupt_folders, folder_threshold, **kwargs: (
+            calls.append((corrupt_files, corrupt_folders, folder_threshold, kwargs.get("check_tag_write")))
             or SimpleNamespace(show_removed=False, unverifiable=False, assessment=SimpleNamespace(unverifiable_details=[]))
         ),
     )
     monkeypatch.setattr(taglib, "tag_group_with_record", lambda *a, **k: {"groups": 1, "tagged": 1, "skipped": 0, "errors": 0})
 
     result = taglib.process_tagging_group(config, group, artist_matcher=None)
-    assert calls == [("keep", "threshold", 25)]
+    assert calls == [("keep", "threshold", 25, True)]
     assert result["tagged"] == 1
 
 
@@ -130,7 +131,7 @@ def test_process_tagging_group_skips_when_corruption_is_unverifiable(monkeypatch
 
 
 def test_main_window_tag_uses_shared_config_and_job_runner():
-    source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     start = source.index("    def _start_tagging_from_main(self):")
     end = source.index("    def _open_manual_updates(self):", start)
     block = source[start:end]
@@ -143,10 +144,9 @@ def test_main_window_tag_uses_shared_config_and_job_runner():
 def test_build459_documentation_covers_standalone_tag_option_parity():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v518.docx").paragraphs)
-    manual = (ROOT / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
+    manual = (ROOT / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
     faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8")
-    assert "Current document version: v518 (TLO v1.7)." in req
     assert "--setlistfm-upgrade" in req and "--corrupt-folder-threshold PERCENT" in req
     assert "Corruption is assessed before mutation with the same fail-closed rules as Inventory" in manual
     assert "Does standalone tlo-tag use the same setlist.fm" in faq

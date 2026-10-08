@@ -1,5 +1,4 @@
 """Focused unit regressions for the Build 397 technical-review remediations."""
-__version__ = "v468"
 
 import importlib
 import subprocess

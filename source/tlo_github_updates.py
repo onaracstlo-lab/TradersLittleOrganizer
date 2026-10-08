@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from tlo_diagnostics import debug_suppressed_exception
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 import datetime as _dt
 import hashlib
@@ -28,6 +29,7 @@ from typing import Any
 from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION, OFFICIAL_GITHUB_OWNER, OFFICIAL_GITHUB_REPO, PUBLIC_VERSION
 from tlo_network_io import MAX_METADATA_RESPONSE_BYTES, read_bounded_text
 from tlo_update_trust import pinned_key_configured, verify_metadata_signature
+from tlo_security import windows_reserved_folder_name
 
 DEFAULT_REPO_OWNER = OFFICIAL_GITHUB_OWNER
 DEFAULT_REPO_NAME = OFFICIAL_GITHUB_REPO
@@ -79,7 +81,7 @@ def _parse_utc(value: Any) -> _dt.datetime | None:
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=_dt.timezone.utc)
         return parsed.astimezone(_dt.timezone.utc)
-    except Exception:
+    except (TypeError, ValueError, OverflowError):
         return None
 
 
@@ -88,7 +90,7 @@ def _settings_path(tlo_home: str | os.PathLike[str] | None) -> Path | None:
         return None
     try:
         return Path(tlo_home).expanduser().resolve() / SETTINGS_FILE_NAME
-    except Exception:
+    except (OSError, RuntimeError, ValueError):
         return None
 
 
@@ -99,16 +101,43 @@ def load_update_settings(tlo_home: str | os.PathLike[str] | None) -> dict[str, A
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
         return {}
+
+
+def _write_text_atomic(path: Path, text: str) -> None:
+    """Write UTF-8 text through a same-directory temporary file and atomic replace."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            newline="\n",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_name = handle.name
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_name, path)
+        temporary_name = None
+    finally:
+        if temporary_name:
+            try:
+                Path(temporary_name).unlink(missing_ok=True)
+            except OSError as exc:
+                debug_suppressed_exception(__name__, exc)
 
 
 def save_update_settings(tlo_home: str | os.PathLike[str] | None, settings: dict[str, Any]) -> None:
     path = _settings_path(tlo_home)
     if path is None:
         raise ValueError("TLOHome is required to save update settings.")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(settings, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _write_text_atomic(path, json.dumps(settings, indent=2, sort_keys=True) + "\n")
 
 
 def is_auto_update_enabled(tlo_home: str | os.PathLike[str] | None) -> bool:
@@ -205,16 +234,6 @@ def _detect_installed_platform_key(tlo_home: str | os.PathLike[str] | None = Non
         if (apps_dir / "_internal").is_dir():
             return "windows_onedir"
     return "windows"
-
-
-def _detect_platform_key() -> tuple[str, tuple[str, ...]]:
-    """Backward-compatible coarse platform helper used by older callers/tests."""
-    exact = _detect_installed_platform_key(None)
-    if exact in {"windows", "windows_onedir"}:
-        return "windows", ("windows", "win")
-    if exact == "macos":
-        return "macos", ("macos", "mac", "darwin", "osx", "os-x")
-    return "linux", ("linux",)
 
 
 def _asset_name(asset: dict[str, Any]) -> str:
@@ -364,6 +383,9 @@ def _load_verified_release_metadata(release: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("The signed TLO update metadata has an unsupported schema.")
     if not verify_metadata_signature(metadata, signature_b64):
         raise ValueError("The TLO update metadata signature does not match the public key pinned in this application.")
+    release_tag = metadata.get("release_tag")
+    if not isinstance(release_tag, str) or not release_tag.strip():
+        raise ValueError("The signed TLO update metadata is missing its required release tag binding.")
     return metadata
 
 
@@ -506,6 +528,18 @@ MAX_ZIP_MEMBERS = 5000
 MAX_ZIP_UNCOMPRESSED_BYTES = MAX_UPDATE_ASSET_BYTES * 4
 MAX_ZIP_COMPRESSION_RATIO = 250
 
+UPDATE_PROTECTED_PATHS = (
+    "bootlist.csv",
+    "toBeInventoried.txt",
+    "setlists/",
+    "logs/",
+    "debug/",
+    "dups/",
+    "readyForXfer/",
+    "staged/",
+    "unidentifiedShows.txt",
+)
+
 
 def _read_zip_json_member(archive: zipfile.ZipFile, member_name: str) -> dict[str, Any]:
     try:
@@ -538,6 +572,7 @@ def _manifest_build_number(manifest: dict[str, Any]) -> int | None:
 def _validate_zip_members(archive: zipfile.ZipFile) -> set[str]:
     """Validate member paths/types and decompression bounds before testzip()."""
     names: set[str] = set()
+    folded_names: set[str] = set()
     total_uncompressed = 0
     infos = archive.infolist()
     if len(infos) > MAX_ZIP_MEMBERS:
@@ -553,16 +588,15 @@ def _validate_zip_members(archive: zipfile.ZipFile) -> set[str]:
         if any(part == ".." for part in parts):
             raise ValueError(f"Downloaded TLO package contains parent traversal in ZIP member: {raw_name}")
         normalized_name = "/".join(parts)
-        if normalized_name in names:
+        folded_name = normalized_name.casefold()
+        if folded_name in folded_names:
             raise ValueError(f"Downloaded TLO package contains a duplicate ZIP member name: {raw_name}")
-        reserved = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
         for part in parts:
             if ":" in part:
                 raise ValueError(f"Downloaded TLO package contains an NTFS alternate-data-stream name: {raw_name}")
             if part.endswith((".", " ")):
                 raise ValueError(f"Downloaded TLO package contains a Windows-unsafe component: {raw_name}")
-            base = part.split(".", 1)[0].upper()
-            if base in reserved:
+            if windows_reserved_folder_name(part):
                 raise ValueError(f"Downloaded TLO package contains a reserved Windows device name: {raw_name}")
         unix_mode = (int(info.external_attr) >> 16) & 0xFFFF
         if (unix_mode & 0o170000) == 0o120000:
@@ -576,7 +610,63 @@ def _validate_zip_members(archive: zipfile.ZipFile) -> set[str]:
             if ratio > MAX_ZIP_COMPRESSION_RATIO:
                 raise ValueError(f"Downloaded TLO package contains an unsafe compression ratio: {raw_name}")
         names.add(normalized_name)
+        folded_names.add(folded_name)
     return names
+
+
+def _normalize_manifest_path(value: str) -> str:
+    """Return a canonical relative manifest path, preserving a directory suffix."""
+    raw = str(value or "")
+    if not raw or "\x00" in raw:
+        raise ValueError("Downloaded TLO package has an invalid protected_paths manifest value.")
+    name = raw.replace("\\", "/")
+    if name.startswith("/") or re.match(r"^[A-Za-z]:", name):
+        raise ValueError("Downloaded TLO package has an invalid protected_paths manifest value.")
+    directory = name.endswith("/")
+    parts = [part for part in name.split("/") if part not in {"", "."}]
+    if not parts or any(part == ".." for part in parts):
+        raise ValueError("Downloaded TLO package has an invalid protected_paths manifest value.")
+    normalized = "/".join(parts)
+    return normalized + ("/" if directory else "")
+
+
+def _validate_update_safety_manifest(
+    manifest: dict[str, Any],
+    names: set[str],
+    *,
+    databases_included: bool,
+) -> None:
+    """Enforce the fail-closed update-package safety contract."""
+    if manifest.get("safe_update") is not True:
+        raise ValueError("Downloaded TLO update is not marked safe_update=true.")
+    if manifest.get("requires_complete_install") is not False:
+        raise ValueError("Downloaded TLO update does not declare requires_complete_install=false.")
+
+    declared = manifest.get("protected_paths")
+    if not isinstance(declared, list) or not all(isinstance(item, str) for item in declared):
+        raise ValueError("Downloaded TLO update has an invalid protected_paths manifest value.")
+
+    expected = list(UPDATE_PROTECTED_PATHS)
+    if not databases_included:
+        expected.append("TLO_DBs/")
+    try:
+        declared_normalized = [_normalize_manifest_path(item) for item in declared]
+        expected_normalized = [_normalize_manifest_path(item) for item in expected]
+    except ValueError:
+        raise
+    declared_folded = {item.casefold() for item in declared_normalized}
+    expected_folded = {item.casefold() for item in expected_normalized}
+    if len(declared_normalized) != len(expected_normalized) or declared_folded != expected_folded:
+        raise ValueError(
+            "Downloaded TLO update protected_paths manifest does not match the required protected paths."
+        )
+
+    protected_files = {item.casefold() for item in expected_normalized if not item.endswith("/")}
+    protected_dirs = {item[:-1].casefold() for item in expected_normalized if item.endswith("/")}
+    for member in names:
+        folded = member.casefold()
+        if folded in protected_files or any(folded == directory or folded.startswith(directory + "/") for directory in protected_dirs):
+            raise ValueError(f"Downloaded TLO update contains protected user-data path: {member}")
 
 
 def _inspect_downloaded_package(
@@ -631,6 +721,8 @@ def _inspect_downloaded_package(
 
     if expected_kind == "complete" and not databases_included:
         raise ValueError("Downloaded complete TLO package is missing the required databases.")
+    if expected_kind == "update":
+        _validate_update_safety_manifest(manifest, names, databases_included=databases_included)
 
     packaging_mode = str(manifest.get("packaging_mode") or "").strip()
     return {
@@ -689,6 +781,47 @@ def _update_download_settings(
     return ""
 
 
+def _download_and_report_verified_asset(
+    asset: dict[str, Any], *, tlo_home: str | os.PathLike[str] | None,
+    latest_build: int, asset_name: str, package_kind: str, platform_key: str,
+) -> UpdateCheckResult:
+    """Single validation/persistence/reporting path for both updater entry points.
+
+    This helper runs only after independently signed release metadata has been
+    checked by the caller, or after a verified ``available`` result is passed to
+    ``download_update``. The download itself retains size and digest checks.
+    """
+    destination = _downloads_dir() / _safe_asset_filename(asset_name)
+    downloaded = _download_asset(asset, destination)
+    package_info = _inspect_downloaded_package(
+        destination, expected_kind=package_kind,
+        expected_platform_key=platform_key, expected_build=latest_build,
+    )
+    databases_included = bool(package_info["databases_included"])
+    packaging_mode = str(package_info["packaging_mode"] or "")
+    settings_warning = _update_download_settings(
+        tlo_home, latest_build, asset_name, destination, package_kind,
+        platform_key=platform_key, packaging_mode=packaging_mode,
+        databases_included=databases_included,
+    )
+    kind_text, extra = _package_message(package_kind, databases_included)
+    if downloaded:
+        title = "TLO update downloaded"
+        lead = f"TLO v{PUBLIC_VERSION} Build {latest_build} {kind_text} was downloaded to:"
+        status = "downloaded"
+    else:
+        title = "TLO update already downloaded"
+        lead = f"TLO v{PUBLIC_VERSION} Build {latest_build} {kind_text} is already available at:"
+        status = "already_downloaded"
+    return UpdateCheckResult(
+        status=status, title=title,
+        message=f"{lead}\n\n{destination}\n\n{extra}" + (f"\n\n{settings_warning}" if settings_warning else ""),
+        latest_build=latest_build, path=str(destination), asset_name=asset_name,
+        package_kind=package_kind, platform_key=platform_key,
+        packaging_mode=packaging_mode, databases_included=databases_included,
+    )
+
+
 def download_update(
     available: UpdateCheckResult,
     tlo_home: str | os.PathLike[str] | None,
@@ -709,41 +842,10 @@ def download_update(
         }
         if not available.asset_name or not available.asset_url or not available.asset_digest:
             raise ValueError("The pending TLO update is missing required verified asset metadata.")
-        destination = _downloads_dir() / _safe_asset_filename(available.asset_name)
-        downloaded = _download_asset(asset, destination)
-        package_info = _inspect_downloaded_package(
-            destination,
-            expected_kind=available.package_kind,
-            expected_platform_key=available.platform_key,
-            expected_build=available.latest_build,
-        )
-        databases_included = bool(package_info["databases_included"])
-        packaging_mode = str(package_info["packaging_mode"] or "")
-        settings_warning = _update_download_settings(
-            tlo_home, available.latest_build, available.asset_name, destination, available.package_kind,
-            platform_key=available.platform_key, packaging_mode=packaging_mode,
-            databases_included=databases_included,
-        )
-        kind_text, extra = _package_message(available.package_kind, databases_included)
-        if downloaded:
-            title = "TLO update downloaded"
-            lead = f"TLO v{PUBLIC_VERSION} Build {available.latest_build} {kind_text} was downloaded to:"
-            status = "downloaded"
-        else:
-            title = "TLO update already downloaded"
-            lead = f"TLO v{PUBLIC_VERSION} Build {available.latest_build} {kind_text} is already available at:"
-            status = "already_downloaded"
-        return UpdateCheckResult(
-            status=status,
-            title=title,
-            message=f"{lead}\n\n{destination}\n\n{extra}" + (f"\n\n{settings_warning}" if settings_warning else ""),
-            latest_build=available.latest_build,
-            path=str(destination),
-            asset_name=available.asset_name,
-            package_kind=available.package_kind,
+        return _download_and_report_verified_asset(
+            asset, tlo_home=tlo_home, latest_build=available.latest_build,
+            asset_name=available.asset_name, package_kind=available.package_kind,
             platform_key=available.platform_key,
-            packaging_mode=packaging_mode,
-            databases_included=databases_included,
         )
     except urllib.error.HTTPError as exc:
         return UpdateCheckResult(
@@ -824,8 +926,10 @@ def check_for_updates(
             signed_build = 0
         if signed_build != latest_build:
             raise ValueError("The independently signed TLO metadata build does not match the GitHub release build.")
-        signed_tag = str(signed_metadata.get("release_tag") or "")
-        if signed_tag and signed_tag != str(release.get("tag_name") or ""):
+        signed_tag = str(signed_metadata.get("release_tag") or "").strip()
+        if not signed_tag:
+            raise ValueError("The independently signed TLO metadata is missing its required release tag binding.")
+        if signed_tag != str(release.get("tag_name") or ""):
             raise ValueError("The independently signed TLO metadata release tag does not match the GitHub release.")
 
         asset, package_kind, platform_key = _choose_asset(release, latest_build, tlo_home)
@@ -870,42 +974,9 @@ def check_for_updates(
                 asset_digest=_expected_digest(asset),
             )
 
-        destination = _downloads_dir() / _safe_asset_filename(asset_name)
-        downloaded = _download_asset(asset, destination)
-        package_info = _inspect_downloaded_package(
-            destination,
-            expected_kind=package_kind,
-            expected_platform_key=platform_key,
-            expected_build=latest_build,
-        )
-        databases_included = bool(package_info["databases_included"])
-        packaging_mode = str(package_info["packaging_mode"] or "")
-        settings_warning = _update_download_settings(
-            tlo_home, latest_build, asset_name, destination, package_kind,
-            platform_key=platform_key, packaging_mode=packaging_mode,
-            databases_included=databases_included,
-        )
-        kind_text, extra = _package_message(package_kind, databases_included)
-        verification_note = ""
-        if downloaded:
-            title = "TLO update downloaded"
-            lead = f"TLO v{PUBLIC_VERSION} Build {latest_build} {kind_text} was downloaded to:"
-            status = "downloaded"
-        else:
-            title = "TLO update already downloaded"
-            lead = f"TLO v{PUBLIC_VERSION} Build {latest_build} {kind_text} is already available at:"
-            status = "already_downloaded"
-        return UpdateCheckResult(
-            status=status,
-            title=title,
-            message=f"{lead}\n\n{destination}\n\n{extra}{verification_note}" + (f"\n\n{settings_warning}" if settings_warning else ""),
-            latest_build=latest_build,
-            path=str(destination),
-            asset_name=asset_name,
-            package_kind=package_kind,
-            platform_key=platform_key,
-            packaging_mode=packaging_mode,
-            databases_included=databases_included,
+        return _download_and_report_verified_asset(
+            asset, tlo_home=tlo_home, latest_build=latest_build,
+            asset_name=asset_name, package_kind=package_kind, platform_key=platform_key,
         )
     except urllib.error.HTTPError as exc:
         return UpdateCheckResult(

@@ -1,6 +1,7 @@
 """Build 495 regressions for Add New Shows Search Path and standalone tlo-tag CLI defaults."""
+from tests._release_artifacts import release_history
+from tests import _release_artifacts as RA
 
-__version__ = "v497"
 
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
@@ -24,7 +25,7 @@ def _load_tag_cli():
 
 
 def test_build495_add_new_shows_gui_has_prefilled_search_path_and_folder_drop():
-    source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     start = source.index("class AddToInventoryWindow:")
     block = source[start:source.index("    def _current_main_checkbox_values", start)]
     assert 'self.search_path_var = tk.StringVar(value=os.path.join(self.config.TLOHome, "readyForXfer"))' in block
@@ -93,14 +94,11 @@ def test_build495_tlo_tag_explicit_corrupt_folder_policy_overrides_keep_default(
 def test_build495_documentation_records_new_search_path_and_tagger_contract():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v518.docx").paragraphs)
-    manual = (ROOT / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
     faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8")
-    assert "Current document version: v518 (TLO v1.7)." in req
     assert "Build 495: Add New Shows Search Path and explicit tlo-tag search folder" in req
     assert "pre-filled with the current TLOHome/readyForXfer path" in req
     assert "A search folder is required on every command-line run" in req
     assert "--corrupt-folders defaults to never" in req
-    assert "Version v1.7 Build 518" in manual
-    assert "Build 495: Add New Shows now has a Search Path textbox" in manual
+    assert "Build 495 - Add New Shows now has a Search Path textbox" in release_history()
     assert "requires an explicit search folder" in faq

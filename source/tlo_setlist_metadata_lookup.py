@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 import csv
 import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from tlo_constants import (
     AMBIGUOUS_CANADIAN_REGION_CODES, CANADIAN_REGION_ALIASES, CANADIAN_REGION_CODES,
@@ -17,7 +18,10 @@ from tlo_constants import (
     LOWERCASE_COMMON_STATE_CODES, MONTH_NAME_CASED_PATTERN, US_STATE_ALIASES, US_STATE_CODES,
 )
 from tlo_text_utils import (
-    MAX_TEXT_FULL_BYTES, compact_ws, normalized_compare_value, read_text_file_sample, safe_title,
+    MAX_TEXT_FULL_BYTES,
+    compact_ws,
+    read_text_file_sample,
+    safe_title,
 )
 
 

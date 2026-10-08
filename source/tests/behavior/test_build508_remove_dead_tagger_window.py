@@ -1,6 +1,5 @@
 """Build 508 regression coverage for removal of the unused TaggerWindow GUI."""
 
-__version__ = "v518"
 
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
@@ -13,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _load_gui():
-    spec = spec_from_file_location("tlo_ggi_build508", ROOT / "tlo-ggi.py")
+    spec = spec_from_file_location("tlo_main_build508", ROOT / "tlo-main.py")
     module = module_from_spec(spec)
     assert spec and spec.loader
     spec.loader.exec_module(module)
@@ -22,7 +21,7 @@ def _load_gui():
 
 def test_dead_tagger_window_and_scaffolding_are_removed():
     gui = _load_gui()
-    source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     assert not hasattr(gui, "TaggerWindow")
     assert "class TaggerWindow" not in source
     assert "active_tagger_window" not in source

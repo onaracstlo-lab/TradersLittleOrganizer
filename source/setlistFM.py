@@ -2,7 +2,8 @@
 """Compatibility CLI wrapper over the production setlist.fm lookup module."""
 from __future__ import annotations
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 import argparse
 from typing import Optional, List

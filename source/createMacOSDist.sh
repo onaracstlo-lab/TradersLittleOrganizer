@@ -12,7 +12,7 @@ Arguments:
   SOURCE_ROOT    Directory containing the TLO Python sources. Defaults to the
                  directory containing this script.
   DIST_ROOT      Output release tree. Defaults to:
-                 $HOME/tloDist-V1.6Build<BUNDLE_NUMBER>
+                 $HOME/tloDist-V<PUBLIC_VERSION>Build<BUNDLE_NUMBER>
 
 Environment variables:
   PYTHON_BIN                    Python executable to use. Default: python3
@@ -35,11 +35,19 @@ BUNDLE_NUMBER="$1"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 SOURCE_ROOT="${2:-$SCRIPT_DIR}"
-DIST_ROOT="${3:-$HOME/tloDist-V1.6Build${BUNDLE_NUMBER}}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 [[ -d "$SOURCE_ROOT" ]] || fail "SOURCE_ROOT does not exist: $SOURCE_ROOT"
 SOURCE_ROOT="$(cd -- "$SOURCE_ROOT" && pwd -P)"
+VERSION_FILE="${SOURCE_ROOT}/tlo_version.py"
+[[ -f "$VERSION_FILE" ]] || fail "Required version module not found: $VERSION_FILE"
+PUBLIC_VERSION="$(awk -F'"' '/^PUBLIC_VERSION[[:space:]]*=[[:space:]]*"[0-9]+(\.[0-9]+)*"[[:space:]]*$/ { print $2; exit }' "$VERSION_FILE")"
+[[ -n "$PUBLIC_VERSION" ]] || fail "Could not read PUBLIC_VERSION from $VERSION_FILE"
+SOURCE_BUNDLE_BUILD="$(awk '/^BUNDLE_BUILD[[:space:]]*=[[:space:]]*[0-9]+[[:space:]]*$/ { print $3; exit }' "$VERSION_FILE")"
+[[ -n "$SOURCE_BUNDLE_BUILD" ]] || fail "Could not read BUNDLE_BUILD from $VERSION_FILE"
+[[ "$BUNDLE_NUMBER" == "$SOURCE_BUNDLE_BUILD" ]] || fail "Bundle number mismatch: supplied $BUNDLE_NUMBER but tlo_version.BUNDLE_BUILD is $SOURCE_BUNDLE_BUILD."
+DIST_ROOT="${3:-$HOME/tloDist-V${PUBLIC_VERSION}Build${BUNDLE_NUMBER}}"
+
 mkdir -p -- "$DIST_ROOT"
 DIST_ROOT="$(cd -- "$DIST_ROOT" && pwd -P)"
 
@@ -47,10 +55,14 @@ TARGET_DIR="${DIST_ROOT}/apps/macOS"
 REPORT_DIR="${DIST_ROOT}/scan-reports"
 REPORT_PATH="${REPORT_DIR}/macos.json"
 SCAN_SCRIPT="${SOURCE_ROOT}/scan_release_artifacts.py"
+VERIFY_ENV_SCRIPT="${SOURCE_ROOT}/verify_build_environment.py"
+PREPARE_FFMPEG_SCRIPT="${SOURCE_ROOT}/prepare_ffmpeg.py"
+TOOL_RECEIPT="${REPORT_DIR}/macos-build-tool-versions.txt"
 
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || fail "Python executable not found: $PYTHON_BIN"
-"$PYTHON_BIN" -m PyInstaller --version >/dev/null 2>&1 || \
-    fail "PyInstaller is not installed for $PYTHON_BIN."
+[[ -f "$VERIFY_ENV_SCRIPT" ]] || fail "Required build-environment verifier not found: $VERIFY_ENV_SCRIPT"
+[[ -f "$PREPARE_FFMPEG_SCRIPT" ]] || fail "Required ffmpeg preparation utility not found: $PREPARE_FFMPEG_SCRIPT"
+"$PYTHON_BIN" "$VERIFY_ENV_SCRIPT" || fail "Pinned macOS build environment verification failed."
 [[ -f "$SCAN_SCRIPT" ]] || fail "Required scan utility not found: $SCAN_SCRIPT"
 
 if [[ -n "${TLO_MACOS_ENTITLEMENTS:-}" && ! -f "$TLO_MACOS_ENTITLEMENTS" ]]; then
@@ -77,7 +89,7 @@ find_script() {
     fail "Required source script not found: $name"
 }
 
-find_optional_icon() {
+find_required_icon() {
     local name="$1"
     local candidate
     for candidate in \
@@ -89,19 +101,15 @@ find_optional_icon() {
             return 0
         fi
     done
-    return 1
+    fail "Required macOS icon file not found: $name"
 }
 
-build_windowed_with_optional_icon() {
+build_windowed_with_icon() {
     local script_path="$1"
     local icon_path="$2"
     shift 2
 
-    if [[ -n "$icon_path" ]]; then
-        build_one "$script_path" yes --icon "$icon_path" "$@"
-    else
-        build_one "$script_path" yes "$@"
-    fi
+    build_one "$script_path" yes --icon "$icon_path" "$@"
 }
 
 rm -rf -- "$TARGET_DIR"
@@ -111,6 +119,18 @@ mkdir -p -- "$TARGET_DIR" "$REPORT_DIR"
 BUILD_ROOT="${DIST_ROOT}/.build-macOS"
 rm -rf -- "$BUILD_ROOT"
 mkdir -p -- "$BUILD_ROOT"
+
+FFMPEG_STAGE="${BUILD_ROOT}/tlo_ffmpeg_bin"
+FFMPEG_PREPARE_ARGS=(--platform macos --output-dir "$FFMPEG_STAGE" --cache-dir "${BUILD_ROOT}/ffmpeg-cache")
+case "${TLO_MACOS_TARGET_ARCH:-}" in
+    x86_64) FFMPEG_PREPARE_ARGS+=(--arch x64) ;;
+    arm64) FFMPEG_PREPARE_ARGS+=(--arch arm64) ;;
+    universal2) FFMPEG_PREPARE_ARGS+=(--arch universal2) ;;
+esac
+"$PYTHON_BIN" "$PREPARE_FFMPEG_SCRIPT" "${FFMPEG_PREPARE_ARGS[@]}" || fail "Pinned ffmpeg preparation failed."
+FFMPEG_BINARY="${FFMPEG_STAGE}/ffmpeg"
+[[ -f "$FFMPEG_BINARY" && -x "$FFMPEG_BINARY" ]] || fail "Prepared ffmpeg binary is missing: $FFMPEG_BINARY"
+FFMPEG_ADD_BINARY="${FFMPEG_BINARY}:tlo_ffmpeg_bin"
 
 cleanup() {
     rm -rf -- "$BUILD_ROOT"
@@ -175,56 +195,52 @@ build_one() {
     fi
 }
 
-INVENTORY_ICON=""
-SEARCH_ICON=""
-TAG_ICON=""
-if icon_candidate="$(find_optional_icon tlo-inventory-icon.icns)"; then
-    INVENTORY_ICON="$icon_candidate"
-fi
-if icon_candidate="$(find_optional_icon tlo-search-icon.icns)"; then
-    SEARCH_ICON="$icon_candidate"
-fi
-if icon_candidate="$(find_optional_icon tlo-tag-icon.icns)"; then
-    TAG_ICON="$icon_candidate"
-fi
+MAIN_ICON="$(find_required_icon tlo-main-icon.icns)"
+SEARCH_ICON="$(find_required_icon tlo-search-icon.icns)"
+TAG_ICON="$(find_required_icon tlo-tag-icon.icns)"
 
 build_one "$(find_script search-artist-db.py)" yes
-build_windowed_with_optional_icon "$(find_script tlo-gsi.py)" "$SEARCH_ICON"
-build_one "$(find_script tlo-gi.py)" no
+build_windowed_with_icon "$(find_script tlo-search.py)" "$SEARCH_ICON"
+build_one "$(find_script tlo-gi.py)" no \
+    --collect-all mutagen \
+    --add-binary "$FFMPEG_ADD_BINARY"
 build_one "$(find_script tlo-research.py)" no
 build_one "$(find_script tlo-reverse.py)" no
-build_windowed_with_optional_icon "$(find_script tlo-ggi.py)" "$INVENTORY_ICON" \
+build_windowed_with_icon "$(find_script tlo-main.py)" "$MAIN_ICON" \
     --collect-all mutagen \
-    --collect-all imageio_ffmpeg \
+    --add-binary "$FFMPEG_ADD_BINARY" \
     --collect-all tkinterdnd2
-if [[ -n "$TAG_ICON" ]]; then
-    build_one "$(find_script tlo-tag.py)" no \
-        --icon "$TAG_ICON" \
-        --collect-all mutagen \
-        --collect-all imageio_ffmpeg
-else
-    build_one "$(find_script tlo-tag.py)" no \
-        --collect-all mutagen \
-        --collect-all imageio_ffmpeg
-fi
+build_one "$(find_script tlo-tag.py)" no \
+    --icon "$TAG_ICON" \
+    --collect-all mutagen \
+    --add-binary "$FFMPEG_ADD_BINARY"
 
 build_one "$(find_script tlo-deleteDupes.py)" no \
-    --collect-all imageio_ffmpeg
+    --add-binary "$FFMPEG_ADD_BINARY"
+
+IMAGEIO_FFMPEG_EXE=/usr/bin/true TLO_PACKAGING_SMOKE_TEST=1 "${TARGET_DIR}/tlo-gi" || fail "Frozen tlo-gi packaging smoke test failed."
+
+{
+    "$PYTHON_BIN" --version
+    "$PYTHON_BIN" -m PyInstaller --version | sed 's/^/PyInstaller /'
+    "$FFMPEG_BINARY" -version | head -n 1
+    printf 'requirements-build.txt sha256 %s\n' "$(shasum -a 256 "${SOURCE_ROOT}/requirements-build.txt" | awk '{print $1}')"
+} > "$TOOL_RECEIPT"
 
 EXPECTED_EXECUTABLES=(
     search-artist-db
-    tlo-gsi
+    tlo-search
     tlo-gi
     tlo-research
     tlo-reverse
-    tlo-ggi
+    tlo-main
     tlo-tag
     tlo-deleteDupes
 )
 EXPECTED_APP_BUNDLES=(
     search-artist-db.app
-    tlo-gsi.app
-    tlo-ggi.app
+    tlo-search.app
+    tlo-main.app
 )
 
 for name in "${EXPECTED_EXECUTABLES[@]}"; do

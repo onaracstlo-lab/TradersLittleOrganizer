@@ -1,0 +1,17 @@
+TLO ffmpeg binary source
+==================================
+
+Version: FFmpeg 9.0.2
+Release date: 2026-09-18
+Binary provider: boul2gom/ffmpeg-builds release v9.0.2
+Source/release base: https://github.com/boul2gom/ffmpeg-builds/releases/tag/v9.0.2
+
+TLO source distributions do not contain the ffmpeg executable. prepare_ffmpeg.py
+fetches the exact platform asset named in its ASSETS table, verifies the pinned
+SHA-256 before extraction, safely extracts only ffmpeg[.exe], and validates
+`ffmpeg -version` before PyInstaller packaging. The source package never falls
+back to PATH, conda, IMAGEIO_FFMPEG_EXE, or imageio-ffmpeg.
+
+FFmpeg itself is available from https://ffmpeg.org/ and is distributed under
+its applicable upstream license terms. The binary provider's build scripts and
+release metadata identify the exact prebuilt release consumed by TLO.

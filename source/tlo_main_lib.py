@@ -1,13 +1,20 @@
 """Command-line inventory orchestration: startup checks, scan execution, postprocess, cleanup, and timing output."""
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
-import sys
 import time
 
 from console_output_lib import console_emit, console_print
 from logging_lib import delete_logs_for_tokens, setup_logging
-from tlo_runtime_control import clear_cancel_request, request_cancel_and_terminate_active_executor, terminate_all_children, apply_process_priority
+from tlo_runtime_control import (
+    clear_cancel_request,
+    request_cancel_and_terminate_active_executor,
+    terminate_all_children,
+    apply_process_priority,
+    acquire_inventory_lock,
+    release_inventory_lock,
+)
 from tlo_db_validation import validate_required_databases
 from tlo_options import apply_lookup_dependency
 from tlo_version import DISPLAY_VERSION
@@ -54,12 +61,14 @@ def run_inventory(config) -> int:
     start_time = time.monotonic()
     exit_code = 0
     clear_cancel_request()
-    apply_process_priority(config)
+    inventory_lock = None
     if config is not None:
         config.inventory_complete = False
         config.inventory_scanning_complete = False
         config.cancel_requested = False
     try:
+        inventory_lock = acquire_inventory_lock(getattr(config, "TLOHome", ""))
+        apply_process_priority(config)
         console_print(config, _startup_banner(config))
         _check_online_lookup_startup(config)
         setup_logging(config)
@@ -98,6 +107,7 @@ def run_inventory(config) -> int:
             else:
                 console_emit(f"ERROR: {exc}", error=True)
     finally:
+        release_inventory_lock(inventory_lock)
         elapsed_minutes = (time.monotonic() - start_time) / 60.0
         if config is None:
             console_emit(f"Elapsed time: {elapsed_minutes:.2f} minutes")

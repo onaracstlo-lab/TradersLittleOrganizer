@@ -6,7 +6,6 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v468"
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -16,7 +15,7 @@ def _source(name: str) -> str:
 
 
 def test_build463_main_window_uses_paths_label_without_changing_cli_option_name():
-    source = _source("tlo-ggi.py")
+    source = _source("tlo-main.py")
     build = source[source.index("    def _build(self):"):source.index("    def _enable_search_path_drag_drop", source.index("    def _build(self):"))]
     assert 'text="Path(s)"' in build
     assert 'text="Search Path"' not in build
@@ -26,7 +25,7 @@ def test_build463_main_window_uses_paths_label_without_changing_cli_option_name(
 
 
 def test_build463_single_line_checkbox_indicator_is_vertically_centered_with_its_label():
-    source = _source("tlo-ggi.py")
+    source = _source("tlo-main.py")
     start = source.index('style.layout(\n                "Main.Large.TCheckbutton"')
     end = source.index('style.layout(\n                "Main.Multiline.TCheckbutton"', start)
     single = source[start:end]
@@ -34,7 +33,7 @@ def test_build463_single_line_checkbox_indicator_is_vertically_centered_with_its
 
 
 def test_build463_wrapped_checkbox_labels_keep_first_line_alignment():
-    source = _source("tlo-ggi.py")
+    source = _source("tlo-main.py")
     start = source.index('style.layout(\n                "Main.Multiline.TCheckbutton"')
     end = source.index('        except tk.TclError:', start)
     wrapped = source[start:end]

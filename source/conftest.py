@@ -1,8 +1,8 @@
 """Suite-level CI display support for Tkinter behavior coverage."""
 
-__version__ = "v518"
 
 import atexit
+import importlib
 import os
 from pathlib import Path
 import shutil
@@ -10,10 +10,57 @@ import subprocess
 import sys
 import time
 
+import pytest
+
 
 _XVFB_PROCESS = None
 _XVFB_DISPLAY = ""
 _XVFB_FAILURE = ""
+
+
+_TKINTER_DEPENDENT_TEST_MODULES = {
+    "test_build432_bounded_traversal_and_io.py",
+    "test_build469_gui_tag_and_controls.py",
+    "test_build479_stabilization.py",
+    "test_build480_requirements_and_mp3.py",
+    "test_build483_setlistfm_upgrade_env.py",
+    "test_build497_delete_extra_tags_state.py",
+    "test_build499_linux_gui_startup.py",
+    "test_build501_review_remediation.py",
+    "test_build504_gui_state_and_upgrade_env.py",
+    "test_build506_review_remediation.py",
+    "test_build508_remove_dead_tagger_window.py",
+    "test_build512_main_gui_workers_copy_wildcards.py",
+    "test_build515_setlist_search_filename_alignment.py",
+    "test_build520_partial_date_search_filename.py",
+    "test_build521_behavior_security_tests.py",
+    "test_build524_closure_audit.py",
+    "test_build528_security_build_consistency.py",
+    "test_build530_verification_accuracy.py",
+}
+
+
+def _tkinter_is_available():
+    try:
+        importlib.import_module("tkinter")
+        return True
+    except (ImportError, ModuleNotFoundError):
+        return False
+
+
+_TKINTER_AVAILABLE = _tkinter_is_available()
+
+
+class _TkUnavailableModule(pytest.Module):
+    def collect(self):
+        pytest.skip("Tkinter is not installed; skipping Tk-dependent regression module.", allow_module_level=True)
+
+
+def pytest_pycollect_makemodule(module_path, parent):
+    """Skip known Tk-importing modules before Python imports them."""
+    if not _TKINTER_AVAILABLE and Path(str(module_path)).name in _TKINTER_DEPENDENT_TEST_MODULES:
+        return _TkUnavailableModule.from_parent(parent, path=module_path)
+    return None
 
 
 def _ci_enabled():

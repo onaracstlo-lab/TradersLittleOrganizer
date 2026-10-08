@@ -1,11 +1,13 @@
 """Text cleanup utilities for safe titles, ASCII normalization, comparison keys, and full-file reads."""
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 import codecs
 import os
 import re
 import unicodedata
 import zipfile
+import zlib
 from html import unescape
 
 from tlo_constants import US_STATE_CODES
@@ -443,7 +445,16 @@ def _read_text_content(
         return text
     except OSError:
         return ""
-    except (KeyError, zipfile.BadZipFile, RuntimeError):
+    except (
+        KeyError,
+        zipfile.BadZipFile,
+        zipfile.LargeZipFile,
+        RuntimeError,
+        zlib.error,
+        EOFError,
+        NotImplementedError,
+        ValueError,
+    ):
         return ""
 
     return ""

@@ -1,4 +1,5 @@
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
@@ -6,13 +7,20 @@ import os
 import sys
 import threading
 import time
+import json
+import socket
+from datetime import datetime, timezone
+from contextlib import contextmanager
+
+from tlo_locking import acquire_owned_lock, release_owned_lock
 
 _cancel_requested = threading.Event()
 _pause_requested = threading.Event()
 _lock = threading.RLock()
 _active_executor = None
 _active_pause_proxy = None
-_priority_applied = False
+_worker_priority_applied = False
+_windows_original_priority = None
 _throttle_state = threading.local()
 
 PERFORMANCE_MODES = {"gentle", "balanced", "fast", "extreme"}
@@ -253,6 +261,17 @@ def flush_standard_streams():
             debug_suppressed_exception(__name__, exc)
 
 
+def _windows_get_priority():
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetCurrentProcess()
+        value = int(kernel32.GetPriorityClass(handle) or 0)
+        return value or None
+    except Exception:
+        return None
+
+
 def _windows_set_priority(priority_class):
     try:
         import ctypes
@@ -264,33 +283,107 @@ def _windows_set_priority(priority_class):
 
 
 def apply_process_priority(config=None):
-    """Lower process priority in gentle/balanced modes where supported.
+    """Apply reversible parent-process priority behavior.
 
-    This is intentionally best-effort. If the OS refuses the request, inventory
-    continues and relies on max-workers plus traversal throttling.
+    Windows permits the GUI/CLI process priority class to be restored, so every
+    mode transition explicitly sets the appropriate class. POSIX niceness cannot
+    normally be raised back without privilege; the long-lived parent therefore
+    remains at normal priority and gentle/balanced niceness is applied only by
+    worker-process initialization.
     """
-    global _priority_applied
+    global _windows_original_priority
     mode = normalize_performance_mode(getattr(config, "performance_mode", "balanced"))
-    if mode in {"fast", "extreme"}:
+    if not sys.platform.startswith("win"):
         return False
 
-    if sys.platform.startswith("win"):
-        # Win32 priority classes.
-        IDLE_PRIORITY_CLASS = 0x00000040
-        BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
-        priority = IDLE_PRIORITY_CLASS if mode == "gentle" else BELOW_NORMAL_PRIORITY_CLASS
-        return _windows_set_priority(priority)
+    IDLE_PRIORITY_CLASS = 0x00000040
+    BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
+    NORMAL_PRIORITY_CLASS = 0x00000020
+    if _windows_original_priority is None:
+        _windows_original_priority = _windows_get_priority() or NORMAL_PRIORITY_CLASS
 
-    # On POSIX, higher nice values mean lower priority. Do this once per process.
-    if _priority_applied:
+    if mode == "gentle":
+        target = IDLE_PRIORITY_CLASS
+    elif mode == "balanced":
+        target = BELOW_NORMAL_PRIORITY_CLASS
+    else:
+        target = _windows_original_priority or NORMAL_PRIORITY_CLASS
+    return _windows_set_priority(target)
+
+
+def apply_worker_process_priority(mode="balanced"):
+    """Lower only worker-process priority for gentle/balanced POSIX work."""
+    global _worker_priority_applied
+    mode = normalize_performance_mode(mode)
+    if sys.platform.startswith("win"):
+        # Windows workers inherit the parent's class; make the intended mode
+        # explicit in case the start method/platform does not preserve it.
+        class _Config:
+            performance_mode = mode
+        return apply_process_priority(_Config())
+    if mode in {"fast", "extreme"} or _worker_priority_applied:
         return False
     increment = 10 if mode == "gentle" else 5
     try:
         os.nice(increment)
-        _priority_applied = True
+        _worker_priority_applied = True
         return True
     except Exception:
         return False
+
+
+def _inventory_lock_path(tlo_home):
+    return os.path.join(os.path.abspath(str(tlo_home or "")), "logs", ".inventory-run.lock")
+
+
+def acquire_inventory_lock(tlo_home):
+    """Enforce one inventory-mutating run per TLOHome."""
+    raw_home = str(tlo_home or "").strip()
+    if not raw_home:
+        raise RuntimeError("TLOHome is required before inventory can start.")
+    home = os.path.abspath(raw_home)
+    path_name = _inventory_lock_path(home)
+    payload = {
+        "pid": os.getpid(),
+        "hostname": socket.gethostname(),
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "operation": "inventory",
+    }
+    try:
+        acquired = acquire_owned_lock(path_name, payload)
+    except OSError as exc:
+        raise RuntimeError(f"Cannot create inventory lock under TLOHome: {exc}") from exc
+    if not acquired:
+        owner = ""
+        try:
+            with open(path_name, "r", encoding="utf-8") as infile:
+                data = json.load(infile)
+            if isinstance(data, dict):
+                host = str(data.get("hostname", "") or "")
+                pid = str(data.get("pid", "") or "")
+                owner = f" (owner: {host or 'unknown host'} pid {pid or 'unknown'})"
+        except (OSError, ValueError):
+            pass
+        raise RuntimeError(
+            "Another inventory-mutating TLO run is already active for this TLOHome" + owner + ". "
+            "Search and other read-only operations may still run."
+        )
+    return path_name
+
+
+def release_inventory_lock(path_name):
+    if path_name:
+        release_owned_lock(path_name)
+
+
+@contextmanager
+def inventory_operation_lock(tlo_home):
+    """Context manager for inventory-output mutating GUI operations."""
+    path_name = acquire_inventory_lock(tlo_home)
+    try:
+        yield path_name
+    finally:
+        release_inventory_lock(path_name)
 
 
 def throttle_point(config=None, units=1):

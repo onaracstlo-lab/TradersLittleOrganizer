@@ -1,11 +1,11 @@
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 import argparse
 import sys
 import os
 import uuid
 from dataclasses import dataclass, field
 
-from console_output_lib import console_emit
 from tlo_options import (
     add_options_to_parser,
     apply_lookup_dependency,
@@ -14,9 +14,7 @@ from tlo_options import (
     parse_compliant_artist_mode,
     parse_corrupt_file_policy,
     parse_corrupt_folder_policy,
-    parse_max_workers,
     parse_percent_0_100,
-    parse_performance_mode,
     validate_compliant_rename_exclusivity,
     validate_corruption_policy,
     validate_setlistfm_upgrade_environment,
@@ -26,7 +24,6 @@ from tlo_path_inputs import (
     normalize_platform_input_path,
     resolve_current_storage_volume,
     resolve_tlo_home,
-    tlo_home_type,
 )
 
 
@@ -55,6 +52,7 @@ class Config:
     compliant_artist_mode: str = "master"
     as_is_artist_name: bool = False
     proper_grammar: bool = False
+    deep_audio_check: bool = False
     tag_during_inventory: bool = False
     tag_copy_during_inventory: bool = False
     tag_copy_destination: str = ""
@@ -172,10 +170,24 @@ def _validate_tag_copy_values(values: dict, parser=None) -> None:
         values["tag_copy_and_delete_path"] = os.path.normpath(normalized)
 
 
+class TLOArgumentDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
+    """Show useful defaults without misleading empty/negative-option defaults."""
+
+    def _get_help_string(self, action):
+        help_text = action.help
+        if help_text is argparse.SUPPRESS or "%(default)" in str(help_text):
+            return help_text
+        if action.default in (None, "", argparse.SUPPRESS):
+            return help_text
+        if isinstance(action, argparse._StoreFalseAction):
+            return help_text
+        return super()._get_help_string(action)
+
+
 def build_inventory_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Inventory, identify, organize, and optionally tag live-music show folders.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=TLOArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--debug", nargs="?", const=True, type=parse_bool, default=False, metavar="BOOL", help="Enable debug output. With no value, enables debug output; also accepts true/false, yes/no, y/n, 1/0. This is the only toggle that accepts an optional BOOL for backwards compatibility.")
     parser.add_argument("--TLOHome", metavar="DIR", help="Fully qualified existing writable directory path for TLOHome. Defaults from the TLOHome environment variable when present.")
@@ -187,6 +199,7 @@ def build_inventory_parser() -> argparse.ArgumentParser:
         "compliant_artist_mode",
         "as_is_artist_name",
         "proper_grammar",
+        "deep_audio_check",
         "tag_during_inventory",
         "tag_copy_during_inventory",
         "tag_copy_destination",
@@ -206,9 +219,9 @@ def build_inventory_parser() -> argparse.ArgumentParser:
         "max_workers",
         "current_storage_volume",
     ))
-    parser.add_argument("-$slam", "--$slam", dest="search_path_slam_override", metavar="STRING", help="Artist override paired with --search-path. Invalid by itself.")
-    parser.add_argument("--$copy", dest="search_path_copy_override", metavar="DIR", help="Per-search-path Tag Copy destination. Only valid with --search-path; mutually exclusive with --$copy-delete.")
-    parser.add_argument("--$copy-delete", dest="search_path_copy_delete_override", metavar="DIR", help="Per-search-path Tag Copy and Delete destination. Only valid with --search-path; mutually exclusive with --$copy.")
+    parser.add_argument("--/slam", dest="search_path_slam_override", metavar="STRING", help="Artist override paired with --search-path. Invalid by itself.")
+    parser.add_argument("--/copy", dest="search_path_copy_override", metavar="DIR", help="Per-search-path Tag Copy destination. Only valid with --search-path; mutually exclusive with --/copy-delete.")
+    parser.add_argument("--/copy-delete", dest="search_path_copy_delete_override", metavar="DIR", help="Per-search-path Tag Copy and Delete destination. Only valid with --search-path; mutually exclusive with --/copy.")
     return parser
 
 
@@ -232,13 +245,13 @@ def parse_command_line():
         parser.error("--search-path is required for inventory.")
 
     if getattr(parsed, "search_path_slam_override", None) and not getattr(parsed, "search_path_override", ""):
-        parser.error("--$slam is only valid when --search-path is also provided.")
+        parser.error("--/slam is only valid when --search-path is also provided.")
     if getattr(parsed, "search_path_copy_override", None) and not getattr(parsed, "search_path_override", ""):
-        parser.error("--$copy is only valid when --search-path is also provided.")
+        parser.error("--/copy is only valid when --search-path is also provided.")
     if getattr(parsed, "search_path_copy_delete_override", None) and not getattr(parsed, "search_path_override", ""):
-        parser.error("--$copy-delete is only valid when --search-path is also provided.")
+        parser.error("--/copy-delete is only valid when --search-path is also provided.")
     if getattr(parsed, "search_path_copy_override", None) and getattr(parsed, "search_path_copy_delete_override", None):
-        parser.error("--$copy and --$copy-delete are mutually exclusive for --search-path.")
+        parser.error("--/copy and --/copy-delete are mutually exclusive for --search-path.")
 
     try:
         parsed.TLOHome = resolve_tlo_home(
@@ -283,6 +296,7 @@ def build_config():
         compliant_artist_mode=values.get("compliant_artist_mode", "master") or "master",
         as_is_artist_name=bool(values.get("as_is_artist_name", False)),
         proper_grammar=bool(values.get("proper_grammar", False)),
+        deep_audio_check=bool(values.get("deep_audio_check", False)),
         tag_during_inventory=bool(values.get("tag_during_inventory", False)),
         tag_copy_during_inventory=bool(values.get("tag_copy_during_inventory", False)),
         tag_copy_destination=(values.get("tag_copy_destination") or ""),

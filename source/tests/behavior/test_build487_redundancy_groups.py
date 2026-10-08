@@ -1,9 +1,11 @@
 """Build 487 ordered redundancy groups and Copy Request source substitution."""
+from tests._release_artifacts import release_history
+from tests import _release_artifacts as RA
 
-__version__ = "v497"
 
 import os
 from pathlib import Path
+ROOT = Path(__file__).resolve().parents[2]
 from types import SimpleNamespace
 
 import pytest
@@ -114,7 +116,7 @@ def test_build487_evaluation_groups_waiting_opportunity_once(tmp_path, monkeypat
 
 
 def test_build487_hamburger_has_redundancy_groups_and_no_main_button():
-    source = Path("tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     assert 'label="Redundancy Groups"' in source
     assert '_open_redundancy_groups' in source
     assert 'text="Redundancy Groups"' not in source
@@ -124,15 +126,14 @@ def test_build487_hamburger_has_redundancy_groups_and_no_main_button():
 
 def test_build487_documentation_covers_ordered_redundancy_and_unquoted_paths():
     from docx import Document
-    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v518.docx").paragraphs)
-    manual = Path("TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
-    faq = Path("TLO-FAQ.txt").read_text(encoding="utf-8")
+    req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
+    faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8")
     assert "Build 487: ordered redundancy groups for equivalent source volumes" in req
     assert "Declaration order is source precedence" in req
     assert "Paths with spaces do not require quotes" in req
-    assert "Juke3 = Back-up3 = Back-up3a" in manual
-    assert "leftmost member always has the highest precedence" in manual
-    assert "Paths with spaces do not require quotes" in manual
+    assert 'Juke3 = Back-up3 = Back-up3a' in release_history()
+    assert 'leftmost member always has the highest precedence' in release_history()
+    assert 'Paths with spaces do not require quotes' in release_history()
     assert "Redundancy Groups" in faq and "Only one copy needs to be inventoried" in faq
 
 

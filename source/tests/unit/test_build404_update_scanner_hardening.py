@@ -1,8 +1,6 @@
 """Build 404 updater and scanner hardening regressions."""
-__version__ = "v468"
 
 import hashlib
-import importlib.util
 from pathlib import Path
 import urllib.error
 import urllib.request

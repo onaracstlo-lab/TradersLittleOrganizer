@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Standalone TLO Research console application."""
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 import argparse
 import sys

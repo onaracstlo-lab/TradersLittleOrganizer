@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 from dataclasses import dataclass
 import json
@@ -20,6 +21,12 @@ from tlo_file_listing import scandir_matching_files
 # years remain valid Research dates even though Inventory does not generally
 # treat a bare year as a performance-date match.
 _STANDALONE_YEAR_RE = re.compile(r"^(?:19|20)\d{2}$", re.IGNORECASE)
+# Build 552: Research is interactive input, not an unbounded text parser. Keep
+# the accepted query and trailing date-expression windows explicit so repeated
+# month tokens cannot trigger quadratic suffix re-parsing.
+MAX_RESEARCH_QUERY_CHARS = 2048
+MAX_RESEARCH_DATE_SUFFIX_CHARS = 256
+_WHITESPACE_RE = re.compile(r"\s+")
 
 
 def _exact_date_normalizations(value: str) -> tuple[str, ...]:
@@ -52,13 +59,21 @@ def _exact_date_normalizations(value: str) -> tuple[str, ...]:
 
 
 def _split_artist_trailing_date(raw: str) -> tuple[str, tuple[str, ...]]:
-    # Try every whitespace boundary from left to right. The first exact date
-    # suffix is the longest date expression, which correctly handles inputs such
-    # as "Grateful Dead April 14, 2001" rather than misclassifying only "2001".
-    for match in re.finditer(r"\s+", raw):
-        artist = raw[: match.start()].strip()
-        suffix = raw[match.end() :].strip()
-        if not artist or not suffix:
+    # Scan only whitespace boundaries capable of producing a bounded trailing
+    # date expression. Inside that suffix window, retain the historical
+    # left-to-right rule so the longest supported date wins (for example,
+    # "April 14, 2001" before just "2001").
+    value = str(raw or "")
+    if not value:
+        return "", ()
+    floor = max(0, len(value) - MAX_RESEARCH_DATE_SUFFIX_CHARS)
+    scan_start = max(0, floor - 1)
+    for match in _WHITESPACE_RE.finditer(value, scan_start):
+        if match.end() < floor:
+            continue
+        artist = value[: match.start()].strip()
+        suffix = value[match.end() :].strip()
+        if not artist or not suffix or len(suffix) > MAX_RESEARCH_DATE_SUFFIX_CHARS:
             continue
         candidates = _exact_date_normalizations(suffix)
         if candidates:
@@ -178,6 +193,10 @@ def parse_research_query(value: str) -> ResearchQuery:
     raw = " ".join(str(value or "").strip().split())
     if not raw:
         raise ValueError("Research input must not be empty.")
+    if len(raw) > MAX_RESEARCH_QUERY_CHARS:
+        raise ValueError(
+            f"Research input is too long; maximum is {MAX_RESEARCH_QUERY_CHARS} characters."
+        )
 
     date_candidates = _exact_date_normalizations(raw)
     if date_candidates:

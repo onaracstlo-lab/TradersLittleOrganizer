@@ -1,9 +1,7 @@
 """Build 405 cancellation/log-token and CI display regressions."""
 
-__version__ = "v468"
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -36,7 +34,7 @@ def test_delete_logs_accepts_current_alphanumeric_tokens(tmp_path):
 
 
 def test_gui_cleanup_uses_only_newly_allocated_tokens():
-    source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     start = source.index("    def _cleanup_active_logs(self):")
     end = source.index("\n    def _run_on_gui_thread", start)
     body = source[start:end]

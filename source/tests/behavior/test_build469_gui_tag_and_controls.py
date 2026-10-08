@@ -1,6 +1,5 @@
 """Build 469 regressions for main-window Tag and related control semantics."""
 
-__version__ = "v472"
 
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
@@ -13,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _load_gui():
-    spec = spec_from_file_location("tlo_ggi_build469", ROOT / "tlo-ggi.py")
+    spec = spec_from_file_location("tlo_main_build469", ROOT / "tlo-main.py")
     module = module_from_spec(spec)
     assert spec and spec.loader
     spec.loader.exec_module(module)
@@ -21,7 +20,7 @@ def _load_gui():
 
 
 def test_keep_report_disables_folder_removal_and_threshold_and_forces_never():
-    source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     assert 'folder_combo.configure(state=("disabled" if keep_report else "readonly"))' in source
     assert 'if keep_report:' in source
     assert 'self.vars["corrupt_folders"].set(CORRUPT_FOLDER_GUI_VALUES["never"])' in source
@@ -29,7 +28,7 @@ def test_keep_report_disables_folder_removal_and_threshold_and_forces_never():
 
 
 def test_issues_window_horizontal_scroll_has_nonstretch_overflow_columns():
-    source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     assert 'self.window.geometry("1050x520")' in source
     assert 'self.tree.column("message", width=720, minwidth=520, stretch=False)' in source
     assert 'self.tree.column("path", width=600, minwidth=360, stretch=False)' in source
@@ -45,7 +44,7 @@ def test_successful_parser_decisions_are_info_not_tagging_warnings():
 
 
 def test_gui_tag_uses_master_paths_and_does_not_open_tagger_window():
-    source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     start = source.index("    def _start_tagging_from_main(self):")
     end = source.index("    def _open_add_to_inventory(self):", start)
     method = source[start:end]
@@ -54,7 +53,7 @@ def test_gui_tag_uses_master_paths_and_does_not_open_tagger_window():
     assert "config = self._build_config()" in method
     assert "jobs = self._main_tag_jobs(config)" in method
     assert "run_tagger_jobs(config, jobs, emit=self.queue.put)" in method
-    assert "Select Tag in Place, Tag Copy, or Tag Copy/Delete Original" in method
+    assert "Select Tag In Place, Tag Copy, or Tag Copy/Delete Original" in method
 
 
 def test_setlistfm_api_key_presence_is_detected_without_exposing_key(monkeypatch):
@@ -67,7 +66,7 @@ def test_setlistfm_api_key_presence_is_detected_without_exposing_key(monkeypatch
 
 
 def test_gui_gates_normal_and_upgrade_setlistfm_boxes_separately():
-    source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     assert "lookup_available = api_key_available()" in source
     assert "upgrade_available = lookup_available and upgrade_api_key_available()" in source
     assert '"setlistfm_lookup": lookup_available' in source

@@ -33,7 +33,7 @@ class _Widget:
 
 
 def _load_gui():
-    spec = spec_from_file_location("tlo_ggi_build483", ROOT / "tlo-ggi.py")
+    spec = spec_from_file_location("tlo_main_build483", ROOT / "tlo-main.py")
     module = module_from_spec(spec)
     assert spec and spec.loader
     spec.loader.exec_module(module)

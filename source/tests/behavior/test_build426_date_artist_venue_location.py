@@ -1,4 +1,5 @@
 """Build 427 regressions for guarded Date Artist Venue Location paths."""
+from tests import _release_artifacts as RA
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,7 +11,6 @@ import tlo_phase23_v2 as P
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v468"
 
 
 def _matcher(*, genesis_collision=False):
@@ -166,17 +166,15 @@ def test_build426_requirements_and_manual_document_rule():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v518.docx")
+    requirements = Document(root / RA.REQUIREMENTS_FILENAME)
     requirements_text = "\n".join(paragraph.text for paragraph in requirements.paragraphs)
-    manual_text = (root / "TLO_Inventory_User_Manual_v518.rtf").read_text(
+    manual_text = (root / RA.MANUAL_FILENAME).read_text(
         encoding="utf-8", errors="ignore"
     )
 
-    assert "Current document version: v518 (TLO v1.7)." in requirements_text
     assert "Date Artist Venue Location" in requirements_text
     assert "1997-04-05 Genesis Old Pub London England" in requirements_text
     assert "a venue must remain after removing the artist" in requirements_text.lower()
-    assert "Version v1.7 Build 518" in manual_text
     assert "Date Artist Venue Location" in manual_text
     assert "1997-04-05 Genesis Old Pub London England" in manual_text
     assert "a venue must remain after removing the artist" in manual_text.lower()

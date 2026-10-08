@@ -10,7 +10,8 @@ import hashlib
 import json
 from typing import Any
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 # Replaced by Run-TLO-GitHub-Build.ps1 from a locally generated public-key JSON.
 # Empty values deliberately fail closed: unsigned/unpinned updates are never accepted.
@@ -19,6 +20,7 @@ PINNED_UPDATE_SIGNING_RSA_N_B64 = ""
 PINNED_UPDATE_SIGNING_RSA_E_B64 = ""
 
 _SHA256_DIGESTINFO_PREFIX = bytes.fromhex("3031300d060960864801650304020105000420")
+MIN_RSA_MODULUS_BITS = 3072
 
 
 def pinned_key_configured() -> bool:
@@ -42,10 +44,15 @@ def verify_metadata_signature(metadata: dict[str, Any], signature_b64: str) -> b
         return False
     if n <= 0 or e <= 1:
         return False
+    if n.bit_length() < MIN_RSA_MODULUS_BITS:
+        return False
     k = (n.bit_length() + 7) // 8
     if len(signature) != k:
         return False
-    encoded = pow(int.from_bytes(signature, "big"), e, n).to_bytes(k, "big")
+    signature_value = int.from_bytes(signature, "big")
+    if signature_value >= n:
+        return False
+    encoded = pow(signature_value, e, n).to_bytes(k, "big")
     digest_info = _SHA256_DIGESTINFO_PREFIX + hashlib.sha256(canonical_metadata_bytes(metadata)).digest()
     padding_len = k - len(digest_info) - 3
     if padding_len < 8:

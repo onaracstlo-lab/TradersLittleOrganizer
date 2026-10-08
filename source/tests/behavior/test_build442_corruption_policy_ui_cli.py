@@ -12,7 +12,6 @@ import tlo_options as O
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v468"
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -164,7 +163,7 @@ def test_build442_folder_failure_does_not_override_keep_file_policy(monkeypatch,
 
 
 def test_build442_gui_groups_corruption_controls_and_disables_threshold_when_unused():
-    source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     assert 'ttk.LabelFrame(frm, text="Corruption Handling"' in source
     assert 'text="Corrupt files"' in source
     assert 'text="Folder removal"' in source

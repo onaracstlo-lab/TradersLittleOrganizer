@@ -2,10 +2,26 @@
 
 from __future__ import annotations
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 import tkinter as tk
 from tkinter import ttk
+
+
+def schedule_tk_after(widget, delay_ms: int, callback) -> bool:
+    """Schedule one Tk callback unless the Tcl interpreter is already shutting down.
+
+    Worker threads can finish after the main loop has exited.  Threaded Tk builds
+    report that race either as ``TclError`` or ``RuntimeError("main thread is not
+    in main loop")``.  Treat both as an ordinary closed-window condition instead
+    of allowing a daemon-thread traceback during application shutdown.
+    """
+    try:
+        widget.after(delay_ms, callback)
+    except (tk.TclError, RuntimeError):
+        return False
+    return True
 
 
 def configure_centered_ttk_button_text(style: ttk.Style) -> None:

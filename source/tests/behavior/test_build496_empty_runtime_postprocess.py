@@ -1,6 +1,7 @@
 """Build 496 regressions for empty current-run metadata during postprocess."""
+from tests._release_artifacts import release_history
+from tests import _release_artifacts as RA
 
-__version__ = "v497"
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -118,11 +119,8 @@ def test_build496_log_fallback_still_works_when_runtime_records_are_not_ready(tm
 def test_build496_documentation_records_empty_runtime_postprocess_fix():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v518.docx").paragraphs)
-    manual = (ROOT / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
-    assert "Current document version: v518 (TLO v1.7)." in req
+    req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
     assert "Build 496: Empty current-run metadata must not reread reused historical logs" in req
     assert "that in-memory list is authoritative even when it is empty" in req
-    assert "Version v1.7 Build 518" in manual
-    assert "does not reread old metadata from that reused token" in manual
-    assert "duplicate bootlist rows" in req or "duplicate existing bootlist rows" in manual
+    assert 'does not reread old metadata from that reused token' in release_history()
+    assert "duplicate bootlist rows" in req or 'duplicate existing bootlist rows' in release_history()

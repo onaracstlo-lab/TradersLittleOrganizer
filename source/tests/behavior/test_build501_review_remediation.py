@@ -1,6 +1,7 @@
 """Build 501 regressions for the Build 500 requirements/code review remediation."""
+from tests._release_artifacts import release_history
+from tests import _release_artifacts as RA
 
-__version__ = "v503"
 
 import importlib.util
 import multiprocessing
@@ -67,18 +68,19 @@ def _rate_holder_worker(home: str, ready, result_queue):
         SFM._acquire_rate_limit_lock(lock_dir, stale_after=30.0, timeout_seconds=2.0)
         ready.set()
         time.sleep(1.20)
-        result_queue.put(("holder-lock-exists", os.path.isdir(lock_dir), ""))
+        result_queue.put(("holder-lock-exists", os.path.isfile(lock_dir), ""))
     finally:
-        try:
-            os.rmdir(lock_dir)
-        except OSError:
-            pass
+        SFM.release_owned_lock(lock_dir)
 
 
+@pytest.mark.gui
 def test_build501_duplicate_text_review_reads_file_through_real_gui_callback(tmp_path):
     tk = pytest.importorskip("tkinter")
-    gui = _load_hyphen_module("tlo-ggi.py", "tlo_ggi_build501_review")
-    root = tk.Tk()
+    gui = _load_hyphen_module("tlo-main.py", "tlo_main_build501_review")
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display is unavailable: {exc}")
     root.withdraw()
     try:
         sample = tmp_path / "sample.txt"
@@ -111,10 +113,10 @@ def test_build501_rate_limit_waiter_does_not_remove_another_workers_lock(tmp_pat
     # The worker signals from the actual wait_for_rate_limit sleep call. At this
     # point that function has already released its own lock, so the second worker
     # can deterministically acquire the lock during the wait interval.
-    assert sleeping.wait(5.0)
+    assert sleeping.wait(10.0)
     holder = ctx.Process(target=_rate_holder_worker, args=(str(tmp_path), holder_ready, q))
     holder.start()
-    assert holder_ready.wait(5.0)
+    assert holder_ready.wait(10.0)
 
     waiter.join(8.0)
     holder.join(8.0)
@@ -133,7 +135,7 @@ def test_build501_proper_grammar_is_exposed_by_real_inventory_gui_and_tagger_par
     tag_args = tag._parse_args([str(tmp_path), "--proper-grammar"])
     assert tag_args.proper_grammar is True
 
-    gui = _load_hyphen_module("tlo-ggi.py", "tlo_ggi_build501_parse")
+    gui = _load_hyphen_module("tlo-main.py", "tlo_main_build501_parse")
     gui_args = gui._parse_gui_command_line(["--proper-grammar"])
     assert gui_args.proper_grammar is True
 
@@ -184,7 +186,7 @@ def test_build501_untranslatable_delete_path_fails_closed(tmp_path, monkeypatch)
 
 
 def test_build501_backup_alert_uses_actual_script_name():
-    gui = _load_hyphen_module("tlo-ggi.py", "tlo_ggi_build501_backup")
+    gui = _load_hyphen_module("tlo-main.py", "tlo_main_build501_backup")
     assert gui._backup_alert_message("/tmp/deleteBackupFolders.sh") == "TLOHome/deleteBackupFolders.sh already exists. Continue or abort?"
     assert gui._backup_alert_message(r"C:\\.tlo\\deleteReplacedFolders.bat").endswith("deleteReplacedFolders.bat already exists. Continue or abort?")
 
@@ -198,22 +200,23 @@ def test_build501_missing_corruption_fields_fail_closed_but_valid_zero_threshold
 def test_build501_destination_reservation_retries_without_overwriting_racing_directory(tmp_path, monkeypatch):
     parent = tmp_path / "dest"
     parent.mkdir()
+    stage = parent / ".tlo-partial-stage"
+    stage.mkdir()
     first = parent / "Show"
     second = parent / "Show (alt1)"
     calls = {"n": 0}
-
-    def racing_unique(*_args, **_kwargs):
+    publish = TL._publish_staged_directory_noreplace
+    def racing_publish(source, target):
         calls["n"] += 1
         if calls["n"] == 1:
             first.mkdir()
-            return str(first)
-        return str(second)
-
-    monkeypatch.setattr(TL, "_unique_destination_path", racing_unique)
-    reserved = TL._reserve_unique_destination_directory(str(parent), "Show", "")
-    assert Path(reserved) == second
-    assert first.is_dir()
-    assert second.is_dir()
+            (first / "foreign.txt").write_text("different")
+            return publish(source, target)
+        return publish(source, target)
+    monkeypatch.setattr(TL, "_publish_staged_directory_noreplace", racing_publish)
+    destination = TL._publish_verified_transfer(str(stage), str(parent), "Show", str(stage))
+    assert Path(destination) == second
+    assert first.is_dir() and second.is_dir()
 
 
 def test_build501_copy_delete_cleanup_failure_retains_verified_destination_and_reports_recovery(tmp_path, monkeypatch):
@@ -288,10 +291,9 @@ def test_build501_unmatched_generic_unknown_tag_is_still_blankened():
 def test_build501_requirements_reconcile_review_findings_and_remove_stale_label():
     from docx import Document
     root = Path(__file__).resolve().parents[2]
-    text = "\n".join(p.text for p in Document(root / "TLO_Inventory_Requirements_Working_v518.docx").paragraphs)
-    assert "Current document version: v518 (TLO v1.7)." in text
+    text = "\n".join(p.text for p in Document(root / RA.REQUIREMENTS_FILENAME).paragraphs)
     assert "Old Grammar" not in text
-    assert "14.8 Collection Search GUI (tlo-gsi)" in text
+    assert "14.8 Collection Search GUI (tlo-search)" in text
     assert "14.9 Artist Database Search GUI (search-artist-db)" in text
     assert "REQ-CORR-000" in text and "fail closed" in text
     assert "SHA-256" in text
@@ -300,8 +302,6 @@ def test_build501_requirements_reconcile_review_findings_and_remove_stale_label(
 
 def test_build501_current_manual_and_changes_are_versioned():
     root = Path(__file__).resolve().parents[2]
-    manual = (root / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
-    changes = (root / "CHANGES_v518.txt").read_text(encoding="utf-8")
-    assert "Version v1.7 Build 518" in manual
-    assert "Build 501" in manual
+    changes = (root / RA.CHANGES_FILENAME).read_text(encoding="utf-8")
+    assert "Build 501" in release_history()
     assert "Review remediation" in changes

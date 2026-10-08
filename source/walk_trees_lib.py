@@ -1,4 +1,5 @@
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 from tlo_diagnostics import debug_suppressed_exception
 import multiprocessing
 import os
@@ -19,6 +20,7 @@ from tlo_runtime_control import (
     register_active_pause_proxy,
     unregister_active_pause_proxy,
     normalize_performance_mode,
+    apply_worker_process_priority,
 )
 
 
@@ -287,7 +289,11 @@ def _run_parallel_paths(config, volume_groups, worker_count):
         register_active_pause_proxy(pause_proxy)
         snapshot = _config_snapshot(config, force_silent=True)
 
-        with ProcessPoolExecutor(max_workers=worker_count) as executor:
+        with ProcessPoolExecutor(
+            max_workers=worker_count,
+            initializer=apply_worker_process_priority,
+            initargs=(getattr(config, "performance_mode", "balanced"),),
+        ) as executor:
             register_active_executor(executor)
             try:
                 future_map = {}

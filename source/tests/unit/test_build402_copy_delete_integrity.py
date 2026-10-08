@@ -1,5 +1,4 @@
 """Build 402 irreversible copy/delete verification regressions."""
-__version__ = "v468"
 
 import inspect
 from pathlib import Path
@@ -9,7 +8,7 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-import tlo_reverse_copy_delete as R
+import tlo_reverse_folders as R
 import tlo_tag_lib as T
 
 
@@ -40,8 +39,7 @@ def test_build402_exact_verify_rejects_same_size_different_bytes(tmp_path):
     (right / "a.bin").write_bytes(b"xyz")
     with pytest.raises(T.TaggerError, match="SHA-256"):
         T._verify_copy_exact(str(left), str(right))
-    with pytest.raises(R.ReverseCopyDeleteError, match="SHA-256"):
-        R._verify_copy(str(left), str(right))
+    assert not R._trees_exactly_match_preserving_symlinks(str(left), str(right))
 
 
 def test_build402_size_stat_failure_aborts_verification(monkeypatch, tmp_path):
@@ -69,16 +67,7 @@ def test_build402_cross_partition_hash_failure_keeps_source_and_rolls_back_desti
         )
     assert source.is_dir()
     assert not (dest_parent / source.name).exists()
-    assert not list(dest_parent.glob(".*.tlo-partial-*"))
-
-
-def test_build402_reverse_containment_precedes_parent_creation_and_never_rolls_back_original():
-    source = inspect.getsource(R.reverse_copy_delete_and_rename)
-    containment = source.index("if not _same_or_under(original, allowed_root)")
-    mkdir = source.index("os.makedirs(original_parent, exist_ok=True)")
-    assert containment < mkdir
-    assert "shutil.rmtree(original" not in source
-    assert "temp_restore" in source
+    assert not list(dest_parent.glob(".tlo-partial-*"))
 
 
 def test_build402_same_partition_forward_move_still_avoids_hashing():

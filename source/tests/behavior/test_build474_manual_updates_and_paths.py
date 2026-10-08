@@ -22,7 +22,7 @@ def test_build476_path_field_uses_semicolon_separated_tobeinventoried_grammar(tm
     two = _music_dir(tmp_path / "two")
     dest = tmp_path / "dest"
     dest.mkdir()
-    parsed = IL.parse_search_path_input(f'{one} --$slam "Artist, One";{two} --$copy {dest}')
+    parsed = IL.parse_search_path_input(f'{one} --/slam "Artist, One";{two} --/copy {dest}')
     assert parsed[0][1] == str(one)
     assert parsed[0][2] == "Artist, One"
     assert parsed[1][1] == str(two)
@@ -60,7 +60,8 @@ def test_build474_folder_save_renames_in_place_replaces_bootlist_and_setlist(tmp
     original = _music_dir(tmp_path / "library" / "Old Folder")
     old_setlist = setlists / "OldShow.txt"
     old_setlist.write_text("old", encoding="utf-8")
-    MU.write_bootlist(str(tlohome), [{"Show": "Old Show", "VolumePath": BP.format_volume_path("", str(original))}])
+    monkeypatch.setattr(MU, "os_volume_label_for_path", lambda _p: "TestVolume")
+    MU.write_bootlist(str(tlohome), [{"Show": "Old Show", "VolumePath": BP.format_volume_path("TestVolume", str(original))}])
 
     monkeypatch.setattr(MU, "identify_folder_dict", lambda config, folder: {
         "show_name": "Ignored Parser Name",
@@ -78,7 +79,7 @@ def test_build474_folder_save_renames_in_place_replaces_bootlist_and_setlist(tmp
     assert Path(result["new_path"]) == new_path
     assert new_path.is_dir() and not original.exists()
     rows = MU.read_bootlist(str(tlohome))
-    assert rows == [{"Show": "New Folder", "VolumePath": BP.format_volume_path("", str(new_path))}]
+    assert rows == [{"Show": "New Folder", "VolumePath": BP.format_volume_path("TestVolume", str(new_path))}]
     assert not old_setlist.exists()
     assert (setlists / "NewFolder.txt").is_file()
 
@@ -99,7 +100,7 @@ def test_build474_folder_save_accepts_already_renamed_target(tmp_path, monkeypat
 
 
 def test_build474_main_gui_contracts():
-    source = Path(__file__).resolve().parents[2].joinpath("tlo-ggi.py").read_text(encoding="utf-8")
+    source = Path(__file__).resolve().parents[2].joinpath("tlo-main.py").read_text(encoding="utf-8")
     block = source[source.index("    def _build(self):"):source.index("    def _enable_search_path_drag_drop")]
     assert 'text="Add New\\nShows"' in block
     assert 'text="Manual\\nTweaks"' in block

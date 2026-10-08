@@ -1,12 +1,12 @@
 """Regression tests for the current TLO requirements and release contract.
 
-The suite pins documented behavior from TLO_Inventory_Requirements_Working_v518.docx.
+The suite pins documented behavior from the current versioned requirements document.
 Historical build-by-build test notes are preserved in old-change-logs.zip rather
 than repeated in this executable test module.
 """
+from tests import _release_artifacts as RA
 
 
-__version__ = "v468"
 
 import argparse
 import importlib.util
@@ -45,7 +45,7 @@ def _disable_corruption_for_non_corruption_test(monkeypatch):
     neutralize corruption classification in those tests so their result does not depend
     on whether the host has a working Trash backend (for example, gio on GitHub Linux).
     """
-    monkeypatch.setattr(C, "classify_audio_paths", lambda paths: ([], []))
+    monkeypatch.setattr(C, "classify_audio_paths", lambda paths, **_kwargs: ([], []))
 
 
 def _source_text(filename):
@@ -63,7 +63,7 @@ def _docx_text(filename):
 
 def _load_local_module(filename, module_name):
     """Load a local script module while safely restoring sys.modules."""
-    if filename in {"tlo-ggi.py", "tlo-gsi.py", "search-artist-db.py"}:
+    if filename in {"tlo-main.py", "tlo-search.py", "search-artist-db.py"}:
         pytest.importorskip("tkinter", reason="Tkinter is required for GUI regression tests")
     module_path = SOURCE_DIR / filename
     spec = importlib.util.spec_from_file_location(module_name, module_path)
@@ -1172,7 +1172,7 @@ def test_inventory_file_bracketed_volume_prefix_is_not_part_of_physical_path(tmp
     import inventory_list_lib as IL
 
     inv = tmp_path / "toBeInventoried.txt"
-    inv.write_text("[VOL A]/mnt/e/music -$slam Artist Name\n", encoding="utf-8")
+    inv.write_text("[VOL A]/mnt/e/music --/slam Artist Name\n", encoding="utf-8")
     parsed = IL._parse_inventory_file(str(inv))
     assert parsed == [("[VOL A]/mnt/e/music", "/mnt/e/music", "Artist Name", "VOL A")]
 
@@ -1877,13 +1877,13 @@ def test_compliant_artist_mode_as_is_skips_master_lookup():
 # v213 - GUI startup remains responsive while roots are prepared
 # --------------------------------------------------------------------------- #
 
-def _load_tlo_ggi_module():
-    return _load_local_module("tlo-ggi.py", "tlo_ggi_for_tests")
+def _load_tlo_main_module():
+    return _load_local_module("tlo-main.py", "tlo_main_for_tests")
 
 
 
 def test_gui_start_defers_inventory_root_preparation_to_worker():
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     start_source = inspect.getsource(gui.App._start)
     assert "prepare_inventory_items" not in start_source
     assert "_ask_existing_volume_action_threadsafe" in start_source
@@ -1891,7 +1891,7 @@ def test_gui_start_defers_inventory_root_preparation_to_worker():
 
 
 def test_gui_thread_marshal_runs_directly_on_main_thread():
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     app = SimpleNamespace()
     assert gui.App._run_on_gui_thread(app, lambda value: value + 1, 41) == 42
 
@@ -1961,7 +1961,7 @@ def test_phase1_sample_only_log_allows_safe_parent_setlist_lookup(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_cli_and_gui_defaults_share_registry(monkeypatch, tmp_path):
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     home = tmp_path / "home"
     home.mkdir()
 
@@ -2221,7 +2221,7 @@ def test_v221_dragdrop_can_register_on_native_windows_with_tkinterdnd2_methods(m
 
 
 def test_v221_gui_uses_dragdrop_root_factory():
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     main_source = inspect.getsource(gui.main)
     assert "create_tk_root(tk)" in main_source
     build_source = inspect.getsource(gui.App._build)
@@ -3134,7 +3134,7 @@ def test_v238_prepare_audio_files_logs_failed_shn_conversion_and_skips_file(monk
     assert shn.exists()
     assert os.path.normpath(str(shn)) not in audio_files
     assert os.path.normpath(str(keep)) in audio_files
-    assert any(str(msg).strip() == f"ERROR_AUDIO_FILE: '{shn}' - SHN conversion failed: bundled native SHN converter is unavailable; rebuild the PyInstaller app with imageio-ffmpeg data included" for msg in messages)
+    assert any(str(msg).strip() == f"ERROR_AUDIO_FILE: '{shn}' - SHN conversion failed: bundled native SHN converter is unavailable; rebuild the application with the checksum-pinned ffmpeg binary included" for msg in messages)
 
 
 def test_v238_tag_group_converts_shn_then_tags_flac(monkeypatch, tmp_path):
@@ -3524,9 +3524,8 @@ def test_v241_rename_compliantly_in_place_renames_group_and_record(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_v242_gui_inventory_start_cancel_is_silent_before_general_error_handler():
-    from pathlib import Path
 
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     method_start = source.index("    def _start(self):")
     marker = "        try:\n"
     start = source.index(marker, method_start)
@@ -3540,9 +3539,8 @@ def test_v242_gui_inventory_start_cancel_is_silent_before_general_error_handler(
 # --------------------------------------------------------------------------- #
 
 def test_v243_gui_add_shows_start_cancel_is_silent_before_general_error_handler():
-    from pathlib import Path
 
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     method_start = source.index("    def _open_add_to_inventory(self):")
     marker = "try:\n            config = self._build_config(for_add_shows=True)"
     start = source.index(marker, method_start)
@@ -3619,9 +3617,8 @@ def test_v245_silent_kept_cli_only_and_convert_shn_uses_former_silent_slot():
 
 
 def test_v245_gui_build_config_takes_silent_from_cli_not_checkbox():
-    from pathlib import Path
 
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     build_config = source[source.index("    def _build_config(self, *, for_add_shows=False):"):source.index("    def _pause_inventory(self):")]
     build_method = source[source.index("    def _build(self):"):source.index("    def _enable_search_path_drag_drop(self):")]
 
@@ -3631,7 +3628,6 @@ def test_v245_gui_build_config_takes_silent_from_cli_not_checkbox():
 
 
 def test_v245_postprocess_setlist_progress_is_throttled():
-    from pathlib import Path
 
     source = _source_text("tlo_postprocess.py")
     assert "progress_interval = max(1000, total_records // 10) if total_records else 0" in source
@@ -3646,7 +3642,7 @@ def test_v245_postprocess_setlist_progress_is_throttled():
 
 def test_v246_add_shows_window_has_only_action_specific_checkbox_and_refreshes_main_values():
     import inspect
-    module = _load_local_module("tlo-ggi.py", "tlo_ggi_gui_v246_addshows")
+    module = _load_local_module("tlo-main.py", "tlo_main_gui_v246_addshows")
 
     build_source = inspect.getsource(module.AddToInventoryWindow._build)
     refresh_source = inspect.getsource(module.AddToInventoryWindow._refresh_config)
@@ -3660,9 +3656,8 @@ def test_v246_add_shows_window_has_only_action_specific_checkbox_and_refreshes_m
 
 
 def test_v246_open_add_shows_uses_add_shows_config_mode():
-    from pathlib import Path
 
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     method_start = source.index("    def _open_add_to_inventory(self):")
     method_end = source.index("    def _show_backup_alert", method_start)
     snippet = source[method_start:method_end]
@@ -3670,9 +3665,8 @@ def test_v246_open_add_shows_uses_add_shows_config_mode():
 
 
 def test_v246_build_config_add_shows_keeps_rename():
-    from pathlib import Path
 
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     build_config = source[source.index("    def _build_config(self, *, for_add_shows=False):"):source.index("    def _pause_inventory(self):")]
 
     assert "if for_add_shows:" in build_config
@@ -3722,9 +3716,8 @@ def test_v246_add_shows_rename_compliantly_renames_ready_folder_in_place(tmp_pat
 # --------------------------------------------------------------------------- #
 
 def test_v247_updater_window_title_bar_and_banner_are_not_duplicated():
-    from pathlib import Path
 
-    gui_source = _source_text("tlo-ggi.py")
+    gui_source = _source_text("tlo-main.py")
     update_source = _source_text("tlo_inventory_update.py")
     build_source = gui_source[gui_source.index("class AddToInventoryWindow:"):gui_source.index("class DuplicateHandlerWindow:")]
 
@@ -4734,9 +4727,8 @@ def test_v264_rename_compliantly_allows_tag_copy_and_delete_path(tmp_path):
 
 
 def test_v264_rename_compliantly_alert_requirement_is_superseded_by_v303():
-    from pathlib import Path
 
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     assert "either Tag in Place, Tag Copy, or Tag Copy/Delete Original must be available" not in source
     assert "_show_rename_requires_tag_mode_alert" not in source
 
@@ -5080,9 +5072,11 @@ def test_v270_all_python_files_have_current_version_stamp():
     current_version = tlo_version.VERSION
     root = SOURCE_DIR
     for source_file in sorted(root.glob("*.py")):
+        if source_file.name in {"conftest.py", "test_tlo_requirements.py"}:
+            continue
         text = source_file.read_text(encoding="utf-8")
         literal = re.search(r"^__version__\s*=\s*['\"]([^'\"]+)['\"]", text, re.MULTILINE)
-        via_constant = re.search(r"^__version__\s*=\s*VERSION\b", text, re.MULTILINE)
+        via_constant = re.search(r"^__version__\s*=\s*(?:VERSION|_TLO_CANONICAL_VERSION)\b", text, re.MULTILINE)
         assert literal or via_constant, f"missing __version__ in {source_file.name}"
         if literal:
             allowed_versions = {current_version}
@@ -5090,7 +5084,7 @@ def test_v270_all_python_files_have_current_version_stamp():
                 allowed_versions.add(tlo_version.DISPLAY_VERSION)
             assert literal.group(1) in allowed_versions, source_file.name
         else:
-            assert source_file.name == "tlo_version.py"
+            assert source_file.name == "tlo_version.py" or ("from tlo_version import VERSION as _TLO_CANONICAL_VERSION" in text and "__version__ = _TLO_CANONICAL_VERSION" in text), source_file.name
 
 
 def test_v270_public_metadata_helper_aliases_remain_available():
@@ -5537,8 +5531,8 @@ def test_v281_inventory_line_accepts_slam_and_copy_directives_any_order(tmp_path
     dest.mkdir()
     inv = tmp_path / "toBeInventoried.txt"
     inv.write_text(
-        f"/mnt/e/music --$copy {dest} --$slam Bob Dylan\n"
-        f"/mnt/f/music --$slam Miles Davis --$copy-delete {dest}\n",
+        f"/mnt/e/music --/copy {dest} --/slam Bob Dylan\n"
+        f"/mnt/f/music --/slam Miles Davis --/copy-delete {dest}\n",
         encoding="utf-8",
     )
 
@@ -5555,7 +5549,7 @@ def test_v281_inventory_line_rejects_copy_and_copy_delete_together(tmp_path):
     dest = tmp_path / "dest"
     dest.mkdir()
     inv = tmp_path / "toBeInventoried.txt"
-    inv.write_text(f"/mnt/e/music --$copy {dest} --$copy-delete {dest}\n", encoding="utf-8")
+    inv.write_text(f"/mnt/e/music --/copy {dest} --/copy-delete {dest}\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="mutually exclusive"):
         IL._parse_inventory_file(str(inv))
@@ -5608,7 +5602,7 @@ def test_v281_command_line_rejects_copy_and_copy_delete_together(monkeypatch, tm
     monkeypatch.setattr(
         IPL.sys,
         "argv",
-        ["tlo-gi.py", "--search-path", str(search), "--$copy", str(dest), "--$copy-delete", str(dest)],
+        ["tlo-gi.py", "--search-path", str(search), "--/copy", str(dest), "--/copy-delete", str(dest)],
     )
 
     with pytest.raises(SystemExit):
@@ -5619,7 +5613,7 @@ def test_v281_command_line_rejects_copy_and_copy_delete_together(monkeypatch, tm
 # --------------------------------------------------------------------------- #
 
 def test_v282_gui_finish_clears_worker_before_refreshing_button_states():
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     finish_source = inspect.getsource(gui.App._finish_inventory_thread)
     assert "self.full_inventory_active = False" in finish_source
     assert "self.worker = None" in finish_source
@@ -5628,11 +5622,11 @@ def test_v282_gui_finish_clears_worker_before_refreshing_button_states():
 
 
 def test_v282_gui_inventory_worker_catches_startup_errors_and_schedules_finish():
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     start_source = inspect.getsource(gui.App._start)
     assert "except Exception as exc:" in start_source
     assert 'self.queue.put(f\"ERROR: {exc}\\n\")' in start_source
-    assert "self.root.after(0, lambda: self._finish_inventory_thread(exit_code))" in start_source
+    assert "schedule_tk_after(self.root, 0, lambda: self._finish_inventory_thread(exit_code))" in start_source
 
 
 # --------------------------------------------------------------------------- #
@@ -6505,7 +6499,7 @@ def test_v296_tag_reason_summary_counts_reason_codes(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_v297_tagger_elapsed_time_format():
-    module = _load_local_module("tlo-ggi.py", "tlo_ggi_for_v297_test")
+    module = _load_local_module("tlo-main.py", "tlo_main_for_v297_test")
     assert module._format_elapsed_time(0) == "0:00"
     assert module._format_elapsed_time(59) == "0:59"
     assert module._format_elapsed_time(60) == "1:00"
@@ -6661,7 +6655,7 @@ def test_v303_inventory_parser_allows_rename_without_tag_mode():
 
 
 def test_v303_gui_has_no_rename_requires_tag_mode_block():
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     assert "_show_rename_requires_tag_mode_alert" not in source
     assert "Because Rename Compliantly is checked" not in source
 
@@ -6819,7 +6813,7 @@ def test_v330_blank_group_runs_after_named_volume_groups(monkeypatch):
 
 
 def test_v304_inventory_updater_button_uses_requested_two_line_label():
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     build_source = inspect.getsource(gui.AddToInventoryWindow._build)
     assert 'text="Process Potential\\nDuplicate/Upgrades"' in build_source
 
@@ -6831,10 +6825,10 @@ def test_v304_inventory_updater_button_uses_requested_two_line_label():
 def test_v305_public_version_matches_bundle_number():
     import tlo_version as V
 
-    assert V.VERSION == "v518"
-    assert V.BUNDLE_BUILD == 517
-    assert V.DISPLAY_VERSION == "v1.7 Build 518"
-    assert V.versioned_title("TLO Main GUI") == "TLO Main GUI v1.7 Build 518"
+    assert V.VERSION == f"v{V.BUNDLE_BUILD}"
+    assert V.BUNDLE_BUILD > 0
+    assert V.DISPLAY_VERSION == f"v{V.PUBLIC_VERSION} Build {V.BUNDLE_BUILD}"
+    assert V.versioned_title("TLO Main GUI") == f"TLO Main GUI {V.DISPLAY_VERSION}"
 
 
 def test_v305_startup_banner_never_appends_release_change_summary():
@@ -6843,19 +6837,19 @@ def test_v305_startup_banner_never_appends_release_change_summary():
 
     for debug in (False, True):
         banner = M._startup_banner(SimpleNamespace(debug=debug))
-        assert banner == "Starting tlo-gi v1.7 Build 518"
+        assert banner == f"Starting tlo-gi {V.DISPLAY_VERSION}"
         assert V.VERSION_SUMMARY not in banner
         assert " - " not in banner
 
 
 def test_v305_all_toplevel_gui_titles_include_public_version():
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     from tlo_inventory_update import UPDATER_DISPLAY_VERSION
 
-    assert gui.WINDOW_TITLE == "TLO Main GUI v1.7 Build 518"
-    assert UPDATER_DISPLAY_VERSION == "TLO Inventory Updater v1.7 Build 518"
+    assert gui.WINDOW_TITLE == f"TLO Main GUI {__import__('tlo_version').DISPLAY_VERSION}"
+    assert UPDATER_DISPLAY_VERSION == f"TLO Inventory Updater {__import__('tlo_version').DISPLAY_VERSION}"
 
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     expected_calls = (
         'alert.title(versioned_title("TLO Backup Alert"))',
         'dialog.title(versioned_title(title))',
@@ -6909,7 +6903,7 @@ def test_v308_inventory_file_ignores_utf8_bom_hash_comment(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_v313_add_shows_first_run_blank_volume_warns_and_does_not_continue(tmp_path, monkeypatch):
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     updater = object.__new__(gui.AddToInventoryWindow)
     updater.config = SimpleNamespace(TLOHome=str(tmp_path))
     updater.window = None
@@ -6928,7 +6922,7 @@ def test_v313_add_shows_first_run_blank_volume_warns_and_does_not_continue(tmp_p
 
 
 def test_v313_add_shows_first_run_with_volume_requires_continue_confirmation(tmp_path, monkeypatch):
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     updater = object.__new__(gui.AddToInventoryWindow)
     updater.config = SimpleNamespace(TLOHome=str(tmp_path))
     updater.window = None
@@ -6948,7 +6942,7 @@ def test_v313_add_shows_first_run_with_volume_requires_continue_confirmation(tmp
 
 
 def test_v313_add_shows_existing_bootlist_does_not_prompt(tmp_path, monkeypatch):
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     (tmp_path / "bootlist.csv").write_text("sep=^\nShow^VolumePath\n", encoding="utf-8")
     updater = object.__new__(gui.AddToInventoryWindow)
     updater.config = SimpleNamespace(TLOHome=str(tmp_path))
@@ -6965,8 +6959,8 @@ def test_v313_add_shows_existing_bootlist_does_not_prompt(tmp_path, monkeypatch)
 # --------------------------------------------------------------------------- #
 
 def test_v317_main_inventory_hamburger_help_cascade_sources_about_and_faq():
-    gui = _load_tlo_ggi_module()
-    source = _source_text("tlo-ggi.py")
+    gui = _load_tlo_main_module()
+    source = _source_text("tlo-main.py")
 
     assert 'ttk.Menubutton(' in source
     assert 'text="☰"' in source
@@ -6982,7 +6976,7 @@ def test_v317_main_inventory_hamburger_help_cascade_sources_about_and_faq():
     assert 'Traders Little Organizer™ - TLO' in source
     assert 'f"V{PUBLIC_VERSION}Build{BUNDLE_BUILD}\\n"' in source
     assert 'TLO-FAQ.txt' in source
-    assert gui.BUNDLE_BUILD == 517
+    assert gui.BUNDLE_BUILD == __import__("tlo_version").BUNDLE_BUILD
 
 
 
@@ -6990,14 +6984,14 @@ def test_v317_main_inventory_hamburger_help_cascade_sources_about_and_faq():
 
 
 def test_v330_about_dialog_uses_superscript_trademark_symbol():
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
 
     assert "Traders Little Organizer™ - TLO" in source
     assert "Traders Little Organizer(TM) - TLO" not in source
 
 
 def test_v317_help_menu_wrappers_schedule_dialog_callbacks():
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     calls = []
 
     class DummyRoot:
@@ -7045,15 +7039,15 @@ def test_v341_faq_file_is_current_and_in_source_bundle():
 
 
 # --------------------------------------------------------------------------- #
-# v319 - CorruptFlacs.txt and tlo-gsi --myTLO compatibility
+# v319 - CorruptFlacs.txt and tlo-search --myTLO compatibility
 # --------------------------------------------------------------------------- #
 
-def _load_tlo_gsi_module():
-    return _load_local_module("tlo-gsi.py", "tlo_gsi_for_tests")
+def _load_tlo_search_module():
+    return _load_local_module("tlo-search.py", "tlo_search_for_tests")
 
 
-def test_v319_tlo_gsi_accepts_hidden_mytlo_with_same_precedence(tmp_path, monkeypatch):
-    gsi = _load_tlo_gsi_module()
+def test_v319_tlo_search_accepts_hidden_mytlo_with_same_precedence(tmp_path, monkeypatch):
+    gsi = _load_tlo_search_module()
     env_home = tmp_path / "envHome"
     cli_home = tmp_path / "cliHome"
     my_home = tmp_path / "myHome"
@@ -7132,7 +7126,7 @@ def test_v319_runtime_control_exposes_child_cleanup_backstop():
 
 
 def test_v319_gui_forced_exits_sweep_children_before_os_exit():
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     assert "def _force_exit_after_child_cleanup" in source
     assert "terminate_all_children()" in source
     assert "flush_standard_streams()" in source
@@ -7190,19 +7184,18 @@ def test_v319_setlist_date_fallback_uses_context_manager_for_drive_file_reads():
 # v323 - Packaged platform icon assets
 
 def test_v323_packaged_platform_icon_assets_are_present():
-    from pathlib import Path
     icon_dir = SOURCE_DIR / "icons"
-    for stem in ("tlo-inventory-icon", "tlo-search-icon", "tlo-tag-icon"):
+    for stem in ("tlo-main-icon", "tlo-search-icon", "tlo-tag-icon"):
         assert (icon_dir / f"{stem}.png").is_file()
         assert (icon_dir / f"{stem}.ico").is_file()
         assert (icon_dir / f"{stem}.icns").is_file()
 
 
 def test_v323_windows_dist_uses_packaged_ico_files_directly():
-    from pathlib import Path
     text = _source_text("createWindowsDist.ps1")
     assert "$IconRoot = Join-Path $SourceRoot 'icons'" in text
-    assert "tlo-inventory-icon.ico" in text
+    assert "tlo-main-icon.ico" in text
+    assert "tlo-inventory-icon.ico" not in text
     assert "tlo-search-icon.ico" in text
     assert "tlo-tag-icon.ico" in text
     assert "Required Windows icon file not found" in text
@@ -7212,11 +7205,10 @@ def test_v323_windows_dist_uses_packaged_ico_files_directly():
 
 def test_v323_windows_ico_assets_are_dib_based_not_png_compressed():
     import struct
-    from pathlib import Path
 
     png_signature = bytes([137, 80, 78, 71, 13, 10, 26, 10])
     icon_dir = SOURCE_DIR / "icons"
-    for stem in ("tlo-inventory-icon", "tlo-search-icon", "tlo-tag-icon"):
+    for stem in ("tlo-main-icon", "tlo-search-icon", "tlo-tag-icon"):
         data = (icon_dir / f"{stem}.ico").read_bytes()
         reserved, icon_type, count = struct.unpack_from("<HHH", data, 0)
         assert reserved == 0
@@ -7231,7 +7223,6 @@ def test_v323_windows_ico_assets_are_dib_based_not_png_compressed():
 
 
 def test_v323_windows_dist_verifies_exact_packaged_icon_resources():
-    from pathlib import Path
     text = _source_text("createWindowsDist.ps1")
     assert "Assert-WindowsIcoIsDibBased" in text
     assert "Assert-WindowsExeMatchesSourceIcon" in text
@@ -7390,8 +7381,8 @@ def test_v323_update_settings_are_tlohome_local(tmp_path):
 
 
 def test_v323_inventory_and_search_sources_include_update_menu_items():
-    inventory_source = _source_text("tlo-ggi.py")
-    search_source = _source_text("tlo-gsi.py")
+    inventory_source = _source_text("tlo-main.py")
+    search_source = _source_text("tlo-search.py")
 
     for source in (inventory_source, search_source):
         assert 'label="Check for updates"' in source
@@ -7404,7 +7395,7 @@ def test_v323_inventory_and_search_sources_include_update_menu_items():
 # --------------------------------------------------------------------------- #
 
 def test_v324_build_config_add_shows_honors_tag_in_place_but_ignores_tag_copy():
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     build_config = source[source.index("    def _build_config(self, *, for_add_shows=False):"):source.index("    def _pause_inventory(self):")]
 
     assert 'tag_in_place = bool(self.bool_vars["tag_during_inventory"].get())' in build_config
@@ -7503,8 +7494,8 @@ def test_v324_update_checker_prefers_platform_complete_fallback(monkeypatch):
 # --------------------------------------------------------------------------- #
 
 def test_v330_inventory_and_search_guis_do_not_build_tlohome_input_boxes():
-    inventory_source = _source_text("tlo-ggi.py")
-    search_source = _source_text("tlo-gsi.py")
+    inventory_source = _source_text("tlo-main.py")
+    search_source = _source_text("tlo-search.py")
 
     inventory_build = inventory_source[inventory_source.index("    def _build(self):"):inventory_source.index("    def _run_after_menu_closes(self, callback):")]
     search_build = search_source[search_source.index("    def _build_main_window(self) -> None:"):search_source.index("    def _run_after_menu_closes")]
@@ -7518,7 +7509,7 @@ def test_v330_inventory_and_search_guis_do_not_build_tlohome_input_boxes():
 
 
 def test_v330_inventory_gui_uses_non_gui_tlohome_resolver_with_mytlo_precedence():
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     resolver = source[source.index("    def _resolve_gui_tlo_home"):source.index("    def _show_about_from_menu")]
     build_config = source[source.index("    def _build_config(self, *, for_add_shows=False):"):source.index("    def _pause_inventory(self):")]
 
@@ -7529,9 +7520,8 @@ def test_v330_inventory_gui_uses_non_gui_tlohome_resolver_with_mytlo_precedence(
 
 
 def test_v330_search_cli_keeps_mytlo_before_tlohome_before_env(tmp_path, monkeypatch):
-    import importlib.util
 
-    search_gui = _load_local_module("tlo-gsi.py", "tlo_gsi_v330")
+    search_gui = _load_local_module("tlo-search.py", "tlo_search_v330")
 
     env_home = tmp_path / "env"
     tlo_home = tmp_path / "tlo"
@@ -7585,7 +7575,10 @@ def test_v330_delete_backup_bat_has_no_echo_off_and_uses_bootlist_rooted_path(tm
 
     text = script.read_text(encoding="utf-8")
     assert not text.startswith("@echo off")
-    assert 'rmdir /s /q "E:\\Artist 2001-02-03 Venue"' in text
+    assert 'REM "[]" "E:\\Artist 2001-02-03 Venue"' in text
+    assert 'REM rmdir /s /q "E:\\Artist 2001-02-03 Venue"' in text
+    assert 'SKIPPED: unlabeled volume' in text
+    assert not any(line.strip().startswith('rmdir /s /q ') for line in text.splitlines())
 
 
 def test_v330_delete_backup_path_requires_drive_or_root_from_bootlist_row():
@@ -7640,6 +7633,9 @@ def test_v330_update_destination_uses_sanitized_basename_and_warns_without_diges
             "packaging_mode": "native",
             "databases_included": False,
             "database_files": [],
+            "safe_update": True,
+            "requires_complete_install": False,
+            "protected_paths": list(G.UPDATE_PROTECTED_PATHS) + ["TLO_DBs/"],
         }
         with zipfile.ZipFile(destination, "w") as archive:
             archive.writestr("UPDATE_MANIFEST.json", json.dumps(manifest))
@@ -7828,7 +7824,7 @@ def test_v332_switch_line_reports_active_inventory_settings():
     assert "Action: Full Inventory" in line
     assert "Compliant: yes" in line
     assert "Tag: yes" in line
-    assert "Tag in Place: yes" in line
+    assert "Tag In Place: yes" in line
     assert "Rename Compliantly: yes" in line
     assert "Convert shn: yes" in line
     assert "etreeDB: yes" in line
@@ -7883,7 +7879,7 @@ def test_v332_add_shows_metadata_log_includes_switches(tmp_path):
     text = meta_logs[0].read_text(encoding="utf-8")
     assert "SHOW_NAME: Artist 1977-05-08 Venue City ST" in text
     assert "Switches -- Action: Add Shows; Compliant: yes; Tag: yes;" in text
-    assert "Tag in Place: yes" in text
+    assert "Tag In Place: yes" in text
     assert "Tag Copy: no" in text
     assert "Tag Copy/Delete Original: no" in text
     assert "Convert shn: yes" in text
@@ -7936,16 +7932,17 @@ def test_v334_main_gui_checkbox_layout_preserves_original_two_rows_and_adds_v339
         "as_is_artist_name": (2, 1, "As-Is Artist Name"),
         "tag_copy_and_delete_enabled": (2, 2, "Tag Copy/Delete Original"),
         "proper_grammar": (3, 1, "Proper Grammar"),
+        "deep_audio_check": (4, 1, "Deep Audio Check"),
         "delete_extra_tags": (3, 3, "Delete Extra Tags"),
     }
-    assert len(GUI_CHECKBOX_OPTIONS) == 14
+    assert len(GUI_CHECKBOX_OPTIONS) == 15
     for field, (row, col, label) in expected.items():
         option = OPTIONS_BY_FIELD[field]
         assert (option.gui_row, option.gui_col, option.gui_label) == (row, col, label)
 
 
 def test_v334_main_gui_configures_four_checkbox_columns():
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     for column in range(4):
         assert f"checkbox_frame.columnconfigure({column}, weight=0)" in source
 
@@ -8074,7 +8071,7 @@ def test_v337_operation_review_explains_original_file_changes(tmp_path):
         setlistfm_lookup=False, performance_mode="balanced", max_workers=2,
     )
     lines = operation_review_lines(config, operation="Full Inventory")
-    assert any(line.strip() == "Tag in Place: Yes" for line in lines)
+    assert any(line.strip() == "Tag In Place: Yes" for line in lines)
     assert "Original files may be changed: Yes" in lines
 
 
@@ -8165,8 +8162,8 @@ def test_v337_add_shows_preserves_folder_error_details(tmp_path, monkeypatch):
 
 
 def test_v337_add_shows_gui_has_review_validation_status_and_summary():
-    gui = _load_tlo_ggi_module()
-    source = _source_text("tlo-ggi.py")
+    gui = _load_tlo_main_module()
+    source = _source_text("tlo-main.py")
     assert not hasattr(gui.AddToInventoryWindow, "_preview_new_shows")
     assert not hasattr(gui.AddToInventoryWindow, "_preview_duplicates")
     assert hasattr(gui.AddToInventoryWindow, "_new_show_review_lines")
@@ -8180,7 +8177,7 @@ def test_v337_add_shows_gui_has_review_validation_status_and_summary():
 # v338 - Main Inventory GUI validation-label cleanup
 
 def test_v338_main_window_omits_search_and_copy_status_labels_but_keeps_validation():
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     assert "search_path_status_var" not in source
     assert "copy_destination_status_var" not in source
     assert "validate_search_path(self.vars[\"search_path_override\"].get(), tlo_home)" in source
@@ -8192,18 +8189,18 @@ def test_v338_main_window_omits_search_and_copy_status_labels_but_keeps_validati
 
 def test_v339_main_window_removes_copy_delete_path_entry_and_adds_checkbox():
     from tlo_options import OPTIONS_BY_FIELD, GUI_CHECKBOX_OPTIONS
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     assert 'text="Tag Copy/Delete Original\\n-- Destination Path"' not in source
     assert 'self.vars["tag_copy_and_delete_path"]' not in source
     assert OPTIONS_BY_FIELD["tag_copy_and_delete_path"].gui is None
     option = OPTIONS_BY_FIELD["tag_copy_and_delete_enabled"]
     assert option in GUI_CHECKBOX_OPTIONS
     assert (option.gui_row, option.gui_col, option.gui_label) == (2, 2, "Tag Copy/Delete Original")
-    assert hasattr(_load_tlo_ggi_module().App, "_confirm_tag_copy_delete_destination")
+    assert hasattr(_load_tlo_main_module().App, "_confirm_tag_copy_delete_destination")
 
 
 def test_v339_copy_delete_destination_checks_path_and_available_storage(tmp_path):
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     app = object.__new__(gui.App)
     valid, message, normalized = app._destination_storage_status(str(tmp_path))
     assert valid is True
@@ -8215,7 +8212,7 @@ def test_v339_copy_delete_destination_checks_path_and_available_storage(tmp_path
 
 
 def test_v339_artist_mode_is_checkbox_driven_and_never_prompts():
-    gui_source = _source_text("tlo-ggi.py")
+    gui_source = _source_text("tlo-main.py")
     parser_source = _source_text("inventory_parser_lib.py")
     assert "_prompt_compliant_artist_mode" not in gui_source
     assert 'input("Compliant artist names:' not in parser_source
@@ -8277,7 +8274,7 @@ def test_v339_review_reports_as_is_artist_and_copy_delete_destination(tmp_path):
 
 
 def test_v339_tag_modes_are_mutually_exclusive():
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
 
     class FakeVar:
         def __init__(self, value=False):
@@ -8304,7 +8301,7 @@ def test_v339_tag_modes_are_mutually_exclusive():
 
 
 def test_v339_gui_help_documents_checkbox_and_command_line_destination():
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     assert "Tag Copy/Delete Original --tag-copy-delete-original" in source
     assert "--tag-copy-and-delete DIR Supply the Tag Copy/Delete Original destination" in source
 
@@ -8312,7 +8309,7 @@ def test_v339_gui_help_documents_checkbox_and_command_line_destination():
 # v341 - defer both copy destination prompts until an action starts
 
 def test_v341_checking_copy_modes_does_not_open_destination_dialog():
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
 
     class FakeVar:
         def __init__(self, value=False):
@@ -8341,7 +8338,7 @@ def test_v341_checking_copy_modes_does_not_open_destination_dialog():
 
 def test_v341_build_config_requests_selected_copy_destination_after_action_start():
     import inspect
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     source = inspect.getsource(gui.App._build_config)
     assert "self._confirm_tag_copy_destination(self._tag_copy_destination)" in source
     assert "self._confirm_tag_copy_delete_destination(self._tag_copy_delete_destination)" in source
@@ -8351,7 +8348,7 @@ def test_v341_build_config_requests_selected_copy_destination_after_action_start
 
 def test_v341_copy_modes_share_validation_and_only_delete_mode_warns():
     import inspect
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     source = inspect.getsource(gui.App._confirm_copy_destination)
     assert "self._destination_storage_status" in source
     assert "Valid destination" not in source  # produced by the shared validator, not hard-coded per mode
@@ -8361,7 +8358,7 @@ def test_v341_copy_modes_share_validation_and_only_delete_mode_warns():
 
 
 def test_v341_inline_validation_does_not_require_destination_before_start():
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     assert "Tag Copy destination will be requested after Inventory is started." in source
     assert "Tag Copy/Delete Original destination will be requested after Inventory is started" in source
     assert "destination_status.valid" not in source
@@ -8410,7 +8407,7 @@ def _v341_fake_build_config_app(gui, tmp_path, selected_mode):
 
 
 def test_v341_tag_copy_prompt_runs_during_build_config(tmp_path):
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     app = _v341_fake_build_config_app(gui, tmp_path, "copy")
     calls = []
     app._confirm_tag_copy_destination = lambda initial: calls.append(initial) or str(tmp_path)
@@ -8425,7 +8422,7 @@ def test_v341_tag_copy_prompt_runs_during_build_config(tmp_path):
 
 
 def test_v341_copy_delete_prompt_runs_during_build_config(tmp_path):
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     app = _v341_fake_build_config_app(gui, tmp_path, "delete")
     calls = []
     app._confirm_tag_copy_destination = lambda _initial: (_ for _ in ()).throw(AssertionError("wrong dialog"))
@@ -8443,15 +8440,15 @@ def test_v341_copy_delete_prompt_runs_during_build_config(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_v342_current_documentation_contract():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v518.docx")
-    manual_rtf = _source_text("TLO_Inventory_User_Manual_v518.rtf")
+    requirements = _docx_text(RA.REQUIREMENTS_FILENAME)
+    manual_rtf = _source_text(RA.MANUAL_FILENAME)
     faq = _source_text("TLO-FAQ.txt")
     source_and_build_helpers = "\n".join(
         _source_text(name)
         for name in ("createWindowsDist.ps1", "createLinuxDist.sh", "createMacOSDist.sh")
     )
 
-    assert "Current document version: v518 (TLO v1.7)." in requirements
+    assert f"Current document version: {__import__('tlo_version').VERSION} (TLO v1.7)." in requirements
     assert "Build 344" not in requirements
     assert "CHANGES_v344.txt" not in requirements
     assert "eight ZIP assets" in requirements
@@ -8460,9 +8457,9 @@ def test_v342_current_documentation_contract():
     assert "v1.1 Build" not in requirements
     assert "Build 340 checkbox" not in requirements
 
-    assert "Version v1.7 Build 518" in manual_rtf
+    assert f"Version {__import__('tlo_version').DISPLAY_VERSION}" in manual_rtf
     assert "V1.3Build351" not in manual_rtf
-    assert "Version v1.7 Build 518" in manual_rtf
+    assert f"Version {__import__('tlo_version').DISPLAY_VERSION}" in manual_rtf
     assert "eight assets" in manual_rtf
     assert "artists.sqlite" in manual_rtf and "venues.txt" in manual_rtf
     assert "Checking either box only selects the mode" in manual_rtf
@@ -8497,7 +8494,7 @@ def test_v342_current_documentation_contract():
 
 
 def test_v356_requirements_use_canonical_cross_references_and_input_limits():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v518.docx")
+    requirements = _docx_text(RA.REQUIREMENTS_FILENAME)
 
     assert "1.3 Generated Setlist Content" in requirements
     assert "Generated setlist content is defined canonically in Section 1.3" in requirements
@@ -8529,7 +8526,7 @@ def test_v356_requirements_use_canonical_cross_references_and_input_limits():
 # --------------------------------------------------------------------------- #
 
 def test_v342_main_window_uses_dry_run_checkbox_instead_of_preview_buttons():
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     assert 'self.dry_run_checkbox = ttk.Checkbutton' in source
     assert 'text="Dry Run"' in source
     assert '("dry_run", "Dry run", 3, 0)' not in source
@@ -8541,7 +8538,7 @@ def test_v342_main_window_uses_dry_run_checkbox_instead_of_preview_buttons():
 
 def test_v342_inventory_click_routes_dry_run_to_non_destructive_preview():
     import inspect
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     source = inspect.getsource(gui.App._start)
     assert 'dry_run = bool(self.dry_run_var.get())' in source
     assert 'self._review_inventory_operation(config, dry_run=dry_run)' in source
@@ -8553,7 +8550,7 @@ def test_v342_inventory_click_routes_dry_run_to_non_destructive_preview():
 
 def test_v342_inventory_button_is_not_silently_disabled_by_inline_validation():
     import inspect
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     source = inspect.getsource(gui.App._update_main_action_states)
     assert 'form_invalid' not in source
     assert 'self.inventory_button.configure' in source
@@ -8589,7 +8586,7 @@ def test_v343_inventory_cli_rejects_compliant_with_rename(tmp_path, monkeypatch,
 
 
 def test_v343_gui_and_tagger_cli_reject_compliant_with_rename(capsys):
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     with pytest.raises(SystemExit) as gui_exit:
         gui._parse_gui_command_line(["--compliant", "--rename-compliantly"])
     assert gui_exit.value.code == 2
@@ -8603,7 +8600,7 @@ def test_v343_gui_and_tagger_cli_reject_compliant_with_rename(capsys):
 
 
 def test_v343_main_gui_toggles_compliant_and_rename_compliantly():
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
 
     class FakeVar:
         def __init__(self, value=False):
@@ -8777,7 +8774,7 @@ def _v345_add_shows_config(tlo_home, **overrides):
 
 def test_v345_add_shows_has_no_preview_buttons_and_reviews_all_main_flags():
     import inspect
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     build = inspect.getsource(gui.AddToInventoryWindow._build)
     new_review = inspect.getsource(gui.AddToInventoryWindow._new_show_review_lines)
     process_new = inspect.getsource(gui.AddToInventoryWindow._process_new_shows)
@@ -8864,7 +8861,7 @@ def test_v345_album_tags_retain_trailing_parentheticals():
 
 def test_v345_add_shows_dry_run_keeps_process_new_available_without_first_bootlist_volume():
     import inspect
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     source = inspect.getsource(gui.AddToInventoryWindow._set_processing_controls)
     assert 'level != "error" or self._current_dry_run()' in source
     assert not hasattr(gui.AddToInventoryWindow, "_dry_run_toggled")
@@ -8960,7 +8957,7 @@ def test_v346_dry_run_plan_reports_the_restored_folder_parenthetical():
 
 
 def test_v347_child_actions_do_not_require_live_notice_refreshes():
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     assert "def _main_options_changed" not in source
     assert "def _main_dry_run_changed" not in source
 
@@ -9020,7 +9017,7 @@ def test_v348_review_checkbox_section_is_identical_for_all_workflows(tmp_path):
 
 
 def test_v348_add_shows_refreshes_all_main_values_before_action(tmp_path):
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     values = _v348_checkbox_values(tag_during_inventory=False, tag_copy_during_inventory=True)
 
     class Parent:
@@ -9064,7 +9061,7 @@ def test_v348_add_shows_refreshes_all_main_values_before_action(tmp_path):
 
 def test_v351_inventory_hamburger_donate_cascades_and_details():
     import inspect
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     build_source = inspect.getsource(gui.App._build)
 
     assert 'self.hamburger_menu.add_cascade(label="Donate", menu=self.donate_menu)' in build_source
@@ -9077,8 +9074,8 @@ def test_v351_inventory_hamburger_donate_cascades_and_details():
 
 
 def test_v351_donate_details_are_documented():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v518.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v518.rtf")
+    requirements = _docx_text(RA.REQUIREMENTS_FILENAME)
+    manual = _source_text(RA.MANUAL_FILENAME)
 
     for text in (requirements, manual):
         assert "Donate" in text
@@ -9095,19 +9092,19 @@ def test_v351_donate_details_are_documented():
 # --------------------------------------------------------------------------- #
 
 def test_v351_donation_details_use_normal_menu_text():
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     for label in ("@James-Scarano-3", "James Scarano", "49 Majestic Ave.", "Nashua, NH 03063"):
         line = next(line for line in source.splitlines() if f'add_command(label="{label}"' in line)
         assert 'state="disabled"' not in line
     assert "normal dark menu text" in _source_text("TLO-FAQ.txt")
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v518.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v518.rtf")
+    requirements = _docx_text(RA.REQUIREMENTS_FILENAME)
+    manual = _source_text(RA.MANUAL_FILENAME)
     assert "dark text rather than disabled gray text" in requirements
     assert "normal dark menu text instead of disabled gray text" in manual
 
 
 def test_v351_about_contact_uses_gmail_wording():
-    source = _source_text("tlo-ggi.py")
+    source = _source_text("tlo-main.py")
     assert "Contact me at: support@traderslittleorganizer.com" in source
     assert "onaracs.tlo of gmail" not in source
     assert "onaracs.tlo of g.mail" not in source
@@ -9117,7 +9114,7 @@ def test_v351_about_contact_uses_gmail_wording():
 
 def test_v352_activity_indicator_moves_at_one_tenth_previous_speed():
     ux = _load_local_module("tlo_ux.py", "tlo_ux_v352")
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     calls = []
 
     class RecordingProgressBar:
@@ -9141,8 +9138,8 @@ def test_v353_run_settings_log_appends_confirmation_lines(tmp_path):
         "Operation: Full Inventory",
         f"Path: {tmp_path}",
         "Main-window checkbox values:",
-        "  Tag in Place: Yes",
-        "  Artist in Album Tag: Yes",
+        "  Tag In Place: Yes",
+        "  Artist In Album Tag: Yes",
         "Original files may be changed: Yes",
     ]
     started = datetime(2026, 8, 2, 22, 4, 5, tzinfo=timezone.utc)
@@ -9170,7 +9167,7 @@ def test_v353_run_settings_log_appends_confirmation_lines(tmp_path):
 
 
 def test_v353_review_wrapper_logs_only_after_start(monkeypatch, tmp_path):
-    gui = _load_tlo_ggi_module()
+    gui = _load_tlo_main_module()
     calls = []
     config = SimpleNamespace(TLOHome=str(tmp_path))
     lines = ["Operation: Tag", "  Dry Run: No"]
@@ -9202,10 +9199,10 @@ def test_v353_command_line_inventory_and_tag_use_the_same_log():
 
 
 def test_v353_run_settings_log_is_documented_in_current_artifacts():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v518.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v518.rtf")
+    requirements = _docx_text(RA.REQUIREMENTS_FILENAME)
+    manual = _source_text(RA.MANUAL_FILENAME)
     faq = _source_text("TLO-FAQ.txt")
-    help_source = _source_text("tlo-ggi.py")
+    help_source = _source_text("tlo-main.py")
 
     for text in (requirements, manual, faq, help_source):
         assert "runSettings.log" in text
@@ -9333,13 +9330,13 @@ def test_v356_full_inventory_tag_in_place_passes_artist_in_album_to_album_builde
 def test_v356_safe_grouping_and_artist_in_album_are_documented_in_current_artifacts():
     import zipfile
 
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v518.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v518.rtf")
+    requirements = _docx_text(RA.REQUIREMENTS_FILENAME)
+    manual = _source_text(RA.MANUAL_FILENAME)
     faq = _source_text("TLO-FAQ.txt")
 
     for text in (requirements, manual, faq):
         assert "broad collection" in text or "broad collection/search" in text
-        assert "Artist in Album" in text
+        assert "Artist In Album" in text or "Artist in Album" in text
     assert "(WLIR-FM, rm v.2)" in requirements
     assert "(WLIR-FM, rm v.2)" in manual
     with zipfile.ZipFile(SOURCE_DIR / "old-change-logs.zip") as archive:
@@ -9400,11 +9397,14 @@ def test_v356_setlistfm_lock_wait_has_deadline(tmp_path):
     import tlo_setlistfm_lookup as S
 
     lock_dir = Path(S._rate_limit_lock_dir(str(tmp_path)))
-    lock_dir.mkdir()
-    started = S.time.monotonic()
-    with pytest.raises(S.SetlistFMError, match="Timed out"):
-        S._acquire_rate_limit_lock(str(lock_dir), stale_after=60.0, timeout_seconds=0.01)
-    assert S.time.monotonic() - started < 1.0
+    S._acquire_rate_limit_lock(str(lock_dir), stale_after=60.0, timeout_seconds=0.2)
+    try:
+        started = S.time.monotonic()
+        with pytest.raises(S.SetlistFMError, match="Timed out"):
+            S._acquire_rate_limit_lock(str(lock_dir), stale_after=60.0, timeout_seconds=0.01)
+        assert S.time.monotonic() - started < 1.0
+    finally:
+        S.release_owned_lock(str(lock_dir))
 
 
 def test_v356_setlistfm_production_lookup_receives_tlohome(monkeypatch, tmp_path):
@@ -9494,12 +9494,10 @@ def test_v356_tagger_issue_collection_uses_actual_log_names(tmp_path):
 
 
 def test_v356_search_tools_use_central_display_version():
-    import importlib.util
-    import tlo_version
 
-    assert 'DISPLAY_VERSION = "v1.6 Build' not in _source_text("tlo-gsi.py")
+    assert 'DISPLAY_VERSION = "v1.6 Build' not in _source_text("tlo-search.py")
     assert 'DISPLAY_VERSION = "v1.6 Build' not in _source_text("search-artist-db.py")
-    assert "from tlo_version import DISPLAY_VERSION" in _source_text("tlo-gsi.py")
+    assert "from tlo_version import DISPLAY_VERSION" in _source_text("tlo-search.py")
     assert "from tlo_version import DISPLAY_VERSION" in _source_text("search-artist-db.py")
 
 
@@ -9508,8 +9506,8 @@ def test_v356_search_tools_use_central_display_version():
 # --------------------------------------------------------------------------- #
 
 def test_v358_user_manual_is_complete_and_current():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v518.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v518.rtf")
+    requirements = _docx_text(RA.REQUIREMENTS_FILENAME)
+    manual = _source_text(RA.MANUAL_FILENAME)
 
     assert "14.3 User Manual Content Requirements" in requirements
     assert "first-inventory Quick Start" in requirements
@@ -9585,7 +9583,7 @@ def test_v358_integration_category_contains_ten_promoted_scenarios():
 
 
 def test_v358_requirements_define_test_architecture_and_ci_compatibility():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v518.docx")
+    requirements = _docx_text(RA.REQUIREMENTS_FILENAME)
     for phrase in (
         "17. Test Suite Architecture and Execution Requirements",
         "tests/unit",
@@ -9600,8 +9598,8 @@ def test_v358_requirements_define_test_architecture_and_ci_compatibility():
 
 
 def test_copy_delete_documentation_preserves_source_metadata_sequence():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v518.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v518.rtf")
+    requirements = _docx_text(RA.REQUIREMENTS_FILENAME)
+    manual = _source_text(RA.MANUAL_FILENAME)
     assert "metadata extraction from the original source tree" in requirements
     assert "original folder and path components" in requirements
     assert "Tagging and final inventory output then use the destination path" in requirements
@@ -9610,8 +9608,8 @@ def test_copy_delete_documentation_preserves_source_metadata_sequence():
 
 
 def test_copy_delete_documentation_distinguishes_move_and_copy_preflight():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v518.docx")
-    manual = _source_text("TLO_Inventory_User_Manual_v518.rtf")
+    requirements = _docx_text(RA.REQUIREMENTS_FILENAME)
+    manual = _source_text(RA.MANUAL_FILENAME)
     assert "same filesystem, TLO must perform a directory rename/move" in requirements
     assert "must not total source file sizes" in requirements
     assert "Tag Copy always totals the source" in manual

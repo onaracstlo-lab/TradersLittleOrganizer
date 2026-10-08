@@ -1,6 +1,6 @@
 """Build 375 Research application and GUI contracts."""
+from tests import _release_artifacts as RA
 
-__version__ = "v468"
 
 from pathlib import Path
 
@@ -20,7 +20,7 @@ def _docx_text(name: str) -> str:
 def test_research_sources_are_present_and_gui_is_wired():
     cli = (ROOT / "tlo-research.py").read_text(encoding="utf-8")
     lib = (ROOT / "tlo_research_lib.py").read_text(encoding="utf-8")
-    gui = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    gui = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     assert 'prog="tlo-research"' in cli
     assert '"--TLOHome"' in cli
     assert '"--myTLO"' in cli
@@ -45,8 +45,8 @@ def test_research_is_built_on_all_platforms():
 
 
 def test_research_documentation_is_present():
-    requirements = _docx_text("TLO_Inventory_Requirements_Working_v518.docx")
-    manual = (ROOT / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
+    requirements = _docx_text(RA.REQUIREMENTS_FILENAME)
+    manual = (ROOT / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
     for text in (requirements, manual):
         assert "tlo-research" in text
         assert "artist followed by a date" in text.lower()

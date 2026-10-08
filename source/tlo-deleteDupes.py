@@ -1,6 +1,7 @@
 """Repair corrupt FLACs from duplicate copies, then move duplicates to a partition holding folder."""
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 import argparse
 import hashlib
@@ -10,13 +11,14 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 
 from console_output_lib import console_emit
+from tlo_diagnostics import debug_suppressed_exception
+from tlo_ffmpeg import bundled_ffmpeg_executable as _bundled_ffmpeg_executable
 from tlo_path_inputs import normalize_platform_input_path, resolve_tlo_home, strip_optional_quotes
 from tlo_text_utils import normalized_compare_value
 from tlo_path_policy import is_phase1_pruned_directory
@@ -629,18 +631,6 @@ def _move_duplicate_folder_to_duplicates(
     return source, destination
 
 
-def _bundled_ffmpeg_executable() -> str:
-    """Return the imageio-ffmpeg executable bundled with the application."""
-    try:
-        import imageio_ffmpeg  # type: ignore
-
-        executable = str(imageio_ffmpeg.get_ffmpeg_exe() or "").strip()
-    except Exception as exc:
-        raise DeleteDupesError(f"Bundled FLAC validator is unavailable: {exc}") from exc
-    if not executable or not os.path.isfile(executable):
-        raise DeleteDupesError("Bundled FLAC validator is unavailable; imageio-ffmpeg did not provide ffmpeg.")
-    return executable
-
 
 def _subprocess_no_window_kwargs() -> dict:
     """Avoid opening an extra console window for the decoder on Windows."""
@@ -650,6 +640,22 @@ def _subprocess_no_window_kwargs() -> dict:
     return {"creationflags": creation_flag} if creation_flag else {}
 
 
+def _ffmpeg_flac_failure_is_unverifiable(stderr_text: str) -> bool:
+    """Return True when ffmpeg reports an access/infrastructure failure."""
+    lowered = str(stderr_text or "").lower()
+    markers = (
+        "permission denied",
+        "operation not permitted",
+        "no such file or directory",
+        "input/output error",
+        "device or resource busy",
+        "too many open files",
+        "stale file handle",
+        "transport endpoint is not connected",
+    )
+    return any(marker in lowered for marker in markers)
+
+
 def flac_file_is_healthy(
     path_name: str,
     *,
@@ -657,7 +663,7 @@ def flac_file_is_healthy(
     run_func=subprocess.run,
     timeout_seconds: float = FLAC_VALIDATION_TIMEOUT_SECONDS,
 ) -> Optional[bool]:
-    """Return True/False for healthy/corrupt, or None when validation times out."""
+    """Return True/False for healthy/corrupt, or None when unverifiable."""
     normalized = os.path.normpath(str(path_name or ""))
     if os.path.splitext(normalized)[1].lower() != ".flac":
         return False
@@ -665,6 +671,11 @@ def flac_file_is_healthy(
         if not os.path.isfile(normalized):
             return None
         os.stat(normalized)
+        # Prove that this process can open the file before asking ffmpeg to
+        # classify its audio stream. Access failures are infrastructure state,
+        # not evidence that the FLAC bytes are corrupt.
+        with open(normalized, "rb"):
+            pass
     except (OSError, MemoryError):
         return None
     executable = ffmpeg_executable or _bundled_ffmpeg_executable()
@@ -675,6 +686,10 @@ def flac_file_is_healthy(
         "-loglevel",
         "error",
         "-xerror",
+        "-f",
+        "flac",
+        "-protocol_whitelist",
+        "file",
         "-i",
         normalized,
         "-map",
@@ -692,6 +707,7 @@ def flac_file_is_healthy(
             text=True,
             check=False,
             timeout=max(1.0, float(timeout_seconds)),
+            env={**os.environ, "LC_ALL": "C"},
             **_subprocess_no_window_kwargs(),
         )
     except KeyboardInterrupt:
@@ -700,11 +716,21 @@ def flac_file_is_healthy(
         return None
     except (OSError, MemoryError):
         return None
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - validator boundary; classify as unverifiable
         # Unexpected validator/infrastructure failures are unverifiable, not
-        # proof that the FLAC itself is corrupt.
+        # proof that the FLAC itself is corrupt. Record the suppressed failure so
+        # destructive repair decisions remain auditable.
+        debug_suppressed_exception("flac_file_is_healthy validator", exc)
         return None
-    return int(getattr(completed, "returncode", 1) or 0) == 0
+
+    return_code = getattr(completed, "returncode", None)
+    if return_code == 0:
+        return True
+    if return_code is None:
+        return None
+    if _ffmpeg_flac_failure_is_unverifiable(getattr(completed, "stderr", "")):
+        return None
+    return False
 
 
 def _relative_flac_paths(root: str) -> List[str]:
@@ -734,56 +760,115 @@ def _sha256_file(path: str) -> str:
 
 
 def _replace_file_from_copy(source_path: str, destination_path: str) -> None:
-    """Stage and byte-verify a replacement, then atomically install it.
+    """Stage, verify, atomically install, and safely roll back a FLAC repair.
 
-    The current keeper bytes remain at destination until the fully staged copy
-    has been verified.  A temporary backup is retained through the atomic
-    replacement so an installation error never destroys the prior bytes.
+    The prior keeper bytes are snapshotted before any replacement. A backup is
+    eligible for rollback only after its size and SHA-256 match that snapshot,
+    and rollback is attempted only after the replacement was actually installed.
     """
-    destination_dir = os.path.dirname(destination_path)
+    source_path = os.path.normpath(source_path)
+    destination_path = os.path.normpath(destination_path)
+    destination_dir = os.path.dirname(destination_path) or os.curdir
+
+    source_size = os.path.getsize(source_path)
+    source_hash = _sha256_file(source_path)
+    keeper_size = os.path.getsize(destination_path)
+    keeper_hash = _sha256_file(destination_path)
+
+    try:
+        free_bytes = int(shutil.disk_usage(destination_dir).free)
+    except OSError as exc:
+        raise DeleteDupesError(
+            f"Unable to verify free space before FLAC repair: {destination_path}: {exc}"
+        ) from exc
+    required_bytes = source_size + keeper_size
+    if free_bytes < required_bytes:
+        raise DeleteDupesError(
+            f"Insufficient free space for safe FLAC repair: need {required_bytes} bytes "
+            f"for staging and verified backup, have {free_bytes}: {destination_path}"
+        )
+
     temp_path = ""
     backup_path = ""
+    backup_verified = False
+    installed = False
+    installation_verified = False
+
+    def matches_snapshot(path: str, expected_size: int, expected_hash: str) -> bool:
+        return os.path.getsize(path) == expected_size and _sha256_file(path) == expected_hash
+
     try:
-        fd, temp_path = tempfile.mkstemp(prefix=".tlo-deleteDupes-repair-", suffix=".flac", dir=destination_dir)
+        fd, temp_path = tempfile.mkstemp(
+            prefix=".tlo-deleteDupes-repair-", suffix=".flac", dir=destination_dir
+        )
         os.close(fd)
         shutil.copy2(source_path, temp_path)
-        if os.path.getsize(source_path) != os.path.getsize(temp_path) or _sha256_file(source_path) != _sha256_file(temp_path):
+        if not matches_snapshot(temp_path, source_size, source_hash):
             raise DeleteDupesError(f"Staged FLAC repair copy failed byte verification: {source_path}")
 
-        fd, backup_path = tempfile.mkstemp(prefix=".tlo-deleteDupes-backup-", suffix=".flac", dir=destination_dir)
+        fd, backup_path = tempfile.mkstemp(
+            prefix=".tlo-deleteDupes-backup-", suffix=".flac", dir=destination_dir
+        )
         os.close(fd)
         shutil.copy2(destination_path, backup_path)
+        if not matches_snapshot(backup_path, keeper_size, keeper_hash):
+            raise DeleteDupesError(
+                f"FLAC repair backup failed byte verification; keeper was not replaced: {destination_path}"
+            )
+        backup_verified = True
+
         os.replace(temp_path, destination_path)
+        installed = True
         temp_path = ""
-        try:
-            os.remove(backup_path)
-            backup_path = ""
-        except OSError:
-            # The repair succeeded; retaining a backup is safer than treating a
-            # cleanup failure as a failed repair.
-            pass
-    finally:
-        for cleanup_path in (temp_path,):
-            if cleanup_path:
-                try:
-                    os.remove(cleanup_path)
-                except OSError:
-                    pass
-        # If destination installation failed, destination was never replaced.
-        # The backup is therefore redundant and can be removed.  If installation
-        # succeeded but backup cleanup failed, intentionally leave it in place.
-        if backup_path and os.path.exists(destination_path):
+
+        if not matches_snapshot(destination_path, source_size, source_hash):
+            raise DeleteDupesError(
+                f"Installed FLAC repair failed byte verification: {destination_path}"
+            )
+        installation_verified = True
+    except BaseException as original_exc:
+        if installed and not installation_verified:
+            if not backup_verified or not backup_path:
+                raise DeleteDupesError(
+                    f"FLAC repair installation failed without a verified rollback backup: {destination_path}"
+                ) from original_exc
             try:
-                if _sha256_file(destination_path) == _sha256_file(source_path):
-                    pass
-                else:
-                    os.replace(backup_path, destination_path)
-                    backup_path = ""
-            except Exception:
+                os.replace(backup_path, destination_path)
+                backup_path = ""
+                if not matches_snapshot(destination_path, keeper_size, keeper_hash):
+                    raise DeleteDupesError(
+                        f"FLAC repair rollback verification failed: {destination_path}"
+                    )
+            except BaseException as rollback_exc:
+                retained = backup_path or "<backup path unavailable>"
+                raise DeleteDupesError(
+                    f"FLAC repair failed and automatic rollback failed; verified backup retained at "
+                    f"{retained}: {destination_path}: {rollback_exc}"
+                ) from original_exc
+        raise
+    finally:
+        if temp_path:
+            try:
+                os.remove(temp_path)
+            except OSError:
                 pass
-            if backup_path and os.path.exists(backup_path):
+        if backup_path:
+            if installed and installation_verified:
+                # Successful repair: cleanup is best-effort. Leaving a verified
+                # backup behind is safer than turning cleanup failure into a
+                # failed repair.
                 try:
                     os.remove(backup_path)
+                    backup_path = ""
+                except OSError:
+                    pass
+            elif not installed:
+                # Installation never happened, so the keeper still has its
+                # original bytes. A partial or complete backup must never be
+                # restored in this state; it is only temporary debris.
+                try:
+                    os.remove(backup_path)
+                    backup_path = ""
                 except OSError:
                     pass
 
@@ -830,7 +915,7 @@ def repair_corrupt_flacs_from_copies(
                 replace_func(candidate_flac, original_flac)
             except KeyboardInterrupt:
                 raise
-            except Exception as exc:
+            except (OSError, DeleteDupesError) as exc:
                 emit(
                     f"Unable to replace corrupt FLAC from copy {candidate.number}: "
                     f"{original_flac} ({exc})",
@@ -901,6 +986,10 @@ def delete_duplicate_copy_directories(
     mismatch_log_path = os.path.join(tlo_home, "deleteDupesMismatches.txt")
     moved_count = 0
     validator = ffmpeg_executable or _bundled_ffmpeg_executable()
+    if not validator:
+        raise DeleteDupesError(
+            "Bundled FLAC validator is unavailable; rebuild the application with the checksum-pinned ffmpeg binary included."
+        )
 
     # Older tests/embedders may still provide trash_func. Preserve that injection
     # point without changing normal CLI behavior; production execution always
@@ -988,7 +1077,7 @@ def delete_duplicate_copy_directories(
 
 def _parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        prog="tlo-deleteDupes.py",
+        prog="tlo-deleteDupes",
         description=(
             "Recursively find duplicate sibling directories. Candidate folders are discovered from exact "
             "X/(copyN) families and from same-artist/date sibling names. Copies are compared with one another "

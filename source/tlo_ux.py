@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 
 import copy
@@ -24,9 +25,8 @@ from inventory_list_lib import (
     _strip_optional_quotes,
     parse_search_path_input,
 )
-from tlo_media_rules import MEDIA_EXTENSIONS
-from tlo_security import is_network_or_device_path
-from tlo_options import defensive_corruption_policy_values
+from tlo_security import is_network_or_device_path, windows_directory_from_api
+from tlo_options import OPTIONS_BY_FIELD, defensive_corruption_policy_values
 
 
 # ttk.Progressbar.start() receives the animation interval in milliseconds.
@@ -199,23 +199,27 @@ def _yes_no(value: object) -> str:
     return "Yes" if bool(value) else "No"
 
 
-MAIN_WINDOW_CHECKBOX_SPECS = (
-    ("etree_lookup", "etreeDB"),
-    ("compliant", "Compliant"),
-    ("tag_during_inventory", "Tag in Place"),
-    ("artist_in_album", "Artist in Album Tag"),
-    ("setlistfm_lookup", "setlist.fm"),
-    ("setlistfm_upgrade", "setlist.fm upgrade"),
-    ("thorough_setlist_matching", "Thorough Setlist Matching"),
-    ("rename_compliantly", "Rename Compliantly"),
-    ("tag_copy_during_inventory", "Tag Copy"),
-    ("convert_shn", "Convert shn"),
-    ("as_is_artist_name", "As-Is Artist Name"),
-    ("proper_grammar", "Proper Grammar"),
-    ("tag_copy_and_delete_enabled", "Tag Copy/Delete Original"),
-    ("delete_extra_tags", "Delete Extra Tags"),
-    ("dry_run", "Dry Run"),
+_MAIN_WINDOW_CHECKBOX_FIELDS = (
+    "etree_lookup",
+    "compliant",
+    "tag_during_inventory",
+    "artist_in_album",
+    "setlistfm_lookup",
+    "setlistfm_upgrade",
+    "thorough_setlist_matching",
+    "rename_compliantly",
+    "tag_copy_during_inventory",
+    "convert_shn",
+    "as_is_artist_name",
+    "proper_grammar",
+    "deep_audio_check",
+    "tag_copy_and_delete_enabled",
+    "delete_extra_tags",
 )
+
+MAIN_WINDOW_CHECKBOX_SPECS = tuple(
+    (field, OPTIONS_BY_FIELD[field].gui_label) for field in _MAIN_WINDOW_CHECKBOX_FIELDS
+) + (("dry_run", "Dry Run"),)
 
 
 def main_window_checkbox_values(source, *, dry_run=None) -> dict[str, bool]:
@@ -243,6 +247,7 @@ def main_window_checkbox_values(source, *, dry_run=None) -> dict[str, bool]:
         "convert_shn": bool(read("convert_shn", False)),
         "as_is_artist_name": bool(read("as_is_artist_name", False)),
         "proper_grammar": bool(read("proper_grammar", False)),
+        "deep_audio_check": bool(read("deep_audio_check", False)),
         "tag_copy_and_delete_enabled": bool(copy_delete),
         "delete_extra_tags": bool(read("delete_extra_tags", False)),
         "dry_run": bool(read("main_window_dry_run", False) if dry_run is None else dry_run),
@@ -281,7 +286,7 @@ def operation_review_lines(
         if checkbox_values.get("setlistfm_lookup") and not checkbox_values.get("setlistfm_upgrade"):
             lines.append(
                 "Thorough Setlist Matching note: setlist.fm coverage remains subject to the normal 600-ms / 1,400-call limits; "
-                "setlist.fm upgrade provides broader/faster setlist.fm coverage."
+                "setlist.fm Upgrade provides broader/faster setlist.fm coverage."
             )
         elif checkbox_values.get("setlistfm_lookup") and checkbox_values.get("setlistfm_upgrade"):
             lines.append("Thorough Setlist Matching note: upgraded setlist.fm access is available for proactive corroboration/deconfliction.")
@@ -345,21 +350,21 @@ def _preview_actions(config, *, copy_mode: str = "", tagger: bool = False, shn_c
     actions: list[str] = []
     if tagger:
         if str(getattr(config, "tag_copy_and_delete_path", "") or "").strip():
-            actions.append("move folder on the same partition; otherwise copy, verify, remove original, then tag destination")
+            actions.append("move folder on the same partition; otherwise copy, verify paths/sizes and SHA-256, remove original, then tag destination")
         elif bool(getattr(config, "tag_copy_during_inventory", False)):
-            actions.append("copy folder and tag copy")
+            actions.append("copy folder, verify relative structure and file sizes, then tag copy")
         else:
             actions.append("write audio tags in place")
     elif bool(getattr(config, "tag_during_inventory", False)):
         actions.append("write audio tags in place")
     elif bool(getattr(config, "tag_copy_during_inventory", False)):
-        actions.append("copy folder and tag copy")
+        actions.append("copy folder, verify relative structure and file sizes, then tag copy")
     elif str(getattr(config, "tag_copy_and_delete_path", "") or "").strip():
-        actions.append("move folder on the same partition; otherwise copy, verify file sizes, then remove original")
+        actions.append("move folder on the same partition; otherwise copy, verify paths/sizes and SHA-256, then remove original")
     elif copy_mode == "copy":
         actions.append("copy folder")
     elif copy_mode == "copy-delete":
-        actions.append("move folder on the same partition; otherwise copy, verify file sizes, then remove original")
+        actions.append("move folder on the same partition; otherwise copy, verify paths/sizes and SHA-256, then remove original")
     else:
         actions.append("inventory only")
 
@@ -565,7 +570,12 @@ def preview_operation(
                         try:
                             from tlo_corruption import classify_audio_paths, corruption_action, qualifying_corrupt_music_dirs, group_audio_snapshot
                             corruption_audio, snapshot_errors = group_audio_snapshot(group)
-                            corruption_bad, unverifiable_files = classify_audio_paths(corruption_audio)
+                            if bool(getattr(preview_config, "deep_audio_check", False)):
+                                corruption_bad, unverifiable_files = classify_audio_paths(
+                                    corruption_audio, deep_audio_check=True
+                                )
+                            else:
+                                corruption_bad, unverifiable_files = classify_audio_paths(corruption_audio)
                             file_policy, folder_policy, folder_threshold = defensive_corruption_policy_values(preview_config)
                             unverifiable = list(snapshot_errors) + list(unverifiable_files)
                             corruption_policy = (
@@ -739,7 +749,7 @@ def preview_add_shows(
                         tag["title"] = ""
                     else:
                         tag["action"] = "would not tag"
-                        tag["reason"] = "Convert shn is enabled without Tag in Place"
+                        tag["reason"] = "Convert shn is enabled without Tag In Place"
                         tag["artist"] = ""
                         tag["album"] = ""
                         tag["track"] = ""
@@ -1122,8 +1132,8 @@ def open_path(path_name: str) -> bool:
         is_dir = True
     try:
         if os.name == "nt":
-            system_root = os.environ.get("SystemRoot", r"C:\Windows")
-            explorer = os.path.join(system_root, "explorer.exe")
+            windows_dir = windows_directory_from_api()
+            explorer = os.path.join(windows_dir, "explorer.exe")
             if is_file:
                 subprocess.Popen([explorer, "/select,", os.path.normpath(target)])
             else:

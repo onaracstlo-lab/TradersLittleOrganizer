@@ -24,13 +24,13 @@ Important:
 
 from __future__ import annotations
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 
 import argparse
 import json
 import re
-import sys
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -206,6 +206,8 @@ def normalize_etree_date(raw_date: str) -> str | None:
         a, b, c = tokens[i], tokens[i + 1], tokens[i + 2]
 
         if a in month_names and b.isdigit() and c.isdigit():
+            if len(b) > 2:
+                continue
             try:
                 year = int(c)
                 if year < 100:
@@ -213,10 +215,12 @@ def normalize_etree_date(raw_date: str) -> str | None:
                 if year < 1900 or year > 2099:
                     continue
                 return datetime(year, month_names[a], int(b)).strftime("%Y-%m-%d")
-            except ValueError:
+            except (ValueError, OverflowError):
                 pass
 
         if a.isdigit() and b in month_names and c.isdigit():
+            if len(a) > 2:
+                continue
             try:
                 year = int(c)
                 if year < 100:
@@ -224,7 +228,7 @@ def normalize_etree_date(raw_date: str) -> str | None:
                 if year < 1900 or year > 2099:
                     continue
                 return datetime(year, month_names[b], int(a)).strftime("%Y-%m-%d")
-            except ValueError:
+            except (ValueError, OverflowError):
                 pass
 
     return None
@@ -257,8 +261,12 @@ def graphql_request(
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             response_body = read_bounded_text(response, MAX_METADATA_RESPONSE_BYTES, label="eTreeDB response")
     except urllib.error.HTTPError as e:
-        body = read_bounded_text(e, MAX_ERROR_RESPONSE_BYTES, label="eTreeDB HTTP error response")
-        raise ETreeDBError(f"HTTP {e.code} from eTreeDB GraphQL: {body[:500]}") from e
+        try:
+            body = read_bounded_text(e, MAX_ERROR_RESPONSE_BYTES, label="eTreeDB HTTP error response")
+        except (ResponseTooLargeError, UnicodeError, OSError, ValueError):
+            body = ""
+        suffix = f": {body[:500]}" if body else ""
+        raise ETreeDBError(f"HTTP {e.code} from eTreeDB GraphQL{suffix}") from e
     except ResponseTooLargeError as e:
         raise ETreeDBError(str(e)) from e
     except urllib.error.URLError as e:
@@ -268,6 +276,9 @@ def graphql_request(
         decoded = json.loads(response_body)
     except json.JSONDecodeError as e:
         raise ETreeDBError(f"GraphQL response was not JSON: {response_body[:500]}") from e
+
+    if not isinstance(decoded, dict):
+        raise ETreeDBError("GraphQL response JSON was not an object.")
 
     if decoded.get("errors"):
         raise ETreeDBError(json.dumps(decoded["errors"], indent=2, ensure_ascii=False))

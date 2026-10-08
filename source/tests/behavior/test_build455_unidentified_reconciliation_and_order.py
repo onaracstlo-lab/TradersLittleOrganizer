@@ -7,7 +7,6 @@ import tlo_postprocess as PP
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v468"
 
 
 def test_unidentified_shows_preserve_existing_then_current_encounter_order(tmp_path: Path):
@@ -90,7 +89,7 @@ def test_artists_not_in_database_preserve_encounter_order_and_casefold_dedupe(tm
 
 
 def test_corrupt_files_dropdown_is_only_slightly_wider_than_build453():
-    source = (Path(__file__).resolve().parents[2] / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (Path(__file__).resolve().parents[2] / "tlo-main.py").read_text(encoding="utf-8")
     block = source[source.index("self.corrupt_files_combo = ttk.Combobox"):]
     block = block[:block.index("self.corrupt_files_combo.grid")]
     assert "width=18" in block

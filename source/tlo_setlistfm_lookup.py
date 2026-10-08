@@ -29,8 +29,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from tlo_network_io import MAX_ERROR_RESPONSE_BYTES, MAX_METADATA_RESPONSE_BYTES, ResponseTooLargeError, read_bounded_text
+from tlo_locking import acquire_owned_lock, release_owned_lock
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 API_BASE = "https://api.setlist.fm/rest/1.0"
 ENV_API_KEY = "SETLISTFM_API_KEY"
 ENV_UPGRADE_API_KEY = "SETLISTFMUPGRADE_API_KEY"
@@ -149,25 +151,6 @@ def _persistent_windows_environment_value(name: str) -> str:
                 text = os.path.expandvars(text).strip()
         if text:
             return text
-    return ""
-
-
-def _environment_value(name: str, aliases: Iterable[str] = ()) -> str:
-    """Return the first non-empty process value, then persisted Windows fallback.
-
-    An explicit CMD/PowerShell/session value has normal environment precedence.
-    Persisted User/System values are a fallback for variables missing from an
-    older parent process environment snapshot.
-    """
-    names = (name, *tuple(aliases or ()))
-    for candidate in names:
-        value = os.environ.get(candidate, "").strip()
-        if value:
-            return value
-    for candidate in names:
-        value = _persistent_windows_environment_value(candidate)
-        if value:
-            return value
     return ""
 
 
@@ -362,29 +345,47 @@ def _write_rate_state(state_file: str, state: Dict[str, Any]) -> None:
                 pass
 
 
-def _acquire_rate_limit_lock(lock_dir: str, *, stale_after: float, timeout_seconds: float) -> None:
+def _acquire_rate_limit_lock(lock_path: str, *, stale_after: float, timeout_seconds: float) -> None:
+    """Acquire the shared OS-held setlist.fm reservation lock.
+
+    ``stale_after`` is retained in the call signature for compatibility with
+    older tests/callers, but stale-file removal is intentionally no longer
+    used. A crashed process releases the OS advisory lock automatically.
+    """
+    del stale_after
+    if os.path.lexists(lock_path) and os.path.islink(lock_path):
+        raise SetlistFMError(f"Refusing symlinked setlist.fm lock path: {lock_path}")
     deadline = time.monotonic() + max(0.0, float(timeout_seconds))
+    payload = {
+        "pid": os.getpid(),
+        "hostname": os.environ.get("COMPUTERNAME") or os.environ.get("HOSTNAME") or "unknown",
+        "purpose": "setlist.fm rate-limit reservation",
+        "acquired_utc": datetime.now(timezone.utc).isoformat(),
+    }
     while True:
-        if os.path.lexists(lock_dir) and os.path.islink(lock_dir):
-            raise SetlistFMError(f"Refusing symlinked setlist.fm lock path: {lock_dir}")
         try:
-            os.mkdir(lock_dir, 0o700)
-            return
-        except FileExistsError:
-            try:
-                age = time.time() - os.path.getmtime(lock_dir)
-                if age > stale_after:
-                    os.rmdir(lock_dir)
-                    continue
-            except FileNotFoundError:
-                continue
-            except OSError:
-                pass
-            if time.monotonic() >= deadline:
-                raise SetlistFMError(
-                    f"Timed out after {float(timeout_seconds):.1f} seconds waiting for the setlist.fm rate-limit lock."
-                )
-            time.sleep(0.05)
+            if acquire_owned_lock(lock_path, payload):
+                return
+        except OSError as exc:
+            raise SetlistFMError(f"Cannot acquire setlist.fm rate-limit lock: {lock_path}: {exc}") from exc
+        if time.monotonic() >= deadline:
+            raise SetlistFMError(
+                f"Timed out after {float(timeout_seconds):.1f} seconds waiting for the setlist.fm rate-limit lock."
+            )
+        time.sleep(0.05)
+
+
+def _bounded_rate_limit_wait(last_request: float, now: float, min_interval_seconds: float) -> tuple[float, bool]:
+    """Return a bounded wait and whether persisted state was implausibly future-dated."""
+    interval = max(0.0, float(min_interval_seconds or 0.0))
+    try:
+        last_value = float(last_request or 0.0)
+    except (TypeError, ValueError):
+        last_value = 0.0
+    if last_value > float(now) + interval:
+        return 0.0, True
+    wait_time = interval - (float(now) - last_value)
+    return min(interval, max(0.0, wait_time)), False
 
 
 def wait_for_rate_limit(
@@ -400,10 +401,10 @@ def wait_for_rate_limit(
 
     The reservation enforces both requirements across local worker processes:
     one request every ``min_interval_seconds`` and no more than ``max_calls``
-    requests for the current inventory run. A mkdir-based lock is used because
-    os.mkdir is atomic on Windows and POSIX. If a stale lock is encountered, it
-    is removed after a short grace period. When a wait is required, the lock is
-    released before sleeping so other workers do not spin behind a sleeper.
+    requests for the current inventory run. The shared OS advisory-lock helper
+    is used so crashed processes cannot leave a stale-file remove/recreate race.
+    When a wait is required, the lock is released before sleeping so other
+    workers do not spin behind a sleeper.
     """
     state_file = _rate_limit_state_file(tlo_home)
     lock_dir = _rate_limit_lock_dir(tlo_home)
@@ -443,14 +444,25 @@ def wait_for_rate_limit(
                     f"setlist.fm daily call limit reached: {daily_count}/{max_calls_per_day}"
                 )
 
-            last_request = float(state.get("last_request", 0.0) or 0.0)
+            try:
+                last_request = float(state.get("last_request", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                last_request = 0.0
             now = time.time()
-            wait_time = float(min_interval_seconds) - (now - last_request)
+            wait_time, future_corrupt = _bounded_rate_limit_wait(
+                last_request, now, min_interval_seconds
+            )
+            if future_corrupt:
+                # A persisted timestamp beyond one interval in the future cannot
+                # legitimately represent the previous reservation. Treat it as
+                # corrupt state instead of allowing an unbounded sleep.
+                state["last_request"] = 0.0
+                wait_time = 0.0
             if wait_time > 0:
                 # Release it, wait, and retry so other workers do not busy-spin
                 # behind a lock holder that is only sleeping.
                 try:
-                    os.rmdir(lock_dir)
+                    release_owned_lock(lock_dir)
                     held_lock = False
                 except Exception as exc:  # noqa: BLE001 - best-effort boundary
                     debug_suppressed_exception(__name__, exc)
@@ -478,7 +490,7 @@ def wait_for_rate_limit(
         finally:
             if held_lock:
                 try:
-                    os.rmdir(lock_dir)
+                    release_owned_lock(lock_dir)
                 except Exception as exc:  # noqa: BLE001 - best-effort boundary
                     debug_suppressed_exception(__name__, exc)
 
@@ -514,16 +526,22 @@ def api_get(
             headers={
                 "Accept": "application/json",
                 "Accept-Language": "en",
-                "x-api-key": api_key,
                 "User-Agent": USER_AGENT,
             },
             method="GET",
         )
+        # urllib copies ordinary headers to redirect targets. Keep the API key
+        # attached only to the original api.setlist.fm request.
+        request.add_unredirected_header("x-api-key", api_key)
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             body = read_bounded_text(response, MAX_METADATA_RESPONSE_BYTES, label="setlist.fm response")
     except urllib.error.HTTPError as exc:
-        detail = read_bounded_text(exc, MAX_ERROR_RESPONSE_BYTES, label="setlist.fm HTTP error response")
-        raise SetlistFMError(f"setlist.fm API request failed: HTTP {exc.code} {exc.reason}: {detail[:500]}") from exc
+        try:
+            detail = read_bounded_text(exc, MAX_ERROR_RESPONSE_BYTES, label="setlist.fm HTTP error response")
+        except (ResponseTooLargeError, UnicodeError, OSError, ValueError):
+            detail = ""
+        suffix = f": {detail[:500]}" if detail else ""
+        raise SetlistFMError(f"setlist.fm API request failed: HTTP {exc.code} {exc.reason}{suffix}") from exc
     except ResponseTooLargeError as exc:
         raise SetlistFMError(str(exc)) from exc
     except urllib.error.URLError as exc:

@@ -1,8 +1,6 @@
 """Executable Tkinter behavior tests for layout and progress animation."""
 
-__version__ = "v468"
 
-from pathlib import Path
 
 import pytest
 
@@ -17,7 +15,7 @@ pytestmark = [pytest.mark.behavior, pytest.mark.gui]
 
 def _load_gui_module():
     from tests import _legacy_suite as legacy
-    return legacy._load_local_module("tlo-ggi.py", "tlo_ggi_v375_gui_behavior")
+    return legacy._load_local_module("tlo-main.py", "tlo_main_v375_gui_behavior")
 
 
 @pytest.fixture
@@ -47,7 +45,7 @@ def test_checkbox_grid_uses_registry_positions_and_dry_run_cell(tk_root, monkeyp
     from tlo_options import GUI_CHECKBOX_OPTIONS
 
     monkeypatch.setenv("TLOHome", str(tmp_path))
-    app = gui.App(tk_root, gui._parse_gui_command_line([]))
+    gui.App(tk_root, gui._parse_gui_command_line([]))
     tk_root.update_idletasks()
 
     actual = {}
@@ -91,6 +89,7 @@ def test_reverse_folder_workflow_is_not_exposed_in_inventory_gui(tk_root, monkey
     gui = _load_gui_module()
     monkeypatch.setenv("TLOHome", str(tmp_path))
     app = gui.App(tk_root, gui._parse_gui_command_line([]))
+    assert app is not None
     assert not hasattr(app, "reverse_copy_delete_button")
     assert not hasattr(app, "_open_reverse_copy_delete")
 

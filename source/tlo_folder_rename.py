@@ -1,9 +1,12 @@
 """Shared helpers for exact-case folder renames."""
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 import os
 import uuid
+
+from tlo_diagnostics import debug_suppressed_exception
 
 
 def folder_name_write_needed(source_root: str, target_leaf: str) -> bool:
@@ -38,7 +41,7 @@ def _temporary_case_rename_path(source_root: str) -> str:
     parent = os.path.dirname(source_root)
     leaf = os.path.basename(source_root) or "TLO"
     for _ in range(50):
-        candidate = os.path.join(parent, f".{leaf}.tlo-case-rename-{uuid.uuid4().hex}")
+        candidate = os.path.join(parent, f".tlo-case-rename-{uuid.uuid4().hex}-{leaf}")
         if not os.path.lexists(candidate):
             return candidate
     raise OSError(f"Could not allocate temporary folder name beside {source_root}")
@@ -64,11 +67,24 @@ def rename_folder_exact_case(source_root: str, destination_root: str) -> str:
         os.rename(source, temporary)
         try:
             os.rename(temporary, destination)
-        except Exception:
+        except OSError as exc:
             try:
                 os.rename(temporary, source)
-            except Exception:
-                pass
+            except OSError as rollback_exc:
+                debug_suppressed_exception("case-only folder rename rollback", rollback_exc)
+                if os.path.lexists(temporary):
+                    current = temporary
+                elif os.path.lexists(destination):
+                    current = destination
+                elif os.path.lexists(source):
+                    current = source
+                else:
+                    current = "<folder location could not be determined>"
+                raise OSError(
+                    "Rename failed and could not be undone; "
+                    f"the folder is currently at {current}. "
+                    f"Final rename error: {exc}. Rollback error: {rollback_exc}"
+                ) from exc
             raise
     else:
         os.rename(source, destination)

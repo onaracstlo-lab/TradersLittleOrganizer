@@ -1,5 +1,7 @@
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
+import base64
 import csv
 import json
 import ntpath
@@ -9,11 +11,11 @@ import re
 import shlex
 import shutil
 import subprocess
-import sys
 import tempfile
+import uuid
 from dataclasses import asdict
 from types import SimpleNamespace
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 from tlo_security import csv_formula_escape, csv_formula_unescape
 
 from tlo_artist_db import load_artist_matcher, lookup_artist_master_with_status, match_line_to_artists
@@ -31,7 +33,6 @@ from tlo_phase23_v2 import (
     _format_switches_log_line,
     _match_string_dash_string,
     _match_compliant_string_dash_string_date,
-    _string_date_matches,
     _compliant_string_date_matches,
 )
 from tlo_postprocess import (
@@ -305,7 +306,7 @@ def write_bootlist(tlo_home: str, rows: List[Dict[str, str]]) -> str:
             outfile.flush()
             os.fsync(outfile.fileno())
         os.replace(temp_name, path_name)
-    except Exception:
+    except (OSError, UnicodeError, csv.Error):
         try:
             os.remove(temp_name)
         except OSError:
@@ -664,7 +665,7 @@ def _rewrite_path_under_root(path_name: str, old_root: str, new_root: str) -> st
             return normalized_path
         rel = os.path.relpath(normalized_path, normalized_old)
         return os.path.normpath(os.path.join(new_root, rel))
-    except Exception:
+    except (OSError, ValueError):
         return path_name
 
 
@@ -678,7 +679,7 @@ def _rewrite_record_dict_paths(record_dict: Dict[str, str], old_root: str, new_r
             continue
         try:
             values = json.loads(raw_value)
-        except Exception:
+        except (json.JSONDecodeError, TypeError, ValueError):
             continue
         if isinstance(values, list):
             record_dict[key] = json.dumps([_rewrite_path_under_root(value, old_root, new_root) for value in values], ensure_ascii=False)
@@ -712,7 +713,7 @@ def _rename_add_shows_folder_compliantly(config, folder_path: str, record_dict: 
         destination = direct_target
     try:
         rename_folder_exact_case(source_root, destination)
-    except Exception as exc:
+    except (OSError, ValueError) as exc:
         raise InventoryUpdateError(f"Rename Compliantly failed for {source_root}: {exc}") from exc
     _rewrite_record_dict_paths(record_dict, source_root, destination)
     return os.path.normpath(destination)
@@ -806,9 +807,6 @@ def _canonical_safe_delete_path(path_text: str, *, tlo_home: str = "") -> str:
                 pass
     return target
 
-
-def _is_safe_delete_rooted_path(path_text: str, *, tlo_home: str = "") -> bool:
-    return bool(_canonical_safe_delete_path(path_text, tlo_home=tlo_home))
 
 def _join_storage_root(root_path: str, folder_leaf: str) -> str:
     root = str(root_path or "").strip()
@@ -1017,34 +1015,6 @@ def infer_setlist_paths_for_show(tlo_home: str, show_name: str) -> List[str]:
     return candidates
 
 
-def open_paths(paths: Iterable[str]) -> None:
-    """Open only directories or inert text documents; never execute a path."""
-    clean_paths = [p for p in paths if p and os.path.exists(p)]
-    if not clean_paths:
-        return
-    safe_text_exts = {".txt", ".log", ".csv", ".rtf"}
-    if os.name == "nt":
-        for path_name in clean_paths:
-            try:
-                if os.path.isdir(path_name):
-                    subprocess.Popen(["explorer.exe", path_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                elif os.path.splitext(path_name)[1].casefold() in safe_text_exts:
-                    subprocess.Popen(["notepad.exe", path_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            except OSError:
-                pass
-        return
-    opener = "/usr/bin/open" if sys.platform == "darwin" else shutil.which("xdg-open")
-    if not opener:
-        return
-    for path_name in clean_paths:
-        if not os.path.isdir(path_name) and os.path.splitext(path_name)[1].casefold() not in safe_text_exts:
-            continue
-        try:
-            subprocess.Popen([opener, path_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except OSError:
-            pass
-
-
 def _running_under_wsl() -> bool:
     if os.name == "nt":
         return False
@@ -1116,6 +1086,9 @@ def _append_delete_command(script_path: str, path_to_delete: str, volume_label: 
     translated = _delete_command_path_for_script(script_path, path_to_delete)
     if not translated:
         return False
+    if script_path.lower().endswith(".bat") and any(ord(ch) < 32 or ch == '"' for ch in translated):
+        # Never allow a malformed bootlist path to introduce batch commands.
+        return False
     os.makedirs(os.path.dirname(script_path), exist_ok=True)
     is_bat = script_path.lower().endswith(".bat")
     existed = os.path.exists(script_path)
@@ -1130,17 +1103,52 @@ def _append_delete_command(script_path: str, path_to_delete: str, volume_label: 
             if not existed:
                 outfile.write("setlocal DisableDelayedExpansion" + newline)
                 outfile.write("chcp 65001 >nul" + newline)
-                outfile.write("REM Edit drive letters below as needed before running this file." + newline)
-                outfile.write("REM Volume labels identify where each recorded path was found; [] means the volume was unlabeled." + newline + newline)
+                outfile.write("REM To adjust drive letters, edit each TLO_DELETE_TARGET value; do not edit just the comments." + newline)
+                outfile.write("REM The runtime label check and rmdir share that one target variable." + newline)
+                outfile.write("REM [] identifies an unlabeled volume; its deletion is always disabled." + newline + newline)
             safe_path = _batch_escape_literal(translated)
-            safe_label = _batch_escape_literal(label)
-            outfile.write(f'REM [{safe_label}] "{safe_path}"' + newline)
-            outfile.write(f'if exist "{safe_path}\\" (' + newline)
-            outfile.write(f'  echo Deleting [{safe_label}] "{safe_path}"' + newline)
-            outfile.write(f'  rmdir /s /q "{safe_path}"' + newline)
-            outfile.write(') else (' + newline)
-            outfile.write(f'  echo Not found [{safe_label}] "{safe_path}"' + newline)
-            outfile.write(')' + newline + newline)
+            # Volume labels containing controls must remain inert in REM lines.
+            visible_label = "".join(ch if ord(ch) >= 32 and ord(ch) != 127 else "?" for ch in label)
+            safe_label = _batch_escape_literal(visible_label)
+            outfile.write(f'REM "[{safe_label}]" "{safe_path}"' + newline)
+            if not label:
+                outfile.write(f'echo SKIPPED: unlabeled volume cannot be verified for "{safe_path}"' + newline)
+                outfile.write('REM SAFETY: destructive command disabled for unlabeled volume.' + newline)
+                outfile.write(f'REM rmdir /s /q "{safe_path}"' + newline + newline)
+            else:
+                # Encode the recorded label so cmd.exe cannot interpret its
+                # punctuation, quotes, percent signs or non-ASCII characters
+                # as batch syntax.  Only PowerShell decodes it for comparison.
+                expected_base64 = base64.b64encode(label.encode("utf-16le")).decode("ascii")
+                token = uuid.uuid4().hex
+                skip = f':TLO_SKIP_{token}'
+                done = f':TLO_DONE_{token}'
+                ps = r'%__APPDIR__%WindowsPowerShell\v1.0\powershell.exe'
+                probe = (
+                    'try { '
+                    "$expected=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($env:TLO_DELETE_LABEL_B64)); "
+                    "$drive=[System.IO.DriveInfo]::new($env:TLO_DELETE_DRIVE + ':\\'); "
+                    '$actual=$drive.VolumeLabel; '
+                    'if ([string]::IsNullOrEmpty($actual) -or '
+                    '-not [string]::Equals($actual,$expected,[StringComparison]::Ordinal)) { exit 1 }; '
+                    'exit 0 } catch { exit 1 }'
+                )
+                outfile.write(f'set "TLO_DELETE_TARGET={safe_path}"' + newline)
+                outfile.write('set "TLO_DELETE_DRIVE=%TLO_DELETE_TARGET:~0,1%"' + newline)
+                outfile.write(f'set "TLO_DELETE_LABEL_B64={expected_base64}"' + newline)
+                outfile.write(f'if not exist "{ps}" goto {skip}' + newline)
+                outfile.write(f'"{ps}" -NoProfile -NonInteractive -Command "{probe}" >nul 2>&1' + newline)
+                outfile.write(f'if errorlevel 1 goto {skip}' + newline)
+                outfile.write('if exist "%TLO_DELETE_TARGET%\" (' + newline)
+                outfile.write('  echo Deleting "%TLO_DELETE_TARGET%" after volume-label verification' + newline)
+                outfile.write('  rmdir /s /q "%TLO_DELETE_TARGET%"' + newline)
+                outfile.write(') else (' + newline)
+                outfile.write('  echo Not found "%TLO_DELETE_TARGET%"' + newline)
+                outfile.write(')' + newline)
+                outfile.write(f'goto {done}' + newline)
+                outfile.write(skip + newline)
+                outfile.write('echo SKIPPED: wrong, missing or unverifiable volume for "%TLO_DELETE_TARGET%"; see recorded label above' + newline)
+                outfile.write(done + newline + newline)
         else:
             if label:
                 qroot = shlex.quote(root)
@@ -1151,8 +1159,15 @@ def _append_delete_command(script_path: str, path_to_delete: str, volume_label: 
                               "elif command -v diskutil >/dev/null 2>&1; then TLO_ACTUAL_LABEL=$(diskutil info \"$TLO_ROOT\" 2>/dev/null | awk -F: '/Volume Name/{sub(/^[ \\t]+/,\"\",$2); print $2; exit}'); " +
                               "elif command -v findmnt >/dev/null 2>&1; then TLO_ACTUAL_LABEL=$(findmnt -n -o LABEL --target \"$TLO_ROOT\" 2>/dev/null || true); fi" + newline)
                 outfile.write("[ \"$TLO_ACTUAL_LABEL\" = \"$TLO_EXPECTED_LABEL\" ] || { echo \"Wrong or unverifiable volume at $TLO_ROOT; expected $TLO_EXPECTED_LABEL\" >&2; exit 1; }" + newline)
-            outfile.write(f"printf '%s\\n' {shlex.quote('Deleting ' + translated)}" + newline)
-            outfile.write(f"rm -rf -- {shlex.quote(translated)}" + newline)
+                outfile.write(f"printf '%s\\n' {shlex.quote('Deleting ' + translated)}" + newline)
+                outfile.write(f"rm -rf -- {shlex.quote(translated)}" + newline)
+            else:
+                outfile.write(
+                    f"printf '%s\\n' {shlex.quote('SKIPPED: unlabeled volume cannot be verified automatically; manually verify before deleting ' + translated)}"
+                    + newline
+                )
+                outfile.write("# SAFETY: destructive command disabled because this volume had no label to verify." + newline)
+                outfile.write(f"# rm -rf -- {shlex.quote(translated)}" + newline)
     if not is_bat:
         try:
             os.chmod(script_path, 0o755)
@@ -1169,7 +1184,7 @@ def _json_list_value(value) -> List[str]:
         return [os.path.normpath(str(item)) for item in value if str(item or "").strip()]
     try:
         parsed = json.loads(str(value))
-    except Exception:
+    except (json.JSONDecodeError, TypeError, ValueError):
         return []
     if not isinstance(parsed, list):
         return []
@@ -1226,7 +1241,7 @@ def _ensure_add_shows_tag_log_scope(config, scope_path: str) -> None:
         return
     try:
         token = allocate_log_tokens(config.TLOHome, 1)[0]
-    except Exception:
+    except (OSError, ValueError, IndexError):
         token = "U"
     config.current_log_token = token
     logs.start_search_path(os.path.normpath(scope_path or config.TLOHome), 1, log_token=token)
@@ -1261,8 +1276,8 @@ def _add_shows_tag_emit(config, text: str) -> None:
 def _tag_add_shows_folder_in_place(config, folder_path: str, record_dict: Dict[str, str], generated_setlist_path: str = "") -> Dict[str, int]:
     """Tag or SHN-convert an Add Shows source folder before staging.
 
-    Add Shows still never performs Tag Copy.  When Tag in Place is checked, the
-    folder is tagged in place.  When Tag in Place is not checked but Convert shn
+    Add Shows still never performs Tag Copy.  When Tag In Place is checked, the
+    folder is tagged in place.  When Tag In Place is not checked but Convert shn
     is checked, SHN/SHNF files are converted to FLAC without writing tags.  Both
     the regular Add Shows path and the duplicate-resolution path call this after
     compliant rename and generated setlist preparation, but before staging.
@@ -1282,7 +1297,7 @@ def _tag_add_shows_folder_in_place(config, folder_path: str, record_dict: Dict[s
 
     _ensure_add_shows_tag_log_scope(config, folder_path)
     if bool(getattr(config, "tag_copy_during_inventory", False)):
-        _add_shows_tag_emit(config, "ADD_SHOWS_TAG_COPY_IGNORED: Add Shows supports Tag in Place only; Tag Copy was ignored")
+        _add_shows_tag_emit(config, "ADD_SHOWS_TAG_COPY_IGNORED: Add Shows supports Tag In Place only; Tag Copy was ignored")
 
     group = _build_single_folder_group(config, folder_path)
     if generated_setlist_path and os.path.isfile(generated_setlist_path) and not group.get("setlist_file"):
@@ -1421,7 +1436,7 @@ def review_paths_for_duplicate(config, item: Dict[str, object], selected_rows: S
     else:
         try:
             paths.append(create_or_replace_generated_setlist(config.TLOHome, record))
-        except Exception:
+        except (OSError, InventoryUpdateError, ValueError):
             if source:
                 paths.append(source)
     for row in selected_rows:
@@ -1463,7 +1478,7 @@ def delete_new_keep_old(item: Dict[str, object]) -> None:
     if folder and os.path.isdir(folder):
         try:
             move_to_trash(folder)
-        except Exception as exc:
+        except (OSError, subprocess.SubprocessError) as exc:
             raise InventoryUpdateError(
                 f"Unable to move the new duplicate folder to Trash/Recycle Bin; it remains in place: {folder} ({exc})"
             ) from exc

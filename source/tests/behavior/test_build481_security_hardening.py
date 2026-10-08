@@ -8,11 +8,9 @@ from types import SimpleNamespace
 import pytest
 
 import logging_lib
-import tlo_bootlist_volume_policy as BP
 import tlo_github_updates as GU
 import tlo_inventory_update as IU
 import tlo_postprocess as PP
-import tlo_security as SEC
 import tlo_setlist_file_selection as FS
 import tlo_sibling_collections as SC
 import tlo_tag_lib as TL

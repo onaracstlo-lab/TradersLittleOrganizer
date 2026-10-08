@@ -1,15 +1,17 @@
 """Build 488 Redundancy Groups dismiss-button wording."""
+from tests._release_artifacts import release_history
+from tests import _release_artifacts as RA
 
-__version__ = "v497"
 
 from pathlib import Path
+ROOT = Path(__file__).resolve().parents[2]
 import pytest
 
 pytestmark = pytest.mark.behavior
 
 
 def _redundancy_window_source():
-    source = Path("tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     start = source.index("class RedundancyGroupsWindow:")
     end = source.index("class CopyRequestsWindow:", start)
     return source[start:end]
@@ -31,10 +33,8 @@ def test_build488_redundancy_groups_layout_and_behavior_unchanged():
 
 def test_build488_docs_describe_label_only_change():
     from docx import Document
-    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v518.docx").paragraphs)
-    manual = Path("TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
-    assert "Current document version: v518 (TLO v1.7)." in req
+    req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
     assert "Build 488: Redundancy Groups Close label" in req
     assert "The editor-dismiss button is labeled Close" in req
-    assert "Build 488 Redundancy Groups Close label" in manual
-    assert "Close instead of Cancel" in manual
+    assert "Build 488 - Redundancy Groups Close label" in release_history()
+    assert 'Close instead of Cancel' in release_history()

@@ -1,4 +1,6 @@
 """Build 474: conservative descriptor fallback for unknown-date collections/shows."""
+from tests._release_artifacts import release_history
+from tests import _release_artifacts as RA
 
 from pathlib import Path
 
@@ -9,7 +11,6 @@ import tlo_postprocess as post
 from tlo_models import ShowMetadata
 from tlo_show_descriptor import extract_fallback_descriptor
 
-__version__ = "v476"
 pytestmark = pytest.mark.behavior
 
 
@@ -147,14 +148,12 @@ def test_build473_documents_describe_descriptor_as_non_geographic_fallback():
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    requirements = Document(root / "TLO_Inventory_Requirements_Working_v518.docx")
+    requirements = Document(root / RA.REQUIREMENTS_FILENAME)
     req_text = "\n".join(p.text for p in requirements.paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
     faq = (root / "TLO-FAQ.txt").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v518 (TLO v1.7)." in req_text
     assert "separate non-geographic Descriptor" in req_text
     assert "The Descriptor must never populate Venue, City, Region, Country, or Location." in req_text
-    assert "Build 473 - unknown-date descriptor fallback" in manual
-    assert "Venue and Location remain blank" in manual
-    assert "Build 473 can add a separate non-geographic descriptor" in faq
+    assert "Build 473 - unknown-date descriptor fallback" in release_history()
+    assert 'Venue and Location remain blank' in release_history()
+    assert "TLO can add a separate non-geographic descriptor instead of inventing a venue or location" in faq

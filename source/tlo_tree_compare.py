@@ -1,6 +1,7 @@
 """Exact recursive directory-tree comparison and copy/alternate collision helpers."""
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 import hashlib
 import os
@@ -29,23 +30,41 @@ def _raise_walk_error(error: OSError) -> None:
     raise error
 
 
-def _tree_manifest(root: str, *, ignore_root_names: Set[str] | None = None) -> Tuple[Set[str], Dict[str, int]]:
+def _tree_manifest(
+    root: str, *, ignore_root_names: Set[str] | None = None
+) -> Tuple[Set[str], Dict[str, int], Dict[str, str]]:
+    """Return directories, regular files, and symlinks without following links."""
     directories: Set[str] = set()
     files: Dict[str, int] = {}
+    links: Dict[str, str] = {}
     ignored = {str(name).casefold() for name in (ignore_root_names or set())}
     root_norm = os.path.normcase(os.path.abspath(os.path.normpath(root)))
-    for current_dir, dir_names, file_names in os.walk(root, onerror=_raise_walk_error):
+    for current_dir, dir_names, file_names in os.walk(
+        root, topdown=True, followlinks=False, onerror=_raise_walk_error
+    ):
         if os.path.normcase(os.path.abspath(os.path.normpath(current_dir))) == root_norm and ignored:
             dir_names[:] = [name for name in dir_names if name.casefold() not in ignored]
             file_names = [name for name in file_names if name.casefold() not in ignored]
+
+        retained_dirs = []
         for dir_name in dir_names:
             full_path = os.path.join(current_dir, dir_name)
-            directories.add(_normalized_relative(full_path, root))
+            relative = _normalized_relative(full_path, root)
+            if os.path.islink(full_path):
+                links[relative] = os.readlink(full_path)
+            else:
+                directories.add(relative)
+                retained_dirs.append(dir_name)
+        dir_names[:] = retained_dirs
+
         for file_name in file_names:
             full_path = os.path.join(current_dir, file_name)
             relative = _normalized_relative(full_path, root)
-            files[relative] = os.path.getsize(full_path)
-    return directories, files
+            if os.path.islink(full_path):
+                links[relative] = os.readlink(full_path)
+            else:
+                files[relative] = os.path.getsize(full_path)
+    return directories, files, links
 
 
 def _sha256(path_name: str) -> str:
@@ -63,10 +82,12 @@ def directory_trees_exactly_match(left_root: str, right_root: str, *, ignore_roo
     """Return True only for identical recursive structure and byte contents.
 
     Exact identity requires the same relative descendant folders (including
-    empty folders), the same relative files, identical file sizes, and identical
-    SHA-256 content for every file. Filesystem timestamps/attributes are not
-    content and are intentionally ignored. Any comparison error is a safe
-    non-match so an unverified collision is never labeled a copy.
+    empty folders), the same relative regular files, identical file sizes and
+    SHA-256 content for every regular file, and the same symbolic links with the
+    same readlink() target text. Links are compared as links and are never
+    dereferenced for content. Filesystem timestamps/attributes are intentionally
+    ignored. Any comparison error is a safe non-match so an unverified collision
+    is never labeled a copy.
     """
     left_root = os.path.normpath(str(left_root or ""))
     right_root = os.path.normpath(str(right_root or ""))
@@ -79,9 +100,9 @@ def directory_trees_exactly_match(left_root: str, right_root: str, *, ignore_roo
         pass
 
     try:
-        left_dirs, left_files = _tree_manifest(left_root, ignore_root_names=ignore_root_names)
-        right_dirs, right_files = _tree_manifest(right_root, ignore_root_names=ignore_root_names)
-        if left_dirs != right_dirs or left_files != right_files:
+        left_dirs, left_files, left_links = _tree_manifest(left_root, ignore_root_names=ignore_root_names)
+        right_dirs, right_files, right_links = _tree_manifest(right_root, ignore_root_names=ignore_root_names)
+        if left_dirs != right_dirs or left_files != right_files or left_links != right_links:
             return False
         for relative in sorted(left_files):
             left_path = os.path.join(left_root, relative)

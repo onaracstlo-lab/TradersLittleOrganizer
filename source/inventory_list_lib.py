@@ -1,4 +1,5 @@
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 from tlo_diagnostics import debug_suppressed_exception
 import os
 import re
@@ -8,8 +9,6 @@ from console_output_lib import console_print
 from logging_lib import truncate_logs_for_tokens, prune_logs_for_tokens_and_paths
 from tlo_volume_label import resolve_volume_label
 from tlo_bootlist_volume_policy import (
-    count_group_logs_by_volume,
-    group_log_tokens_by_volume,
     read_group_log_volume_rows,
     paths_related,
     path_is_same_or_under,
@@ -126,14 +125,14 @@ def _strip_optional_quotes(text):
     return text
 
 
-_PATH_DIRECTIVE_RE = re.compile(r"(?<!\S)(--?\$slam|--\$copy-delete|--\$copy)(?=\s|$)", re.IGNORECASE)
+_PATH_DIRECTIVE_RE = re.compile(r"(?<!\S)(--/slam|--/copy-delete|--/copy)(?=\s|$)", re.IGNORECASE)
 
 
 def _split_path_and_directives(line_text):
     """Parse one inventory-control entry.
 
     The physical path must come first.  Optional directives may follow in any
-    order: --$slam / -$slam, --$copy, and --$copy-delete.  Directive values run
+    order: --/slam, --/copy, and --/copy-delete.  Directive values run
     until the next directive marker or the end of the line, so paths and artist
     names may contain spaces without additional quoting.
     """
@@ -153,11 +152,11 @@ def _split_path_and_directives(line_text):
         value = _strip_optional_quotes(text[value_start:value_end].strip())
         if not value:
             raise ValueError(f"Missing value for {match.group(1)} directive in inventory line: {line_text}")
-        if marker.endswith("$slam"):
+        if marker.endswith("/slam"):
             key = "slam"
-        elif marker == "--$copy":
+        elif marker == "--/copy":
             key = "copy"
-        elif marker == "--$copy-delete":
+        elif marker == "--/copy-delete":
             key = "copy_delete"
         else:
             raise ValueError(f"Unrecognized inventory directive {match.group(1)} in line: {line_text}")
@@ -167,7 +166,7 @@ def _split_path_and_directives(line_text):
         values[key] = value
 
     if values["copy"] and values["copy_delete"]:
-        raise ValueError("--$copy and --$copy-delete are mutually exclusive on one inventory-control entry")
+        raise ValueError("--/copy and --/copy-delete are mutually exclusive on one inventory-control entry")
 
     return _strip_optional_quotes(path_part), values["slam"], values["copy"], values["copy_delete"]
 
@@ -418,10 +417,10 @@ def _parse_inventory_file(file_path):
             copy_destination = ""
             if copy_value:
                 copy_mode = "copy"
-                copy_destination = _normalize_copy_destination(copy_value, "--$copy")
+                copy_destination = _normalize_copy_destination(copy_value, "--/copy")
             elif copy_delete_value:
                 copy_mode = "copy-delete"
-                copy_destination = _normalize_copy_destination(copy_delete_value, "--$copy-delete")
+                copy_destination = _normalize_copy_destination(copy_delete_value, "--/copy-delete")
             if copy_mode and copy_destination:
                 parsed_items.append((raw_path_entry, normalized_path, assoc_value, volume_label, copy_mode, copy_destination))
             else:
@@ -496,7 +495,7 @@ def parse_search_path_input(
     The Path(s) value may contain multiple semicolon-separated direct entries.
     Each direct entry uses the same grammar as one line of the former
     TLOHome/toBeInventoried.txt input: optional [Volume] prefix followed by a
-    path and optional --$slam / --$copy / --$copy-delete directives.
+    path and optional --/slam / --/copy / --/copy-delete directives.
 
     A Search Path entry whose physical path ends in .txt is instead treated as
     an inventory-control text file. That file may have any name and is parsed
@@ -513,7 +512,7 @@ def parse_search_path_input(
     global_copy = _strip_optional_quotes(str(copy_override or "").strip())
     global_copy_delete = _strip_optional_quotes(str(copy_delete_override or "").strip())
     if global_copy and global_copy_delete:
-        raise ValueError("--$copy and --$copy-delete are mutually exclusive for Search Path.")
+        raise ValueError("--/copy and --/copy-delete are mutually exclusive for Search Path.")
 
     parsed_items = []
     text_control_files = []
@@ -546,27 +545,27 @@ def parse_search_path_input(
 
         if inline_slam and global_slam:
             raise ValueError(
-                f"Search Path entry {entry_number} contains --$slam while the separate Slam field/--$slam is also set."
+                f"Search Path entry {entry_number} contains --/slam while the separate Slam field/--/slam is also set."
             )
         if (inline_copy or inline_copy_delete) and (global_copy or global_copy_delete):
             raise ValueError(
-                f"Search Path entry {entry_number} contains a copy directive while a separate --$copy/--$copy-delete option is also set."
+                f"Search Path entry {entry_number} contains a copy directive while a separate --/copy/--/copy-delete option is also set."
             )
 
         slam_value = inline_slam or global_slam
         copy_value = inline_copy or global_copy
         copy_delete_value = inline_copy_delete or global_copy_delete
         if copy_value and copy_delete_value:
-            raise ValueError(f"--$copy and --$copy-delete are mutually exclusive in Search Path entry {entry_number}.")
+            raise ValueError(f"--/copy and --/copy-delete are mutually exclusive in Search Path entry {entry_number}.")
 
         copy_mode = ""
         copy_destination = ""
         if copy_value:
             copy_mode = "copy"
-            copy_destination = _normalize_copy_destination(copy_value, "--$copy")
+            copy_destination = _normalize_copy_destination(copy_value, "--/copy")
         elif copy_delete_value:
             copy_mode = "copy-delete"
-            copy_destination = _normalize_copy_destination(copy_delete_value, "--$copy-delete")
+            copy_destination = _normalize_copy_destination(copy_delete_value, "--/copy-delete")
 
         if copy_mode and copy_destination:
             parsed_items.append(
@@ -577,7 +576,7 @@ def parse_search_path_input(
 
     if text_control_files and (global_slam or global_copy or global_copy_delete):
         raise ValueError(
-            "The separate Slam/--$slam and --$copy/--$copy-delete options cannot be combined with a .txt Search Path control file; put per-path directives inside the file."
+            "The separate Slam/--/slam and --/copy/--/copy-delete options cannot be combined with a .txt Search Path control file; put per-path directives inside the file."
         )
 
     return parsed_items
@@ -1073,7 +1072,7 @@ def load_accessible_inventory_paths(config):
         for item in inaccessible_items:
             bad_path, normalized_path, bad_value, bad_volume_label, _bad_volume_key = item[:5]
             reason = item[-1]
-            display_path = f"{bad_path} -$slam {bad_value}" if bad_value else bad_path
+            display_path = f"{bad_path} --/slam {bad_value}" if bad_value else bad_path
             console_print(config, f"  {display_path}")
             console_print(config, f"    normalized: {normalized_path}")
             if bad_volume_label:

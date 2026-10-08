@@ -1,10 +1,12 @@
 """Build 503 direct path/volume Copy Requests with show de-confliction."""
+from tests._release_artifacts import release_history
+from tests import _release_artifacts as RA
 
-__version__ = "v503"
 
 import os
 import sqlite3
 from pathlib import Path
+ROOT = Path(__file__).resolve().parents[2]
 
 import pytest
 
@@ -161,18 +163,17 @@ def test_build503_direct_copy_preview_counts_direct_bytes_and_gui_enables_copy(t
     assert str(source) in evaluation.direct_available
     assert required >= 5
     assert errors == []
-    gui = Path("tlo-ggi.py").read_text(encoding="utf-8")
+    gui = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     assert "evaluation.available or evaluation.direct_available" in gui
 
 
 def test_build503_documentation_describes_direct_copy_and_deconfliction():
     from docx import Document
-    req = "\n".join(p.text for p in Document("TLO_Inventory_Requirements_Working_v518.docx").paragraphs)
-    manual = Path("TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
-    faq = Path("TLO-FAQ.txt").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
+    faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8", errors="ignore")
     assert "direct filesystem path/volume item" in req
     assert "[Volume] path" in req
     assert "de-conflicted in the same pass and on later passes" in req
     assert "Build 503: direct path/volume Copy Request items" in req
-    assert "direct filesystem path or volume item" in manual
+    assert 'direct filesystem path or volume item' in release_history()
     assert "rooted filesystem path" in faq

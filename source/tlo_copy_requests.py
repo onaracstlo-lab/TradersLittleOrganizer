@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 import hashlib
 import json
@@ -14,13 +15,13 @@ import socket
 import subprocess
 import string
 import tempfile
-import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from tlo_artist_db import ArtistMatcher, load_artist_matcher, lookup_artist_master_with_status
+from tlo_diagnostics import debug_suppressed_exception
 from tlo_bootlist_volume_policy import (
     normalize_volume_label,
     parse_volume_path_value,
@@ -30,6 +31,7 @@ from tlo_bootlist_volume_policy import (
 from tlo_tree_compare import directory_trees_exactly_match
 from tlo_path_policy import OS_MANAGED_DIR_NAMES
 from tlo_path_inputs import normalize_platform_input_path, strip_optional_quotes
+from tlo_locking import acquire_owned_lock, release_owned_lock, lock_is_held, clear_unheld_lock_payload
 from inventory_list_lib import split_search_path_entries
 from tlo_volume_label import resolve_volume_label
 from tlo_redundancy import (
@@ -62,7 +64,7 @@ VOLUME_ROOT_EXCLUDED_NAMES = OS_MANAGED_DIR_NAMES
 STALE_COPY_PREFIX = ".tlo-copy-"
 COPY_TEMP_MARKER_FILENAME = ".tlo-copy-owned.json"
 COPY_PASS_LOCK_FILENAME = ".copy-pass.lock"
-DESTINATION_LOCK_PREFIX = ".tlo-copy-lock-"
+DESTINATION_LOCK_PREFIX = ".tlo-lock-copy-"
 FOREIGN_LOCK_STALE_SECONDS = 24 * 60 * 60
 
 SHOW_DATE_RE = re.compile(r"(?<!\d)(?P<date>\d{4}-\d{2}-\d{2})(?!\d)")
@@ -70,6 +72,7 @@ DATE_REQUEST_RE = re.compile(r"^(?P<artist>.+?)\s+(?P<date>\d{4}-\d{2}-\d{2})$")
 YEAR_REQUEST_RE = re.compile(r"^(?P<artist>.+?)\s+(?P<year>\d{4})$")
 RANGE_REQUEST_RE = re.compile(r"^(?P<artist>.+?)\s+(?P<start>\d{2}|\d{4})-(?P<end>\d{2}|\d{4})$")
 SAFE_ID_RE = re.compile(r"[^A-Za-z0-9._-]+")
+VALID_REQUEST_ID_RE = re.compile(r"[A-Za-z0-9._-]+")
 WINDOWS_ROOTED_PATH_RE = re.compile(r"^[A-Za-z]:(?:[\\/].*)?$")
 UNC_PATH_RE = re.compile(r"^\\\\[^\\/]+[\\/][^\\/]+")
 
@@ -173,11 +176,11 @@ def _atomic_write_text(path_name: str, text: str) -> None:
             outfile.flush()
             os.fsync(outfile.fileno())
         os.replace(temp_name, path_name)
-    except Exception:
+    except (OSError, UnicodeError):
         try:
             os.remove(temp_name)
-        except OSError:
-            pass
+        except OSError as cleanup_exc:
+            debug_suppressed_exception("Copy Request atomic-write temp cleanup", cleanup_exc)
         raise
 
 
@@ -229,8 +232,15 @@ def request_id_for_paths(request_input: str, destination: str) -> str:
     return f"{stem[:48]}--{digest}"
 
 
+def _validated_request_id(request_id: str) -> str:
+    value = str(request_id or "")
+    if value in {".", ".."} or VALID_REQUEST_ID_RE.fullmatch(value) is None:
+        raise CopyRequestError(f"Invalid Copy Request ID: {value!r}")
+    return value
+
+
 def request_dir(tlo_home: str, request_id: str) -> str:
-    return os.path.join(copy_requests_root(tlo_home), request_id)
+    return os.path.join(copy_requests_root(tlo_home), _validated_request_id(request_id))
 
 
 def state_path(tlo_home: str, request_id: str) -> str:
@@ -500,6 +510,11 @@ def load_request(tlo_home: str, request_id: str, *, missing_ok: bool = False) ->
         raise CopyRequestError(f"Cannot read Copy Request state: {path_name}: {exc}") from exc
     if not isinstance(payload, dict) or int(payload.get("schema", 0) or 0) != STATE_SCHEMA:
         raise CopyRequestError(f"Unsupported Copy Request state: {path_name}")
+    stored_request_id = str(payload.get("request_id", "") or "")
+    if stored_request_id != request_id:
+        raise CopyRequestError(
+            f"Copy Request state ID does not match its containing directory: {path_name}"
+        )
     return payload
 
 
@@ -555,24 +570,38 @@ def close_request(tlo_home: str, request_id: str) -> Dict[str, object]:
 
 
 def delete_request(tlo_home: str, request_id: str) -> None:
+    request_id = _validated_request_id(request_id)
+    root = os.path.realpath(copy_requests_root(tlo_home))
     directory = request_dir(tlo_home, request_id)
+    resolved = os.path.realpath(directory)
+    if os.path.dirname(resolved) != root:
+        raise CopyRequestError("Copy Request deletion target is outside the Copy Requests root.")
     if os.path.isdir(directory):
         shutil.rmtree(directory)
 
 
-def list_requests(tlo_home: str) -> List[Dict[str, object]]:
+def list_request_entries(tlo_home: str) -> List[Tuple[str, Dict[str, object]]]:
+    """Return (containing-directory ID, state) pairs for valid requests."""
     root = copy_requests_root(tlo_home)
     if not os.path.isdir(root):
         return []
-    result: List[Dict[str, object]] = []
+    result: List[Tuple[str, Dict[str, object]]] = []
     for name in sorted(os.listdir(root), key=str.casefold):
         if name == REPORTS_DIRNAME:
             continue
-        state = load_request(tlo_home, name, missing_ok=True)
+        try:
+            request_id = _validated_request_id(name)
+            state = load_request(tlo_home, request_id, missing_ok=True)
+        except CopyRequestError:
+            continue
         if state:
-            result.append(state)
-    result.sort(key=lambda item: str(item.get("updated_at", "")), reverse=True)
+            result.append((request_id, state))
+    result.sort(key=lambda item: str(item[1].get("updated_at", "")), reverse=True)
     return result
+
+
+def list_requests(tlo_home: str) -> List[Dict[str, object]]:
+    return [state for _request_id, state in list_request_entries(tlo_home)]
 
 
 # ---------------------------------------------------------------------------
@@ -1519,15 +1548,18 @@ def _owner_is_live(payload: Mapping[str, object]) -> bool:
 
 
 def stale_lock_details(path_name: str) -> Dict[str, object]:
-    """Describe a stale Copy Request lock that may be cleared with user confirmation."""
+    """Describe owner metadata only when an advisory lock is actually held.
+
+    Build 527 no longer treats mere lock-file existence as ownership. A crashed
+    process releases the OS advisory lock automatically, so stale files can be
+    reused without a remove/recreate race.
+    """
+    if not os.path.exists(path_name) or not lock_is_held(path_name):
+        return {}
     payload = _read_json_file(path_name)
     if not payload:
-        return {}
+        return {"path": path_name, "hostname": "unknown", "age_seconds": 0.0, "same_host": False}
     host = str(payload.get("hostname", "") or "")
-    if host == socket.gethostname():
-        if _owner_is_live(payload):
-            return {}
-        return {"path": path_name, "hostname": host or "this computer", "age_seconds": 0.0, "same_host": True}
     raw_when = str(payload.get("started_at", "") or payload.get("created_at", "") or "")
     age = 0.0
     try:
@@ -1540,63 +1572,36 @@ def stale_lock_details(path_name: str) -> Dict[str, object]:
             age = max(0.0, __import__("time").time() - os.path.getmtime(path_name))
         except OSError:
             age = 0.0
-    if age < FOREIGN_LOCK_STALE_SECONDS:
-        return {}
-    return {"path": path_name, "hostname": host or "another computer", "age_seconds": age, "same_host": False}
+    return {
+        "path": path_name,
+        "hostname": host or "another computer",
+        "age_seconds": age,
+        "same_host": host == socket.gethostname(),
+    }
 
 
 def clear_stale_lock(path_name: str) -> bool:
-    """Clear only a lock that stale_lock_details currently identifies as stale."""
-    if not stale_lock_details(path_name):
+    """Clear metadata only when the lock is not currently owned."""
+    if lock_is_held(path_name):
         return False
-    try:
-        os.remove(path_name)
-        return True
-    except OSError:
-        return False
+    return clear_unheld_lock_payload(path_name)
 
 
 def _acquire_exclusive_lock(path_name: str, request_id: str) -> str:
-    """Acquire a local lock file, recovering only a dead same-host owner."""
+    """Acquire and hold a cross-platform advisory lock for the operation."""
     os.makedirs(os.path.dirname(path_name) or ".", exist_ok=True)
     payload = _copy_owner_payload(request_id)
-    for _attempt in range(2):
-        try:
-            fd = os.open(path_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError:
-            existing = _read_json_file(path_name)
-            if existing and str(existing.get("hostname", "")) == socket.gethostname() and not _owner_is_live(existing):
-                try:
-                    os.remove(path_name)
-                except OSError:
-                    pass
-                continue
-            raise CopyRequestError(f"Copy Request is already active for this request/destination: {path_name}")
-        except OSError as exc:
-            raise CopyRequestError(f"Cannot acquire Copy Request lock {path_name}: {exc}") from exc
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8", newline="") as outfile:
-                json.dump(payload, outfile, sort_keys=True)
-                outfile.write("\n")
-                outfile.flush()
-                os.fsync(outfile.fileno())
-            return path_name
-        except Exception:
-            try:
-                os.remove(path_name)
-            except OSError:
-                pass
-            raise
-    raise CopyRequestError(f"Cannot recover Copy Request lock: {path_name}")
+    try:
+        acquired = acquire_owned_lock(path_name, payload)
+    except OSError as exc:
+        raise CopyRequestError(f"Cannot acquire Copy Request lock {path_name}: {exc}") from exc
+    if not acquired:
+        raise CopyRequestError(f"Copy Request is already active for this request/destination: {path_name}")
+    return path_name
 
 
 def _release_exclusive_lock(path_name: str) -> None:
-    try:
-        os.remove(path_name)
-    except FileNotFoundError:
-        pass
-    except OSError:
-        pass
+    release_owned_lock(path_name)
 
 
 def _destination_lock_path(destination: str, request_id: str) -> str:
@@ -1723,8 +1728,11 @@ def _create_owned_copy_temp(destination: str, request_id: str) -> str:
             payload["created_at"] = payload.pop("started_at")
             json.dump(payload, outfile, sort_keys=True)
             outfile.write("\n")
-    except Exception:
-        shutil.rmtree(temp_path, ignore_errors=True)
+    except (OSError, TypeError, ValueError):
+        try:
+            shutil.rmtree(temp_path)
+        except OSError as cleanup_exc:
+            debug_suppressed_exception("Copy Request owned-temp cleanup", cleanup_exc)
         raise
     return temp_path
 
@@ -1743,14 +1751,21 @@ def _copy_into_temp_target(
 
     if cancel_check is not None and cancel_check():
         raise CopyRequestCancelled("Copy Request cancelled by user.")
+
+    # Revalidate at the copy boundary. Evaluation already rejects links, but a
+    # source can change after evaluation. Preserve any raced-in link as a link
+    # so copytree can never dereference and copy its external target, then reject
+    # links again in the completed temporary tree before it can be published.
+    _walk_tree_size_and_reject_links(source, ignore_root_names=ignore_root_names)
     shutil.copytree(
         source,
         temp_target,
-        symlinks=False,
+        symlinks=True,
         dirs_exist_ok=True,
         ignore=_copytree_ignore_root_names(source, ignore_root_names),
         copy_function=copy_file,
     )
+    _walk_tree_size_and_reject_links(temp_target)
 
 
 def _finalize_reserved_copy(temp_target: str, target: str) -> None:
@@ -2174,8 +2189,8 @@ def _copy_available_unlocked(tlo_home: str, request_id: str, *, roots: Optional[
                     pass
             try:
                 _clear_pending_copy(tlo_home, state)
-            except Exception:
-                pass
+            except (OSError, TypeError, ValueError) as cleanup_exc:
+                debug_suppressed_exception("Copy Request pending-state cleanup after failed direct copy", cleanup_exc)
             if isinstance(exc, CopyRequestCancelled):
                 result.cancelled = True
                 break
@@ -2229,8 +2244,8 @@ def _copy_available_unlocked(tlo_home: str, request_id: str, *, roots: Optional[
                         pass
                 try:
                     _clear_pending_copy(tlo_home, state)
-                except Exception:
-                    pass
+                except (OSError, TypeError, ValueError) as cleanup_exc:
+                    debug_suppressed_exception("Copy Request pending-state cleanup after failed show copy", cleanup_exc)
                 if isinstance(exc, CopyRequestCancelled):
                     result.cancelled = True
                     break

@@ -15,7 +15,6 @@ import tlo_setlistfm_lookup as SFM
 from tlo_models import ShowMetadata
 
 pytestmark = pytest.mark.behavior
-__version__ = "v480"
 
 
 def _music_dir(path: Path) -> Path:
@@ -32,7 +31,7 @@ def _record(**kwargs):
 
 def test_build479_gui_tag_completion_calls_state_reset_without_nameerror(monkeypatch):
     root = Path(__file__).resolve().parents[2]
-    spec = importlib.util.spec_from_file_location("tlo_ggi_build479", root / "tlo-ggi.py")
+    spec = importlib.util.spec_from_file_location("tlo_main_build479", root / "tlo-main.py")
     gui = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(gui)
@@ -96,9 +95,10 @@ def test_build479_manual_update_preserves_shared_old_setlist_family(tmp_path, mo
     alt = setlists / "GratefulDead1977-05-08BartonHallIthacaNY(alt1).txt"
     base.write_text("source one", encoding="utf-8")
     alt.write_text("source two", encoding="utf-8")
+    monkeypatch.setattr(MU, "os_volume_label_for_path", lambda _p: "TestVolume")
     MU.write_bootlist(str(home), [
-        {"Show": show, "VolumePath": str(one)},
-        {"Show": show, "VolumePath": str(two)},
+        {"Show": show, "VolumePath": BP.format_volume_path("TestVolume", str(one))},
+        {"Show": show, "VolumePath": BP.format_volume_path("TestVolume", str(two))},
     ])
     monkeypatch.setattr(MU, "identify_folder_dict", lambda _c, folder: {"show_name": "x", "main_dir_path": folder})
     monkeypatch.setattr(MU, "create_or_replace_generated_setlist", lambda *_a, **_k: "")

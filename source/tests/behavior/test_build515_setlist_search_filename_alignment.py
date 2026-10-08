@@ -1,4 +1,4 @@
-"""Build 515 regression: tlo-gsi and inventory use identical setlist filename normalization."""
+"""Build 515 regression: tlo-search and inventory use identical setlist filename normalization."""
 from __future__ import annotations
 
 import importlib.util
@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _load_gsi():
-    spec = importlib.util.spec_from_file_location("tlo_gsi_build515", ROOT / "tlo-gsi.py")
+    spec = importlib.util.spec_from_file_location("tlo_search_build515", ROOT / "tlo-search.py")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     assert spec.loader is not None

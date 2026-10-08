@@ -1,8 +1,8 @@
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 import os
 import re
 
-from console_output_lib import console_print
 from tlo_runtime_control import throttle_point, normalize_performance_mode
 from tlo_path_policy import OS_MANAGED_DIR_NAMES, is_phase1_pruned_directory
 

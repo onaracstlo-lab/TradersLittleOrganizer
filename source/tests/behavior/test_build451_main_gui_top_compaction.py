@@ -6,13 +6,12 @@ import pytest
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v468"
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def _build_block() -> str:
-    source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     start = source.index("    def _build(self):")
     end = source.index("    def _enable_search_path_drag_drop", start)
     return source[start:end]

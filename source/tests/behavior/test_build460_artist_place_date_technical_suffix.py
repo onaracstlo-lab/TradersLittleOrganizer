@@ -1,4 +1,5 @@
 """Build 460 regressions for Artist + place + Date + technical-suffix folders."""
+from tests import _release_artifacts as RA
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,7 +11,6 @@ import tlo_phase23_v2 as P
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v468"
 
 
 def _matcher(*, include_rtf=True):
@@ -192,16 +192,14 @@ def test_build460_requirements_and_manual_document_guarded_fallback():
 
     root = Path(__file__).resolve().parents[2]
     req = "\n".join(
-        paragraph.text for paragraph in Document(root / "TLO_Inventory_Requirements_Working_v518.docx").paragraphs
+        paragraph.text for paragraph in Document(root / RA.REQUIREMENTS_FILENAME).paragraphs
     )
-    manual = (root / "TLO_Inventory_User_Manual_v518.rtf").read_text(
+    manual = (root / RA.MANUAL_FILENAME).read_text(
         encoding="utf-8", errors="ignore"
     )
 
-    assert "Current document version: v518 (TLO v1.7)." in req
     assert "Artist + Place + Date + TechnicalSuffix" in req
     assert "TLO must not construct, infer, or guess an initialism" in req
     assert "RTF Paris 7 March 76 flac16" in req
-    assert "Version v1.7 Build 518" in manual
     assert "RTF Paris 7 March 76 flac16" in manual
     assert "TLO does not invent RTF from Return to Forever" in manual

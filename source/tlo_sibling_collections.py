@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-__version__ = "v518"
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+__version__ = _TLO_CANONICAL_VERSION
 
 import json
 import ntpath
@@ -12,10 +13,11 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from tlo_diagnostics import debug_suppressed_exception
 from tlo_media_rules import MEDIA_EXTENSIONS
 from tlo_setlist_file_selection import _ordered_exception_files, _ordered_txt_files
 from tlo_wrapper_rules import split_wrapper_part_suffix
-from tlo_text_utils import MAX_TEXT_FULL_BYTES, decode_text_bytes, read_text_file_full
+from tlo_text_utils import decode_text_bytes, read_text_file_full
 from tlo_path_policy import is_phase1_pruned_directory
 
 JOURNAL_NAME = ".tlo-sibling-consolidation.json"
@@ -836,18 +838,37 @@ def _execute_plan(plan: CollectionPlan, complete_path_log: str, tlo_home: str = 
         log_committed = True
         os.unlink(os.path.join(final_path, JOURNAL_NAME))
         _remove_recovery_registry(tlo_home, payload)
-    except Exception:
+    except Exception as exc:
+        rollback_failures: List[str] = []
         if log_committed:
             try:
                 _restore_complete_path_log(complete_path_log, original_log)
-            except Exception:
-                pass
+            except Exception as log_exc:
+                debug_suppressed_exception("sibling collection complete-path log rollback", log_exc)
+                rollback_failures.append(
+                    f"complete-path log could not be restored: {complete_path_log} ({log_exc})"
+                )
         try:
             rolled_back = _rollback_container(current_container, payload)
             if rolled_back:
                 _remove_recovery_registry(tlo_home, payload)
-        except Exception:
-            pass
+            else:
+                rollback_exc = RuntimeError("automatic rollback reported an ambiguous or unsafe folder state")
+                debug_suppressed_exception("sibling collection folder rollback", rollback_exc)
+                rollback_failures.append(str(rollback_exc))
+        except Exception as rollback_exc:
+            debug_suppressed_exception("sibling collection folder rollback", rollback_exc)
+            current_container = str(getattr(rollback_exc, "container", current_container) or current_container)
+            rollback_failures.append(f"folder rollback failed ({rollback_exc})")
+        if rollback_failures:
+            candidates = (current_container, final_path, temp_path)
+            existing = next((path for path in candidates if path and os.path.lexists(path)), current_container)
+            original_detail = str(exc).strip() or exc.__class__.__name__
+            raise RuntimeError(
+                f"{original_detail}. Automatic rollback was incomplete: "
+                + "; ".join(rollback_failures)
+                + f". Current recovery container: {existing}"
+            ) from exc
         raise
 
 

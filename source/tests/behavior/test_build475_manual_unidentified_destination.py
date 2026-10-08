@@ -65,6 +65,7 @@ def test_unidentified_manual_update_does_not_move_or_rename_and_updates_inventor
     (home / "unidentifiedShows.txt").write_text(f"{original}\n{other}\n", encoding="utf-8")
     MU.write_bootlist(str(home), [{"Show": "Existing", "VolumePath": str(tmp_path / "existing")}])
 
+    monkeypatch.setattr(MU, "os_volume_label_for_path", lambda _p: "TestVolume")
     seen = {}
     def fake_identify(config, folder):
         seen["folder"] = folder
@@ -88,7 +89,7 @@ def test_unidentified_manual_update_does_not_move_or_rename_and_updates_inventor
     assert final.is_dir()
     assert not original.exists()
     rows = MU.read_bootlist(str(home))
-    assert {"Show": "New Collection Name", "VolumePath": BP.format_volume_path("", str(final))} in rows
+    assert {"Show": "New Collection Name", "VolumePath": BP.format_volume_path("TestVolume", str(final))} in rows
     remaining = (home / "unidentifiedShows.txt").read_text(encoding="utf-8").splitlines()
     assert str(original) not in remaining
     assert str(other) in remaining
@@ -107,6 +108,7 @@ def test_batch_file_unidentified_line_uses_supplied_destination(tmp_path, monkey
     monkeypatch.setattr(MU, "identify_folder_dict", lambda config, folder: {"show_name": "x", "main_dir_path": folder})
     monkeypatch.setattr(MU, "create_or_replace_generated_setlist", lambda home_, record: "")
 
+    monkeypatch.setattr(MU, "os_volume_label_for_path", lambda _p: "TestVolume")
     result = MU.apply_manual_updates_file(
         SimpleNamespace(TLOHome=str(home)),
         str(ctl),
@@ -114,12 +116,12 @@ def test_batch_file_unidentified_line_uses_supplied_destination(tmp_path, monkey
     )
     assert result["updated"] == 1
     assert result["errors"] == []
-    assert MU.read_bootlist(str(home)) == [{"Show": "Named Show", "VolumePath": BP.format_volume_path("", str(final))}]
+    assert MU.read_bootlist(str(home)) == [{"Show": "Named Show", "VolumePath": BP.format_volume_path("TestVolume", str(final))}]
 
 
 def test_v17_gui_prompt_contract():
     root = Path(__file__).resolve().parents[2]
-    source = (root / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (root / "tlo-main.py").read_text(encoding="utf-8")
     assert 'dialog.title("Where is the unidentified show going?")' in source
     assert 'text="Path"' in source
     assert "enable_folder_path_drop(" in source

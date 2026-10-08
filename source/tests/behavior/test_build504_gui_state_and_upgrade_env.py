@@ -1,6 +1,6 @@
 """Build 504 GUI state and setlist.fm upgrade environment regressions."""
+from tests import _release_artifacts as RA
 
-__version__ = "v505"
 
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
@@ -31,7 +31,7 @@ class _Widget:
 
 
 def _load_gui():
-    spec = spec_from_file_location("tlo_ggi_build504", ROOT / "tlo-ggi.py")
+    spec = spec_from_file_location("tlo_main_build504", ROOT / "tlo-main.py")
     module = module_from_spec(spec)
     assert spec and spec.loader
     spec.loader.exec_module(module)
@@ -125,11 +125,10 @@ def test_gui_enables_upgrade_from_persistent_environment(monkeypatch):
 def test_build504_documentation_records_both_gui_fixes():
     from docx import Document
 
-    req = "\n".join(p.text for p in Document(ROOT / "TLO_Inventory_Requirements_Working_v518.docx").paragraphs)
-    manual = (ROOT / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
+    req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
+    manual = (ROOT / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
     faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v518 (TLO v1.7)." in req
     assert "disabled/greyed and forced unchecked" in req
     assert "SETLISTFM_UPGRADE_API_KEY" in req
     assert "persisted User/System environment" in req

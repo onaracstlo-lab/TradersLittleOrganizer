@@ -1,6 +1,5 @@
 """Build 450: GUI button labels are centered horizontally and vertically."""
 
-__version__ = "v468"
 
 from pathlib import Path
 
@@ -20,15 +19,15 @@ def test_shared_ttk_button_style_centers_anchor_and_multiline_justification():
 
 
 def test_inventory_and_search_apps_apply_shared_centered_button_style():
-    inventory = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
-    search = (ROOT / "tlo-gsi.py").read_text(encoding="utf-8")
+    inventory = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
+    search = (ROOT / "tlo-search.py").read_text(encoding="utf-8")
     for source in (inventory, search):
         assert "configure_centered_ttk_button_text" in source
     assert 'style.configure("Main.TButton", font=self.main_font, padding=(8, 7), anchor="center", justify="center")' in inventory
 
 
 def test_main_inventory_one_line_buttons_do_not_use_fake_blank_second_lines():
-    source = (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    source = (ROOT / "tlo-main.py").read_text(encoding="utf-8")
     for label in ("Tag", "Research", "Quit", "Pause", "Resume"):
         assert f'text="{label}\\n "' not in source
         assert f'text="{label}"' in source

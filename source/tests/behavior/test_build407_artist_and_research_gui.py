@@ -1,6 +1,5 @@
 """Build 407 artist-suffix and Research-results GUI behavior."""
 
-__version__ = "v468"
 
 import importlib.util
 from pathlib import Path
@@ -102,7 +101,7 @@ def test_research_results_ctrl_a_find_dialog_direction_and_wrap(tmp_path):
     except Exception as exc:
         pytest.skip(f"Tk display unavailable: {exc}")
 
-    gui = _load_hyphen_module("tlo-ggi.py", "tlo_ggi_build407_research_results_gui")
+    gui = _load_hyphen_module("tlo-main.py", "tlo_main_build407_research_results_gui")
     try:
         root.withdraw()
         args = gui._parse_gui_command_line(["--TLOHome", str(tmp_path)])

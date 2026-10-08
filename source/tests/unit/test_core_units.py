@@ -1,6 +1,5 @@
 """Fast isolated tests for options, metadata formatting, and settings logging."""
 
-__version__ = "v468"
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -65,7 +64,7 @@ def test_run_settings_log_exactly_preserves_review_lines(tmp_path):
         "Operation: Full Inventory",
         "Main-window checkbox values:",
         "  Compliant: Yes",
-        "  Artist in Album Tag: No",
+        "  Artist In Album Tag: No",
         "  Dry run: Yes",
         "Original files may be changed: No",
     ]

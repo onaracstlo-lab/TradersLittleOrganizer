@@ -1,6 +1,5 @@
 """Build 380 regressions for compliant String1 - String2 Date precedence."""
 
-__version__ = "v468"
 
 import os
 from types import SimpleNamespace

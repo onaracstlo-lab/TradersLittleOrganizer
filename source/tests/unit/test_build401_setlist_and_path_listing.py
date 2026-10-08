@@ -1,8 +1,6 @@
 """Build 401 setlist-family and literal-directory enumeration regressions."""
-__version__ = "v468"
 
 import inspect
-import os
 from pathlib import Path
 
 import pytest
@@ -13,7 +11,7 @@ import tlo_file_listing as F
 import tlo_inventory_update as U
 import tlo_postprocess as P
 import tlo_research_lib as R
-import tlo_reverse_copy_delete as V
+import tlo_reverse_folders as V
 
 
 def test_build401_setlist_family_is_exact_base_or_altn_only():

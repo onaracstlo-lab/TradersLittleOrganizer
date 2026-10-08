@@ -9,7 +9,6 @@ import tlo_manual_updates as MU
 from tlo_bootlist_volume_policy import format_volume_path, os_volume_label_for_path
 
 pytestmark = pytest.mark.behavior
-__version__ = "v478"
 
 
 def _music_dir(path: Path) -> Path:
@@ -25,7 +24,7 @@ def _inventory_volume_path(path: Path) -> str:
 
 
 def test_build478_gui_update_tags_is_default_on_and_propagated_to_all_save_paths():
-    source = Path(__file__).resolve().parents[2].joinpath("tlo-ggi.py").read_text(encoding="utf-8")
+    source = Path(__file__).resolve().parents[2].joinpath("tlo-main.py").read_text(encoding="utf-8")
     start = source.index("class ManualUpdatesWindow:")
     end = source.index("class AddToInventoryWindow:", start)
     block = source[start:end]

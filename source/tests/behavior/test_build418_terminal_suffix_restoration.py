@@ -1,4 +1,5 @@
 """Build 418 regressions for restored terminal artist suffixes and DB review list."""
+from tests import _release_artifacts as RA
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -179,13 +180,11 @@ def test_build418_requirements_and_manual_document_restored_suffix_and_review_li
     from docx import Document
 
     root = Path(__file__).resolve().parents[2]
-    req = Document(root / "TLO_Inventory_Requirements_Working_v518.docx")
+    req = Document(root / RA.REQUIREMENTS_FILENAME)
     req_text = "\n".join(p.text for p in req.paragraphs)
-    manual = (root / "TLO_Inventory_User_Manual_v518.rtf").read_text(encoding="utf-8", errors="ignore")
+    manual = (root / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
 
-    assert "Current document version: v518 (TLO v1.7)." in req_text
     assert "restore the exact terminal suffix text" in req_text
     assert "TLOHome/artistsNotInDatabase.txt" in req_text
-    assert "Version v1.7 Build 518" in manual
     assert "restores the exact removed suffix" in manual
     assert "artistsNotInDatabase.txt" in manual

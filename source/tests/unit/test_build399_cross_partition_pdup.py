@@ -1,6 +1,5 @@
 """Build 399 cross-partition potential-duplicate behavior."""
 
-__version__ = "v468"
 
 from types import SimpleNamespace
 

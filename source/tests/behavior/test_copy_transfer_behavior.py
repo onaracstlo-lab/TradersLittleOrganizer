@@ -1,6 +1,5 @@
 """Behavioral coverage for copy and Copy/Delete Original transfer verification."""
 
-__version__ = "v468"
 
 from types import SimpleNamespace
 
@@ -116,7 +115,7 @@ def test_cross_partition_copy_delete_verifies_sizes_before_deleting_source(tmp_p
         record,
     )
 
-    assert calls == [(str(source), str(destination / source.name), True)]
+    assert len(calls) == 1 and calls[0][0] == str(source) and calls[0][1].startswith(str(destination / ".tlo-partial-")) and calls[0][2] is True
     assert not source.exists()
 
 
@@ -150,7 +149,9 @@ def test_tag_copy_always_verifies_sizes_even_on_same_partition(tmp_path, monkeyp
     )
 
     copied_root = destination / source.name
-    assert calls == [(str(source), str(copied_root))]
+    assert len(calls) == 1 and calls[0][0] == str(source)
+    assert calls[0][1].startswith(str(destination / ".tlo-partial-"))
+    assert not list(destination.glob(".tlo-partial-*"))
     assert source.is_dir()
     assert copied_root.is_dir()
     assert copied_record.main_dir_path == str(copied_root)

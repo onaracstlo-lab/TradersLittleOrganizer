@@ -9,13 +9,12 @@ from tlo_options import GUI_CHECKBOX_OPTIONS, OPTIONS_BY_FIELD
 
 pytestmark = pytest.mark.behavior
 
-__version__ = "v468"
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def _source() -> str:
-    return (ROOT / "tlo-ggi.py").read_text(encoding="utf-8")
+    return (ROOT / "tlo-main.py").read_text(encoding="utf-8")
 
 
 def test_build441_performance_mode_combo_is_narrower():
@@ -57,6 +56,7 @@ def test_build441_checkbox_internal_layout_is_unchanged():
         "tag_copy_and_delete_enabled": (2, 2),
         "thorough_setlist_matching": (3, 0),
         "proper_grammar": (3, 1),
+        "deep_audio_check": (4, 1),
         "delete_extra_tags": (3, 3),
     }
     assert len(GUI_CHECKBOX_OPTIONS) == len(expected)
