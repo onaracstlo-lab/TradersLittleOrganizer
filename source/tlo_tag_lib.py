@@ -3523,7 +3523,7 @@ def convert_shn_to_flac(path_name: str, emit: Optional[Callable[[str], None]] = 
         raise TaggerError(f"FLAC destination already exists: {target}")
     converter = _bundled_ffmpeg_executable()
     if not converter:
-        raise TaggerError("bundled native SHN converter is unavailable; rebuild the application with the checksum-pinned ffmpeg binary included")
+        raise TaggerError("bundled native SHN converter is unavailable; rebuild the application with the source-hash-pinned LGPL ffmpeg binary included")
     temp_fd, temp_target = tempfile.mkstemp(
         prefix=".tlo-convert-", suffix=".tmp.flac", dir=os.path.dirname(target) or "."
     )

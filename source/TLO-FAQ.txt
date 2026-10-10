@@ -233,3 +233,6 @@ A: Cross-filesystem Copy/Delete keeps the source intact while it copies into a .
 
 Q: Has anything changed about opening files through the Inventory Update window?
 A: No visible command was removed. The unused Inventory Update path-opening helper was retired. Current Main GUI open-path actions continue through a single hardened opener that rejects network/device paths and symbolic links. On Windows, selecting a file in Explorer does not execute its associated application.
+
+Q: Why does TLO include FFmpeg source and a license?
+A: FFmpeg is a separate LGPL-licensed audio-processing tool. Approved native TLO packages include its corresponding verified source, build recipe, and LGPL notice under THIRD_PARTY/FFmpeg. It is used for SHN conversion and audio stream checks.

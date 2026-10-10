@@ -1,0 +1,21 @@
+FFmpeg 9.0.2 — third-party license and corresponding source
+============================================================
+
+TLO invokes FFmpeg as a separate command-line process for audio operations.
+FFmpeg is copyright the FFmpeg developers and other copyright holders.
+FFmpeg website: https://ffmpeg.org/
+
+The TLO-provided FFmpeg build is designed to be configured without
+--enable-nonfree, --enable-gpl, or --enable-version3, and to use FFmpeg's
+LGPL v2.1-or-later licensing mode. Actual binary license/configuration is
+checked before packaging. See the included COPYING.LGPLv2.1.
+
+The complete upstream source tarball matching this native FFmpeg distribution,
+source checksum, and the auditable compilation script are included in
+THIRD_PARTY/FFmpeg in each complete and update package.
+
+Users may rebuild or modify FFmpeg under the applicable license; TLO is a
+separately distributed application and does not link FFmpeg libraries.
+
+Consult https://ffmpeg.org/legal.html for the FFmpeg project's compliance
+checklist. This notice is not a substitute for legal review.

@@ -304,6 +304,10 @@ $FfmpegStage = Join-Path $FfmpegBuildRoot 'tlo_ffmpeg_bin'
 Invoke-Python -Runner $PythonRunner -Arguments @($PrepareFfmpegScript, '--platform', 'windows', '--output-dir', $FfmpegStage, '--cache-dir', (Join-Path $FfmpegBuildRoot 'cache'))
 $FfmpegBinary = Join-Path $FfmpegStage 'ffmpeg.exe'
 if (-not (Test-Path -LiteralPath $FfmpegBinary -PathType Leaf)) { throw "Prepared ffmpeg binary is missing: $FfmpegBinary" }
+& $PythonRunner[0] "${SourceRoot}\ffmpeg_license_guard.py" $FfmpegBinary
+if ($LASTEXITCODE -ne 0) { throw 'FFmpeg license check failed before packaging.' }
+& $PythonRunner[0] (Join-Path $SourceRoot 'ffmpeg_redistribution_assets.py') --dist $TargetDir --binary $FfmpegBinary --cache (Join-Path $FfmpegBuildRoot 'cache')
+if ($LASTEXITCODE -ne 0) { throw 'FFmpeg source/license attachment failed for Windows.' }
 $FfmpegAddBinary = "${FfmpegBinary}:tlo_ffmpeg_bin"
 
 $MainIcon = Join-Path $IconRoot 'tlo-main-icon.ico'

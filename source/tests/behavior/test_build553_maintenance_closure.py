@@ -34,7 +34,7 @@ def test_build553_helper_modules_have_real_module_docstrings():
 @pytest.mark.parametrize(
     ("script", "description"),
     [
-        ("prepare_ffmpeg.py", "Fetch and verify the exact ffmpeg binary used by TLO native builds."),
+        ("prepare_ffmpeg.py", "Build FFmpeg 9.0.2 from pinned upstream source; reject all nonfree binaries."),
         ("audit_build_requirements.py", "Run pip-audit 2.10.1 from TLO's hash-locked audit tool environment."),
         ("verify_build_environment.py", "Fail closed when a native TLO build uses an unapproved toolchain."),
     ],

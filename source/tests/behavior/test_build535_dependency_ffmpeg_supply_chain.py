@@ -2,7 +2,6 @@
 import hashlib
 import importlib.util
 import re
-import zipfile
 from pathlib import Path
 
 import pytest
@@ -21,34 +20,15 @@ def _load(name: str, filename: str):
 
 
 def test_build535_ffmpeg_release_is_exact_and_checksum_pinned():
-    prep = _load("tlo_prepare_ffmpeg_535", "prepare_ffmpeg.py")
-    assert prep.FFMPEG_VERSION == "9.0.2"
-    assert "releases/download/v9.0.2" in prep.PROVIDER_RELEASE
-    assert len(prep.ASSETS) == 8
-    for (platform_name, arch), (asset, digest) in prep.ASSETS.items():
-        assert platform_name in {"linux", "macos", "windows"}
-        assert arch in {"x64", "arm64", "x86"}
-        assert asset.startswith("ffmpeg-") and asset.endswith(".zip")
-        assert re.fullmatch(r"[0-9a-f]{64}", digest)
-
-
-def test_build535_ffmpeg_archive_extraction_rejects_traversal_and_extracts_only_binary(tmp_path):
-    prep = _load("tlo_prepare_ffmpeg_extract_535", "prepare_ffmpeg.py")
-    good = tmp_path / "good.zip"
-    with zipfile.ZipFile(good, "w") as zf:
-        zf.writestr("release/bin/ffmpeg", b"ffmpeg-binary")
-        zf.writestr("release/README.txt", b"ignored")
-    out = tmp_path / "out" / "ffmpeg"
-    prep._extract_ffmpeg(good, out, windows=False)
-    assert out.read_bytes() == b"ffmpeg-binary"
-    assert out.stat().st_mode & 0o111
-
-    bad = tmp_path / "bad.zip"
-    with zipfile.ZipFile(bad, "w") as zf:
-        zf.writestr("../escape", b"x")
-        zf.writestr("release/bin/ffmpeg", b"ffmpeg-binary")
-    with pytest.raises(RuntimeError, match="unsafe ffmpeg archive member"):
-        prep._extract_ffmpeg(bad, tmp_path / "bad-out" / "ffmpeg", windows=False)
+    import ffmpeg_source_build as src
+    prep = _load('tlo_prepare_ffmpeg_535', 'prepare_ffmpeg.py')
+    assert prep.FFMPEG_VERSION == '9.0.2'
+    assert src.SOURCE_URL == 'https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz'
+    assert re.fullmatch(r'[0-9a-f]{64}', src.SOURCE_SHA256)
+    assert '--enable-nonfree' not in src.CONFIGURE_FLAGS
+    assert '--enable-gpl' not in src.CONFIGURE_FLAGS
+    assert '--disable-everything' in src.CONFIGURE_FLAGS
+    assert 'boul2gom' not in (ROOT / 'prepare_ffmpeg.py').read_text(encoding='utf-8')
 
 
 def test_build535_runtime_resolver_has_no_imageio_or_environment_fallback():
@@ -117,5 +97,5 @@ def test_build535_ffmpeg_source_notice_matches_preparation_manifest():
     notice = (ROOT / "FFMPEG_BUILD_SOURCE.txt").read_text(encoding="utf-8")
     prep = _load("tlo_prepare_ffmpeg_notice_535", "prepare_ffmpeg.py")
     assert f"Version: FFmpeg {prep.FFMPEG_VERSION}" in notice
-    assert "boul2gom/ffmpeg-builds" in notice
+    assert "ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz" in notice
     assert hashlib.sha256((ROOT / "requirements-build.txt").read_bytes()).hexdigest()

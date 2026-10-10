@@ -988,7 +988,7 @@ def delete_duplicate_copy_directories(
     validator = ffmpeg_executable or _bundled_ffmpeg_executable()
     if not validator:
         raise DeleteDupesError(
-            "Bundled FLAC validator is unavailable; rebuild the application with the checksum-pinned ffmpeg binary included."
+            "Bundled FLAC validator is unavailable; rebuild the application with the source-hash-pinned LGPL ffmpeg binary included."
         )
 
     # Older tests/embedders may still provide trash_func. Preserve that injection

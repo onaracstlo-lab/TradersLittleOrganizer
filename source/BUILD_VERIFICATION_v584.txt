@@ -1,0 +1,37 @@
+TLO v1.7 Build 584 -- LOCAL VERIFICATION ONLY, NOT RELEASE-ATTESTED
+================================================================
+Build 583 GitHub Actions evidence (uploaded TLO583-Actions-Logs.txt):
+- Native Windows FFmpeg 9.0.2 compiled successfully and applications built.
+- Windows Artifact Signing, signature verification, and scanner jobs completed.
+- Native macOS and Linux builds and scans completed, artifacts uploaded.
+- All three platform artifacts downloaded to release assembly.
+- Assembly failed for Windows onedir due to expected LGPL THIRD_PARTY directory.
+
+Build 584 changes: current source/documentation version bump and process-v116
+paired release validation. Source application/FFmpeg implementation unchanged.
+Process v116 requires complete FFmpeg source/notices/provenance on all four
+platform variants and synchronizes every downstream Windows layout validator.
+
+Local Python/PowerShell simulated tests and ZIP verification are recorded in
+independent process package tests; release must still pass hosted CI native
+Build 584 compilation/signing, scan receipts, full pytest and final upload.
+
+Build 584 verification mode distinction:
+- Ruff lint: lint not attested locally for Build 584 because pinned Ruff 0.16.10
+  is unavailable in this local interpreter; Build 583's hosted Linux Ruff
+  gate passed. Build 584's hosted Ruff gate remains mandatory.
+- Xvfb display (CI=1): Build 583 hosted Linux full CI test suite completed;
+  no Build 584 host-backed Xvfb attestation is claimed here.
+- No display (DISPLAY and CI unset): prior focused 50 passed, 6 skipped
+  GUI tests; actual source behavior suite is rerun below, with 6 skipped
+  native-Windows/display-dependent cases across the grouped checks.
+- Local Build 584 source contract/unit/integration: 239 passed.
+- Local historical compatibility tests: 1,406 passed.
+- Local Build Process v116, realistic legal-source/release fixtures:
+  56 passed, 1 expected skip (complete-only/database-update invalid pair).
+- Local Build 584 source behavior suite across four disjoint groups (after
+  verification-report corrections): 1,747 passed, 6 expected skips.
+- Separately targeted release-report regressions: 11 passed, 1 expected skip.
+- Local full process suite: 56 passed, 1 expected skip (invalid option pair).
+- Native Build 583 evidence confirms Windows onedir + hybrid scanner and sign
+  receipts were uploaded; Build 584 CI must independently confirm final ZIPs.

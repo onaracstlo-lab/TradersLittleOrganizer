@@ -47,7 +47,7 @@ def bundled_ffmpeg_executable() -> str:
     """Return only TLO's prepared and packaged native ffmpeg executable.
 
     Build 535 removes imageio-ffmpeg from runtime resolution.  The build
-    scripts fetch one exact, checksum-pinned ffmpeg binary into
+    scripts compile one LGPL source-hash-pinned ffmpeg binary into
     ``tlo_ffmpeg_bin`` and PyInstaller carries that directory into the app.
     No environment variable, PATH, conda, current-directory, or package helper
     fallback is accepted.

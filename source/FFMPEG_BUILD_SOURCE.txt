@@ -1,17 +1,12 @@
-TLO ffmpeg binary source
-==================================
-
+TLO FFmpeg 9.0.2 — LGPL-only audio-build corresponding source
+===========================================================
 Version: FFmpeg 9.0.2
-Release date: 2026-09-18
-Binary provider: boul2gom/ffmpeg-builds release v9.0.2
-Source/release base: https://github.com/boul2gom/ffmpeg-builds/releases/tag/v9.0.2
+Official source: https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz
+Verified source SHA-256: 8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e
+Source date: 2026-09-18
 
-TLO source distributions do not contain the ffmpeg executable. prepare_ffmpeg.py
-fetches the exact platform asset named in its ASSETS table, verifies the pinned
-SHA-256 before extraction, safely extracts only ffmpeg[.exe], and validates
-`ffmpeg -version` before PyInstaller packaging. The source package never falls
-back to PATH, conda, IMAGEIO_FFMPEG_EXE, or imageio-ffmpeg.
-
-FFmpeg itself is available from https://ffmpeg.org/ and is distributed under
-its applicable upstream license terms. The binary provider's build scripts and
-release metadata identify the exact prebuilt release consumed by TLO.
+TLO must build FFmpeg itself from verified upstream source on the native runner.
+NO prebuilt FFmpeg release downloads. NO --enable-gpl or --enable-nonfree.
+See ffmpeg_source_build.py, build_audio_ffmpeg.sh, FFmpeg legal notice and
+LGPL v2.1 text. Ship corresponding source and recipe inside each native ZIP.
+Public distributions are prohibited until all native build/codec/license gates pass.

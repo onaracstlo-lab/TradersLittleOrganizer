@@ -3134,7 +3134,7 @@ def test_v238_prepare_audio_files_logs_failed_shn_conversion_and_skips_file(monk
     assert shn.exists()
     assert os.path.normpath(str(shn)) not in audio_files
     assert os.path.normpath(str(keep)) in audio_files
-    assert any(str(msg).strip() == f"ERROR_AUDIO_FILE: '{shn}' - SHN conversion failed: bundled native SHN converter is unavailable; rebuild the application with the checksum-pinned ffmpeg binary included" for msg in messages)
+    assert any(str(msg).strip() == f"ERROR_AUDIO_FILE: '{shn}' - SHN conversion failed: bundled native SHN converter is unavailable; rebuild the application with the source-hash-pinned LGPL ffmpeg binary included" for msg in messages)
 
 
 def test_v238_tag_group_converts_shn_then_tags_flac(monkeypatch, tmp_path):

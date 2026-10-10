@@ -131,4 +131,4 @@ def test_build548_stale_build_labels_are_removed_from_build_metadata():
     assert not re.search(r"TLO Build \d+", ffmpeg_source)
     assert not re.search(r"TLO Build \d+", build_lock)
     assert "TLO-build/535" not in prepare
-    assert 'f"TLO-build/{__version__.removeprefix(\'v\')}"' in prepare
+    assert "from ffmpeg_source_build import FFMPEG_VERSION, prepare_source_build, SOURCE_NAME" in prepare

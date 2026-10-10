@@ -130,6 +130,8 @@ esac
 "$PYTHON_BIN" "$PREPARE_FFMPEG_SCRIPT" "${FFMPEG_PREPARE_ARGS[@]}" || fail "Pinned ffmpeg preparation failed."
 FFMPEG_BINARY="${FFMPEG_STAGE}/ffmpeg"
 [[ -f "$FFMPEG_BINARY" && -x "$FFMPEG_BINARY" ]] || fail "Prepared ffmpeg binary is missing: $FFMPEG_BINARY"
+"$PYTHON_BIN" "${SOURCE_ROOT}/ffmpeg_license_guard.py" "$FFMPEG_BINARY" || fail "FFmpeg license check failed"
+"$PYTHON_BIN" "${SOURCE_ROOT}/ffmpeg_redistribution_assets.py" --dist "$TARGET_DIR" --binary "$FFMPEG_BINARY" --cache "${BUILD_ROOT}/ffmpeg-cache" || fail "FFmpeg source/license attachment failed for macOS"
 FFMPEG_ADD_BINARY="${FFMPEG_BINARY}:tlo_ffmpeg_bin"
 
 cleanup() {
