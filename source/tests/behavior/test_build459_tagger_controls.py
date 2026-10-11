@@ -148,5 +148,5 @@ def test_build459_documentation_covers_standalone_tag_option_parity():
     manual = (ROOT / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
     faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8")
     assert "--setlistfm-upgrade" in req and "--corrupt-folder-threshold PERCENT" in req
-    assert "Corruption is assessed before mutation with the same fail-closed rules as Inventory" in manual
+    assert "Tag writing failures are classified as corrupt unless caused by transient access" in manual
     assert "Does standalone tlo-tag use the same setlist.fm" in faq

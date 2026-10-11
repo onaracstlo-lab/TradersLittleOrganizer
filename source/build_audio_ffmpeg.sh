@@ -65,8 +65,8 @@ fi
   --enable-static --disable-shared \
   --enable-demuxer=shorten,flac,wav,aiff,mp3,ogg,mov,ape,wv,aac,asf,matroska,au,caf,tta,tak \
   --enable-decoder=shorten,flac,mp3,aac,alac,ape,wavpack,opus,vorbis,wmav1,wmav2,tta,tak,pcm_s16le,pcm_s24le,pcm_s32le,pcm_s16be,pcm_s24be,pcm_s32be,pcm_u8,pcm_f32le,pcm_f64le \
-  --enable-encoder=flac,pcm_s16le \
-  --enable-muxer=flac,null,framemd5 \
+  --enable-encoder=flac,pcm_s8,pcm_s16le,pcm_s24le,pcm_s32le \
+  --enable-muxer=flac,null,pcm_s8,pcm_s16le,pcm_s24le,pcm_s32le \
   --enable-parser=aac,flac,mpegaudio,opus,vorbis \
   --enable-filter=abuffer,abuffersink,anull,aresample,aformat \
   --enable-protocol=file,pipe

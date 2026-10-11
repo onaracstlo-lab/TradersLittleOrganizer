@@ -16,7 +16,7 @@ def test_native_recipes_do_not_use_removed_postproc_flag():
     assert '--disable-postproc' not in ff.CONFIGURE_FLAGS
     for token in ('--disable-everything', '--enable-encoder=flac',
                   '--enable-decoder=shorten', '--enable-demuxer=shorten',
-                  '--enable-muxer=flac,null,framemd5'):
+                  '--enable-muxer=flac,null,pcm_s8,pcm_s16le,pcm_s24le,pcm_s32le'):
         assert token in script
 
 

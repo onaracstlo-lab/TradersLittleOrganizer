@@ -282,6 +282,8 @@ def operation_review_lines(
 
     lines.extend(main_window_checkbox_review_lines(main_checkbox_source or config, dry_run=dry_run))
     checkbox_values = main_window_checkbox_values(main_checkbox_source or config, dry_run=dry_run)
+    if checkbox_values.get("deep_audio_check"):
+        lines.append("Deep Audio Check warning: Every audio file is read and decoded in full; large collections can take a long time. A reversible tag test runs first unless Dry Run is enabled.")
     if checkbox_values.get("thorough_setlist_matching"):
         if checkbox_values.get("setlistfm_lookup") and not checkbox_values.get("setlistfm_upgrade"):
             lines.append(
@@ -566,50 +568,18 @@ def preview_operation(
                     result.media_files += len(audio_files)
                     result.shn_files += shn_count
                     actions = _preview_actions(preview_config, copy_mode=copy_mode, tagger=tagger, shn_count=shn_count)
-                    if not tagger:
-                        try:
-                            from tlo_corruption import classify_audio_paths, corruption_action, qualifying_corrupt_music_dirs, group_audio_snapshot
-                            corruption_audio, snapshot_errors = group_audio_snapshot(group)
-                            if bool(getattr(preview_config, "deep_audio_check", False)):
-                                corruption_bad, unverifiable_files = classify_audio_paths(
-                                    corruption_audio, deep_audio_check=True
-                                )
-                            else:
-                                corruption_bad, unverifiable_files = classify_audio_paths(corruption_audio)
-                            file_policy, folder_policy, folder_threshold = defensive_corruption_policy_values(preview_config)
-                            unverifiable = list(snapshot_errors) + list(unverifiable_files)
-                            corruption_policy = (
-                                "unverifiable"
-                                if unverifiable
-                                else corruption_action(
-                                    len(corruption_audio), len(corruption_bad), file_policy, folder_policy, folder_threshold
-                                )
-                            )
-                            pct = (100.0 * len(corruption_bad) / len(corruption_audio)) if corruption_audio else 0.0
-                            if corruption_policy == "unverifiable":
-                                actions = tuple(actions) + (f"CORRUPTION_UNVERIFIABLE ({len(unverifiable)} read/validator error(s); WOULD_NOT_TRASH; mutation steps would be skipped)",)
-                            elif corruption_policy == "trash_folder_all_corrupt":
-                                actions = tuple(actions) + (f"WOULD_TRASH_CORRUPT_FOLDER ({len(corruption_bad)}/{len(corruption_audio)} = {pct:.2f}%; folder policy=100% corrupt only)",)
-                            elif corruption_policy == "trash_folder_threshold":
-                                actions = tuple(actions) + (f"WOULD_TRASH_CORRUPT_FOLDER ({len(corruption_bad)}/{len(corruption_audio)} = {pct:.2f}% >= {folder_threshold}%)",)
-                            else:
-                                folder_candidates = qualifying_corrupt_music_dirs(
-                                    group, corruption_audio, corruption_bad, folder_policy, folder_threshold
-                                )
-                                if folder_candidates:
-                                    labels = ", ".join(os.path.basename(os.path.normpath(path)) or os.path.normpath(path) for path in folder_candidates)
-                                    actions = tuple(actions) + (f"WOULD_TRASH_CORRUPT_MUSIC_FOLDER(S) ({len(folder_candidates)}: {labels}; folder policy={folder_policy})",)
-                                candidate_keys = {os.path.normcase(os.path.normpath(path)) for path in folder_candidates}
-                                remaining_bad = [
-                                    path for path in corruption_bad
-                                    if os.path.normcase(os.path.normpath(os.path.dirname(path))) not in candidate_keys
-                                ]
-                                if remaining_bad and file_policy == "delete":
-                                    actions = tuple(actions) + (f"WOULD_TRASH_CORRUPT_FILES ({len(remaining_bad)} file(s); file policy=delete)",)
-                                elif remaining_bad:
-                                    actions = tuple(actions) + (f"WOULD_KEEP_AND_REPORT_CORRUPT_FILES ({len(remaining_bad)} file(s); file policy=keep)",)
-                        except Exception as exc:
-                            result.issues.append(RunIssue("Corruption dry-run check failed", str(exc), str(group.get("main_dir_path") or root), "warning", "preview"))
+                    if not tagger and (
+                        bool(getattr(preview_config, "deep_audio_check", False))
+                        or bool(getattr(preview_config, "tag_during_inventory", False))
+                        or bool(getattr(preview_config, "tag_copy_during_inventory", False))
+                        or bool(getattr(preview_config, "tag_copy_and_delete_path", ""))
+                    ):
+                        # The new corruption gate requires a real, reversible tag
+                        # write. Dry Run/Preview must never modify audio, even
+                        # temporarily; report that results await the real run.
+                        actions = tuple(actions) + (
+                            "CORRUPTION_NOT_ASSESSED (Dry Run cannot perform tag-write validation; no deletion performed)",
+                        )
                     tags = [PreviewTag(**entry) for entry in (plan.get("tags", []) or [])]
                     item = PreviewItem(
                         path=os.path.normpath(str(plan.get("folder") or group.get("main_dir_path") or root)),

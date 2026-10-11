@@ -58,10 +58,10 @@ def _group(path="/shows/show"):
 
 def test_assessment_is_separate_and_unverifiable_forces_no_action(monkeypatch):
     monkeypatch.setattr(C, "group_audio_snapshot", lambda group: (["a.flac", "b.flac"], []))
-    monkeypatch.setattr(C, "classify_audio_paths", lambda paths: (["a.flac"], [("b.flac", "OSError: offline")]))
+    monkeypatch.setattr(C, "classify_audio_paths", lambda paths, **_kwargs: (["a.flac"], [("b.flac", "OSError: offline")]))
     monkeypatch.setattr(C, "fully_corrupt_music_dirs", lambda *args: pytest.fail("must not derive destructive targets when unverifiable"))
 
-    result = C.assess_group_corruption(_group(), "delete", "all", 100)
+    result = C.assess_group_corruption(_group(), "delete", "all", 100, check_tag_write=True)
 
     assert result.audio_files == ["a.flac", "b.flac"]
     assert result.corrupt_files == ["a.flac"]
@@ -71,10 +71,10 @@ def test_assessment_is_separate_and_unverifiable_forces_no_action(monkeypatch):
 
 def test_positive_all_corrupt_assessment_authorizes_whole_show_trash(monkeypatch):
     monkeypatch.setattr(C, "group_audio_snapshot", lambda group: (["a.flac", "b.flac"], []))
-    monkeypatch.setattr(C, "classify_audio_paths", lambda paths: (list(paths), []))
+    monkeypatch.setattr(C, "classify_audio_paths", lambda paths, **_kwargs: (list(paths), []))
     monkeypatch.setattr(C, "fully_corrupt_music_dirs", lambda *args: ["/shows/show"])
 
-    result = C.assess_group_corruption(_group(), "delete", "all", 100)
+    result = C.assess_group_corruption(_group(), "delete", "all", 100, check_tag_write=True)
 
     assert not result.unverifiable
     assert result.action == "trash_folder_all_corrupt"
@@ -134,7 +134,7 @@ def test_handle_group_corruption_fails_closed_on_unexpected_assessment_error(mon
     monkeypatch.setattr(C, "move_to_trash", lambda path: pytest.fail("unexpected failure must not trash"))
     config = _config()
 
-    outcome = C.handle_group_corruption(config, _group(), _record(), "delete", "all", 100)
+    outcome = C.handle_group_corruption(config, _group(), _record(), "delete", "all", 100, check_tag_write=True)
 
     assert outcome.unverifiable
     assert outcome.unexpected_error.startswith("RuntimeError:")

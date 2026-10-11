@@ -30,8 +30,8 @@ AUDIO_DEMUXERS = ('shorten', 'flac', 'wav', 'aiff', 'mp3', 'ogg', 'mov', 'ape', 
 AUDIO_DECODERS = ('shorten', 'flac', 'mp3', 'aac', 'alac', 'ape', 'wavpack', 'opus', 'vorbis',
                   'wmav1', 'wmav2', 'tta', 'tak', 'pcm_s16le', 'pcm_s24le', 'pcm_s32le',
                   'pcm_s16be', 'pcm_s24be', 'pcm_s32be', 'pcm_u8', 'pcm_f32le', 'pcm_f64le')
-AUDIO_ENCODERS = ('flac', 'pcm_s16le')
-AUDIO_MUXERS = ('flac', 'null', 'framemd5')
+AUDIO_ENCODERS = ('flac', 'pcm_s8', 'pcm_s16le', 'pcm_s24le', 'pcm_s32le')
+AUDIO_MUXERS = ('flac', 'null', 'pcm_s8', 'pcm_s16le', 'pcm_s24le', 'pcm_s32le')
 AUDIO_PARSERS = ('aac', 'flac', 'mpegaudio', 'opus', 'vorbis')
 AUDIO_FILTERS = ('abuffer', 'abuffersink', 'anull', 'aresample', 'aformat')
 PROTOCOLS = ('file', 'pipe')

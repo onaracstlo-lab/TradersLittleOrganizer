@@ -140,22 +140,17 @@ def test_build467_delete_extra_tags_noop_when_mp3_already_has_exact_four_fields(
     assert tags.saved_to is None
 
 
-def test_build467_mp3_corruption_uses_explicit_mp3_validator(tmp_path, monkeypatch):
+def test_build585_mp3_tag_write_failure_marks_corrupt_before_deep_decoder(tmp_path, monkeypatch):
     path = tmp_path / "broken.mp3"
     path.write_bytes(b"not-an-mp3")
     calls = []
-
     def fail_mp3(candidate):
         calls.append(str(candidate))
         raise MutagenError("invalid MPEG stream")
-
-    monkeypatch.setattr(corruption, "MP3", fail_mp3)
-    monkeypatch.setattr(corruption, "MutagenFile", lambda *_args, **_kwargs: pytest.fail("generic validator should not be used for MP3"))
-
-    bad, unverifiable = corruption.classify_audio_paths([str(path)])
-
-    assert bad == [str(path)]
-    assert unverifiable == []
+    monkeypatch.setattr(corruption, "_validate_tag_write_round_trip", fail_mp3)
+    monkeypatch.setattr(corruption, "_deep_audio_stream_status", lambda *_: pytest.fail("must not decode once tag fails"))
+    bad, unverifiable = corruption.classify_audio_paths([str(path)], check_tag_write=True, deep_audio_check=True)
+    assert bad == [str(path)] and unverifiable == []
     assert calls == [str(path)]
 
 
@@ -171,11 +166,11 @@ def test_build467_mp3_counts_in_same_folder_corruption_percentage_as_flac(tmp_pa
     monkeypatch.setattr(
         corruption,
         "classify_audio_paths",
-        lambda paths: ([str(mp3)], []),
+        lambda paths, **_kwargs: ([str(mp3)], []),
     )
 
     assessment = corruption.assess_group_corruption(
-        group, corrupt_files="delete", corrupt_folders="threshold", folder_threshold=50
+        group, corrupt_files="delete", corrupt_folders="threshold", folder_threshold=50, check_tag_write=True
     )
 
     assert set(assessment.audio_files) == {str(flac), str(mp3)}

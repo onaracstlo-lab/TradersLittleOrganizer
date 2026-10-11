@@ -34,7 +34,7 @@ def test_build558_manual_explains_no_dry_run_deletion_and_clear_real_run_choice(
     assert 'If you do not want to move any corrupt files or folders' in rtf
     assert 'Dry Run never moves, Trashes, or deletes files or folders' in rtf
     assert 'regardless of the Corruption Handling settings' in rtf
-    assert 'When selected, Deep Audio Check may read and decode' in rtf
+    assert 'Dry Run never probes tags or decodes audio' in rtf
     assert 'Build 558 - ' in release_history()
 
 

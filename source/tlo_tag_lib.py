@@ -5176,6 +5176,45 @@ def _select_tracks_for_tagging(
     return tracks, "filenames", None
 
 
+def _apply_confirmed_tag_write_failures(config, group, record, bad_paths, access_errors, emit=None):
+    """Apply existing threshold policy to failures discovered by actual tag writes.
+
+    The pre-operation reversible probe catches most failures, but a real tag
+    write can still fail after the probe.  Use those confirmed errors directly
+    without running any more audio checks. Access failures block deletion.
+    """
+    if not bad_paths and not access_errors:
+        return False
+    if bool(getattr(config, "manual_tweaks_tagging", False)):
+        return False
+    from tlo_corruption import (
+        CorruptionAssessment, apply_corruption_assessment, corruption_action,
+        group_audio_snapshot, qualifying_corrupt_music_dirs,
+    )
+    if getattr(config, "logs", None) is None:
+        return False
+    audio_files, read_errors = group_audio_snapshot(group)
+    normalized_audio = {os.path.normcase(os.path.abspath(p)) for p in audio_files}
+    bad = list(dict.fromkeys(os.path.normpath(p) for p in bad_paths))
+    unknown = list(access_errors) + list(read_errors)
+    if any(os.path.normcase(os.path.abspath(p)) not in normalized_audio for p in bad):
+        unknown.append((str(getattr(record, "main_dir_path", "")), "failed tagged file no longer in show snapshot"))
+    safe_files, safe_folders, threshold = defensive_corruption_policy_values(config)
+    action = "none" if unknown else corruption_action(len(audio_files), len(bad), safe_files, safe_folders, threshold)
+    folders = [] if unknown or action.startswith("trash_folder") else qualifying_corrupt_music_dirs(
+        group, audio_files, bad, safe_folders, threshold
+    )
+    assessment = CorruptionAssessment(
+        audio_files=audio_files, corrupt_files=bad, unverifiable_details=unknown,
+        action=action, corruption_percent=(100 * len(bad) / len(audio_files) if audio_files else 0.0),
+        corrupt_files_policy=safe_files, corrupt_folders_policy=safe_folders,
+        folder_threshold=threshold, folder_candidates=folders,
+    )
+    _emit(emit, f"CORRUPTION_TAG_WRITE: {record.main_dir_path} | {len(bad)} corrupt, {len(unknown)} unverified; applying existing file/folder policy")
+    outcome = apply_corruption_assessment(config, group, record, assessment)
+    return outcome.show_removed
+
+
 def tag_group_with_record(
     config: Config,
     group: dict,
@@ -5298,6 +5337,8 @@ def tag_group_with_record(
     # debug copies remain reserved for skipped title-selection problems that
     # have an actual setlist file to inspect.
 
+    tag_write_corrupt = []
+    tag_write_unverifiable = []
     for audio_path, track in zip(audio_files, tracks):
         if is_cancel_requested():
             stats["skipped"] += 1
@@ -5329,8 +5370,23 @@ def tag_group_with_record(
         except Exception as exc:
             stats["errors"] += 1
             error_text = _normalize_tag_write_error(audio_path, exc)
-            record_corrupt_flac(config, audio_path)
-            _emit(emit, _format_tag_file_error_line(audio_path, error_text))
+            from tlo_corruption import _exception_chain, _transient_access_error
+            transient = any(_transient_access_error(cause) for cause in _exception_chain(exc))
+            if not transient and not bool(getattr(config, "manual_tweaks_tagging", False)):
+                tag_write_corrupt.append(audio_path)
+                record_corrupt_flac(config, audio_path)
+                _emit(emit, _format_tag_file_error_line(audio_path, error_text))
+                _emit(emit, f"CORRUPT_TAG_WRITE: {_quote_log_path(audio_path)} | tag write failed; no further corruption inspection")
+            else:
+                if transient:
+                    tag_write_unverifiable.append((audio_path, "tag write access/resource error: " + error_text))
+                _emit(emit, _format_tag_file_error_line(audio_path, error_text))
+                if transient:
+                    _emit(emit, f"CORRUPTION_UNVERIFIABLE_TAG_ACCESS: {_quote_log_path(audio_path)} | transient access/resource failure")
+    if (tag_write_corrupt or tag_write_unverifiable) and not is_cancel_requested():
+        stats["show_removed"] = _apply_confirmed_tag_write_failures(
+            config, group, record, tag_write_corrupt, tag_write_unverifiable, emit=emit
+        )
     return stats
 
 
@@ -5898,6 +5954,8 @@ def run_tagger(
     tag_emit = _build_tag_log_emit(config, emit)
     artist_matcher = load_artist_matcher(config)
 
+    if bool(getattr(config, "deep_audio_check", False)):
+        _emit(tag_emit, "DEEP_AUDIO_CHECK: Checking every full audio stream can be very slow, especially on large collections.")
     _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | setlist.fm fallback={'yes' if config.setlistfm_lookup else 'no'} | setlist.fm upgrade={'yes' if getattr(config, 'setlistfm_upgrade', False) else 'no'} | thorough setlist matching={'yes' if getattr(config, 'thorough_setlist_matching', False) else 'no'} | corrupt files={getattr(config, 'corrupt_files', 'delete')} | corrupt folders={getattr(config, 'corrupt_folders', 'all')} | corrupt folder threshold={getattr(config, 'corrupt_folder_threshold', 100)}% | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | artist in album={'yes' if getattr(config, 'artist_in_album', True) else 'no'} | delete extra tags={'yes' if getattr(config, 'delete_extra_tags', False) else 'no'} | as-is artist name={'yes' if getattr(config, 'as_is_artist_name', False) else 'no'} | proper grammar={'yes' if getattr(config, 'proper_grammar', False) else 'no'} | deep audio check={'yes' if getattr(config, 'deep_audio_check', False) else 'no'} | debug={'yes' if config.debug else 'no'}")
     _emit(tag_emit, f"TLOHome: {config.TLOHome}")
     _emit(tag_emit, f"Tagging Path: {tagging_path}")

@@ -119,45 +119,20 @@ def test_build557_tagging_plus_deep_runs_tag_probe_then_decoder(monkeypatch, tmp
     assert calls == [("tag", str(path)), ("deep", str(path))]
 
 
-def test_build557_ffmpeg_command_is_local_file_only_and_full_stream(tmp_path):
+def test_build585_flac_routes_to_fingerprint_validator(monkeypatch, tmp_path):
     path = _copy_flac(tmp_path)
-    captured = {}
-
-    class Proc:
-        returncode = 0
-        def poll(self):
-            return 0
-        def communicate(self):
-            return ("", "")
-        def kill(self):
-            raise AssertionError("clean decoder should not be killed")
-
-    def fake_popen(command, **kwargs):
-        captured["command"] = list(command)
-        captured["kwargs"] = kwargs
-        # Build 566 emits a framehash sample record for FLAC so successful
-        # decoding alone does not falsely accept missing final frames.
-        samples = FLAC(path).info.total_samples
-        kwargs["stdout"].write(
-            f"#tb 0: 1/44100\n#codec_id 0: pcm_s16le\n"
-            f"0, 0, 0, {samples}, {samples * 2}, abcdef\n".encode("ascii")
-        )
-        return Proc()
-
-    status = corruption._deep_audio_stream_status(
-        str(path), ffmpeg_executable="/app/ffmpeg", popen_factory=fake_popen,
-        cancel_check=lambda: False, timeout_seconds=10,
-    )
-    assert status is True
-    command = captured["command"]
-    input_index = command.index("-i")
-    assert command[input_index - 2:input_index] == ["-protocol_whitelist", "file"]
-    assert command[command.index("-protocol_whitelist") + 1] == "file"
-    assert command[input_index + 1] == str(path.resolve())
-    assert command[command.index("-map") + 1] == "0:a:0"
-    assert command[-3:] == ["-f", "framemd5", "-"]
-    assert "-xerror" in command
-    assert captured["kwargs"]["env"]["LC_ALL"] == "C"
+    seen = {}
+    def fake_validate(file, **kwargs):
+        seen["file"] = file
+        seen["kwargs"] = kwargs
+        return True
+    monkeypatch.setattr(corruption, "verify_flac_fingerprint", fake_validate)
+    assert corruption._deep_audio_stream_status(
+        str(path), ffmpeg_executable="/app/ffmpeg", cancel_check=lambda: False,
+    ) is True
+    assert seen["file"] == str(path.resolve())
+    assert seen["kwargs"]["ffmpeg_executable"] == "/app/ffmpeg"
+    assert callable(seen["kwargs"]["cancel_check"])
 
 
 def test_build557_real_truncated_flac_passes_header_but_fails_full_decode(tmp_path):

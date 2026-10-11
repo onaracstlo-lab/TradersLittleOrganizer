@@ -287,7 +287,7 @@ def _build_help_text() -> str:
         "  --compliant          Use the simplified compliant Phase 2/3 parsing rules. Mutually exclusive with --rename-compliantly.\n"
         "  --as-is-artist-name  Preserve the artist name found in metadata instead of replacing a matched alias with the Artist DB master name.\n"
         "  --proper-grammar     Prefer the DB-backed Proper Grammar alias when available. As-Is Artist Name overrides this preference.\n"
-        "  --deep-audio-check   Decode each complete audio stream with TLO's bundled ffmpeg during corruption validation. Slower; default off.\n"
+        "  --deep-audio-check   Verify every audio stream (FLAC PCM MD5 plus sample count); probe and restore a temporary tag first. Very slow; default off.\n"
         "  --tag-during-inventory  Tag in place during inventory-time tagging; mutually exclusive with Tag Copy and Tag Copy/Delete Original.\n"
         "  --tag-copy-during-inventory  Copy each music folder before tagging and tag the copy instead of the original.\n"
         "  --tag-copy-destination DIR   Destination parent directory for Tag Copy. The GUI asks after Inventory or Tag is started.\n"

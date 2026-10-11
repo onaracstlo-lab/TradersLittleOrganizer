@@ -49,7 +49,8 @@ def test_canonical_current_artifacts_and_manual_version():
         assert f'Appendix {appendix} -' in requirements
     manual=(ROOT / A.MANUAL_FILENAME).read_text(encoding='utf8')
     assert f'Version {V.DISPLAY_VERSION}' in manual
-    assert 'Release history' in manual
+    assert "What's New" in manual
+    assert 'Release history' not in manual
     assert 'Build history (selected changes)' not in manual
     assert (ROOT / A.CHANGES_FILENAME).read_text().startswith(f'TLO {V.DISPLAY_VERSION}')
 

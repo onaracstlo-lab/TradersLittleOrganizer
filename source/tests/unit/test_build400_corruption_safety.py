@@ -16,8 +16,8 @@ def _touch_audio(tmp_path, name="x.flac", payload=b"fLaC" + b"\0" * 128):
 
 def test_build400_permission_error_is_unverifiable_not_corrupt(monkeypatch, tmp_path):
     path = _touch_audio(tmp_path)
-    monkeypatch.setattr(C, "FLAC", lambda p: (_ for _ in ()).throw(PermissionError("locked")))
-    bad, unverifiable = C.classify_audio_paths([str(path)])
+    monkeypatch.setattr(C, "_validate_tag_write_round_trip", lambda p: (_ for _ in ()).throw(PermissionError("locked")))
+    bad, unverifiable = C.classify_audio_paths([str(path)], check_tag_write=True)
     assert bad == []
     assert unverifiable and unverifiable[0][0] == str(path)
     assert "PermissionError" in unverifiable[0][1]
@@ -25,15 +25,15 @@ def test_build400_permission_error_is_unverifiable_not_corrupt(monkeypatch, tmp_
 
 def test_build400_oserror_is_unverifiable_not_corrupt(monkeypatch, tmp_path):
     path = _touch_audio(tmp_path)
-    monkeypatch.setattr(C, "FLAC", lambda p: (_ for _ in ()).throw(OSError("device unavailable")))
-    bad, unverifiable = C.classify_audio_paths([str(path)])
+    monkeypatch.setattr(C, "_validate_tag_write_round_trip", lambda p: (_ for _ in ()).throw(OSError(__import__('errno').EIO, "device unavailable")))
+    bad, unverifiable = C.classify_audio_paths([str(path)], check_tag_write=True)
     assert bad == []
     assert unverifiable and "OSError" in unverifiable[0][1]
 
 
 def test_build431_real_missing_flac_is_unverifiable_without_mocking_mutagen(tmp_path):
     path = tmp_path / "vanished.flac"
-    bad, unverifiable = C.classify_audio_paths([str(path)])
+    bad, unverifiable = C.classify_audio_paths([str(path)], check_tag_write=True)
     assert bad == []
     assert unverifiable and unverifiable[0][0] == str(path)
     assert "FileNotFoundError" in unverifiable[0][1]
@@ -49,8 +49,8 @@ def test_build431_mutagen_wrapped_oserror_is_unverifiable(monkeypatch, tmp_path)
         except PermissionError as cause:
             raise MutagenError("validator read failed") from cause
 
-    monkeypatch.setattr(C, "FLAC", wrapped)
-    bad, unverifiable = C.classify_audio_paths([str(path)])
+    monkeypatch.setattr(C, "_validate_tag_write_round_trip", wrapped)
+    bad, unverifiable = C.classify_audio_paths([str(path)], check_tag_write=True)
     assert bad == []
     assert unverifiable and "PermissionError" in unverifiable[0][1]
 
@@ -58,18 +58,19 @@ def test_build431_mutagen_wrapped_oserror_is_unverifiable(monkeypatch, tmp_path)
 def test_build400_parse_failure_is_proven_corrupt(monkeypatch, tmp_path):
     from mutagen import MutagenError
     path = _touch_audio(tmp_path)
-    monkeypatch.setattr(C, "FLAC", lambda p: (_ for _ in ()).throw(MutagenError("bad stream")))
-    bad, unverifiable = C.classify_audio_paths([str(path)])
+    monkeypatch.setattr(C, "_validate_tag_write_round_trip", lambda p: (_ for _ in ()).throw(MutagenError("bad stream")))
+    bad, unverifiable = C.classify_audio_paths([str(path)], check_tag_write=True)
     assert bad == [str(path)]
     assert unverifiable == []
 
 
-def test_build400_unknown_validator_exception_is_unverifiable(monkeypatch, tmp_path):
+def test_build585_unknown_decoder_is_unverifiable(monkeypatch, tmp_path):
     path = _touch_audio(tmp_path)
-    monkeypatch.setattr(C, "FLAC", lambda p: (_ for _ in ()).throw(RuntimeError("validator bug")))
-    bad, unverifiable = C.classify_audio_paths([str(path)])
+    monkeypatch.setattr(C, "_validate_tag_write_round_trip", lambda p: None)
+    monkeypatch.setattr(C, "_deep_audio_stream_status", lambda p: None)
+    bad, unverifiable = C.classify_audio_paths([str(path)], deep_audio_check=True)
     assert bad == []
-    assert unverifiable and "RuntimeError" in unverifiable[0][1]
+    assert unverifiable and "DeepAudioCheckUnverifiable" in unverifiable[0][1]
 
 
 def test_build400_group_listing_error_is_unverifiable(monkeypatch, tmp_path):

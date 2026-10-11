@@ -6851,6 +6851,8 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
     shn_conversion_totals = {"groups": 0, "converted": 0, "errors": 0}
     copy_delete_inventory_groups: List[dict] = []
     renamed_inventory_groups: List[dict] = []
+    if bool(getattr(config, "deep_audio_check", False)):
+        config.logs.tag("DEEP_AUDIO_CHECK: Reading and hashing/decoding every audio file can be very slow. Dry Run does not probe or decode files.")
     if tag_during_inventory:
         tag_mode = "copy-and-delete" if tag_copy_and_delete_enabled else ("copy" if tag_copy_during_inventory else "in-place")
         tag_destination = tag_copy_and_delete_path if tag_copy_and_delete_enabled else (getattr(config, "tag_copy_destination", "") if tag_copy_during_inventory else "")
@@ -6892,7 +6894,7 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
             corrupt_folders=safe_corrupt_folders,
             folder_threshold=safe_corrupt_threshold,
             check_tag_write=_corruption_tag_write_check_enabled(config, tag_during_inventory),
-            deep_audio_check=bool(getattr(config, "deep_audio_check", False)),
+            deep_audio_check=bool(getattr(config, "deep_audio_check", False)) and not bool(getattr(config, "dry_run", False)),
         )
         corruption_unverifiable = corruption_outcome.unverifiable
         if corruption_outcome.show_removed:
@@ -6996,6 +6998,10 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
                     meta_log_entry=meta_log_entry,
                 )
                 merge_tag_stats(tag_totals, subtotal)
+                if subtotal.get("show_removed"):
+                    if inventory_group in copy_delete_inventory_groups:
+                        copy_delete_inventory_groups.remove(inventory_group)
+                    continue
             except Exception as exc:
                 tag_totals["groups"] += 1
                 tag_totals["errors"] += 1

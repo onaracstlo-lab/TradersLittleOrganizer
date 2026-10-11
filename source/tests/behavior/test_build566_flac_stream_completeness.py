@@ -60,15 +60,18 @@ def test_build566_real_frame_aligned_truncation_in_classification(tmp_path, monk
     assert intact.exists() and partial.exists()  # classification never removes anything
 
 
-def test_build566_unknown_declared_flac_sample_count_is_unverifiable(monkeypatch, tmp_path):
+def test_build585_missing_stored_md5_is_corrupt(monkeypatch, tmp_path):
     intact, executable = _make_flac(tmp_path, 8)
-    monkeypatch.setattr(corruption, "_flac_declared_sample_total", lambda _path: None)
+    data = bytearray(intact.read_bytes())
+    data[26:42] = bytes(16)
+    intact.write_bytes(data)
     assert corruption._deep_audio_stream_status(
         str(intact), ffmpeg_executable=executable, cancel_check=lambda: False
-    ) is None
+    ) is False
     monkeypatch.setattr(corruption, "bundled_ffmpeg_executable", lambda: executable)
+    monkeypatch.setattr(corruption, "_validate_tag_write_round_trip", lambda path: None)
     bad, unknown = corruption.classify_audio_paths([str(intact)], deep_audio_check=True)
-    assert bad == [] and len(unknown) == 1
+    assert bad == [str(intact)] and unknown == []
 
 
 def test_build566_failed_decoder_is_not_misclassified_as_corruption(tmp_path):
@@ -87,18 +90,15 @@ def test_build566_cancel_before_decoder_completion_is_unverifiable(tmp_path):
     ) is None
 
 
-def test_build566_bad_or_missing_framehash_is_unverifiable(tmp_path):
-    intact, executable = _make_flac(tmp_path, 8)
-    from tempfile import TemporaryFile
-    with TemporaryFile() as stream:
-        stream.write(b"#tb 0: 1/44100\n#codec_id 0: pcm_s16le\n")
-        assert corruption._flac_decoded_sample_total(stream, 44100) is None
-    with TemporaryFile() as stream:
-        stream.write(b"#tb 0: 1/44100\n#codec_id 0: pcm_s16le\n0, 0, 0, missing, 2, ff\n")
-        assert corruption._flac_decoded_sample_total(stream, 44100) is None
-    with TemporaryFile() as stream:
-        stream.write(b"#tb 0: 1/48000\n#codec_id 0: pcm_s16le\n0, 0, 0, 99, 198, ff\n")
-        assert corruption._flac_decoded_sample_total(stream, 44100) is None
+def test_build585_incomplete_pcm_hash_data_is_corrupt():
+    from io import BytesIO
+    from tlo_flac_fingerprint import _fingerprint_from_pcm, FingerprintCorrupt
+    with pytest.raises(FingerprintCorrupt):
+        _fingerprint_from_pcm(BytesIO(b""), 16, 16, 1)
+    with pytest.raises(FingerprintCorrupt):
+        _fingerprint_from_pcm(BytesIO(b"\x00"), 16, 16, 1)
+    with pytest.raises(FingerprintCorrupt):
+        _fingerprint_from_pcm(BytesIO(b"\x00\x00\x00\x00"), 16, 16, 3)
 
 
 def test_build566_non_flac_continues_to_use_original_decoder_contract(tmp_path):

@@ -48,4 +48,4 @@ def test_hash_gate_fails_closed(monkeypatch, tmp_path):
 def test_audio_capability_manifest_complete():
     assert {'shorten', 'flac', 'ogg', 'mov', 'mp3', 'wav', 'ape', 'wv'} <= set(src.AUDIO_DEMUXERS)
     assert {'shorten', 'flac', 'aac', 'alac', 'opus', 'vorbis', 'ape', 'wavpack'} <= set(src.AUDIO_DECODERS)
-    assert {'flac','null','framemd5'} <= set(src.AUDIO_MUXERS)
+    assert {'flac','null','pcm_s8','pcm_s16le','pcm_s24le','pcm_s32le'} <= set(src.AUDIO_MUXERS)

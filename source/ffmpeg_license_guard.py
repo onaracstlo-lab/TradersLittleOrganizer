@@ -17,8 +17,8 @@ FORBIDDEN = ('--enable-nonfree', '--enable-gpl', '--enable-version3')
 REQUIRED = ('--disable-autodetect', '--disable-network', '--disable-ffplay', '--disable-ffprobe')
 REQUIRED_DEMUXERS = ('shn', 'flac', 'wav', 'aiff', 'mp3', 'ogg', 'mov', 'ape', 'wv')
 REQUIRED_DECODERS = ('shorten', 'flac', 'mp3', 'aac', 'alac', 'ape', 'wavpack', 'opus', 'vorbis')
-REQUIRED_MUXERS = ('flac', 'null', 'framemd5')
-REQUIRED_ENCODERS = ('flac', 'pcm_s16le')
+REQUIRED_MUXERS = ('flac', 'null', 's8', 's16le', 's24le', 's32le')
+REQUIRED_ENCODERS = ('flac', 'pcm_s8', 'pcm_s16le', 'pcm_s24le', 'pcm_s32le')
 
 
 def validate_version_output(output: str, *, require_audio_only: bool = False) -> None:

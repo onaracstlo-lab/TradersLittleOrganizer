@@ -362,6 +362,9 @@ def _update_manual_folder_tags(config, folder_path: str, record_dict: Dict[str, 
     # delete SHN/SHNF originals.  Conversion remains an explicit Tag/Inventory
     # workflow.
     setattr(tag_config, "convert_shn", False)
+    setattr(tag_config, "manual_tweaks_tagging", True)
+    setattr(tag_config, "deep_audio_check", False)
+    setattr(tag_config, "standalone_tagger_corruption_enabled", False)
     group = _build_single_folder_group(tag_config, folder_path)
     record = _record_namespace_from_dict(record_dict)
     record.main_dir_path = os.path.normpath(folder_path)

@@ -4,8 +4,8 @@ from __future__ import annotations
 from tlo_version import VERSION as _TLO_CANONICAL_VERSION
 __version__ = _TLO_CANONICAL_VERSION
 
-import contextlib
 import copy
+import errno
 import ctypes
 import os
 import subprocess
@@ -22,6 +22,7 @@ from mutagen.mp4 import MP4FreeForm, MP4Tags
 
 from tlo_diagnostics import debug_suppressed_exception
 from tlo_ffmpeg import bundled_ffmpeg_executable
+from tlo_flac_fingerprint import verify_flac_fingerprint, FingerprintCorrupt, FingerprintUnverifiable
 from tlo_runtime_control import is_cancel_requested
 
 try:
@@ -39,7 +40,7 @@ DEEP_AUDIO_CHECK_TIMEOUT_SECONDS = 1800.0
 
 MEDIA_EXTENSIONS = {
     ".flac", ".mp3", ".m4a", ".mp4", ".aac", ".alac", ".ogg", ".oga", ".opus", ".wav",
-    ".aif", ".aiff", ".ape", ".wv", ".tta", ".wma",
+    ".aif", ".aiff", ".ape", ".wv", ".tta", ".wma", ".shn", ".shnf",
 }
 
 # Match the formats the tagger currently attempts to mutate.  Corruption
@@ -324,152 +325,64 @@ def _ffmpeg_failure_is_unverifiable(stderr_text):
     return any(marker in lowered for marker in markers)
 
 
-def _flac_declared_sample_total(path):
-    """Return (samples, sample_rate), or None if FLAC duration is unspecified.
-
-    FLAC STREAMINFO's total_samples is authoritative for a fully present FLAC
-    stream, but zero explicitly means unknown.  Unknown is *unverifiable*, not
-    evidence that the source is corrupt or proof it is intact.
-    """
-    if FLAC is None:
-        return None
-    try:
-        info = FLAC(path).info
-        samples = int(getattr(info, "total_samples", 0) or 0)
-        sample_rate = int(getattr(info, "sample_rate", 0) or 0)
-    except (OSError, MutagenError, ValueError, TypeError, AttributeError):
-        return None
-    if samples <= 0 or sample_rate <= 0:
-        return None
-    return samples, sample_rate
-
-
-def _flac_decoded_sample_total(framehash_file, sample_rate):
-    """Count actual PCM samples from FFmpeg's framehash muxer, not its exit code.
-
-    framehash produces one short record per decoded PCM frame; these records
-    have timestamps/durations in the declared 1/sample_rate time base.  A
-    temporary file bounds process pipe memory and is never put in the source
-    collection.  Malformed/oversized output is unverifiable, not corruption.
-    """
-    try:
-        framehash_file.seek(0, os.SEEK_END)
-        if framehash_file.tell() > 64 * 1024 * 1024:
-            return None
-        framehash_file.seek(0)
-        timebase_ok = False
-        codec_ok = False
-        total = 0
-        frames = 0
-        for raw in framehash_file:
-            if len(raw) > 4096:
-                return None
-            line = raw.decode("ascii", errors="strict").strip()
-            if line.startswith("#tb 0:"):
-                timebase_ok = line.split(":", 1)[1].strip() == f"1/{sample_rate}"
-            elif line.startswith("#codec_id 0:"):
-                codec_ok = line.split(":", 1)[1].strip() == "pcm_s16le"
-            elif line and not line.startswith("#"):
-                fields = [field.strip() for field in line.split(",")]
-                if len(fields) != 6 or fields[0] != "0":
-                    return None
-                duration = int(fields[3])
-                if duration <= 0:
-                    return None
-                total += duration
-                frames += 1
-                if frames > 500000 or total > (1 << 56):
-                    return None
-        if not timebase_ok or not codec_ok or not frames:
-            return None
-        return total
-    except (OSError, UnicodeError, ValueError, OverflowError):
-        return None
-
-
 def _deep_audio_stream_status(
-    path,
-    *,
-    ffmpeg_executable=None,
-    popen_factory=subprocess.Popen,
-    timeout_seconds=DEEP_AUDIO_CHECK_TIMEOUT_SECONDS,
-    cancel_check=is_cancel_requested,
+    path, *, ffmpeg_executable=None, popen_factory=subprocess.Popen,
+    timeout_seconds=DEEP_AUDIO_CHECK_TIMEOUT_SECONDS, cancel_check=is_cancel_requested,
 ):
-    """Return True for verified decode, False for corruption, or None if unknown.
+    """Return True/False/None for verified/failed/unverifiable full decode.
 
-    FLAC additionally requires exact agreement between decoded PCM samples and
-    the declared STREAMINFO total.  FFmpeg's successful exit alone can accept
-    a truncated file whose last available frame happens to be complete.
+    FLAC uses independently hashed, bit-depth-preserving PCM and the stored
+    STREAMINFO MD5; other formats retain the existing FFmpeg null decode.
     """
     executable = str(ffmpeg_executable or bundled_ffmpeg_executable() or "").strip()
     if not executable:
         return None
     normalized = os.path.abspath(os.path.normpath(str(path or "")))
-    is_flac = Path(normalized).suffix.casefold() == ".flac"
-    try:
-        before_stat = os.stat(normalized) if is_flac else None
-        declared = _flac_declared_sample_total(normalized) if is_flac else None
-    except (OSError, MemoryError):
-        return None
-    if is_flac and declared is None:
-        return None
+    if Path(normalized).suffix.casefold() == ".flac":
+        try:
+            return verify_flac_fingerprint(
+                normalized, ffmpeg_executable=executable,
+                popen_factory=popen_factory, timeout_seconds=timeout_seconds,
+                cancel_check=cancel_check, hidden_subprocess_kwargs=_hidden_windows_subprocess_kwargs(),
+            )
+        except FingerprintCorrupt:
+            return False
+        except FingerprintUnverifiable:
+            return None
 
     command = [
         executable, "-nostdin", "-hide_banner", "-loglevel", "error", "-xerror",
         "-protocol_whitelist", "file", "-i", normalized, "-map", "0:a:0",
+        "-f", "null", "-",
     ]
-    # framemd5 records per-frame decoded sample counts in a local output file,
-    # without allocating or writing a full PCM copy of the recording.
-    if is_flac:
-        command += ["-c:a", "pcm_s16le", "-f", "framemd5", "-"]
-    else:
-        command += ["-f", "null", "-"]
-
     process = None
     try:
-        with (tempfile.TemporaryFile(mode="w+b") if is_flac else contextlib.nullcontext(None)) as sample_records:
+        with tempfile.TemporaryFile(mode="w+b") as stderr_file:
             process = popen_factory(
-                command, stdin=subprocess.DEVNULL,
-                stdout=sample_records if is_flac else subprocess.DEVNULL,
-                stderr=subprocess.PIPE, text=True,
-                env={**os.environ, "LC_ALL": "C"},
+                command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=stderr_file, env={**os.environ, "LC_ALL": "C"},
                 **_hidden_windows_subprocess_kwargs(),
             )
             deadline = time.monotonic() + max(1.0, float(timeout_seconds))
             while process.poll() is None:
                 if cancel_check and cancel_check():
-                    try:
-                        process.kill()
-                    finally:
-                        process.communicate()
+                    process.kill()
+                    process.wait()
                     return None
                 if time.monotonic() >= deadline:
-                    try:
-                        process.kill()
-                    finally:
-                        process.communicate()
+                    process.kill()
+                    process.wait()
                     return None
                 time.sleep(0.05)
-            _stdout, stderr = process.communicate()
+            stderr_file.seek(0)
+            stderr = stderr_file.read(128 * 1024).decode("utf-8", "replace")
             if process.returncode != 0:
                 return None if _ffmpeg_failure_is_unverifiable(stderr) else False
-            if not is_flac:
-                return True
-            after_stat = os.stat(normalized)
-            if (after_stat.st_size, after_stat.st_mtime_ns) != (before_stat.st_size, before_stat.st_mtime_ns):
-                return None
-            decoded = _flac_decoded_sample_total(sample_records, declared[1])
-            if decoded is None:
-                return None
-            return decoded == declared[0]
+            return True
     except KeyboardInterrupt:
         if process is not None and process.poll() is None:
             process.kill()
         raise
-    except (OSError, MemoryError):
-        if process is not None and process.poll() is None:
-            process.kill()
-        return None
     except Exception as exc:
         if process is not None and process.poll() is None:
             process.kill()
@@ -478,54 +391,79 @@ def _deep_audio_stream_status(
 
 
 def classify_audio_paths(paths, *, check_tag_write=False, deep_audio_check=False):
-    """Return (proven_corrupt_paths, unverifiable_errors).
+    """Find proven corruption only when tagging or Deep Audio Check is active.
 
-    Header/format validation always runs.  When ``check_tag_write`` is true,
-    TLO also proves that taggable audio can accept and restore a temporary tag
-    value.  When ``deep_audio_check`` is true, TLO additionally decodes the
-    complete audio stream with its bundled ffmpeg.  Header, tag-format/write,
-    or full-stream decode failures are corruption; filesystem/resource/validator
-    failures remain unverifiable and suppress corruption-driven mutation.
+    Try the reversible tag round trip first.  A non-access tagging failure
+    proves corruption, and we *never* decode that file after it.  A deep check
+    without normal tagging also makes a reversible tag probe first.
+    Filesystem/access/restore failures are unverifiable (no Trash action).
     """
-    bad = []
-    unverifiable = []
+    if not (check_tag_write or deep_audio_check):
+        return [], []
+    bad, unverifiable = [], []
     for path in list(paths or []):
+        tag_attempted = False
         try:
             _preflight_audio_read(path)
-            lowered = str(path).lower()
-            if lowered.endswith(".flac") and FLAC is not None:
-                FLAC(path)
-            elif lowered.endswith(".mp3") and MP3 is not None:
-                MP3(path)
-            else:
-                audio = MutagenFile(path)
-                if audio is None:
-                    raise ValueError("unrecognized audio format")
-            if check_tag_write and Path(path).suffix.lower() in TAG_WRITE_CHECK_EXTENSIONS:
+            if Path(path).suffix.lower() in TAG_WRITE_CHECK_EXTENSIONS:
+                tag_attempted = True
                 _validate_tag_write_round_trip(path)
+            # Untaggable formats such as .shn cannot be tested for a successful
+            # tag write.  Deep-check them with the decoder when requested;
+            # tag-only mode does not claim they are corrupt simply for lacking
+            # a mutagen-compatible metadata container.
             if deep_audio_check:
                 stream_status = _deep_audio_stream_status(path)
                 if stream_status is None:
                     raise _DeepAudioCheckUnverifiable(
-                        "full-stream decoder unavailable, cancelled, timed out, or encountered an access/infrastructure failure"
+                        "full-stream checker unavailable, cancelled, timed out, or access failed"
                     )
                 if stream_status is False:
-                    raise _DeepAudioDecodeError("full audio stream decode failed")
+                    raise _DeepAudioDecodeError("audio decode/fingerprint validation failed")
         except (_TagWriteRestoreError, _DeepAudioCheckUnverifiable) as exc:
             unverifiable.append((path, f"{type(exc).__name__}: {exc}"))
-        except (PermissionError, OSError, MemoryError) as exc:
+        except (PermissionError, MemoryError) as exc:
             unverifiable.append((path, f"{type(exc).__name__}: {exc}"))
+        except OSError as exc:
+            # Only access/resource problems are inconclusive; media-invalid
+            # error codes from a tag writer count as corruption.
+            if _transient_access_error(exc):
+                unverifiable.append((path, f"{type(exc).__name__}: {exc}"))
+            else:
+                bad.append(path)
         except (MutagenError, ValueError, TypeError, KeyError) as exc:
-            cause = _unverifiable_underlying_error(exc)
+            cause = next((item for item in _exception_chain(exc)
+                          if isinstance(item, OSError) and _transient_access_error(item)), None)
             if cause is not None:
                 unverifiable.append((path, f"{type(cause).__name__}: {cause}"))
             else:
                 bad.append(path)
         except Exception as exc:
-            # Unexpected validator failures are infrastructure/implementation
-            # failures, not proof that the user's audio bytes are corrupt.
-            unverifiable.append((path, f"{type(exc).__name__}: {exc}"))
+            # Only a known attempted tag-write failure is evidence of corruption;
+            # unexpected decoder/implementation errors remain unverifiable.
+            cause = next((item for item in _exception_chain(exc)
+                          if _transient_access_error(item)), None)
+            if cause is not None:
+                unverifiable.append((path, f"{type(cause).__name__}: {cause}"))
+            elif tag_attempted:
+                bad.append(path)
+            else:
+                unverifiable.append((path, f"{type(exc).__name__}: {exc}"))
     return bad, unverifiable
+
+
+def _transient_access_error(exc):
+    """Classify filesystem/resource failures as unverified, never corrupt."""
+    access_codes = {
+        errno.EACCES, errno.EPERM, errno.EAGAIN, errno.EBUSY,
+        errno.EMFILE, errno.ENFILE, errno.ENOENT, errno.EIO,
+        errno.ENOSPC, errno.EROFS, errno.ENODEV, errno.ETIMEDOUT,
+    }
+    for name in ("ESTALE", "EDQUOT", "ENETDOWN", "ENOTCONN", "ECANCELED"):
+        value = getattr(errno, name, None)
+        if value is not None:
+            access_codes.add(value)
+    return isinstance(exc, OSError) and (exc.errno in access_codes or isinstance(exc, PermissionError))
 
 
 def corrupt_audio_paths(paths):
@@ -974,15 +912,15 @@ def assess_group_corruption(group, corrupt_files="delete", corrupt_folders="all"
     corrupt_files = str(corrupt_files or "delete").strip().lower()
     corrupt_folders = str(corrupt_folders or "all").strip().lower()
     folder_threshold = int(folder_threshold)
+    if not (check_tag_write or deep_audio_check):
+        # No corruption check, scan or deletion when neither opt-in trigger is on.
+        return CorruptionAssessment(corrupt_files_policy=corrupt_files,
+                                    corrupt_folders_policy=corrupt_folders,
+                                    folder_threshold=folder_threshold)
     audio_files, snapshot_errors = group_audio_snapshot(group)
-    if check_tag_write or deep_audio_check:
-        corrupt_paths, validator_errors = classify_audio_paths(
-            audio_files, check_tag_write=bool(check_tag_write), deep_audio_check=bool(deep_audio_check)
-        )
-    else:
-        # Preserve the long-standing one-argument classifier boundary for ordinary
-        # header-only callers and historical test fixtures.
-        corrupt_paths, validator_errors = classify_audio_paths(audio_files)
+    corrupt_paths, validator_errors = classify_audio_paths(
+        audio_files, check_tag_write=bool(check_tag_write), deep_audio_check=bool(deep_audio_check)
+    )
     unverifiable_details = list(snapshot_errors) + list(validator_errors)
     action = "none"
     folder_candidates = []
@@ -1178,6 +1116,10 @@ def apply_corruption_assessment(config, group, record, assessment):
 
 def handle_group_corruption(config, group, record, corrupt_files="delete", corrupt_folders="all", folder_threshold=100, *, check_tag_write=False, deep_audio_check=False):
     """Fail-closed assessment + mutation wrapper for inventory orchestration."""
+    if not (check_tag_write or deep_audio_check):
+        return CorruptionOutcome(assessment=CorruptionAssessment(
+            corrupt_files_policy=str(corrupt_files), corrupt_folders_policy=str(corrupt_folders),
+            folder_threshold=int(folder_threshold)))
     try:
         assessment = assess_group_corruption(
             group, corrupt_files=corrupt_files, corrupt_folders=corrupt_folders, folder_threshold=folder_threshold,
