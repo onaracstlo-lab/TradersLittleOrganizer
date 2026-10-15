@@ -1,0 +1,29 @@
+TLO v1.7 Build 590 — LOCAL VERIFICATION; NOT RELEASE-ATTESTED
+
+Scope: verified Add New Shows tagging acceptance, opt-in Deep Audio Check,
+correct staged-folder inventory naming, guarded setlist/inventory commit,
+complete tag counts and explicit unsupported-mode warning. No changes to
+underlying corruption deletion policies, FLAC/MP3 decoders or FFmpeg recipe.
+
+Test results: 2,041 source/unit/contract/behavior tests passed, with 6
+expected skips on platform/Ruff-availability cases (1,810 behavior and
+231 unit/contract tests). Integration and historical compatibility:
+1,416 passed. Build 590 acceptance regression: 17 passed, including real
+FLAC-only and mixed FLAC/SHN tagging and safety/rollback verification.
+The source behavior suite was partitioned by module to isolate a historic
+long-running combined-suite stall; every partition returned success.
+Requirements DOCX rendered to 118 pages; representative pages visually
+inspected. Three manual illustrations preserved. Python AST and shell syntax
+verified. Complete source ZIP SHA256 member manifest verified.
+GitHub Build Process v117 remains unchanged and was not repackaged.
+Ruff lint: lint not attested locally (Ruff executable unavailable). Windows
+preflight and hosted CI must execute the configured Ruff check.
+Windows/macOS native builds, Windows signing and signature verification,
+malware scanning, final release assembly and publication: NOT EXECUTED HERE.
+GitHub Build Process v117 is unchanged.
+
+GUI/headless test evidence: GUI smoke tests requiring a display run under
+Xvfb display (CI=1); no-display environments are not treated as a GUI pass.
+No display (DISPLAY and CI unset): six GUI-only cases remain skipped
+in the historical headless smoke-contract (6 skipped). This is distinct
+from execution under Xvfb display (CI=1).

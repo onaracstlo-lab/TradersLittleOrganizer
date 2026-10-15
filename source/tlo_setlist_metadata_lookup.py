@@ -1590,6 +1590,41 @@ def _best_venue_from_lines(lines: List[str], support: _SupportData) -> Tuple[str
 
 
 
+def _confirmed_event_date_location_header(lines: List[str], support: _SupportData) -> Tuple[str, str, str, str, str, str]:
+    """Recognize a narrow three-line concert header with an event subtitle.
+
+    ``Artist: Event`` / ``weekday, date`` / ``City, ST @ Venue`` is
+    independently anchored by a full date and a state-qualified location.
+    Do not infer an artist from a generic colon, introductory prose, or a
+    standalone weekday; those are frequent sources of false identification.
+    """
+    for index in range(max(0, min(len(lines) - 2, 16))):
+        artist_event = _clean_spaces(lines[index])
+        date_line = _clean_spaces(lines[index + 1])
+        venue_location = _clean_spaces(lines[index + 2])
+        if not (_looks_like_date_header_line(date_line) and " @ " in venue_location):
+            continue
+        if ":" not in artist_event or _explicit_metadata_match(artist_event):
+            continue
+        artist, subtitle = artist_event.split(":", 1)
+        artist, subtitle = _clean_spaces(artist), _clean_spaces(subtitle)
+        if not (artist and subtitle and 1 <= _line_word_count(artist) <= 14):
+            continue
+        if _looks_like_date_header_line(artist) or _looks_like_sentence_prose_line(artist):
+            continue
+        location_piece, venue = venue_location.split(" @ ", 1)
+        location_piece, venue = _clean_spaces(location_piece), _clean_spaces(venue)
+        if not venue or len(venue) > 160 or not re.search(r"[A-Za-z]{3}", venue):
+            continue
+        # Parse only the location component: attempting to parse the complete
+        # line can confuse the university name with an adjacent city/region.
+        city, region, country, _raw, _pattern, _confidence = _parse_location_from_text(location_piece, support)
+        if not (city and (region or country)):
+            continue
+        return artist, venue, city, region, country, location_piece
+    return "", "", "", "", "", ""
+
+
 def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> SetlistVenueLocationResult:
     """Extract venue/location from one selected setlist text file.
 
@@ -1618,6 +1653,12 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
 
     support = _SupportData(tlo_dbs_dir)
     structured_artist, structured_venue, structured_city, structured_region, structured_country, structured_raw, structured_pattern, structured_conf = _extract_structured_unlabeled_header_block(metadata_lines, support)
+    event_artist, event_venue, event_city, event_region, event_country, event_location_raw = _confirmed_event_date_location_header(_metadata_header_lines(lines, 80), support)
+    if event_artist:
+        structured_artist = event_artist
+        structured_conf = max(structured_conf, 94)
+        structured_venue, structured_city, structured_region, structured_country = event_venue, event_city, event_region, event_country
+        structured_raw, structured_pattern = event_location_raw, "LOCATION_EVENT_DATE_CITY_AT_VENUE"
     inline_artist, inline_venue, inline_conf = _extract_inline_artist_date_header(metadata_lines, support)
     if not structured_artist and inline_artist:
         structured_artist = inline_artist
@@ -1630,7 +1671,9 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
     explicit_artist = safe_title(_normalize_artist_header_text(fields.get("artist", "")))
     structured_artist = safe_title(_normalize_artist_header_text(structured_artist))
     artist = explicit_artist or structured_artist
-    artist_source = "setlist_metadata:EXPLICIT_ARTIST_KEY" if explicit_artist else ("setlist_metadata:STRUCTURED_UNLABELED_ARTIST_HEADER" if structured_artist else "")
+    artist_source = ("setlist_metadata:EXPLICIT_ARTIST_KEY" if explicit_artist else
+                     "setlist_metadata:CONFIRMED_EVENT_HEADER" if event_artist else
+                     "setlist_metadata:STRUCTURED_UNLABELED_ARTIST_HEADER" if structured_artist else "")
     artist_confidence = 95 if explicit_artist else (max(88, structured_conf) if structured_artist else 0)
     venue = _clean_spaces(fields.get("venue", ""))
     raw_venue = venue

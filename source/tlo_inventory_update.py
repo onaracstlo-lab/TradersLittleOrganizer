@@ -927,31 +927,6 @@ def _strip_pdup_suffix(show_name: str) -> str:
     return PDUP_SUFFIX_RE.sub("", str(show_name or "").strip()).strip()
 
 
-def _next_pdup_number(matches: Sequence[Dict[str, str]]) -> int:
-    used = set()
-    for row in matches or []:
-        match = PDUP_SUFFIX_RE.search(str(row.get("Show", "") or "").strip())
-        if match:
-            try:
-                used.add(int(match.group("number")))
-            except (TypeError, ValueError):
-                continue
-    return (max(used) + 1) if used else 1
-
-
-def _apply_pdup_marker(record_dict: Dict[str, str], number: int) -> str:
-    """Append one zero-padded potential-duplicate marker to show identity."""
-    marker = f"(pdup{int(number):02d})"
-    show_name = _strip_pdup_suffix(record_dict.get("show_name", ""))
-    parentheticals = str(record_dict.get("parentheticals", "") or "").strip()
-    parentheticals = PDUP_SUFFIX_RE.sub("", parentheticals).strip()
-    if parentheticals and show_name and not show_name.endswith(parentheticals):
-        show_name = f"{show_name} {parentheticals}".strip()
-    record_dict["parentheticals"] = " ".join(part for part in [parentheticals, marker] if part).strip()
-    record_dict["show_name"] = " ".join(part for part in [show_name, marker] if part).strip()
-    return marker
-
-
 def _format_add_shows_volume_path(current_storage: str, folder_leaf: str) -> str:
     label, root_path = _split_storage_designation(current_storage)
     if root_path:
@@ -1273,7 +1248,107 @@ def _add_shows_tag_emit(config, text: str) -> None:
         logs.tag("%s", line)
 
 
-def _tag_add_shows_folder_in_place(config, folder_path: str, record_dict: Dict[str, str], generated_setlist_path: str = "") -> Dict[str, int]:
+def _add_shows_tag_mode(config) -> bool:
+    """Reject unsupported copy selections, rather than silently accepting untagged shows."""
+    selected_copy = bool(getattr(config, "main_window_tag_copy_selected", False))
+    selected_delete = bool(getattr(config, "main_window_tag_copy_delete_selected", False))
+    if selected_copy or selected_delete or bool(getattr(config, "tag_copy_during_inventory", False)) or bool(getattr(config, "tag_copy_and_delete_path", "")):
+        raise InventoryUpdateError(
+            "Add New Shows stages original folders and supports Tag in Place, not Tag Copy or "
+            "Tag Copy/Delete Original. Select Tag in Place, or run the standalone Tag operation."
+        )
+    return bool(getattr(config, "tag_during_inventory", False))
+
+
+def _add_shows_discovered_group(config, folder_path: str) -> dict:
+    """Use Tag's inventory discovery for multiple music directories; fail closed on ambiguity.
+
+    A single show folder can contain disc subfolders. A wrapper must not be
+    treated as one recording if Tag discovers two or more distinct shows.
+    """
+    group = _build_single_folder_group(config, folder_path)
+    if len(group.get("music_dirs", [])) <= 1:
+        return group
+    from tlo_tag_lib import _groups_from_inventory_discovery
+    # Discovery mutates current_search_* state. Use a shallow config copy; logs
+    # still go to the original active scope, and original settings are preserved.
+    import copy
+    discovery_config = copy.copy(config)
+    discovered = _groups_from_inventory_discovery(discovery_config, folder_path)
+    actual = {os.path.normcase(os.path.abspath(p)) for p in group.get("music_files", [])}
+    grouped = [os.path.normcase(os.path.abspath(p)) for g in discovered for p in g.get("music_files", [])]
+    if len(discovered) != 1 or len(grouped) != len(set(grouped)) or set(grouped) != actual:
+        raise InventoryUpdateError(
+            "Multiple or ambiguous performance groups beneath this incoming folder; "
+            "separate the performances and rerun Add New Shows. No tags or inventory entry were accepted."
+        )
+    discovered[0]["main_dir_path"] = os.path.normpath(folder_path)
+    discovered[0]["main_dir_name"] = os.path.basename(os.path.normpath(folder_path))
+    return discovered[0]
+
+
+def _add_shows_audio_phase(config, folder_path: str, record_dict: Dict[str, str], generated_setlist: str = "") -> dict:
+    """Run the inventory corruption gate and verify tagging before acceptance.
+
+    Returns a status with explicit counts; never exports setlists or inventory.
+    """
+    from tlo_corruption import handle_group_corruption
+    from tlo_options import defensive_corruption_policy_values
+    from tlo_tag_lib import TAGGABLE_AUDIO_EXTENSIONS, empty_tag_stats
+
+    tag_enabled = _add_shows_tag_mode(config)
+    deep_check = bool(getattr(config, "deep_audio_check", False))
+    stats = dict(empty_tag_stats())
+    status = {"accepted": True, "removed": False, "reason": "", "stats": stats, "excluded": 0}
+    if not (tag_enabled or deep_check or bool(getattr(config, "convert_shn", False))):
+        return status
+    _ensure_add_shows_tag_log_scope(config, folder_path)
+    group = _add_shows_discovered_group(config, folder_path)
+    record = _record_namespace_from_dict(record_dict)
+    record.main_dir_path = os.path.normpath(folder_path)
+    if deep_check:
+        _add_shows_tag_emit(config, "DEEP_AUDIO_CHECK: Full-stream processing of every audio file may be very slow.")
+    if tag_enabled or deep_check:
+        files_policy, folders_policy, threshold = defensive_corruption_policy_values(config)
+        outcome = handle_group_corruption(
+            config, group, record, corrupt_files=files_policy, corrupt_folders=folders_policy,
+            folder_threshold=threshold, check_tag_write=tag_enabled, deep_audio_check=deep_check,
+        )
+        if outcome.show_removed:
+            status.update(accepted=False, removed=True, reason="Corruption deletion policy removed the performance")
+            return status
+        if outcome.unverifiable or outcome.unexpected_error or outcome.whole_folder_trash_failed:
+            status.update(accepted=False, reason="Corruption validation was inconclusive; kept for review")
+            return status
+    if not tag_enabled and not bool(getattr(config, "convert_shn", False)):
+        return status
+    # Re-enumerate after corruption deletion; no removed track may be tagged.
+    group = _add_shows_discovered_group(config, folder_path) if os.path.isdir(folder_path) else group
+    convert_shn = bool(getattr(config, "convert_shn", False))
+    candidates = [p for p in group.get("music_files", []) if os.path.splitext(p)[1].lower() in TAGGABLE_AUDIO_EXTENSIONS
+                  or (convert_shn and os.path.splitext(p)[1].lower() in {".shn", ".shnf"})]
+    ignored = [p for p in group.get("music_files", []) if p not in candidates]
+    status["excluded"] = len(ignored)
+    for path in ignored:
+        _add_shows_tag_emit(config, f"ADD_SHOWS_TAG_EXCLUDED: {path} | unsupported for direct tagging; Convert shn if applicable")
+    # Preserve the established Add Shows tagging helper and logs.
+    tagged_stats = _tag_add_shows_folder_in_place(config, folder_path, record_dict, generated_setlist,
+                                                  discovered_group=group)
+    status["stats"] = tagged_stats
+    if bool(tagged_stats.get("show_removed", False)) or not os.path.isdir(folder_path):
+        status.update(accepted=False, removed=True, reason="Confirmed tag-write corruption removed the show")
+    elif tag_enabled and (not candidates or int(tagged_stats.get("tagged", 0)) != len(candidates)
+                          or int(tagged_stats.get("errors", 0)) or int(tagged_stats.get("skipped", 0))):
+        status.update(accepted=False, reason=(
+            f"Tagging incomplete: eligible={len(candidates)} tagged_or_unchanged={tagged_stats.get('tagged', 0)} "
+            f"skipped_groups={tagged_stats.get('skipped', 0)} file_errors={tagged_stats.get('errors', 0)}"
+        ))
+    elif not tag_enabled and int(tagged_stats.get("errors", 0)):
+        status.update(accepted=False, reason="Convert shn failed; source retained for review")
+    return status
+
+
+def _tag_add_shows_folder_in_place(config, folder_path: str, record_dict: Dict[str, str], generated_setlist_path: str = "", *, discovered_group=None) -> Dict[str, int]:
     """Tag or SHN-convert an Add Shows source folder before staging.
 
     Add Shows still never performs Tag Copy.  When Tag In Place is checked, the
@@ -1299,7 +1374,7 @@ def _tag_add_shows_folder_in_place(config, folder_path: str, record_dict: Dict[s
     if bool(getattr(config, "tag_copy_during_inventory", False)):
         _add_shows_tag_emit(config, "ADD_SHOWS_TAG_COPY_IGNORED: Add Shows supports Tag In Place only; Tag Copy was ignored")
 
-    group = _build_single_folder_group(config, folder_path)
+    group = discovered_group if discovered_group is not None else _build_single_folder_group(config, folder_path)
     if generated_setlist_path and os.path.isfile(generated_setlist_path) and not group.get("setlist_file"):
         group["setlist_file"] = os.path.normpath(generated_setlist_path)
         group["setlist_files"] = [os.path.normpath(generated_setlist_path)]
@@ -1337,6 +1412,7 @@ def _tag_add_shows_folder_in_place(config, folder_path: str, record_dict: Dict[s
         allow_unknown_metadata=True,
         fallback_to_filenames_on_track_problem=True,
         fallback_to_title_tags_on_track_problem=True,
+        exclude_untaggable_audio=True,
     )
     emit_tag_fallback_summary(subtotal, lambda text: _add_shows_tag_emit(config, text))
     emit_tag_problem_summary(config, lambda text: _add_shows_tag_emit(config, text))
@@ -1355,11 +1431,16 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
         raise InventoryUpdateError(f"Add Shows Search Path does not exist or is not a directory: {source_root}")
     artist_matcher = load_artist_matcher(config)
     duplicate_count = 0
-    pdup_count = 0
     staged_count = 0
     processed_count = 0
     error_count = 0
+    held_count = 0
+    removed_count = 0
+    excluded_count = 0
+    tag_totals = {"tagged": 0, "unchanged": 0, "skipped": 0, "errors": 0}
     issue_records: List[Dict[str, str]] = []
+    # Fail before processing any candidates if a selected copy mode cannot run.
+    _add_shows_tag_mode(config)
     for folder in _iter_top_level_dirs(source_root):
         processed_count += 1
         try:
@@ -1368,30 +1449,69 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
             if check_duplicates:
                 matches = find_potential_duplicate_rows_for_folder(config, folder, record, artist_matcher)
             record_dict = _record_dict_for_new_folder(config, folder, record, artist_matcher)
-            if matches and potential_duplicate_matches_are_remote_only(matches, current_volume):
-                pdup_number = _next_pdup_number(matches)
-                marker = _apply_pdup_marker(record_dict, pdup_number)
-                _log_add_shows_metadata(
-                    config,
-                    record_dict,
-                    folder,
-                    current_volume,
-                    f"Add Shows potential duplicate retained as {marker}; matching bootlist rows are on another partition and unavailable for comparison",
-                )
-                pdup_count += 1
-            elif matches:
-                _log_add_shows_metadata(config, record_dict, folder, current_volume, "Add Shows duplicate candidate moved to dups")
+            if matches:
+                # A potential duplicate is never a newly accepted performance,
+                # even if its existing match is on a disconnected partition.
+                # Move before renaming, tagging, setlist creation or bootlist writes.
+                # Leave both identity and contents intact for later review.
                 move_folder_to(folder, dirs["dups"])
                 duplicate_count += 1
+                _log_add_shows_metadata(
+                    config, record_dict, folder, current_volume,
+                    "Add Shows potential duplicate moved to dups for review; not inventoried or tagged",
+                )
+                continue
+            # Validate first, before any compliant rename, inventory write or
+            # exported setlist. Keep incomplete shows in the input for review.
+            generated_setlist = ""
+            status = _add_shows_audio_phase(config, folder, record_dict, generated_setlist)
+            for key in tag_totals:
+                tag_totals[key] += int(status["stats"].get(key, 0) or 0)
+            excluded_count += int(status["excluded"])
+            if status["removed"]:
+                removed_count += 1
+                _add_shows_tag_emit(config, f"ADD_SHOWS_REMOVED: {folder} | {status['reason']}")
+                continue
+            if not status["accepted"]:
+                held_count += 1
+                _add_shows_tag_emit(config, f"ADD_SHOWS_HELD: {folder} | {status['reason']}")
+                issue_records.append({"path": folder, "message": status["reason"], "level": "warning"})
                 continue
             folder = _rename_add_shows_folder_compliantly(config, folder, record_dict)
-            folder_leaf = os.path.basename(os.path.normpath(folder))
-            generated_setlist = create_or_replace_generated_setlist(config.TLOHome, record_dict)
-            _add_bootlist_row_for_record(config.TLOHome, record_dict, current_volume, folder_leaf)
-            _log_add_shows_metadata(config, record_dict, folder, current_volume, "Add Shows staged new show")
-            _tag_add_shows_folder_in_place(config, folder, record_dict, generated_setlist)
-            move_folder_to(folder, dirs["staged"])
+            incoming_parent = os.path.dirname(folder)
+            original_bootlist_path = bootlist_path(config.TLOHome)
+            original_bootlist_bytes = (open(original_bootlist_path, "rb").read()
+                                       if os.path.isfile(original_bootlist_path) else None)
+            staged_folder = move_folder_to(folder, dirs["staged"])
+            generated_setlist = ""
+            try:
+                # Use the ACTUAL destination name if staged already contained
+                # a same-named show. Never publish an entry for the source leaf.
+                folder_leaf = os.path.basename(os.path.normpath(staged_folder))
+                generated_setlist = create_or_replace_generated_setlist(config.TLOHome, record_dict)
+                _add_bootlist_row_for_record(config.TLOHome, record_dict, current_volume, folder_leaf)
+            except Exception:
+                # Undo newly-created output and return the accepted audio to its
+                # source, keeping the previous inventory bytes untouched.
+                if generated_setlist and os.path.isfile(generated_setlist):
+                    os.remove(generated_setlist)
+                if original_bootlist_bytes is None:
+                    if os.path.isfile(original_bootlist_path):
+                        os.remove(original_bootlist_path)
+                else:
+                    fd, temp_bootlist = tempfile.mkstemp(prefix=".addshows-restore-", dir=config.TLOHome)
+                    try:
+                        with os.fdopen(fd, "wb") as outfile:
+                            outfile.write(original_bootlist_bytes)
+                        os.replace(temp_bootlist, original_bootlist_path)
+                    finally:
+                        if os.path.exists(temp_bootlist):
+                            os.remove(temp_bootlist)
+                move_folder_to(staged_folder, incoming_parent)
+                raise
             staged_count += 1
+            _log_add_shows_metadata(config, record_dict, staged_folder, current_volume,
+                                    "Add Shows staged new show; audio phase verified")
         except Exception as exc:
             error_count += 1
             issue_records.append({
@@ -1401,8 +1521,15 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
     return {
         "processed": processed_count,
         "staged": staged_count,
+        "held": held_count,
+        "removed_corrupt": removed_count,
+        "tagged": tag_totals["tagged"],
+        "unchanged": tag_totals["unchanged"],
+        "tag_skipped": tag_totals["skipped"],
+        "tag_errors": tag_totals["errors"],
+        "tag_excluded": excluded_count,
         "duplicates": duplicate_count,
-        "potential_duplicates_unavailable": pdup_count,
+        "potential_duplicates_unavailable": 0,  # Legacy result field; no pdup markers are generated.
         "errors": error_count,
         "issues": issue_records,
     }
@@ -1445,31 +1572,72 @@ def review_paths_for_duplicate(config, item: Dict[str, object], selected_rows: S
 
 
 def process_duplicate_folder(config, item: Dict[str, object], selected_rows: Sequence[Dict[str, str]], current_volume: str) -> Dict[str, int]:
+    """Accept a reviewed replacement only after its audio phase is verified.
+
+    An untagged candidate must never schedule deletion of an existing show.
+    The script, bootlist, setlist and staged move are committed together after
+    the shared Add Shows tag/deep-audio gate has accepted the replacement.
+    """
     dirs = ensure_updater_directories(config.TLOHome)
     script_path = updater_delete_script_path(config.TLOHome)
     folder = str(item.get("folder") or "")
     record = dict(item.get("record") or {})
+    _add_shows_tag_mode(config)
+    status = _add_shows_audio_phase(config, folder, record, "")
+    if not status["accepted"]:
+        _add_shows_tag_emit(config, f"ADD_SHOWS_DUPLICATE_HELD: {folder} | {status['reason']}")
+        raise InventoryUpdateError(
+            f"Duplicate replacement was not accepted: {status['reason']}. "
+            "No inventory, setlist or old-show deletion changes were committed."
+        )
+
+    folder = _rename_add_shows_folder_compliantly(config, folder, record)
+    original_parent = os.path.dirname(os.path.normpath(folder))
+    bootlist_file = bootlist_path(config.TLOHome)
+    prior_bootlist = open(bootlist_file, "rb").read() if os.path.isfile(bootlist_file) else None
+    prior_script = open(script_path, "rb").read() if os.path.isfile(script_path) else None
+    staged_folder = move_folder_to(folder, dirs["staged"])
+    generated_setlist = ""
     deleted_old = 0
     scripted_rows: List[Dict[str, str]] = []
     skipped_delete_commands = 0
-    for row in selected_rows:
-        volume_label, path_to_delete = _delete_target_from_bootlist_volume_path(
-            row.get("VolumePath", ""), tlo_home=config.TLOHome
+    try:
+        generated_setlist = create_or_replace_generated_setlist(config.TLOHome, record)
+        for row in selected_rows:
+            volume_label, path_to_delete = _delete_target_from_bootlist_volume_path(
+                row.get("VolumePath", ""), tlo_home=config.TLOHome
+            )
+            if path_to_delete and _append_delete_command(script_path, path_to_delete, volume_label):
+                deleted_old += 1
+                scripted_rows.append(row)
+            else:
+                skipped_delete_commands += 1
+        if scripted_rows:
+            _remove_bootlist_rows(config.TLOHome, scripted_rows)
+        # Derive the name from the actual staged location, including collisions.
+        _add_bootlist_row_for_record(
+            config.TLOHome, record, current_volume, os.path.basename(os.path.normpath(staged_folder))
         )
-        if path_to_delete and _append_delete_command(script_path, path_to_delete, volume_label):
-            deleted_old += 1
-            scripted_rows.append(row)
-        else:
-            skipped_delete_commands += 1
-    if scripted_rows:
-        _remove_bootlist_rows(config.TLOHome, scripted_rows)
-    folder = _rename_add_shows_folder_compliantly(config, folder, record)
-    folder_leaf = os.path.basename(os.path.normpath(folder))
-    generated_setlist = create_or_replace_generated_setlist(config.TLOHome, record)
-    _add_bootlist_row_for_record(config.TLOHome, record, current_volume, folder_leaf)
-    _log_add_shows_metadata(config, record, folder, current_volume, "Add Shows duplicate resolved and staged")
-    _tag_add_shows_folder_in_place(config, folder, record, generated_setlist)
-    move_folder_to(folder, dirs["staged"])
+    except Exception:
+        if generated_setlist and os.path.isfile(generated_setlist):
+            os.remove(generated_setlist)
+        for path_name, original in ((bootlist_file, prior_bootlist), (script_path, prior_script)):
+            if original is None:
+                if os.path.isfile(path_name):
+                    os.remove(path_name)
+            else:
+                fd, recovery_file = tempfile.mkstemp(prefix=".addshows-restore-", dir=os.path.dirname(path_name))
+                try:
+                    with os.fdopen(fd, "wb") as outfile:
+                        outfile.write(original)
+                    os.replace(recovery_file, path_name)
+                finally:
+                    if os.path.exists(recovery_file):
+                        os.remove(recovery_file)
+        move_folder_to(staged_folder, original_parent)
+        raise
+    _log_add_shows_metadata(config, record, staged_folder, current_volume,
+                            "Add Shows duplicate resolved and staged after tag/deep verification")
     return {"delete_commands": deleted_old, "delete_commands_skipped": skipped_delete_commands, "staged": 1}
 
 

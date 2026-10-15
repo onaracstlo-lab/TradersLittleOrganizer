@@ -32,20 +32,8 @@ def test_remote_only_requires_every_match_to_be_definitively_other_partition():
     assert U.potential_duplicate_matches_are_remote_only([remote, unknown], "[A]E:\\Music") is False
 
 
-def test_pdup_number_starts_at_01_and_advances_past_highest_existing_marker():
-    matches = [
-        {"Show": "Artist 2001-02-03 Venue", "VolumePath": "[B] F:\\Show"},
-        {"Show": "Artist 2001-02-03 Venue (pdup01)", "VolumePath": "[C] G:\\Show"},
-        {"Show": "Artist 2001-02-03 Venue (pdup03)", "VolumePath": "[D] H:\\Show"},
-    ]
-    assert U._next_pdup_number([matches[0]]) == 1
-    assert U._next_pdup_number(matches) == 4
-
-    record = {"show_name": "Artist 2001-02-03 Venue", "parentheticals": "(set 2)"}
-    marker = U._apply_pdup_marker(record, 4)
-    assert marker == "(pdup04)"
-    assert record["show_name"] == "Artist 2001-02-03 Venue (set 2) (pdup04)"
-    assert record["parentheticals"] == "(set 2) (pdup04)"
+def test_legacy_pdup_suffix_is_recognized_only_for_existing_inventory_rows():
+    assert U._strip_pdup_suffix("Artist 2001-02-03 Venue (pdup04)") == "Artist 2001-02-03 Venue"
 
 
 def test_exact_compliant_show_match_recognizes_existing_pdup_suffix(tmp_path):
@@ -82,7 +70,7 @@ def _fake_record_dict(folder):
     }
 
 
-def test_process_new_shows_stages_remote_match_as_pdup_instead_of_dups(tmp_path, monkeypatch):
+def test_process_new_shows_moves_remote_match_to_dups_without_inventory(tmp_path, monkeypatch):
     ready = tmp_path / "readyForXfer"
     staged = tmp_path / "staged"
     dups = tmp_path / "dups"
@@ -108,12 +96,13 @@ def test_process_new_shows_stages_remote_match_as_pdup_instead_of_dups(tmp_path,
 
     result = U.process_new_shows(config, "[Current]E:\\Music", check_duplicates=True)
 
-    assert result["duplicates"] == 0
-    assert result["potential_duplicates_unavailable"] == 1
-    assert result["staged"] == 1
-    rows = U.read_bootlist(str(tmp_path))
-    assert any(row["Show"].endswith("(pdup01)") and "E:\\Music" in row["VolumePath"] for row in rows)
-    assert not any(dups.iterdir())
+    assert result["duplicates"] == 1
+    assert result["potential_duplicates_unavailable"] == 0
+    assert result["staged"] == 0
+    assert not list(staged.iterdir())
+    assert (dups / "Incoming").is_dir()
+    assert not folder.exists()
+    assert U.read_bootlist(str(tmp_path)) == [{"Show": "Artist 2001-02-03 Venue City ST", "VolumePath": "[Remote] F:\\Archive\\Old"}]
 
 
 def test_process_new_shows_keeps_same_partition_match_in_existing_dups_workflow(tmp_path, monkeypatch):

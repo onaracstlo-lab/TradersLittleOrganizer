@@ -757,6 +757,8 @@ def _read_text(path_name: str) -> str:
 
 def _clean_track_title(title: str) -> str:
     value = html.unescape(str(title or "")).strip()
+    if re.fullmatch(r"[?\s]+", value) and "?" in value:
+        return "unknown"
     value = TIME_PREFIX_RE.sub("", value).strip()
     # Drop duration-plus-note tails such as "12:20 (end cut)" before the
     # simpler bare-duration suffix pass.  These are timing/condition notes,
@@ -1303,7 +1305,7 @@ def _usable_title_from_audio_title_tag(raw_title: str) -> Tuple[str, bool]:
     numbered = TITLE_TAG_NUMBER_PREFIX_RE.match(candidate)
     if numbered:
         candidate = _clean_track_title(numbered.group("title"))
-    if _is_generic_audio_title_tag(candidate) or _is_build408_generic_title_word(candidate):
+    if candidate.casefold() == "unknown" or _is_generic_audio_title_tag(candidate) or _is_build408_generic_title_word(candidate):
         return "Unknown", False
     if not re.search(r"[A-Za-z]", candidate):
         return "Unknown", False
@@ -5225,6 +5227,7 @@ def tag_group_with_record(
     fallback_to_title_tags_on_track_problem: bool = False,
     metadata_problems: Optional[Sequence[str]] = None,
     meta_log_entry: str = "",
+    exclude_untaggable_audio: bool = False,
 ) -> Dict[str, int]:
     """Tag one already-discovered inventory/tagger group.
 
@@ -5279,6 +5282,17 @@ def tag_group_with_record(
             return stats
 
     raw_audio_files = _rescan_group_audio_files(group)
+    if exclude_untaggable_audio:
+        # Add New Shows verifies every *eligible* file; non-taggable media is
+        # reported separately rather than counting as a failed tag write.
+        # Keep SHN only when explicit conversion was requested.
+        accepted_audio = [path_name for path_name in raw_audio_files
+                          if os.path.splitext(path_name)[1].lower() in TAGGABLE_AUDIO_EXTENSIONS
+                          or (bool(getattr(config, "convert_shn", False)) and _is_shn_audio_file(path_name))]
+        for excluded_path in raw_audio_files:
+            if excluded_path not in accepted_audio:
+                _emit(emit, f"ADD_SHOWS_TAG_EXCLUDED: {excluded_path} | no supported tag writer")
+        raw_audio_files = accepted_audio
     shn_count = sum(1 for path_name in raw_audio_files if _is_shn_audio_file(path_name))
     if shn_count:
         _emit(emit, f"INFO: {folder} | SHN files detected: {shn_count}; convert shn={'yes' if bool(getattr(config, 'convert_shn', False)) else 'no'}")
@@ -5791,8 +5805,10 @@ def run_tagger_jobs(config: Config, jobs, emit: Optional[Callable[[str], None]] 
     """
     clear_cancel_request()
     ensure_corrupt_flacs_log(config)
-    validate_required_databases(config)
+    # GUI Tag uses the main window Config, whose database fields are not
+    # populated until logging sets up the TLOHome-derived locations.
     setup_logging(config)
+    validate_required_databases(config)
     artist_matcher = load_artist_matcher(config)
     tag_emit = _build_tag_log_emit(config, emit)
 
@@ -5942,8 +5958,8 @@ def run_tagger(
     )
     ensure_corrupt_flacs_log(config)
     tagging_path = resolve_tagging_path(config.TLOHome, tag_path=tag_path)
-    validate_required_databases(config)
     setup_logging(config)
+    validate_required_databases(config)
     config.current_search_path = os.path.normpath(tagging_path)
     config.current_search_index = 1
     config.current_slam = ""

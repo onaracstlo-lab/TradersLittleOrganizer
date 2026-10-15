@@ -7409,13 +7409,15 @@ def test_v324_add_shows_regular_and_duplicate_paths_tag_before_staging():
     regular = source[source.index("def process_new_shows") : source.index("def duplicate_work_items")]
     duplicate = source[source.index("def process_duplicate_folder") : source.index("def delete_new_keep_old")]
 
-    regular_tag = regular.index("_tag_add_shows_folder_in_place(config, folder, record_dict, generated_setlist)")
+    # Build 590: the Add Shows audio gate encompasses the shared tag writer,
+    # checks every eligible track, and prevents inventory/staging on skip/error.
+    regular_gate = regular.index("_add_shows_audio_phase(config, folder, record_dict, generated_setlist)")
     regular_move = regular.index('move_folder_to(folder, dirs["staged"])')
-    duplicate_tag = duplicate.index("_tag_add_shows_folder_in_place(config, folder, record, generated_setlist)")
+    duplicate_gate = duplicate.index('_add_shows_audio_phase(config, folder, record, "")')
     duplicate_move = duplicate.index('move_folder_to(folder, dirs["staged"])')
 
-    assert regular_tag < regular_move
-    assert duplicate_tag < duplicate_move
+    assert regular_gate < regular_move
+    assert duplicate_gate < duplicate_move
 
 
 def test_v324_add_shows_tag_in_place_helper_invokes_tag_writer(monkeypatch, tmp_path):

@@ -4466,7 +4466,6 @@ class AddToInventoryWindow:
         result = result or {}
         processed = int(result.get("processed", 0) or 0)
         duplicates = int(result.get("duplicates", 0) or 0)
-        pdups = int(result.get("potential_duplicates_unavailable", 0) or 0)
         errors = int(result.get("errors", 0) or 0)
         staged = int(result.get("staged", 0) or 0)
         issues = []
@@ -4475,18 +4474,24 @@ class AddToInventoryWindow:
                 issues.append(entry)
             elif isinstance(entry, dict):
                 issues.append(RunIssue(
-                    "Add Shows folder error",
+                    "Add Shows held for review" if str(entry.get("level")) == "warning" else "Add Shows folder error",
                     str(entry.get("message") or "Folder processing failed."),
                     str(entry.get("path") or ""),
-                    "error",
+                    str(entry.get("level") or "error"),
                     "add-shows",
                 ))
         summary = "\n".join([
             "Add Shows processing complete",
             f"Folders considered: {processed}",
             f"Folders staged: {staged}",
+            f"Held for review (remain at source): {int(result.get('held', 0) or 0)}",
+            f"Removed by corruption policy: {int(result.get('removed_corrupt', 0) or 0)}",
             f"Potential duplicates moved to dups: {duplicates}",
-            f"Cross-partition potential duplicates staged as pdup: {pdups}",
+            f"Files successfully tagged or already correct: {int(result.get('tagged', 0) or 0)}",
+            f"Of those, already unchanged: {int(result.get('unchanged', 0) or 0)}",
+            f"Tagging groups skipped: {int(result.get('tag_skipped', 0) or 0)}",
+            f"Tagging errors: {int(result.get('tag_errors', 0) or 0)}",
+            f"Files excluded from direct tagging: {int(result.get('tag_excluded', 0) or 0)}",
             f"Folder errors: {errors}",
             f"Elapsed: {format_elapsed(elapsed_seconds)}",
         ])

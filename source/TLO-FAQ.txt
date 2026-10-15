@@ -106,8 +106,8 @@ A: In the main Inventory window, click Research and enter an artist followed by 
 Q: Does TLO accept 19xx-xx-xx and 20xx-xx-xx as dates?
 A: Yes. They are legitimate century-known partial dates. TLO requires the less-significant components to remain unknown, so 19xx-xx-xx and 20xx-xx-xx are valid, while forms such as 19xx-05-xx, 20xx-xx-14, 1xxx-xx-xx, and 2xxx-xx-xx are not.
 
-Q: What does (pdupNN) mean in Add Shows?
-A: When Process New Shows has Check for Duplicates selected and every matching bootlist entry is on another storage partition, TLO assumes those existing folders are unavailable for comparison and keeps the incoming show with a potential-duplicate marker such as (pdup01), (pdup02), and so on. This is not a copy/alternate determination. If a matching entry is on the current partition, or TLO cannot determine the partition, the existing duplicate review and copy/alternate checks remain in effect. Rename Compliantly applies the pdup marker to the physical folder name; otherwise the folder name is left as supplied.
+Q: What happens to potential duplicates in Add New Shows?
+A: When Check for Duplicates is on, every potential match is moved to TLOHome/dups for review, including matches from another or disconnected storage volume. TLO does not rename the incoming folder, append (pdupNN), tag it, create a setlist, or add it to bootlist.csv. Resolve those folders later with Process Potential Duplicate/Upgrades. Older inventory entries containing (pdupNN) are still recognized for matching.
 
 Q: Does standalone tlo-tag use the same setlist.fm, Thorough Setlist Matching, and corruption controls as Inventory?
 A: Yes. tlo-tag.py/tlo-tag.exe accepts the same lookup, Thorough Setlist Matching, corruption, and Delete Extra Tags controls. A standalone tlo-tag run now requires an explicit search folder (positional SEARCH_FOLDER or --search-folder; --tag-path remains a compatibility alias). Its corrupt-file policy defaults to delete, while its corrupt-folder policy defaults to never/keep unless you explicitly choose all or threshold; Full Inventory defaults to deleting proven-corrupt files and removing only 100%-corrupt folders. setlist.fm still requires eTreeDB. GUI Tag uses the current main-window values directly and no longer opens a separate Tag window. Corruption is checked before tag mutation using the same fail-closed rules as Inventory. When a real tagging mode is active, that pre-mutation check also performs a reversible temporary tag write/readback/restore/readback probe. Deep Audio Check is a separate default-off control (and --deep-audio-check CLI option) that decodes audio with TLO's bundled ffmpeg. For FLAC, a nonzero STREAMINFO total sample count must also match the actual decoded PCM samples, catching truncation even when ffmpeg reports success. If the expected count is missing or a reliable measurement cannot be obtained, the file is unverifiable, not automatically corrupt. Other formats may lack an authoritative duration; a clean decoder exit cannot always prove original completeness. A real decode failure is corruption; decoder unavailability, timeout, cancellation, access/I/O/resource, or validator-infrastructure failures are unverifiable and fail closed. When Deep Audio Check is off, non-tagging inventory checks only the header/metadata, not the complete audio stream. With real tagging, TLO also tests whether tags can be written and precisely restored. A header or metadata failure is classified as corrupt; a readable header does not prove the complete recording decodes. Dry Run never writes the probe tag or moves/deletes corrupt files or folders, regardless of the selected Corruption Handling policies. Dry Run may perform the read-only deep decode when enabled.
@@ -236,3 +236,23 @@ A: No visible command was removed. The unused Inventory Update path-opening help
 
 Q: Why does TLO include FFmpeg source and a license?
 A: FFmpeg is a separate LGPL-licensed audio-processing tool. Approved native TLO packages include its corresponding verified source, build recipe, and LGPL notice under THIRD_PARTY/FFmpeg. It is used for SHN conversion and audio stream checks.
+
+Add New Shows: Why was a folder not staged when Tag In Place was selected?
+--------------------------------------------------------------------------
+Add New Shows now verifies that every eligible audio file was actually tagged
+or already has the requested tags. If metadata is insufficient, any group is
+skipped, a tag write fails, or full audio validation cannot be completed, the
+folder remains in its input location for review. No new inventory or exported
+setlist entry is created for a held show. Check the final tagged/unchanged,
+skipped, failed and excluded counts, and consult TLOHome/logs/tage*.txt.
+Non-taggable media such as SHN without Convert shn is reported as excluded;
+SHN cannot have normal audio tags until converted. Selecting Deep Audio Check
+can make processing very slow and applies the existing corrupt-file and folder
+policies. Tag Copy and Tag Copy/Delete Original are not Add New Shows modes;
+use Tag in Place or a separate Tag operation. Potential duplicates still move
+directly to TLOHome/dups without tagging or inventory entries.
+
+Resolved potential duplicate replacements receive the same tagging/deep-audio
+verification before any previous inventory row or deletion script is changed.
+If tagging is incomplete, the candidate stays in dups and old copies remain
+protected.

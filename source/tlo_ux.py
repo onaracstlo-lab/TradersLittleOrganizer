@@ -621,12 +621,9 @@ def preview_add_shows(
     from tlo_artist_db import load_artist_matcher
     from tlo_inventory_update import (
         _build_single_folder_group,
-        _apply_pdup_marker,
         _metadata_to_record_dict,
-        _next_pdup_number,
         _record_dict_for_new_folder,
         find_potential_duplicate_rows_for_folder,
-        potential_duplicate_matches_are_remote_only,
     )
     from tlo_postprocess import _adjust_show_name_for_output
     from tlo_tag_lib import _album_for_record, build_dry_run_group_plan
@@ -692,14 +689,6 @@ def preview_add_shows(
             else:
                 record_dict = _record_dict_for_new_folder(config, entry.path, record, artist_matcher)
             matches = find_potential_duplicate_rows_for_folder(config, entry.path, record, artist_matcher) if (duplicate_mode or check_duplicates) else []
-            remote_pdup_marker = ""
-            if (
-                not duplicate_mode
-                and check_duplicates
-                and matches
-                and potential_duplicate_matches_are_remote_only(matches, str(getattr(config, "current_volume_label", "") or ""))
-            ):
-                remote_pdup_marker = _apply_pdup_marker(record_dict, _next_pdup_number(matches))
             final_show_name = _adjust_show_name_for_output(record_dict)
             plan["show_name"] = final_show_name
             final_artist = str(record_dict.get("artist") or plan.get("artist") or "")
@@ -740,18 +729,8 @@ def preview_add_shows(
             if duplicate_mode:
                 actions.append("prepare duplicate/upgrade review")
                 actions.append("leave folders unchanged during this scan")
-            elif check_duplicates and matches and remote_pdup_marker:
-                actions.append(f"mark show {remote_pdup_marker}; existing potential matches are on another partition")
-                actions.append("add resulting show to bootlist.csv without unavailable cross-partition comparison")
-                if bool(getattr(config, "rename_compliantly", False)):
-                    actions.append("rename folder to resulting pdup show name")
-                if bool(getattr(config, "convert_shn", False)) and shn_count:
-                    actions.append("convert SHN to FLAC and remove verified SHN source")
-                if tag_enabled:
-                    actions.append("write tags in place")
-                actions.append("move accepted pdup folder to staged")
             elif check_duplicates and matches:
-                actions.append("move folder to dups as a potential duplicate")
+                actions.append("move folder to dups for potential duplicate review; no tagging, inventory or setlist changes")
             else:
                 actions.append("add resulting show to bootlist.csv")
                 if bool(getattr(config, "rename_compliantly", False)):
@@ -762,7 +741,10 @@ def preview_add_shows(
                     actions.append("write tags in place")
                 actions.append("move accepted folder to staged")
 
-            tags = [PreviewTag(**tag) for tag in (plan.get("tags", []) or [])]
+            # Preview must not imply tagging when duplicate routing wins.
+            tags = [] if (not duplicate_mode and check_duplicates and matches) else [
+                PreviewTag(**tag) for tag in (plan.get("tags", []) or [])
+            ]
             item = PreviewItem(
                 path=os.path.normpath(entry.path),
                 media_files=len(audio_files),

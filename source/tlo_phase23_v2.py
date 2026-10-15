@@ -3629,8 +3629,9 @@ def _clear_resolved_weak_path_artist_conflicts(
     conflicts: Optional[List[str]],
     confirmed_artist: str,
     observations: Optional[List[str]] = None,
+    confirmation_source: str = "DB",
 ) -> None:
-    """Clear generic path-artist conflicts resolved by a DB-confirmed setlist header.
+    """Clear generic path-artist conflicts resolved by a corroborated setlist header.
 
     Only conflicts created by generic subdirectory/path scanning are eligible.
     Artist DB collisions and conflicts involving explicit/stronger sources are
@@ -3657,7 +3658,7 @@ def _clear_resolved_weak_path_artist_conflicts(
         conflicts[:] = kept
         if observations is not None:
             observations.append(
-                f"DB-confirmed structured setlist artist resolved weaker path artist conflict: {confirmed_artist}"
+                f"{confirmation_source}-confirmed structured setlist artist resolved weaker path artist conflict: {confirmed_artist}"
             )
 
 
@@ -3666,7 +3667,7 @@ def _setlist_may_override_weak_path_artist(
     current_value: str,
     setlist_confidence: int,
 ) -> bool:
-    """Allow a DB-confirmed structured setlist artist to correct weak path scans.
+    """Allow a corroborated structured setlist artist to correct weak path scans.
 
     This is intentionally narrower than the venue/location path override.  Only
     artist values produced by generic path-pattern/subdirectory scanning are
@@ -5789,6 +5790,60 @@ def _resolve_collaborative_artist_header(
     return compact_ws("".join(rebuilt)), masters
 
 
+def _corroborated_artist_tokens(text: str) -> List[str]:
+    """Compare artist spellings without articles, punctuation or `and`/`&` drift."""
+    cleaned = standard_ascii_text(compact_ws(text)).casefold()
+    values = re.findall(r"[a-z0-9]+|&", cleaned)
+    if values[:1] == ["the"]:
+        values = values[1:]
+    return ["and" if value == "&" else value for value in values]
+
+
+def _artist_agrees_with_leading_show_folder(setlist_artist: str, folder_name: str) -> bool:
+    """Accept independent setlist/folder agreement without requiring an Artist DB hit.
+
+    Compare complete *leading tokens*, never a partial word or arbitrary path
+    substring.  Normalize typography, an optional leading `The`, and `&`/`and`
+    so common folder/setlist renderings of a collaboration can agree.  Only
+    the show folder's name is considered, never a parent directory.
+    """
+    expected = _corroborated_artist_tokens(setlist_artist)
+    actual = _corroborated_artist_tokens(folder_name)
+    # A single generic word is weak corroboration.  A single uncommon name
+    # may still be legitimate when directly followed by a performance date.
+    if not expected or len(actual) < len(expected):
+        return False
+    if actual[:len(expected)] != expected:
+        return False
+    if len(expected) == 1 and len(actual) > 1:
+        remainder = actual[len(expected):]
+        if not remainder or not re.fullmatch(r"(?:19|20)\d{2}", remainder[0]):
+            return False
+    return True
+
+
+def _record_unlisted_setlist_artist(
+    record: ShowMetadata,
+    setlist_artist: str,
+    folder_agrees: bool,
+    db_status: str,
+    observations: List[str],
+) -> None:
+    """Report an accepted, independently corroborated artist missing from DB."""
+    if (
+        folder_agrees
+        and db_status == "no_match"
+        and record.artist
+        and _artist_agrees_with_leading_show_folder(setlist_artist, record.main_dir_name)
+        and not record.artist_not_in_database
+    ):
+        record.artist_not_in_database = record.artist
+        observations.append(
+            "artist not in Artist DB; matching selected setlist header and "
+            f"leading show folder confirm: {record.artist}"
+        )
+
+
 def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata, evidence: Dict[str, List[Candidate]], observations: List[str], artist_matcher: Optional[ArtistMatcher] = None, conflicts: Optional[List[str]] = None) -> bool:
     """Apply selected-setlist artist/venue/location metadata.
 
@@ -5823,6 +5878,9 @@ def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata,
         artist_source = getattr(result, "artist_source", "") or "setlist_metadata:EXPLICIT_ARTIST_KEY"
         artist_confidence = int(getattr(result, "artist_confidence", 0) or max(confidence, 80))
         structured_unlabeled = artist_source == "setlist_metadata:STRUCTURED_UNLABELED_ARTIST_HEADER"
+        folder_agrees = _artist_agrees_with_leading_show_folder(
+            lookup_setlist_artist, record.main_dir_name
+        )
         detail, apostrophe_fallback = _lookup_artist_detail_with_apostrophe_fallback(
             lookup_setlist_artist, artist_matcher
         )
@@ -5849,7 +5907,9 @@ def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata,
                 lookup_setlist_artist, artist_matcher, config
             )
 
-        if structured_unlabeled and detail["status"] != "matched" and not collaborative_artist:
+        if structured_unlabeled and detail["status"] != "matched" and not collaborative_artist and not (
+            detail["status"] == "no_match" and folder_agrees
+        ):
             if detail["status"] == "collision":
                 observations.append(
                     _collision_note(
@@ -5882,12 +5942,23 @@ def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata,
                 record.artist = candidate_artist
                 evidence.setdefault("artist", []).append(Candidate(record.artist, artist_source, artist_confidence))
                 if structured_unlabeled:
-                    observations.append(
-                        f"DB-confirmed artist identified from structured unlabeled setlist header: {raw_setlist_artist} -> {record.artist}"
+                    if folder_agrees and detail["status"] == "no_match" and not collaborative_artist:
+                        observations.append(
+                            f"folder-confirmed artist identified from structured unlabeled setlist header: {raw_setlist_artist} -> {record.artist}"
+                        )
+                    else:
+                        observations.append(
+                            f"DB-confirmed artist identified from structured unlabeled setlist header: {raw_setlist_artist} -> {record.artist}"
+                        )
+                    _clear_resolved_weak_path_artist_conflicts(
+                        conflicts, record.artist, observations,
+                        confirmation_source=("folder" if folder_agrees and detail["status"] == "no_match" and not collaborative_artist else "DB"),
                     )
-                    _clear_resolved_weak_path_artist_conflicts(conflicts, record.artist, observations)
                 applied = True
-            elif _metadata_values_equivalent(record.artist, candidate_artist):
+            elif (
+                _metadata_values_equivalent(record.artist, candidate_artist)
+                or (folder_agrees and _corroborated_artist_tokens(record.artist) == _corroborated_artist_tokens(lookup_setlist_artist))
+            ):
                 current_best = max(
                     (c.confidence for c in _matching_evidence_for_value(evidence, "artist", record.artist)),
                     default=0,
@@ -5900,13 +5971,26 @@ def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata,
                 old_artist = record.artist
                 record.artist = candidate_artist
                 evidence.setdefault("artist", []).append(Candidate(record.artist, artist_source, artist_confidence))
-                observations.append(
-                    f"DB-confirmed structured setlist artist overrode weaker path artist: {old_artist} -> {record.artist}"
+                confirmation_source = (
+                    "folder" if folder_agrees and detail["status"] == "no_match" and not collaborative_artist else "DB"
                 )
-                _clear_resolved_weak_path_artist_conflicts(conflicts, record.artist, observations)
+                observations.append(
+                    f"{confirmation_source}-confirmed structured setlist artist overrode weaker path artist: {old_artist} -> {record.artist}"
+                )
+                _clear_resolved_weak_path_artist_conflicts(
+                    conflicts, record.artist, observations, confirmation_source=confirmation_source
+                )
                 applied = True
             else:
                 _observe_metadata_disagreement(observations, "setlist metadata", "artist", record.artist, candidate_artist)
+            if (
+                _metadata_values_equivalent(record.artist, candidate_artist)
+                or _corroborated_artist_tokens(record.artist) == _corroborated_artist_tokens(lookup_setlist_artist)
+            ):
+                _record_unlisted_setlist_artist(
+                    record, lookup_setlist_artist, folder_agrees,
+                    detail["status"], observations,
+                )
 
     if _apply_setlist_scalar_field(
         record, evidence, observations, field="venue", candidate_value=result.venue, source=source, confidence=confidence
@@ -6168,6 +6252,33 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
     record.show_name = _append_parentheticals_to_show_name(record.show_name, record.parentheticals)
     if not record.show_name:
         unresolved_reasons.append("unable to create show name")
+
+    # Compliant mode deliberately builds show names from folder naming rules,
+    # but the selected setlist can independently confirm an unknown artist.
+    if record.artist and record.setlist_file and not record.artist_not_in_database:
+        setlist_result = extract_setlist_venue_location(
+            record.setlist_file, getattr(config, "tlo_dbs_dir", "")
+        )
+        lookup_artist, _qualifier = _split_terminal_performance_qualifier_from_artist(
+            compact_ws(getattr(setlist_result, "artist", ""))
+        )
+        if (
+            lookup_artist
+            and _artist_agrees_with_leading_show_folder(lookup_artist, record.main_dir_name)
+            and _corroborated_artist_tokens(lookup_artist) == _corroborated_artist_tokens(record.artist)
+        ):
+            header_detail, _ = _lookup_artist_detail_with_apostrophe_fallback(
+                lookup_artist, artist_matcher
+            )
+            chosen_detail, _ = _lookup_artist_detail_with_apostrophe_fallback(
+                record.artist, artist_matcher
+            )
+            if header_detail["status"] == "no_match" and chosen_detail["status"] == "no_match":
+                record.artist_not_in_database = record.artist
+                observations.append(
+                    "artist not in Artist DB; matching selected setlist header and "
+                    f"leading show folder confirm: {record.artist}"
+                )
 
     _mark_terminal_suffix_fallback_artist_not_in_database(record, artist_matcher, observations)
     record.evidence = evidence
@@ -6915,7 +7026,7 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
                 tag_totals["groups"] += 1
                 tag_totals["skipped"] += 1
                 config.logs.tag(
-                    "TAG_SKIP: %s | show unidentified; leaving original folder untouched",
+                    "TAG_SKIP: %s | show unidentified; no tags written (see unresolved metadata report)",
                     record.main_dir_path,
                 )
             elif bool(getattr(config, "rename_compliantly", False)):
@@ -6994,6 +7105,7 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
                     emit=_tag_log_emit,
                     allow_unknown_metadata=True,
                     fallback_to_filenames_on_track_problem=True,
+                    fallback_to_title_tags_on_track_problem=True,
                     metadata_problems=unresolved_reasons,
                     meta_log_entry=meta_log_entry,
                 )
