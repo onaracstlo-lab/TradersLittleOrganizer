@@ -5822,6 +5822,110 @@ def _artist_agrees_with_leading_show_folder(setlist_artist: str, folder_name: st
     return True
 
 
+def _match_db_artist_venue_city_date_without_string2(
+    group: dict, config, matcher: Optional[ArtistMatcher]
+) -> Optional[Dict[str, str]]:
+    """Recognize ``Artist Venue City State Date`` without a trailing String2.
+
+    The artist must resolve uniquely in the Artist DB, the last token must
+    be a full ISO date, and the remaining pre-date phrase must parse into all
+    of venue, city and state/country.  This protects album/title/collector
+    text and does not attempt to invent a city from an unanchored path.
+    """
+    if matcher is None:
+        return None
+    folder = compact_ws(group.get("main_dir_name", ""))
+    dates = [item for item in _find_date_matches(folder) if item.get("date_order") == "ymd" and re.fullmatch(r"(?:19|20)\d{2}-\d{2}-\d{2}", item.get("raw", ""))]
+    if len(dates) != 1 or _clean_piece(folder[int(dates[0]["end"]):]):
+        return None
+    before = _clean_piece(folder[:int(dates[0]["start"])])
+    tokens = list(re.finditer(r"[A-Za-z][A-Za-z'&.+-]*", before))
+    if len(tokens) < 3:
+        return None
+    for token in reversed(tokens[:-2]):
+        raw_artist = _clean_piece(before[:token.end()])
+        place = _clean_piece(before[token.end():])
+        venue, city, region, country, _extra = _parse_string2(place)
+        if not (venue and city and (region or country)):
+            continue
+        detail, _apostrophe_fallback = _lookup_artist_detail_with_apostrophe_fallback(raw_artist, matcher)
+        if detail["status"] == "collision":
+            return None
+        if detail["status"] != "matched" or len(detail["masters"]) != 1:
+            continue
+        return {
+            "artist": _artist_output_name(config, raw_artist, detail["masters"][0]),
+            "artist_not_in_db": "", "date": str(dates[0]["normalized"]),
+            "venue": venue, "city": city, "region": region, "country": country,
+            "source": "db_artist_venue_city_date_no_string2",
+        }
+    return None
+
+
+def _match_setlist_confirmed_artist_place_date(
+    group: dict, config, matcher: Optional[ArtistMatcher], observations: List[str]
+) -> Optional[Dict[str, str]]:
+    """Guarded ``Artist Venue City Date [source]`` fallback.
+
+    The usual String1 Date String2 split is *not* an artist split when the
+    date comes after a venue/location.  Rather than guess arbitrary boundaries,
+    require independent confirmation from the selected setlist: exactly one
+    complete date agreeing with the folder, an artist starting the *folder*,
+    and distinct venue and city tokens in the pre-date remainder, in order.
+    The setlist supplies the authoritative venue/location.  Do not apply this
+    to a path which lacks that corroboration, and do not promote a guessed
+    second field or an arbitrary collector's note into the show name.
+    """
+    selected = compact_ws(group.get("setlist_file", ""))
+    if not selected or not os.path.isfile(selected):
+        return None
+    result = extract_setlist_venue_location(selected, getattr(config, "tlo_dbs_dir", ""))
+    if not (result.artist and result.venue and result.city and result.region and result.artist_confidence >= 85):
+        return None
+    dates = _collect_setlist_date_matches(group)
+    distinct_dates = {item.get("normalized", "") for item in dates if item.get("normalized", "")}
+    if len(distinct_dates) != 1:
+        return None
+    agreed_date = next(iter(distinct_dates))
+    if not re.fullmatch(r"(?:19|20)\d{2}-\d{2}-\d{2}", agreed_date):
+        return None
+    folder = compact_ws(group.get("main_dir_name", ""))
+    full_dates = [row for row in _find_date_matches(folder) if row.get("date_order") == "ymd" and re.fullmatch(r"(?:19|20)\d{2}-\d{2}-\d{2}", row.get("raw", ""))]
+    if len(full_dates) != 1 or full_dates[0].get("normalized") != agreed_date:
+        return None
+    preceding = compact_ws(folder[:int(full_dates[0]["start"])])
+    actual = _corroborated_artist_tokens(preceding)
+    artist_tokens = _corroborated_artist_tokens(result.artist)
+    if not artist_tokens or actual[:len(artist_tokens)] != artist_tokens:
+        return None
+    remainder = actual[len(artist_tokens):]
+    if len(remainder) < 2 or len(remainder) > 16:
+        return None
+    # Require a *distinctive* venue term and a subsequent city term. Generic
+    # 'the', 'at', 'hall', or 'live' are not enough to corroborate a place.
+    ignored = {"the", "at", "a", "an", "live", "venue", "hall", "center", "club", "room"}
+    venue_keys = [word for word in _corroborated_artist_tokens(result.venue) if len(word) >= 4 and word not in ignored]
+    city_keys = [word for word in _corroborated_artist_tokens(result.city) if len(word) >= 3]
+    if not venue_keys or not city_keys:
+        return None
+    venue_positions = [index for index, word in enumerate(remainder) if word in venue_keys]
+    city_positions = [index for index, word in enumerate(remainder) if word in city_keys]
+    if not venue_positions or not city_positions or min(venue_positions) >= max(city_positions):
+        return None
+    detail, _apostrophe_fallback = _lookup_artist_detail_with_apostrophe_fallback(result.artist, matcher)
+    if detail["status"] == "collision":
+        observations.append("setlist-confirmed Artist Venue City Date fallback withheld: ambiguous Artist DB entry")
+        return None
+    master = detail["masters"][0] if detail["status"] == "matched" and detail["masters"] else ""
+    artist = _artist_output_name(config, result.artist, master)
+    return {
+        "artist": artist, "artist_not_in_db": artist if detail["status"] == "no_match" else "",
+        "date": agreed_date, "venue": result.venue, "city": result.city,
+        "region": result.region, "country": result.country,
+        "source": selected,
+    }
+
+
 def _record_unlisted_setlist_artist(
     record: ShowMetadata,
     setlist_artist: str,
@@ -5880,6 +5984,10 @@ def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata,
         structured_unlabeled = artist_source == "setlist_metadata:STRUCTURED_UNLABELED_ARTIST_HEADER"
         folder_agrees = _artist_agrees_with_leading_show_folder(
             lookup_setlist_artist, record.main_dir_name
+        ) or any(
+            item.source == "setlist_confirmed_artist_place_date"
+            and _corroborated_artist_tokens(item.value) == _corroborated_artist_tokens(lookup_setlist_artist)
+            for item in evidence.get("artist", [])
         )
         detail, apostrophe_fallback = _lookup_artist_detail_with_apostrophe_fallback(
             lookup_setlist_artist, artist_matcher
@@ -6409,6 +6517,52 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
     if aggregate_album_name:
         observations.append(f"wrapper-suffixed related folders aggregated as album: {aggregate_album_name}")
 
+    # The artist can precede a venue and city before the date.  In that
+    # arrangement, neither String1 nor String2 is a reliable metadata field.
+    # Check the selected local setlist before using the generic path pattern.
+    setlist_place_date = None
+    if not config.current_slam and not aggregate_album_name:
+        setlist_place_date = _match_setlist_confirmed_artist_place_date(
+            group, config, artist_matcher, observations
+        ) or _match_db_artist_venue_city_date_without_string2(group, config, artist_matcher)
+    if setlist_place_date:
+        record.artist = setlist_place_date["artist"]
+        record.date = setlist_place_date["date"]
+        record.venue = setlist_place_date["venue"]
+        record.city = setlist_place_date["city"]
+        record.region = setlist_place_date["region"]
+        record.country = setlist_place_date["country"]
+        record.location = _join_location(record.city, record.region, record.country)
+        record.artist_not_in_database = setlist_place_date["artist_not_in_db"]
+        date_matches.append({
+            "raw": record.date, "normalized": record.date,
+            "part": record.main_dir_name, "part_path": record.main_dir_path,
+            "source": "setlist_confirmed_artist_place_date",
+        })
+        for name, value in (("artist", record.artist), ("date", record.date),
+                            ("venue", record.venue), ("city", record.city),
+                            ("region", record.region), ("country", record.country)):
+            if value:
+                evidence.setdefault(name, []).append(Candidate(value, "setlist_confirmed_artist_place_date", 90))
+        path_mode = ("DB-confirmed Artist Venue City Date without String2" if
+                     setlist_place_date["source"] == "db_artist_venue_city_date_no_string2" else
+                     "setlist-confirmed Artist Venue City Date")
+        observations.append(
+            f"{path_mode} fallback: ignored unreliable String1/String2 split; "
+            f"{record.artist} | {record.date} | {record.venue} | {record.location}"
+        )
+        if record.artist_not_in_database:
+            observations.append(f"artist not in Artist DB; independent setlist and folder agreement: {record.artist}")
+        # Do not later parse the collector's tail after the date as String2.
+        required_matches = []
+        optional_matches = []
+        pattern_matches = []
+        abbreviation_matches = []
+        strong_pattern_matches = []
+        abbreviation_exclude_paths = set()
+        string_date_string_found = False
+        string_date_found = False
+
     if config.current_slam:
         record.artist = config.current_slam.strip()
         evidence.setdefault("artist", []).append(Candidate(record.artist, "slam_override", 100))
@@ -6474,7 +6628,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                 )
                 record.artist = pattern_artist
         date_artist_venue_location_match: Optional[Dict[str, object]] = None
-        if not dash_album_match and len(conflicts) == 0:
+        if not dash_album_match and not setlist_place_date and len(conflicts) == 0:
             date_artist_venue_location_match = _apply_date_artist_venue_location_path(
                 config,
                 group,
@@ -6493,7 +6647,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                     "source": "date_artist_venue_location",
                 })
 
-        if not dash_album_match and len(conflicts) == 0 and not date_artist_venue_location_match:
+        if not dash_album_match and not setlist_place_date and len(conflicts) == 0 and not date_artist_venue_location_match:
             artist_place_date_technical_suffix_match = _apply_artist_place_date_technical_suffix_path(
                 config,
                 group,

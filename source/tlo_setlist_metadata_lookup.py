@@ -1663,6 +1663,15 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
     if not structured_artist and inline_artist:
         structured_artist = inline_artist
         structured_conf = max(structured_conf, inline_conf)
+    elif structured_artist and inline_artist:
+        # A one-line ``Artist 12/10/1994`` header can also be seen as a
+        # structured *entire-line* artist when the following line is the venue.
+        # Only strip the suffix if it is exactly one supported date.  Never
+        # trim meaningful numerals or dates embedded inside an artist's name.
+        suffix = structured_artist[len(inline_artist):].strip() if structured_artist.casefold().startswith(inline_artist.casefold()) else ""
+        if suffix and _INLINE_DATE_TOKEN_RE.fullmatch(suffix):
+            structured_artist = inline_artist
+            structured_conf = max(structured_conf, inline_conf)
     if not structured_venue and inline_venue:
         structured_venue = inline_venue
         structured_conf = max(structured_conf, inline_conf)

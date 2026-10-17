@@ -1,0 +1,36 @@
+TLO v1.7 Build 591 — LOCAL VERIFICATION; NOT RELEASE-ATTESTED
+
+Scope: In non-compliant naming, recognize a setlist-confirmed Artist Venue City
+Date [collector note] folder without treating the pre-date venue/city as part
+of Artist or treating the collector note as post-date String2. Also recognize
+Artist Venue City State Date when String2 is absent and Artist DB and full
+location parsing agree. Parse Artist Date lines in setlist headers correctly.
+All existing tagging, inventory, duplicate, deep-audio, deletion and signing
+behaviors are unchanged.
+
+Regression results (locally executed):
+- Behavior suite: 1,821 passed, 6 expected platform/Ruff skips, partitioned
+  into groups of 353 / 334 / 296 / 838 passing tests.
+- Unit suite: 100 passed.
+- Contract suite: 131 passed.
+- Total source/unit/contract/behavior: 2,052 passed, 6 expected skips.
+- Historical compatibility/requirements suite: 1,406 passed.
+- Build 591 actual NRBQ setlist, negative/ambiguous metadata, date and
+  Add New Shows compliant-rename regression: 11 passed.
+- Python AST: all 294 Python files parse. Source tree free of .pyc artifacts.
+- Requirements DOCX: 118 rendered pages; source and revision pages inspected.
+- RTF user manual: retained three image diagrams and 12 What's New bullets.
+- Complete source ZIP: file entries checked against SHA256SUMS_v591.txt,
+  with no duplicate names, absolute/unsafe paths or code-cache artifacts.
+- GitHub Build Process v117 unchanged and NOT repackaged.
+
+Ruff lint: lint not attested locally (Ruff executable unavailable). Windows
+preflight and hosted CI must execute the configured Ruff check. Windows/macOS
+native builds, Windows signing and signature verification, malware scanning,
+final release assembly and publication: NOT EXECUTED HERE.
+
+GUI/headless test evidence: GUI smoke tests requiring a display run under
+Xvfb display (CI=1); no-display environments are not treated as a GUI pass.
+No display (DISPLAY and CI unset): six GUI-only cases remain skipped
+in the historical headless smoke-contract (6 skipped). This is distinct
+from execution under Xvfb display (CI=1).

@@ -1,7 +1,7 @@
-TLO Source and Utilities Bundle v590
+TLO Source and Utilities Bundle v591
 
-Public application version: v1.7 Build 590
-Source bundle label: v590
+Public application version: v1.7 Build 591
+Source bundle label: v591
 Paired native release GitHub Build Process: v117
 
 Corruption policy: No inspection without tagging or Deep Audio Check. A tag failure
@@ -13,20 +13,20 @@ large collections. Deletion thresholds and safeguards are unchanged. Manual Twea
 has no corruption checking.
 
 Current documentation files:
-- TLO_Inventory_User_Manual_v590.rtf (What's New plus concise usage)
-- TLO_Inventory_Requirements_Working_v590.docx (consolidated specification)
+- TLO_Inventory_User_Manual_v591.rtf (What's New plus concise usage)
+- TLO_Inventory_Requirements_Working_v591.docx (consolidated specification)
 - TLO-FAQ.txt
-- CHANGES_v590.txt
-- BUILD_VERIFICATION_v590.txt
-- SHA256SUMS_v590.txt
+- CHANGES_v591.txt
+- BUILD_VERIFICATION_v591.txt
+- SHA256SUMS_v591.txt
 
-Build 590 requires successful Add New Shows Tag In Place completion before a
+Build 591 retains Build 590 behavior: successful Add New Shows Tag In Place completion before a
 performance is staged, inventoried or exported as a setlist. Incomplete tag
 runs leave originals for review and report tagged/unchanged/skipped/failed and
 excluded audio. Deep Audio Check honors the established corruption policies;
 ambiguous multi-show input remains in source; unsupported copy modes fail
 explicitly. Potential duplicates still move directly to TLOHome/dups.
-Build Process v117 is unchanged.
+Build 591 additionally fixes artist/venue/date identification for NRBQ-style Artist Venue City Date folders with independent setlist confirmation. Collector/source text is not misused as a venue. Build Process v117 is unchanged.
 
 Main programs: tlo-main.py, tlo-gi.py, tlo-tag.py, tlo-search.py,
 tlo-research.py, tlo-reverse.py, tlo-deleteDupes.py, search-artist-db.py.
