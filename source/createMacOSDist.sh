@@ -266,12 +266,25 @@ if [[ -n "${TLO_MACOS_CODESIGN_IDENTITY:-}" ]]; then
     done
 fi
 
-"$PYTHON_BIN" "$SCAN_SCRIPT" \
-    --platform macos \
-    --artifact-dir "$TARGET_DIR" \
-    --report "$REPORT_PATH"
+# Homebrew ClamAV 1.5.4_1 with OpenSSL 4 fails CVD signature verification
+# on GitHub macOS runners. The *only* CI alternative is a deferred, mandatory
+# ClamAV scan in the Linux final packaging job. It scans the complete macOS
+# build artifact and binds macos.json to the very same file hashes; the final
+# assembler rejects any absent/invalid scan receipt. Local builds still scan.
+if [[ "${TLO_DEFER_MACOS_SCAN_TO_PACKAGE:-0}" == "1" ]]; then
+    if [[ "${GITHUB_ACTIONS:-false}" != "true" ]]; then
+        fail "Deferred macOS scan is permitted only in GitHub Actions; local build must scan."
+    fi
+    [[ ! -e "$REPORT_PATH" ]] || fail "Unexpected preexisting macOS scan receipt while scan is deferred."
+    printf 'macOS scanner deferred to mandatory Linux release-packaging scan.\n'
+else
+    "$PYTHON_BIN" "$SCAN_SCRIPT" \
+        --platform macos \
+        --artifact-dir "$TARGET_DIR" \
+        --report "$REPORT_PATH"
 
-[[ -s "$REPORT_PATH" ]] || fail "Clean scan receipt was not created: $REPORT_PATH"
+    [[ -s "$REPORT_PATH" ]] || fail "Clean scan receipt was not created: $REPORT_PATH"
+fi
 
 # Recheck after the scanner has had time to quarantine or remove a file.
 sleep 2
@@ -288,4 +301,8 @@ done
 
 printf '\nmacOS build completed successfully.\n'
 printf 'Executables and app bundles: %s\n' "$TARGET_DIR"
-printf 'Clean scan receipt: %s\n' "$REPORT_PATH"
+if [[ "${TLO_DEFER_MACOS_SCAN_TO_PACKAGE:-0}" == "1" ]]; then
+    printf 'ClamAV scan required at release packaging: %s\n' "$REPORT_PATH"
+else
+    printf 'Clean scan receipt: %s\n' "$REPORT_PATH"
+fi

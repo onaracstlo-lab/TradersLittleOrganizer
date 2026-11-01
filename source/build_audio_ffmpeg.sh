@@ -56,6 +56,15 @@ else
   cd -- "$build_dir"
   configure_command="${source_dir}/configure"
 fi
+# Native UCRT64 MinGW executables must not require MSYS2 pthread runtime DLLs.
+# Static codec libraries alone (--enable-static) do not control executable linkage.
+# Bash 3.2 (macOS) treats empty arrays as unbound under set -u.
+# Positional parameters expand safely even when no extra flag is required.
+if [[ "${MSYSTEM:-}" == UCRT64 ]]; then
+  set -- --extra-ldexeflags=-static
+else
+  set --
+fi
 "$configure_command" \
   --disable-autodetect --disable-everything --enable-small \
   --disable-network --disable-ffplay --disable-ffprobe \
@@ -63,6 +72,7 @@ fi
   --disable-swscale --disable-iconv --disable-bzlib --disable-lzma \
   --disable-zlib --disable-x86asm --enable-ffmpeg \
   --enable-static --disable-shared \
+  "$@" \
   --enable-demuxer=shorten,flac,wav,aiff,mp3,ogg,mov,ape,wv,aac,asf,matroska,au,caf,tta,tak \
   --enable-decoder=shorten,flac,mp3,aac,alac,ape,wavpack,opus,vorbis,wmav1,wmav2,tta,tak,pcm_s16le,pcm_s24le,pcm_s32le,pcm_s16be,pcm_s24be,pcm_s32be,pcm_u8,pcm_f32le,pcm_f64le \
   --enable-encoder=flac,pcm_s8,pcm_s16le,pcm_s24le,pcm_s32le \
@@ -103,6 +113,21 @@ fi
   echo "FFmpeg expected executable $binary missing after make all; refusing to package an incorrect platform binary" >&2
   exit 1
 }
+# Inspect imported PE DLLs BEFORE copying into the release staging tree.
+# /ucrt64/bin/objdump is supplied by the same MSYS2 toolchain as gcc.
+if [[ "${MSYSTEM:-}" == UCRT64 ]]; then
+  inspect_tool=/ucrt64/bin/objdump.exe
+  [[ -x "$inspect_tool" ]] || { echo "Missing UCRT64 objdump for FFmpeg dependency gate" >&2; exit 1; }
+  imports="$($inspect_tool -p "$binary" | sed -n 's/^[[:space:]]*DLL Name:[[:space:]]*//p' | tr '[:upper:]' '[:lower:]')"
+  [[ -n "$imports" ]] || { echo "Cannot inspect Windows FFmpeg DLL dependencies" >&2; exit 1; }
+  while IFS= read -r dll; do
+    case "$dll" in
+      kernel32.dll|user32.dll|advapi32.dll|shell32.dll|ws2_32.dll|bcrypt.dll|ole32.dll|ntdll.dll|msvcrt.dll|ucrtbase.dll|api-ms-win-*.dll|ext-ms-*.dll) ;;
+      *) echo "Non-system FFmpeg DLL dependency rejected: $dll (must be linked statically)" >&2; exit 1 ;;
+    esac
+  done <<< "$imports"
+  echo "FFmpeg Windows dependency gate passed: $(printf '%s' "$imports" | paste -sd ',' -)"
+fi
 cp -- "$binary" "$output"
 # Keep build configuration for post-build and source-provenance receipt.
 cp -- ffbuild/config.log "${output}.config.log"

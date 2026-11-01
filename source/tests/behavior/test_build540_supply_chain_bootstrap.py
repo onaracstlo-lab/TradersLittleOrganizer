@@ -36,7 +36,10 @@ def test_build540_version_and_audit_lock_contract():
     assert {'pip-audit','pip-api','cachecontrol','msgpack','charset-normalizer'} <= names
     msgpack=next(e for e in entries if e.startswith('msgpack=='))
     charset=next(e for e in entries if e.startswith('charset-normalizer=='))
-    assert msgpack.count('--hash=sha256:') >= 4
+    # The v593 lock contains three verified wheel hashes covering CI's
+    # Windows x64, macOS arm64, and manylinux x64 Python 3.13 targets.
+    assert msgpack.count('--hash=sha256:') >= 3
+    assert msgpack.startswith('msgpack==1.2.3 ')
     assert charset.count('--hash=sha256:') >= 3
 
 

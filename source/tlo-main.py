@@ -504,18 +504,85 @@ def _show_operation_review(parent, *, title, lines, preview_callback=None):
     dialog.columnconfigure(0, weight=1)
     dialog.rowconfigure(0, weight=1)
     frame.columnconfigure(0, weight=1)
-    ttk.Label(frame, text="Review the operation before it starts.", font=tkfont.nametofont("TkHeadingFont")).grid(row=0, column=0, sticky="w", pady=(0, 8))
+    frame.rowconfigure(1, weight=1)
+    ttk.Label(
+        frame, text="Review the operation before it starts.",
+        font=tkfont.nametofont("TkHeadingFont"),
+    ).grid(row=0, column=0, sticky="w", pady=(0, 8))
+
+    # Keep the complete ordered review visible without allowing a long settings
+    # list to push the Start/Go Back buttons below the bottom of the screen.
+    # Unlike a Text widget, the canvas retains the existing Label formatting.
+    review_width = min(820, max(320, dialog.winfo_screenwidth() - 100))
+    review_canvas = tk.Canvas(frame, width=review_width, borderwidth=0, highlightthickness=0)
+    review_scrollbar = ttk.Scrollbar(frame, orient="vertical", command=review_canvas.yview)
+    review_canvas.grid(row=1, column=0, sticky="nsew")
+    review_scrollbar.grid(row=1, column=1, sticky="ns")
+    review_content = ttk.Frame(review_canvas)
+    content_id = review_canvas.create_window((0, 0), window=review_content, anchor="nw")
+    review_content.columnconfigure(0, weight=1)
     review_text = "\n".join(lines)
-    ttk.Label(frame, text=review_text, justify="left", wraplength=780).grid(row=1, column=0, sticky="ew")
+    review_label = ttk.Label(
+        review_content, text=review_text, justify="left", wraplength=review_width - 20,
+    )
+    review_label.grid(row=0, column=0, sticky="ew")
+    warning_label = None
     if any(line.endswith("Yes") for line in lines if line.startswith("Original files may be changed:")):
-        ttk.Label(
-            frame,
+        warning_label = ttk.Label(
+            review_content,
             text="This operation can change original folders or audio files. Dry Run is non-destructive.",
-            justify="left",
-            wraplength=780,
-        ).grid(row=2, column=0, sticky="w", pady=(10, 0))
+            justify="left", wraplength=review_width - 20,
+        )
+        warning_label.grid(row=1, column=0, sticky="w", pady=(10, 0))
+
+    def update_scrollbar(first, last):
+        if float(first) <= 0.0 and float(last) >= 1.0:
+            review_scrollbar.grid_remove()
+        else:
+            review_scrollbar.grid()
+        review_scrollbar.set(first, last)
+
+    review_canvas.configure(yscrollcommand=update_scrollbar)
+
+    def update_region(_event=None):
+        review_canvas.configure(scrollregion=review_canvas.bbox("all"))
+
+    def resize_content(event):
+        review_canvas.itemconfigure(content_id, width=event.width)
+        wraplength = max(100, event.width - 20)
+        review_label.configure(wraplength=wraplength)
+        if warning_label is not None:
+            warning_label.configure(wraplength=wraplength)
+        update_region()
+
+    review_content.bind("<Configure>", update_region)
+    review_canvas.bind("<Configure>", resize_content)
+
+    def wheel_scroll(event):
+        # MouseWheel: Windows/macOS; Button-4/5: Linux/X11.
+        if getattr(event, "num", None) in (4, 5):
+            steps = -1 if event.num == 4 else 1
+        else:
+            delta = getattr(event, "delta", 0)
+            wheel_units = max(1, round(abs(delta) / 120)) if delta else 0
+            steps = -wheel_units if delta > 0 else wheel_units
+        if steps:
+            review_canvas.yview_scroll(steps, "units")
+        return "break"
+
+    for widget in (review_canvas, review_content, review_label, warning_label):
+        if widget is not None:
+            widget.bind("<MouseWheel>", wheel_scroll)
+            widget.bind("<Button-4>", wheel_scroll)
+            widget.bind("<Button-5>", wheel_scroll)
+
+    # Size to the content for short reviews; cap tall reviews to fit the screen.
+    # The footer stays outside the scrolled viewport and is always accessible.
+    review_content.update_idletasks()
+    max_review_height = min(580, max(100, dialog.winfo_screenheight() - 240))
+    review_canvas.configure(height=max(1, min(review_content.winfo_reqheight(), max_review_height)))
     buttons = ttk.Frame(frame)
-    buttons.grid(row=3, column=0, sticky="e", pady=(14, 0))
+    buttons.grid(row=2, column=0, columnspan=2, sticky="e", pady=(14, 0))
 
     def close(start=False):
         result["start"] = bool(start)

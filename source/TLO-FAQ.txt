@@ -43,6 +43,9 @@ A: TLO does not create a nested Name\Name folder. TLO builds the aggregate in a 
 Q: What happens if I inventory the same drive again?
 A: For a named volume, TLO deterministically replaces, prunes, or appends the affected scope according to whether the new path is the same as, a parent of, a child of, or separate from the stored paths. It does not ask a Skip/Re-inventory question. Blank-volume runs append to the shared blank-volume logs and can create duplicate inventory entries if the same content is scanned again.
 
+Q: What if the Review Operation settings do not fit in the window?
+A: The review dialog shows a vertical scrollbar when its settings are longer than the available space. Scroll or use the mouse wheel to see all items, including any warning about changes to originals. Start, Go Back and Preview Changes remain visible below the scrolling area. A short review has no unnecessary scrollbar.
+
 Q: Can Rename Compliantly rename my entire collection or search root?
 A: No. TLO may aggregate true CD, disc, part, or volume siblings only when every direct music-bearing child under the parent belongs to that one release relationship. If any direct music-bearing sibling is unrelated, the folders remain separate and the broad collection/search parent is never renamed as one show. Text such as v.2 inside a larger descriptive parenthetical does not count as a volume suffix.
 
@@ -256,3 +259,6 @@ Resolved potential duplicate replacements receive the same tagging/deep-audio
 verification before any previous inventory row or deletion script is changed.
 If tagging is incomplete, the candidate stays in dups and old copies remain
 protected.
+
+Q: Why did repeated inventories of the same path previously show WinError 5 in groups2.log?
+A: Prior runs could leave a log stream open on Windows. TLO releases in-process streams for atomic log updates and preserves previous records if a persistent external file lock remains.

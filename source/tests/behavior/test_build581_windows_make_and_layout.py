@@ -74,8 +74,11 @@ def test_synthetic_ucrt64_in_tree_configure_avoids_absolute_source_include(tmp_p
         ['bash', str(SCRIPT), str(source), str(output), str(build)],
         env=env, capture_output=True, text=True, timeout=30,
     )
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert output.read_bytes() == b'built-in-tree'
+    # A synthetic text-only executable cannot pass the v592 PE-import security
+    # gate, especially when the real UCRT64 objdump is unavailable on Linux.
+    assert result.returncode != 0
+    assert 'Missing UCRT64 objdump for FFmpeg dependency gate' in result.stderr
+    assert not output.exists()
     assert (source / 'ffbuild' / 'config.log').is_file()
     assert not (build / 'Makefile').exists()
     assert 'FFmpeg GNU Make: /usr/bin/make ' in result.stdout

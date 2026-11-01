@@ -15,7 +15,7 @@ EXPECTED_PACKAGES = {
     "pyinstaller-hooks-contrib": "2026.8",
     "altgraph": "0.17.5",
     "packaging": "26.3",
-    "setuptools": "84.0.0",
+    "setuptools": "84.2.1",
     "mutagen": "1.48.1",
     "tkinterdnd2": "0.6.3",
 }

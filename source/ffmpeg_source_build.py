@@ -11,7 +11,12 @@ __version__ = _TLO_CANONICAL_VERSION
 
 import hashlib
 import os
+import socket
+import ssl
 import stat
+import sys
+import time
+import urllib.error
 import subprocess
 import tarfile
 import urllib.request
@@ -20,6 +25,9 @@ from pathlib import Path
 FFMPEG_VERSION = '9.0.2'
 SOURCE_NAME = f'ffmpeg-{FFMPEG_VERSION}.tar.xz'
 SOURCE_URL = f'https://ffmpeg.org/releases/{SOURCE_NAME}'
+SOURCE_FALLBACK_URL = f'https://www.ffmpeg.org/releases/{SOURCE_NAME}'
+SOURCE_DOWNLOAD_RETRY_DELAYS = (1, 2, 4, 8)  # Five total attempts, bounded backoff
+SOURCE_RETRY_HTTP_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
 SOURCE_SHA256 = '8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e'
 MAX_SOURCE_DOWNLOAD_BYTES = 64 * 1024 * 1024
 MAX_SOURCE_EXPANDED_BYTES = 512 * 1024 * 1024
@@ -61,25 +69,68 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _transient_download_error(error: BaseException) -> bool:
+    """Retry network interruptions, not permanent HTTP/TLS or local I/O errors."""
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code in SOURCE_RETRY_HTTP_STATUSES
+    if isinstance(error, urllib.error.URLError):
+        if isinstance(error.reason, ssl.SSLCertVerificationError):
+            return False
+        return True  # DNS/connection/socket failures; attempts are strictly bounded.
+    return isinstance(error, (ConnectionError, TimeoutError, socket.timeout))
+
+
+def _download_verified_source(url: str, temp: Path) -> None:
+    """Download a *single* candidate into a temporary file; fail closed on hash."""
+    digest = hashlib.sha256()
+    count = 0
+    with urllib.request.urlopen(url, timeout=90) as response, temp.open('wb') as out:
+        while True:
+            block = response.read(1024 * 1024)
+            if not block:
+                break
+            count += len(block)
+            if count > MAX_SOURCE_DOWNLOAD_BYTES:
+                raise RuntimeError('FFmpeg source exceeds allowed download size')
+            digest.update(block)
+            out.write(block)
+    if digest.hexdigest() != SOURCE_SHA256:
+        raise RuntimeError('FFmpeg upstream source SHA-256 mismatch; refusing build')
+
+
 def get_source(cache: Path) -> Path:
+    """Retrieve official pinned source, recovering from transient connection resets.
+
+    A complete archive is published only after its checksum passes. A corrupt
+    pre-existing cache fails closed instead of being silently replaced.
+    """
     cache.mkdir(parents=True, exist_ok=True)
     archive = cache / SOURCE_NAME
-    if not archive.is_file():
-        temp = archive.with_suffix('.downloading')
+    if archive.is_file():
+        if sha256(archive) != SOURCE_SHA256:
+            raise RuntimeError('FFmpeg upstream source SHA-256 mismatch; refusing build')
+        return archive
+
+    temp = cache / f'.{SOURCE_NAME}.downloading'
+    attempts = len(SOURCE_DOWNLOAD_RETRY_DELAYS) + 1
+    for attempt in range(attempts):
+        # First two attempts use the canonical origin; remaining attempts use
+        # FFmpeg's own alternate hostname, never a third-party prebuilt binary.
+        url = SOURCE_URL if attempt < 2 else SOURCE_FALLBACK_URL
         try:
-            with urllib.request.urlopen(SOURCE_URL, timeout=90) as response, temp.open('wb') as out:
-                count = 0
-                for block in iter(lambda: response.read(1024 * 1024), b''):
-                    count += len(block)
-                    if count > MAX_SOURCE_DOWNLOAD_BYTES:
-                        raise RuntimeError('FFmpeg source exceeds allowed download size')
-                    out.write(block)
+            _download_verified_source(url, temp)
             os.replace(temp, archive)
+            return archive
+        except Exception as error:
+            if attempt + 1 >= attempts or not _transient_download_error(error):
+                raise
+            delay = SOURCE_DOWNLOAD_RETRY_DELAYS[attempt]
+            print(f'FFmpeg source download attempt {attempt + 1}/{attempts} interrupted '
+                  f'({type(error).__name__}); retrying in {delay}s', file=sys.stderr)
+            time.sleep(delay)
         finally:
             temp.unlink(missing_ok=True)
-    if sha256(archive) != SOURCE_SHA256:
-        raise RuntimeError('FFmpeg upstream source SHA-256 mismatch; refusing build')
-    return archive
+    raise AssertionError('unreachable: FFmpeg download attempt budget exhausted')
 
 
 def extract_source(archive: Path, destination: Path) -> Path:

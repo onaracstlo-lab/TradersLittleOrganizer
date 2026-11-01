@@ -1,10 +1,12 @@
 from tlo_version import VERSION as _TLO_CANONICAL_VERSION
 __version__ = _TLO_CANONICAL_VERSION
 import logging
+from contextlib import contextmanager
 import os
 import re
 import string
 import tempfile
+import time
 from dataclasses import dataclass
 from tlo_security import escape_structured_log_text
 
@@ -248,6 +250,45 @@ def _structured_block_path(block_lines):
     return candidate
 
 
+@contextmanager
+def _suspend_file_log_handlers(path_name):
+    """Hold in-process writers off a log while its contents are read/replaced.
+
+    A Windows FileHandler normally keeps its destination open without delete
+    sharing, making an otherwise valid os.replace fail with WinError 5/32.
+    Acquire the handler locks for the entire read/modify/replace transaction,
+    release the open streams, and let the next emit reopen in *append* mode.
+    Closing just after reading is too late: another writer might append then.
+    """
+    destination = os.path.normcase(os.path.abspath(path_name))
+    active = []
+    for logger in list(logging.Logger.manager.loggerDict.values()):
+        if not isinstance(logger, logging.Logger):
+            continue
+        for handler in logger.handlers:
+            if (isinstance(handler, logging.FileHandler)
+                    and os.path.normcase(os.path.abspath(handler.baseFilename)) == destination
+                    and handler not in active):
+                active.append(handler)
+    active.sort(key=id)
+    acquired = []
+    try:
+        for handler in active:
+            handler.acquire()
+            acquired.append(handler)
+        for handler in active:
+            if handler.stream is not None:
+                handler.flush()
+                handler.stream.close()
+                handler.stream = None
+            # The next write must append to the rewritten log, not truncate it.
+            handler.mode = "a"
+        yield
+    finally:
+        for handler in reversed(acquired):
+            handler.release()
+
+
 def _atomic_rewrite_log(path_name, lines):
     """Rewrite one UTF-8 log atomically while round-tripping undecodable bytes."""
     path_name = os.path.abspath(path_name)
@@ -263,8 +304,18 @@ def _atomic_rewrite_log(path_name, lines):
             os.chmod(temporary_name, os.stat(path_name).st_mode & 0o7777)
         except OSError:
             pass
-        os.replace(temporary_name, path_name)
-        temporary_name = None
+        # Antivirus/indexing tools can briefly hold a log even after all TLO
+        # FileHandlers have released it. Retry only Windows sharing/access
+        # conflicts; never swallow a persistent failure or delete the source.
+        for attempt in range(5):
+            try:
+                os.replace(temporary_name, path_name)
+                temporary_name = None
+                break
+            except PermissionError as exc:
+                if os.name != "nt" or getattr(exc, "winerror", None) not in (5, 32) or attempt == 4:
+                    raise
+                time.sleep(0.05 * (2 ** attempt))
     finally:
         if temporary_name:
             try:
@@ -274,37 +325,38 @@ def _atomic_rewrite_log(path_name, lines):
 
 
 def _prune_structured_log(path_name, root_paths, end_marker):
-    try:
-        with open(path_name, "r", encoding="utf-8", errors="surrogateescape") as infile:
-            lines = infile.readlines()
-    except OSError:
-        return False
-    out = []
-    block = []
-    changed = False
-    in_block = False
-    for line in lines:
-        if not in_block and (line.startswith("GROUP_NUMBER:") or line.startswith("SHOW_NAME:")):
-            in_block = True
-            block = [line]
-            continue
-        if in_block:
-            block.append(line)
-            if line.strip() == end_marker:
-                block_path = _structured_block_path(block)
-                if _path_under_any_scope(block_path, root_paths):
-                    changed = True
-                else:
-                    out.extend(block)
-                block = []
-                in_block = False
-            continue
-        out.append(line)
-    if block:
-        out.extend(block)
-    if changed:
-        _atomic_rewrite_log(path_name, out)
-    return changed
+    with _suspend_file_log_handlers(path_name):
+        try:
+            with open(path_name, "r", encoding="utf-8", errors="surrogateescape") as infile:
+                lines = infile.readlines()
+        except OSError:
+            return False
+        out = []
+        block = []
+        changed = False
+        in_block = False
+        for line in lines:
+            if not in_block and (line.startswith("GROUP_NUMBER:") or line.startswith("SHOW_NAME:")):
+                in_block = True
+                block = [line]
+                continue
+            if in_block:
+                block.append(line)
+                if line.strip() == end_marker:
+                    block_path = _structured_block_path(block)
+                    if _path_under_any_scope(block_path, root_paths):
+                        changed = True
+                    else:
+                        out.extend(block)
+                    block = []
+                    in_block = False
+                continue
+            out.append(line)
+        if block:
+            out.extend(block)
+        if changed:
+            _atomic_rewrite_log(path_name, out)
+        return changed
 
 
 def _line_mentions_pruned_path(line, root_paths):
@@ -323,16 +375,17 @@ def _line_mentions_pruned_path(line, root_paths):
 
 
 def _prune_line_log(path_name, root_paths):
-    try:
-        with open(path_name, "r", encoding="utf-8", errors="surrogateescape") as infile:
-            lines = infile.readlines()
-    except OSError:
+    with _suspend_file_log_handlers(path_name):
+        try:
+            with open(path_name, "r", encoding="utf-8", errors="surrogateescape") as infile:
+                lines = infile.readlines()
+        except OSError:
+            return False
+        out = [line for line in lines if not _line_mentions_pruned_path(line, root_paths)]
+        if len(out) != len(lines):
+            _atomic_rewrite_log(path_name, out)
+            return True
         return False
-    out = [line for line in lines if not _line_mentions_pruned_path(line, root_paths)]
-    if len(out) != len(lines):
-        _atomic_rewrite_log(path_name, out)
-        return True
-    return False
 
 
 def prune_logs_for_tokens_and_paths(tlo_home, tokens, root_paths):
@@ -529,7 +582,11 @@ class LogManager:
 
     def _configure_logger(self, logger_name, log_file, mode="w"):
         logger = logging.getLogger(f"{logger_name}:{log_file}")
-        logger.handlers.clear()
+        # removeHandler() alone does not close FileHandler streams. On Windows
+        # they keep prior token logs locked and break later atomic re-inventory.
+        for previous in tuple(logger.handlers):
+            logger.removeHandler(previous)
+            previous.close()
         logger.setLevel(logging.INFO)
         logger.propagate = False
         safe_mode = "a" if str(mode or "w").lower().startswith("a") else "w"
@@ -539,7 +596,20 @@ class LogManager:
         logger.addHandler(handler)
         return logger
 
+    def _close_scope_handlers(self):
+        """Release all old scope streams before changing the active token."""
+        for logger in (
+            self._dead_end_logger, self._duplicate_logger,
+            self._complete_paths_logger, self._groups_logger,
+            self._conflicts_logger, self._show_metadata_logger,
+            self._tag_success_logger, self._tag_error_logger,
+        ):
+            for handler in tuple(logger.handlers):
+                logger.removeHandler(handler)
+                handler.close()
+
     def _switch_to_scope(self, scope_label, token, search_path, log_mode="w"):
+        self._close_scope_handlers()
         self.current_scope_label = sanitize_scope_label(scope_label)
         self.current_log_token = str(token or "")
         self.paths = LogPaths(

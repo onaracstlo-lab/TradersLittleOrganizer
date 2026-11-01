@@ -39,12 +39,16 @@ def _fixture(tmp_path, *, windows: bool, valid_binary: bool = True):
 
 def test_windows_ffmpeg_exe_target_builds_even_without_plain_ffmpeg_target(tmp_path):
     result, source, output = _fixture(tmp_path, windows=True)
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert output.read_bytes() == b'native-ffmpeg'
+    # Synthetic source proves the .exe target is produced, but the non-PE
+    # test artifact MUST NOT be staged without the Windows DLL import gate.
+    assert result.returncode != 0
+    assert 'Missing UCRT64 objdump for FFmpeg dependency gate' in result.stderr
+    assert not output.exists()
     assert not (source / 'ffmpeg').exists()
     assert (source / 'ffmpeg.exe').is_file()
-    assert (Path(str(output) + '.config.log')).is_file()
-    assert (Path(str(output) + '.build-recipe.txt')).is_file()
+    # No staged provenance receipts until the PE import audit succeeds.
+    assert not (Path(str(output) + '.config.log')).exists()
+    assert not (Path(str(output) + '.build-recipe.txt')).exists()
 
 
 def test_windows_fails_closed_if_output_executable_is_missing(tmp_path):
