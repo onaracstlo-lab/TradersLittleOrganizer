@@ -1,0 +1,18 @@
+TLO v1.7 Build 603 — LOCAL REGRESSION RESULTS — 2026-11-01
+
+Scope: Add tlo-preferences.ini startup defaults and in-app editor, preserve existing
+UI defaults and persisted Auto Update choice, and leave GitHub Build Process v122 unchanged.
+
+Combined Linux-style application suite (Xvfb display, CI=1, shared FFmpeg archive override):
+  2,138 passed; 6 expected skips; one expected duplicate-ZIP warning.
+  6 skips cover unavailable Ruff, native Windows tests and OS-specific integrations.
+Standalone requirements suite: 1,406 passed.
+Focused Build 603 preferences suite: 19 passed.
+Build Process v122 tests: 76 passed, 1 skipped.
+Old Build 478 Update Tags test updated to verify the new preference defaults to on.
+Versioned release contract updated and now passes. Historical behavior tests remain included.
+
+Validation: Python AST syntax; default INI parses; DOCX rendered to 121 pages and
+visually checked; RTF converted and its preferences section verified; ZIP checksums verified.
+Not attested: Ruff lint is not available locally; GitHub Actions/native compilation,
+Windows signing, ClamAV and final release gates have not run.

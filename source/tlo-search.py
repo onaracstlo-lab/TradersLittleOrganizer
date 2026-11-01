@@ -35,6 +35,7 @@ except ImportError:
     DISPLAY_VERSION = "version unavailable"
     VERSION = "version unavailable"
 from tlo_window_icons import install_window_icon
+import tlo_preferences
 from tlo_gui_shortcuts import install_global_ctrl_a
 from tlo_gui_shortcuts import configure_centered_ttk_button_text, schedule_tk_after
 from tlo_postprocess import setlist_filename_from_show_name
@@ -139,6 +140,11 @@ Search box shortcuts:
 
 Font selector:
 - The main window includes a pulldown to change the font family for the running app session.
+
+Preferences:
+- TLOHome/tlo-preferences.ini stores shared startup settings for TLO Main and Search.
+- The hamburger > Edit Preferences command opens an editable text window; Save validates and prompts for a restart.
+- An explicit --find takes precedence over search_query, then the existing clipboard default is used.
 """
 
 
@@ -261,6 +267,17 @@ class BootlistSearchApp:
         self.root = root
         install_global_ctrl_a(self.root)
         self.paths = paths
+        self.preferences = tlo_preferences.parse_text(tlo_preferences.default_text())
+        self._preferences_loaded = False
+        try:
+            self.preferences = tlo_preferences.load(
+                paths.tlohome,
+                initial_auto_update=bool(is_auto_update_enabled(paths.tlohome)) if is_auto_update_enabled else False)
+            self._preferences_loaded = True
+        except (ValueError, OSError) as exc:
+            detail = str(exc)
+            self.root.after_idle(lambda: messagebox.showwarning(
+                'TLO Preferences', f'Preferences could not be loaded: {detail}', parent=self.root))
         self.initial_find = initial_find
 
         self.root.title(f"TLO Search {DISPLAY_VERSION}")
@@ -268,8 +285,26 @@ class BootlistSearchApp:
 
         self.style = ttk.Style(self.root)
         configure_centered_ttk_button_text(self.style)
+        pref = self.preferences['search']
+        for font_name in ('TkDefaultFont', 'TkTextFont', 'TkMenuFont', 'TkHeadingFont',
+                          'TkCaptionFont', 'TkSmallCaptionFont', 'TkIconFont', 'TkTooltipFont',
+                          'TkFixedFont'):
+            try:
+                font = tkfont.nametofont(font_name)
+                settings = {}
+                size = (pref['fixed_font_size'] if font_name == 'TkFixedFont' else
+                        pref['heading_font_size'] if font_name == 'TkHeadingFont' else pref['font_size'])
+                if size:
+                    settings['size'] = size
+                if pref['font_family'] != 'system' and font_name != 'TkFixedFont':
+                    if pref['font_family'] in tkfont.families(self.root):
+                        settings['family'] = pref['font_family']
+                if settings:
+                    font.configure(**settings)
+            except tk.TclError:
+                pass
         self.search_var = tk.StringVar()
-        self.deep_var = tk.BooleanVar(value=False)
+        self.deep_var = tk.BooleanVar(value=pref['deep'])
         self.font_family_var = tk.StringVar()
         self.search_history: List[str] = []
         self.search_entry: ttk.Combobox | None = None
@@ -278,7 +313,9 @@ class BootlistSearchApp:
         self._update_check_thread = None
         self.csv_result_windows: List[CsvSearchResultsWindow] = []
         self.available_font_families = self._build_font_family_list()
-        self.font_family_var.set(self._default_font_family())
+        self.font_family_var.set(
+            pref['font_family'] if pref['font_family'] in self.available_font_families
+            else self._default_font_family())
         self._apply_font_family(self.font_family_var.get())
 
         self._build_main_window()
@@ -388,6 +425,7 @@ class BootlistSearchApp:
         self.hamburger_menu = tk.Menu(self.hamburger_button, tearoff=False)
         self.hamburger_menu.add_command(label="Check for updates", command=lambda: self._run_after_menu_closes(lambda: self._start_update_check(manual=True)))
         self.hamburger_menu.add_checkbutton(label="Auto Update", variable=self.auto_update_var, command=lambda: self._run_after_menu_closes(self._toggle_auto_update))
+        self.hamburger_menu.add_command(label="Edit Preferences", command=lambda: self._run_after_menu_closes(self._edit_preferences))
         self.hamburger_button.configure(menu=self.hamburger_menu)
         self.hamburger_button.pack(side="right", anchor="e")
 
@@ -438,11 +476,23 @@ class BootlistSearchApp:
         except tk.TclError:
             callback()
 
+    def _edit_preferences(self):
+        try:
+            if not tlo_preferences.path_for(self.paths.tlohome).exists():
+                tlo_preferences.load(self.paths.tlohome)
+            tlo_preferences.edit(self.root, self.paths.tlohome)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror('TLO Preferences', str(exc), parent=self.root)
+
     def _initialize_update_menu_state(self) -> None:
         if is_auto_update_enabled is None:
             return
         try:
-            self.auto_update_var.set(bool(is_auto_update_enabled(self.paths.tlohome)))
+            enabled = bool(self.preferences['general']['auto_update']) if self._preferences_loaded else bool(
+                is_auto_update_enabled(self.paths.tlohome))
+            if enabled != bool(is_auto_update_enabled(self.paths.tlohome)):
+                set_auto_update_enabled(self.paths.tlohome, enabled)
+            self.auto_update_var.set(enabled)
         except Exception:
             self.auto_update_var.set(False)
 
@@ -563,6 +613,8 @@ class BootlistSearchApp:
 
         if self.initial_find is not None:
             initial_value = self.initial_find
+        elif self.preferences['search']['search_query']:
+            initial_value = self.preferences['search']['search_query']
         else:
             try:
                 initial_value = self.root.clipboard_get().strip()

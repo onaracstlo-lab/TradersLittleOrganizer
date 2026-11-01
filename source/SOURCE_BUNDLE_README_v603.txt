@@ -1,7 +1,7 @@
-TLO Source and Utilities Bundle v602
+TLO Source and Utilities Bundle v603
 
-Public application version: v1.7 Build 602
-Source bundle label: v602
+Public application version: v1.7 Build 603
+Source bundle label: v603
 Paired native release GitHub Build Process: v122
 
 Corruption policy: No inspection without tagging or Deep Audio Check. A tag failure
@@ -13,12 +13,13 @@ large collections. Deletion thresholds and safeguards are unchanged. Manual Twea
 has no corruption checking.
 
 Current documentation files:
-- TLO_Inventory_User_Manual_v602.rtf (What's New plus concise usage)
-- TLO_Inventory_Requirements_Working_v602.docx (consolidated specification)
+- TLO_Inventory_User_Manual_v603.rtf (What's New plus concise usage)
+- TLO_Inventory_Requirements_Working_v603.docx (consolidated specification)
 - TLO-FAQ.txt
-- CHANGES_v602.txt
-- BUILD_VERIFICATION_v602.txt
-- SHA256SUMS_v602.txt
+- tlo-preferences.ini (default template; app creates its own copy in TLOHome)
+- CHANGES_v603.txt
+- BUILD_VERIFICATION_v603.txt
+- SHA256SUMS_v603.txt
 
 Build 594 retains Build 590 behavior: successful Add New Shows Tag In Place completion before a
 performance is staged, inventoried or exported as a setlist. Incomplete tag
@@ -59,3 +60,5 @@ Build 600 corrected source Windows PNG/ICO preflight and paired with GitHub Buil
 Build 601 requires GitHub Build Process v122. FFmpeg 9.0.2 upstream source is fetched and SHA-256 checked once on Ubuntu, transferred via short-lived artifact to all native platform jobs, and independently verified by each job before native compilation. The TLO_FFMPEG_SOURCE_ARCHIVE environment variable is a mandatory, fail-closed local artifact override when provided; absent override retains source-fetch behavior for manual/local builds.
 
 Build 602 isolates upstream-download unit tests from the CI shared-archive override and removes an impermissible numeric build reference from the evergreen FAQ. Native source validation, hashing, fail-closed policy, and packaging are unchanged.
+
+Build 603: TLO Main and Search create and read TLOHome/tlo-preferences.ini on startup. All Main checkbox defaults (including Dry Run), corruption policy and threshold, performance mode, Max Workers, font families and sizes, Search Deep/font/query defaults, Manual Tweaks Update Tags, Add New Shows Check For Duplicates, and shared Auto Update are configurable. The hamburger Edit Preferences text editor validates before an atomic save and prompts for restart. Explicit Main CLI flags and Search --find take precedence. Existing preference files are never overwritten. The versioned source bundle includes a default tlo-preferences.ini template.

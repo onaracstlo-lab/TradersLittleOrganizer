@@ -58,6 +58,7 @@ from tlo_tag_lib import run_tagger_jobs
 from tlo_version import BUNDLE_BUILD, PUBLIC_VERSION, versioned_title
 from tlo_research_lib import research_logs
 from tlo_window_icons import install_window_icon
+import tlo_preferences
 from tlo_gui_shortcuts import install_global_ctrl_a
 from tlo_gui_shortcuts import configure_centered_ttk_button_text, bounded_initial_window_size, schedule_tk_after
 from tlo_text_utils import read_text_file_sample
@@ -318,6 +319,9 @@ def _build_help_text() -> str:
         "  Quit              Close the GUI.\n"
         "  Inventory (full)  Validate the form and show Review Operation before inventory.\n"
         "  Pause / Resume    Pause or resume traversal between directory operations.\n"
+        "\nStartup defaults are stored in TLOHome/tlo-preferences.ini (created on first startup).\n"
+        "Use hamburger > Edit Preferences; Save then restart Main and Search to apply edits.\n"
+        "Explicit command-line flags override the preference defaults for that launch.\n"
         "\nRun settings are appended to TLOHome/logs/runSettings.log before an operation starts.\n"
     )
 
@@ -692,12 +696,30 @@ def _show_result_dialog(parent, *, title, summary, issues, tlo_home, primary_out
 
 
 
-def _initial_checkbox_values(cli_args) -> dict[str, bool]:
-    """Return initial Main GUI checkbox values from parsed launcher arguments."""
-    return {
-        option.config_field: bool(getattr(cli_args, option.config_field, option.default))
+def _initial_checkbox_values(cli_args, preferences=None, explicit_fields=()) -> dict[str, bool]:
+    """Apply preferences before explicit command-line overrides."""
+    preferences = preferences or {}
+    explicit_fields = set(explicit_fields)
+    values = {
+        option.config_field: bool(
+            getattr(cli_args, option.config_field, option.default)
+            if option.config_field in explicit_fields
+            else preferences.get(option.config_field, getattr(cli_args, option.config_field, option.default))
+        )
         for option in GUI_CHECKBOX_OPTIONS
     }
+    # Explicit CLI selections take priority over conflicting stored GUI defaults.
+    if 'compliant' in explicit_fields and values.get('compliant'):
+        values['rename_compliantly'] = False
+    elif 'rename_compliantly' in explicit_fields and values.get('rename_compliantly'):
+        values['compliant'] = False
+    tagging_modes = ('tag_during_inventory', 'tag_copy_during_inventory', 'tag_copy_and_delete_enabled')
+    explicit_tagging = [field for field in tagging_modes if field in explicit_fields and values.get(field)]
+    if len(explicit_tagging) == 1:
+        for field in tagging_modes:
+            if field != explicit_tagging[0]:
+                values[field] = False
+    return values
 
 
 def _parse_gui_command_line(argv=None):
@@ -743,6 +765,10 @@ def _parse_gui_command_line(argv=None):
         "current_storage_volume",
     ))
     args = parser.parse_args(argv_list)
+    args._explicit_preferences_fields = frozenset(
+        option.config_field for option in OPTIONS_BY_FIELD.values()
+        if option.flag in argv_list or any(token.startswith(option.flag + '=') for token in argv_list)
+    )
     if getattr(args, "search_path_slam_override", "") and not getattr(args, "search_path_override", ""):
         parser.error("--/slam is only valid with --search-path")
     if getattr(args, "search_path_copy_override", "") and not getattr(args, "search_path_override", ""):
@@ -776,6 +802,27 @@ class App:
         self.root = root
         install_global_ctrl_a(self.root)
         self.cli_args = cli_args or _parse_gui_command_line([])
+        self.preferences = tlo_preferences.parse_text(tlo_preferences.default_text())
+        self._preferences_home = None
+        self._preferences_error = None
+        try:
+            home = resolve_inventory_tlo_home(
+                tlo_home=(getattr(self.cli_args, 'TLOHome', '') or '').strip(),
+                my_tlo=(getattr(self.cli_args, 'myTLO', '') or '').strip(),
+                error_type=ValueError,
+            )
+            self._preferences_home = home
+            self.preferences = tlo_preferences.load(
+                home, initial_auto_update=bool(is_auto_update_enabled(home)))
+        except (OSError, ValueError) as exc:
+            self._preferences_error = str(exc)
+        self._preferences_explicit = getattr(self.cli_args, '_explicit_preferences_fields', None)
+        if self._preferences_explicit is None:
+            self._preferences_explicit = frozenset(
+                option.config_field for option in OPTIONS_BY_FIELD.values()
+                if hasattr(self.cli_args, option.config_field)
+                and getattr(self.cli_args, option.config_field) != option.default
+            )
         self.root.title(WINDOW_TITLE)
         self.queue = queue.Queue()
         self.worker = None
@@ -817,6 +864,10 @@ class App:
             normalize_platform_input_path(str(getattr(self.cli_args, "tag_copy_and_delete_path", "") or "").strip())
         ) if str(getattr(self.cli_args, "tag_copy_and_delete_path", "") or "").strip() else ""
         self._build()
+        if self._preferences_error and self._preferences_home is not None:
+            self.root.after_idle(lambda: messagebox.showwarning(
+                'TLO Preferences', 'Preferences could not be loaded; startup defaults are being used.\n' + self._preferences_error,
+                parent=self.root))
         self.root.protocol("WM_DELETE_WINDOW", self._on_quit)
         self._install_sigint_handler()
         self.root.after(100, self._drain)
@@ -873,6 +924,11 @@ class App:
             target_size = int(base_font.cget("size")) + 2
         except Exception:
             target_size = 12
+        pref = self.preferences['main']
+        target_size = pref['font_size'] or target_size
+        family = pref['font_family']
+        if family != 'system' and family not in tkfont.families(self.root):
+            family = 'system'
         self.gui_font_size = target_size
         for font_name in (
             "TkDefaultFont",
@@ -886,7 +942,10 @@ class App:
             "TkTooltipFont",
         ):
             try:
-                tkfont.nametofont(font_name).configure(size=target_size)
+                setting = {'size': (pref['fixed_font_size'] or target_size) if font_name == 'TkFixedFont' else (pref['heading_font_size'] or target_size) if font_name == 'TkHeadingFont' else target_size}
+                if family != 'system' and font_name != 'TkFixedFont':
+                    setting['family'] = family
+                tkfont.nametofont(font_name).configure(**setting)
             except tk.TclError:
                 pass
         style = ttk.Style(self.root)
@@ -909,8 +968,9 @@ class App:
             padding=(2, 4, 10, 4),
             indicatorsize=target_size + 4,
         )
-        self.main_font = tkfont.Font(size=target_size, weight="bold")
-        self.title_font = tkfont.Font(size=target_size, weight="bold")
+        font_kwargs = {'family': family} if family != 'system' else {}
+        self.main_font = tkfont.Font(size=target_size, weight="bold", **font_kwargs)
+        self.title_font = tkfont.Font(size=pref['heading_font_size'] or target_size, weight="bold", **font_kwargs)
         try:
             style.configure("Main.TLabel", font=self.main_font)
             style.configure("Main.TButton", font=self.main_font, padding=(8, 7), anchor="center", justify="center")
@@ -1004,9 +1064,18 @@ class App:
         frm.columnconfigure(1, weight=1)
         frm.columnconfigure(2, weight=1)
 
-        performance_mode_default = (getattr(self.cli_args, "performance_mode", "balanced") or "balanced").strip().lower()
-        cli_max_workers = int(getattr(self.cli_args, "max_workers", 0) or 0)
-        cli_max_workers_supplied = bool(hasattr(self.cli_args, "max_workers"))
+        pref = self.preferences['main']
+        explicit = self._preferences_explicit
+        performance_mode_default = (
+            getattr(self.cli_args, 'performance_mode', 'balanced')
+            if 'performance_mode' in explicit
+            else pref['performance_mode']
+        ).strip().lower()
+        cli_max_workers = int(
+            getattr(self.cli_args, 'max_workers', 0) if 'max_workers' in explicit
+            else pref['max_workers']
+        )
+        cli_max_workers_supplied = True
         initial_max_workers = (
             cli_max_workers
             if cli_max_workers_supplied and cli_max_workers > 0
@@ -1014,11 +1083,17 @@ class App:
         )
         self._max_workers_auto_default = False
         self._setting_max_workers_programmatically = False
-        cli_corrupt_files = parse_corrupt_file_policy(getattr(self.cli_args, "corrupt_files", "delete"))
-        cli_corrupt_folders = parse_corrupt_folder_policy(getattr(self.cli_args, "corrupt_folders", "all"))
-        cli_corrupt_threshold = parse_percent_0_100(getattr(self.cli_args, "corrupt_folder_threshold", 100))
+        cli_corrupt_files = parse_corrupt_file_policy(
+            getattr(self.cli_args, 'corrupt_files', 'delete') if 'corrupt_files' in explicit else pref['corrupt_files'])
+        cli_corrupt_folders = parse_corrupt_folder_policy(
+            getattr(self.cli_args, 'corrupt_folders', 'all') if 'corrupt_folders' in explicit else pref['corrupt_folders'])
+        cli_corrupt_threshold = parse_percent_0_100(
+            getattr(self.cli_args, 'corrupt_folder_threshold', 100)
+            if 'corrupt_folder_threshold' in explicit else pref['corrupt_folder_threshold'])
         defaults = {
-            "search_path_override": (getattr(self.cli_args, "search_path_override", "") or "").strip(),
+            "search_path_override": (
+                (getattr(self.cli_args, 'search_path_override', '') or '')
+                if 'search_path_override' in explicit else pref['search_path']).strip(),
             "search_path_slam_override": (getattr(self.cli_args, "search_path_slam_override", "") or "").strip(),
             "performance_mode": performance_mode_default,
             "max_workers": str(initial_max_workers),
@@ -1073,6 +1148,10 @@ class App:
         self.help_menu.add_command(label="FAQ", command=self._show_faq_from_menu)
         self.hamburger_menu.add_command(label="Check for updates", command=self._check_for_updates_from_menu)
         self.hamburger_menu.add_checkbutton(label="Auto Update", variable=self.auto_update_var, command=self._toggle_auto_update_from_menu)
+        self.hamburger_menu.add_command(
+            label="Edit Preferences",
+            command=lambda: self._run_after_menu_closes(self._edit_preferences),
+        )
         self.hamburger_menu.add_command(
             label="Copy Requests",
             command=lambda: self._run_after_menu_closes(self._open_copy_requests),
@@ -1133,9 +1212,10 @@ class App:
 
         self.bool_vars = {
             field: tk.BooleanVar(value=value)
-            for field, value in _initial_checkbox_values(self.cli_args).items()
+            for field, value in _initial_checkbox_values(
+                self.cli_args, pref, explicit).items()
         }
-        self.dry_run_var = tk.BooleanVar(value=False)
+        self.dry_run_var = tk.BooleanVar(value=pref['dry_run'])
         checkbox_frame = ttk.Frame(options_frame)
         checkbox_frame.grid(
             row=0,
@@ -1560,6 +1640,15 @@ class App:
         except tk.TclError:
             callback()
 
+    def _edit_preferences(self):
+        try:
+            tlo_home = self._resolve_gui_tlo_home(error_type=ValueError)
+            if not tlo_preferences.path_for(tlo_home).exists():
+                tlo_preferences.load(tlo_home)
+            tlo_preferences.edit(self.root, tlo_home)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror('TLO Preferences', str(exc), parent=self.root)
+
     def _cli_tlo_home_value(self):
         """Return the non-GUI --TLOHome value; myTLO precedence is applied by the resolver."""
         return (getattr(self.cli_args, "TLOHome", "") or "").strip()
@@ -1589,7 +1678,10 @@ class App:
     def _initialize_update_menu_state(self):
         try:
             tlo_home = self._resolve_update_tlo_home(require_existing=False)
-            enabled = bool(tlo_home and is_auto_update_enabled(tlo_home))
+            enabled = bool(self.preferences['general']['auto_update']) if self._preferences_home else bool(
+                tlo_home and is_auto_update_enabled(tlo_home))
+            if tlo_home and enabled != bool(is_auto_update_enabled(tlo_home)):
+                set_auto_update_enabled(tlo_home, enabled)
             self.auto_update_var.set(enabled)
             if enabled:
                 self.root.after(800, self._startup_auto_update_check)
@@ -1606,6 +1698,9 @@ class App:
         enabled = bool(self.auto_update_var.get())
         try:
             tlo_home = self._resolve_update_tlo_home(require_existing=True)
+            if self._preferences_home:
+                tlo_preferences.set_auto_update(tlo_home, enabled)
+                self.preferences['general']['auto_update'] = enabled
             set_auto_update_enabled(tlo_home, enabled)
         except Exception as exc:
             self.auto_update_var.set(False)
@@ -3913,7 +4008,8 @@ class ManualUpdatesWindow:
 
         self.original_var = tk.StringVar(value="")
         self.new_name_var = tk.StringVar(value="")
-        self.update_tags_var = tk.BooleanVar(value=True)
+        self.update_tags_var = tk.BooleanVar(
+            value=self.parent_app.preferences['manual_updates']['update_tags'])
         self.status_var = tk.StringVar(value="Ready")
 
         ttk.Label(frm, text="Original (to be edited)").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
@@ -4223,7 +4319,8 @@ class AddToInventoryWindow:
 
         self.search_path_var = tk.StringVar(value=os.path.join(self.config.TLOHome, "readyForXfer"))
         self.volume_var = tk.StringVar(value=getattr(self.config, "current_volume_label", "") or "")
-        self.check_dups_var = tk.BooleanVar(value=True)
+        self.check_dups_var = tk.BooleanVar(
+            value=self.parent_app.preferences['add_new_shows']['check_for_duplicates'])
         self.volume_status_var = tk.StringVar(value="")
         self.status_var = tk.StringVar(value="Ready")
         self.elapsed_var = tk.StringVar(value="Elapsed: 0:00")

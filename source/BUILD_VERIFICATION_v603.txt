@@ -1,0 +1,26 @@
+TLO v1.7 Build 603 — NOT RELEASE-ATTESTED (local verification only)
+
+Purpose: Per-TLOHome tlo-preferences.ini for TLO Main, Search, Manual Tweaks and Add New Shows.
+Main and Search both expose hamburger > Edit Preferences. Preferences are validated before
+atomic Save and successful edits show Restart required. All existing defaults are retained.
+Explicit command-line selections override preference defaults for the current invocation.
+
+Local verified tests (2026-11-01):
+- Full application + contract run under Xvfb display (CI=1), with TLO_FFMPEG_SOURCE_ARCHIVE
+  inherited as in hosted Linux: 2,138 passed, 6 skipped, 1 expected duplicate-ZIP warning.
+- Standalone requirements: 1,406 passed.
+- Build 603 focused preference tests: 19 passed, including live Tk startup, invalid-edit
+  recovery, CLI option conflicts, and explicit restart prompt.
+- Unchanged paired GitHub Build Process v122: 76 passed, 1 skipped.
+- Python AST syntax, Word requirements document and RTF manual rendering: verified.
+- ZIP integrity and SHA-256 manifest checks: verified at packaging.
+- Ruff lint: lint not attested (Ruff not installed in local runtime).
+- Native Windows/Linux/macOS compilation and artifact scans, signing, and GitHub release
+  gate not executed. These remain mandatory for production distribution.
+
+Historical baseline only (not Build 603 evidence):
+- Build 600 Xvfb display (CI=1): 21 GUI tests passed.
+- Build 600 No display (DISPLAY and CI unset): 2,084 non-GUI passed, 8 skipped;
+  nested GUI subset had 6 skipped. Build 602 subsequently passed its own hosted CI-style tests.
+
+Do not distribute an unverified release as signed or malware-scanned.

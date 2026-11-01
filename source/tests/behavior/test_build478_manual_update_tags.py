@@ -28,7 +28,10 @@ def test_build478_gui_update_tags_is_default_on_and_propagated_to_all_save_paths
     start = source.index("class ManualUpdatesWindow:")
     end = source.index("class AddToInventoryWindow:", start)
     block = source[start:end]
-    assert "self.update_tags_var = tk.BooleanVar(value=True)" in block
+    from tlo_preferences import DEFAULTS
+    assert DEFAULTS['manual_updates']['update_tags'] is True
+    assert "self.update_tags_var = tk.BooleanVar(" in block
+    assert "self.parent_app.preferences['manual_updates']['update_tags']" in block
     assert 'text="Update Tags"' in block
     assert "update_tags = bool(self.update_tags_var.get())" in block
     assert "update_tags=update_tags" in block
