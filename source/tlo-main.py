@@ -926,9 +926,8 @@ class App:
             target_size = 12
         pref = self.preferences['main']
         target_size = pref['font_size'] or target_size
-        family = pref['font_family']
-        if family != 'system' and family not in tkfont.families(self.root):
-            family = 'system'
+        family = tlo_preferences.resolve_font_family(
+            pref['font_family'], tkfont.families(self.root))
         self.gui_font_size = target_size
         for font_name in (
             "TkDefaultFont",

@@ -286,6 +286,8 @@ class BootlistSearchApp:
         self.style = ttk.Style(self.root)
         configure_centered_ttk_button_text(self.style)
         pref = self.preferences['search']
+        selected_family = tlo_preferences.resolve_font_family(
+            pref['font_family'], tkfont.families(self.root))
         for font_name in ('TkDefaultFont', 'TkTextFont', 'TkMenuFont', 'TkHeadingFont',
                           'TkCaptionFont', 'TkSmallCaptionFont', 'TkIconFont', 'TkTooltipFont',
                           'TkFixedFont'):
@@ -296,9 +298,8 @@ class BootlistSearchApp:
                         pref['heading_font_size'] if font_name == 'TkHeadingFont' else pref['font_size'])
                 if size:
                     settings['size'] = size
-                if pref['font_family'] != 'system' and font_name != 'TkFixedFont':
-                    if pref['font_family'] in tkfont.families(self.root):
-                        settings['family'] = pref['font_family']
+                if selected_family != 'system' and font_name != 'TkFixedFont':
+                    settings['family'] = selected_family
                 if settings:
                     font.configure(**settings)
             except tk.TclError:
@@ -314,7 +315,8 @@ class BootlistSearchApp:
         self.csv_result_windows: List[CsvSearchResultsWindow] = []
         self.available_font_families = self._build_font_family_list()
         self.font_family_var.set(
-            pref['font_family'] if pref['font_family'] in self.available_font_families
+            tlo_preferences.resolve_font_family(pref['font_family'], self.available_font_families)
+            if tlo_preferences.resolve_font_family(pref['font_family'], self.available_font_families) != 'system'
             else self._default_font_family())
         self._apply_font_family(self.font_family_var.get())
 

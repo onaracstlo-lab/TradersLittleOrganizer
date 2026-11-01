@@ -3,7 +3,6 @@
 from tlo_version import VERSION as _TLO_CANONICAL_VERSION
 __version__ = _TLO_CANONICAL_VERSION
 
-import configparser
 import os
 from pathlib import Path
 import re
@@ -54,96 +53,270 @@ FONT_SIZES = {('main', field) for field in ('font_size', 'heading_font_size', 'f
 }
 
 
+# Lists mirror the Main GUI pull-downs. Use the INI keys, not the GUI labels.
+CHOICES = {
+    ('main', 'performance_mode'): ('gentle', 'balanced', 'fast', 'extreme'),
+    ('main', 'corrupt_files'): ('keep', 'delete'),
+    ('main', 'corrupt_folders'): ('never', 'all', 'threshold'),
+}
+BOOLEAN_WORDS = {
+    'true': True, 'yes': True, 'on': True, '1': True,
+    'false': False, 'no': False, 'off': False, '0': False,
+}
+
+
+def allowed_description(section, key):
+    """An INI-side reference for all configurable fields, including pull-down choices."""
+    if (section, key) in BOOL_KEYS:
+        return 'true | false (also yes/no, on/off, 1/0)'
+    if (section, key) in CHOICES:
+        suffix = {
+            'corrupt_files': ' (keep=Keep and report; delete=Delete corrupt files)',
+            'corrupt_folders': ' (never=Never; all=100% corrupt only; threshold=At threshold)',
+        }.get(key, '')
+        return ' | '.join(CHOICES[section, key]) + suffix
+    if (section, key) in FONT_SIZES:
+        return '0 (platform default) or 7-40 points'
+    if (section, key) == ('main', 'max_workers'):
+        return '0 (automatic for Performance Mode) or 1-256'
+    if (section, key) == ('main', 'corrupt_folder_threshold'):
+        return '0-100 (%)'
+    if key == 'font_family':
+        return 'system (default) or an installed font family (case-insensitive)'
+    if key == 'search_path':
+        return 'a path or semicolon-separated paths; leave blank for default (case preserved)'
+    if key == 'search_query':
+        return 'any query up to 4096 characters; blank uses clipboard (case preserved)'
+    raise KeyError((section, key))
+
+
+# Exact compact layout approved for releases starting in Build 605.
+# Keep this embedded copy synchronized with the distributed INI template.
+_DEFAULT_TEMPLATE = """# Traders Little Organizer startup preferences
+# Edit through hamburger > Edit Preferences. Restart TLO after saving.
+# All section names, keys, choice values, and true/false words ignore case.
+# Paths and free-text search queries retain their exact capitalization.
+# Unavailable font families fall back to the desktop default.
+# Do not change the file while a TLO preferences editor is open.
+
+# all items that take true | false also take yes/no, on/off, and 1/0
+
+# Auto Update is shared by Main and Search.
+[general]
+auto_update = false
+
+# Main window; max_workers=0 uses the Performance Mode ceiling.
+[main]
+etree_lookup = false
+compliant = false
+tag_during_inventory = false
+artist_in_album = true
+setlistfm_lookup = false
+rename_compliantly = false
+tag_copy_during_inventory = false
+convert_shn = false
+setlistfm_upgrade = false
+as_is_artist_name = false
+tag_copy_and_delete_enabled = false
+thorough_setlist_matching = false
+proper_grammar = false
+delete_extra_tags = false
+deep_audio_check = false
+dry_run = false
+# performance_mode: gentle | balanced | fast | extreme
+performance_mode = balanced
+# max_workers: 0 (automatic for Performance Mode) or 1-256
+max_workers = 0
+# corrupt_files: keep | delete (keep=Keep and report; delete=Delete corrupt files)
+corrupt_files = delete
+# corrupt_folders: never | all | threshold (never=Never; all=100% corrupt only; threshold=At threshold)
+corrupt_folders = all
+# corrupt_folder_threshold: 0-100 (%)
+corrupt_folder_threshold = 100
+# search_path: a path or semicolon-separated paths; leave blank for default (case preserved)
+search_path = 
+# font_family: system (default) or an installed font family (case-insensitive)
+font_family = system
+# font_size: 0 (platform default) or 7-40 points
+font_size = 0
+# heading_font_size: 0 (platform default) or 7-40 points
+heading_font_size = 0
+# fixed_font_size: 0 (platform default) or 7-40 points
+fixed_font_size = 0
+
+# Search window; empty search_query keeps clipboard startup.
+[search]
+deep = false
+# search_query: any query up to 4096 characters; blank uses clipboard (case preserved)
+search_query = 
+font_family = system
+font_size = 0
+heading_font_size = 0
+fixed_font_size = 0
+
+# Manual Tweaks window.
+[manual_updates]
+update_tags = true
+
+# Add New Shows window.
+[add_new_shows]
+check_for_duplicates = true
+"""
+
+
 def default_text(*, auto_update=False):
-    """Human-readable, version-independent template retaining existing startup defaults."""
-    comments = {
-        'general': 'Auto Update is shared by Main and Search; changing it in a menu also updates this file.',
-        'main': 'Main window: max_workers=0 selects the current Performance Mode ceiling.\n# font_size=0 uses the existing Tk default + 2 points.',
-        'search': 'Search: empty search_query keeps clipboard startup; 0 font sizes keep Tk defaults.',
-        'manual_updates': 'Manual Tweaks window.',
-        'add_new_shows': 'Add New Shows window.',
-    }
-    lines = [
-        '# Traders Little Organizer startup preferences',
-        '# Edit through hamburger > Edit Preferences. Save changes, then restart TLO.',
-        '# Unavailable font families fall back to the desktop default.',
-        '# Do not change the file while a TLO preferences editor is open.',
-        '',
-    ]
-    for section, entries in DEFAULTS.items():
-        lines.extend(('# ' + comments[section], f'[{section}]'))
-        for name, value in entries.items():
-            if section == 'general' and name == 'auto_update':
-                value = bool(auto_update)
-            if isinstance(value, bool):
-                value = str(value).lower()
-            lines.append(f'{name} = {value}')
-        lines.append('')
-    return '\n'.join(lines)
+    """Create the approved concise INI layout without duplicating boolean help."""
+    if not auto_update:
+        return _DEFAULT_TEMPLATE
+    return re.sub(
+        r'(?m)^(auto_update\s*=\s*)false$',
+        lambda match: match.group(1) + 'true',
+        _DEFAULT_TEMPLATE,
+        count=1,
+    )
+
+
+def _read_entries(text):
+    """Read simple INI assignments, collecting *all* syntax/name errors with line numbers.
+
+    Case-fold only section/key identifiers, never path or query values. Using a
+    small explicit INI grammar avoids ConfigParser stopping at its first error.
+    """
+    errors = []
+    entries = []
+    current = None
+    seen_sections = set()
+    seen_keys = set()
+    for number, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith(('#', ';')):
+            continue
+        if stripped.startswith('['):
+            match = re.fullmatch(r'\[([A-Za-z][A-Za-z0-9_]*)\]\s*(?:[;#].*)?', stripped)
+            if not match:
+                errors.append(f'Line {number}: Invalid section header {stripped!r}; expected [section]')
+                current = None
+                continue
+            current = match.group(1).casefold()
+            if current in seen_sections:
+                errors.append(f'Line {number}: Duplicate section [{current}]')
+            seen_sections.add(current)
+            if current not in DEFAULTS:
+                errors.append(f'Line {number}: Unknown preferences section [{current}]; allowed: {", ".join(DEFAULTS)}')
+            continue
+        match = re.fullmatch(r'\s*([A-Za-z][A-Za-z0-9_]*)\s*[=:]\s*(.*?)\s*', line)
+        if not match:
+            errors.append(f'Line {number}: Invalid preference assignment {stripped!r}; expected key = value')
+            continue
+        key, value = match.group(1).casefold(), match.group(2).strip()
+        if current is None:
+            errors.append(f'Line {number}: [{"no section"}] {key}: key is not inside a valid section')
+            continue
+        if current not in DEFAULTS:
+            continue  # Unknown section was already reported with its line number.
+        if key not in DEFAULTS[current]:
+            errors.append(f'Line {number}: Unknown preference [{current}] {key}; allowed keys: {", ".join(DEFAULTS[current])}')
+            continue
+        identity = current, key
+        if identity in seen_keys:
+            errors.append(f'Line {number}: Duplicate preference [{current}] {key}')
+            continue
+        seen_keys.add(identity)
+        entries.append((number, current, key, value))
+    return entries, errors
+
+
+def _parse_value(section, key, raw):
+    """Validate/normalize enum and boolean values, leaving path/query case intact."""
+    value = raw.strip()
+    if (section, key) in BOOL_KEYS:
+        try:
+            return BOOLEAN_WORDS[value.casefold()]
+        except KeyError as exc:
+            raise ValueError(f'expected {allowed_description(section, key)}') from exc
+    if (section, key) in CHOICES:
+        normalized = value.casefold()
+        if normalized not in CHOICES[section, key]:
+            raise ValueError(f'expected {allowed_description(section, key)}')
+        return normalized
+    if (section, key) in FONT_SIZES or (section, key) in {
+        ('main', 'max_workers'), ('main', 'corrupt_folder_threshold'),
+    }:
+        try:
+            number = int(value)
+        except ValueError as exc:
+            raise ValueError(f'expected {allowed_description(section, key)}') from exc
+        if (section, key) in FONT_SIZES and number != 0 and not 7 <= number <= 40:
+            raise ValueError(f'expected {allowed_description(section, key)}')
+        if (section, key) == ('main', 'max_workers') and not 0 <= number <= 256:
+            raise ValueError(f'expected {allowed_description(section, key)}')
+        if (section, key) == ('main', 'corrupt_folder_threshold') and not 0 <= number <= 100:
+            raise ValueError(f'expected {allowed_description(section, key)}')
+        return number
+    if key == 'font_family':
+        if not value or len(value) > 100 or any(ord(char) < 32 for char in value):
+            raise ValueError(f'expected {allowed_description(section, key)}')
+        return 'system' if value.casefold() == 'system' else value
+    if key in ('search_path', 'search_query'):
+        if len(value) > 4096 or any(ord(char) < 32 for char in value):
+            raise ValueError(f'expected {allowed_description(section, key)}')
+        return value
+    raise ValueError('unsupported preference')
+
+
+def validation_errors(text):
+    """Return a complete, ordered list of actionable INI diagnostics."""
+    entries, errors = _read_entries(text)
+    result = {section: dict(values) for section, values in DEFAULTS.items()}
+    locations = {}
+    for number, section, key, raw in entries:
+        try:
+            result[section][key] = _parse_value(section, key, raw)
+            locations[section, key] = number
+        except ValueError as exc:
+            errors.append(f'Line {number}: Invalid [{section}] {key} = {raw!r}: {exc}')
+
+    main = result['main']
+    def conflict(fields, reason):
+        detail = ', '.join(f'[main] {field} (line {locations.get(("main", field), "default")})'
+                           for field in fields)
+        errors.append(f'Conflicting preferences: {detail}: {reason}')
+
+    if main['compliant'] and main['rename_compliantly']:
+        conflict(('compliant', 'rename_compliantly'), 'cannot both be true')
+    tag_modes = ('tag_during_inventory', 'tag_copy_during_inventory', 'tag_copy_and_delete_enabled')
+    active_modes = tuple(field for field in tag_modes if main[field])
+    if len(active_modes) > 1:
+        conflict(active_modes, 'select no more than one tagging mode')
+    if main['setlistfm_lookup'] and not main['etree_lookup']:
+        conflict(('setlistfm_lookup', 'etree_lookup'), 'setlistfm_lookup requires etree_lookup=true')
+    if main['setlistfm_upgrade'] and not main['setlistfm_lookup']:
+        conflict(('setlistfm_upgrade', 'setlistfm_lookup'), 'setlistfm_upgrade requires setlistfm_lookup=true')
+    if main['delete_extra_tags'] and not active_modes:
+        conflict(('delete_extra_tags',) + tag_modes, 'delete_extra_tags requires a tagging mode')
+    if main['corrupt_files'] == 'keep' and main['corrupt_folders'] != 'never':
+        conflict(('corrupt_files', 'corrupt_folders'),
+                 'corrupt_files=keep requires corrupt_folders=never (no deletion)')
+    return errors
 
 
 def parse_text(text):
-    """Validate every preference, with safe defaults for absent keys/sections."""
-    parser = configparser.ConfigParser(interpolation=None, strict=True)
-    try:
-        parser.read_string(text)
-    except configparser.Error as exc:
-        raise ValueError(f'Invalid preferences syntax: {exc}') from exc
-    unexpected_sections = set(parser.sections()) - set(DEFAULTS)
-    if unexpected_sections:
-        raise ValueError(f'Unknown preferences section: {sorted(unexpected_sections)[0]}')
-    result = {section: dict(entries) for section, entries in DEFAULTS.items()}
-    for section in parser.sections():
-        for key, raw in parser.items(section):
-            if key not in DEFAULTS[section]:
-                raise ValueError(f'Unknown preference: [{section}] {key}')
-            value = raw.strip()
-            try:
-                if (section, key) in BOOL_KEYS:
-                    value = parser.getboolean(section, key)
-                elif (section, key) in FONT_SIZES:
-                    value = int(value)
-                    if value != 0 and not 7 <= value <= 40:
-                        raise ValueError('must be 0 or between 7 and 40')
-                elif (section, key) == ('main', 'max_workers'):
-                    value = int(value)
-                    if value < 0 or value > 256:
-                        raise ValueError('must be 0 through 256')
-                elif (section, key) == ('main', 'corrupt_folder_threshold'):
-                    value = int(value)
-                    if not 0 <= value <= 100:
-                        raise ValueError('must be 0 through 100')
-                elif (section, key) == ('main', 'performance_mode'):
-                    if value not in ('gentle', 'balanced', 'fast', 'extreme'):
-                        raise ValueError('choose gentle, balanced, fast, or extreme')
-                elif (section, key) == ('main', 'corrupt_files'):
-                    if value not in ('keep', 'delete'):
-                        raise ValueError('choose keep or delete')
-                elif (section, key) == ('main', 'corrupt_folders'):
-                    if value not in ('never', 'all', 'threshold'):
-                        raise ValueError('choose never, all, or threshold')
-                elif key == 'font_family':
-                    if not value or len(value) > 100 or any(ord(char) < 32 for char in value):
-                        raise ValueError('must name a font or use system')
-                elif key in ('search_path', 'search_query') and len(value) > 4096:
-                    raise ValueError('entry is too long')
-            except (ValueError, configparser.Error) as exc:
-                raise ValueError(f'Invalid [{section}] {key}: {exc}') from exc
-            result[section][key] = value
-    main = result['main']
-    if main['compliant'] and main['rename_compliantly']:
-        raise ValueError('[main] compliant and rename_compliantly cannot both be true')
-    tag_modes = ('tag_during_inventory', 'tag_copy_during_inventory', 'tag_copy_and_delete_enabled')
-    if sum(bool(main[field]) for field in tag_modes) > 1:
-        raise ValueError('[main] select no more than one tagging mode')
-    if main['setlistfm_lookup'] and not main['etree_lookup']:
-        raise ValueError('[main] setlistfm_lookup requires etree_lookup')
-    if main['setlistfm_upgrade'] and not main['setlistfm_lookup']:
-        raise ValueError('[main] setlistfm_upgrade requires setlistfm_lookup')
-    if main['delete_extra_tags'] and not any(main[field] for field in tag_modes):
-        raise ValueError('[main] delete_extra_tags requires a tagging mode')
+    """Validate ALL settings, then return typed defaults with explicit overrides."""
+    errors = validation_errors(text)
+    if errors:
+        raise ValueError(f'Preferences contain {len(errors)} error(s):\n' +
+                         '\n'.join(f'  • {item}' for item in errors))
+    result = {section: dict(values) for section, values in DEFAULTS.items()}
+    for _line, section, key, raw in _read_entries(text)[0]:
+        result[section][key] = _parse_value(section, key, raw)
     return result
 
+
+def resolve_font_family(requested, families):
+    """Return canonical installed font casing for case-insensitive INI selection."""
+    if requested.casefold() == 'system':
+        return 'system'
+    return next((family for family in families if family.casefold() == requested.casefold()), 'system')
 
 def path_for(tlo_home):
     return Path(tlo_home) / FILENAME
