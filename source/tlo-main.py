@@ -57,6 +57,7 @@ from tlo_main_lib import run_inventory
 from tlo_tag_lib import run_tagger_jobs
 from tlo_version import BUNDLE_BUILD, PUBLIC_VERSION, versioned_title
 from tlo_research_lib import research_logs
+from tlo_window_icons import install_window_icon
 from tlo_gui_shortcuts import install_global_ctrl_a
 from tlo_gui_shortcuts import configure_centered_ttk_button_text, bounded_initial_window_size, schedule_tk_after
 from tlo_text_utils import read_text_file_sample
@@ -4844,6 +4845,7 @@ def main() -> int:
         return 0
     cli_args = _parse_gui_command_line(sys.argv[1:])
     root, _drop_provider = create_tk_root(tk)
+    install_window_icon(root, "main")
     root.withdraw()
     app = App(root, cli_args=cli_args)
     app._show_main_window()

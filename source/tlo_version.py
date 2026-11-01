@@ -1,13 +1,13 @@
 """Central release-version constants for the TLO Inventory bundle."""
 
-VERSION = "v597"
+VERSION = "v602"
 __version__ = VERSION
 PUBLIC_VERSION = "1.7"
 OFFICIAL_GITHUB_OWNER = "onaracstlo-lab"
 OFFICIAL_GITHUB_REPO = "TradersLittleOrganizer"
-BUNDLE_BUILD = 597
-DISPLAY_VERSION = "v1.7 Build 597"
-VERSION_SUMMARY = "Resilient verified FFmpeg source downloads and prior logging/UI corrections"
+BUNDLE_BUILD = 602
+DISPLAY_VERSION = "v1.7 Build 602"
+VERSION_SUMMARY = "Isolate legacy FFmpeg download tests from shared-source CI environment"
 def versioned_title(base_title: str) -> str:
     """Return a GUI title containing the public version/build string."""
     base = str(base_title or "").strip()

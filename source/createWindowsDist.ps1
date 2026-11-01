@@ -313,8 +313,10 @@ $FfmpegAddBinary = "${FfmpegBinary}:tlo_ffmpeg_bin"
 $MainIcon = Join-Path $IconRoot 'tlo-main-icon.ico'
 $SearchIcon = Join-Path $IconRoot 'tlo-search-icon.ico'
 $TagIcon = Join-Path $IconRoot 'tlo-tag-icon.ico'
+$MainIconPng = Join-Path $IconRoot 'tlo-main-icon.png'
+$SearchIconPng = Join-Path $IconRoot 'tlo-search-icon.png'
 
-foreach ($RequiredIcon in @($MainIcon, $SearchIcon, $TagIcon)) {
+foreach ($RequiredIcon in @($MainIcon, $SearchIcon, $TagIcon, $MainIconPng, $SearchIconPng)) {
     if (-not (Test-Path -LiteralPath $RequiredIcon -PathType Leaf)) {
         throw "Required Windows icon file not found: $RequiredIcon"
     }
@@ -324,9 +326,18 @@ Assert-WindowsIcoIsDibBased -IconPath $MainIcon -DisplayName 'TLO Main icon'
 Assert-WindowsIcoIsDibBased -IconPath $SearchIcon -DisplayName 'TLO Search icon'
 Assert-WindowsIcoIsDibBased -IconPath $TagIcon -DisplayName 'TLO Tagger icon'
 
+# Include Tk's live window artwork as well as the EXE's PE icon resource.
+$MainRuntimeIcons = @(
+    '--add-data', ($MainIconPng + ';icons'),
+    '--add-data', ($MainIcon + ';icons')
+)
+$SearchRuntimeIcons = @(
+    '--add-data', ($SearchIconPng + ';icons'),
+    '--add-data', ($SearchIcon + ';icons')
+)
 $ArtistArgs = @('--windowed')
-$SearchArgs = @('--windowed', "--icon=$SearchIcon")
-$GuiArgs = @('--windowed', '--collect-all', 'mutagen', '--add-binary', $FfmpegAddBinary, '--collect-all', 'tkinterdnd2', "--icon=$MainIcon")
+$SearchArgs = @('--windowed', "--icon=$SearchIcon") + $SearchRuntimeIcons
+$GuiArgs = @('--windowed', '--collect-all', 'mutagen', '--add-binary', $FfmpegAddBinary, '--collect-all', 'tkinterdnd2', "--icon=$MainIcon") + $MainRuntimeIcons
 $TagArgs = @('--collect-all', 'mutagen', '--add-binary', $FfmpegAddBinary, "--icon=$TagIcon")
 $DeleteDupesArgs = @('--add-binary', $FfmpegAddBinary)
 $CliArgs = @('--collect-all', 'mutagen', '--add-binary', $FfmpegAddBinary)

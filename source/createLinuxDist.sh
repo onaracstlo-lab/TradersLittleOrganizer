@@ -109,13 +109,15 @@ build_one() {
 }
 
 build_one "$(find_script search-artist-db.py)" --windowed
-build_one "$(find_script tlo-search.py)" --windowed
+build_one "$(find_script tlo-search.py)" --windowed \
+    --add-data "${SOURCE_ROOT}/icons/tlo-search-icon.png:icons"
 build_one "$(find_script tlo-gi.py)" \
     --collect-all mutagen \
     --add-binary "$FFMPEG_ADD_BINARY"
 build_one "$(find_script tlo-research.py)"
 build_one "$(find_script tlo-reverse.py)"
 build_one "$(find_script tlo-main.py)" --windowed \
+    --add-data "${SOURCE_ROOT}/icons/tlo-main-icon.png:icons" \
     --collect-all mutagen \
     --add-binary "$FFMPEG_ADD_BINARY" \
     --collect-all tkinterdnd2

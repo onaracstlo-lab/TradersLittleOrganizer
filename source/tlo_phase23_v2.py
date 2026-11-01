@@ -2760,8 +2760,21 @@ def _lookup_artist_detail_with_apostrophe_fallback(
     ambiguous result as a collision rather than guessing.
     """
     detail = _lookup_artist_detail(term, matcher)
-    if detail["status"] != "no_match" or matcher is None:
+    if matcher is None:
         return detail, False
+    if detail["status"] != "no_match":
+        # Preserve the historical apostrophe-fallback collision guard. A
+        # compressed-key hit can precede the older apostrophe-only lookup;
+        # the latter must still inspect *all* aliases, even of masters that
+        # were only supplied to an in-memory matcher during a regression.
+        query_variants = artist_search_variants(term)
+        exact_names = {
+            compact_ws(alias).casefold()
+            for master in detail["masters"]
+            for alias in matcher.master_aliases.get(master, [master])
+        }
+        if not ("'" in term and not any(v.casefold() in exact_names for v in query_variants)):
+            return detail, False
 
     query_norms = {
         _apostrophe_fold_artist(variant)
@@ -5814,7 +5827,18 @@ def _artist_agrees_with_leading_show_folder(setlist_artist: str, folder_name: st
     if not expected or len(actual) < len(expected):
         return False
     if actual[:len(expected)] != expected:
-        return False
+        # etree-style folder names can attach a numeric date directly to a
+        # punctuation-compressed artist, e.g. weather-report1975-10-07... .
+        # Require the *whole* artist prefix followed immediately by a complete
+        # YYYY-MM-DD; do not accept a partial artist-word match.
+        name = compact_ws(folder_name)
+        attached_date = re.search(r"(?:19|20)\d{2}-\d{2}-\d{2}(?=$|[^0-9])", name)
+        if not attached_date:
+            return False
+        leading = name[:attached_date.start()]
+        compressed_leading = "".join(ch for ch in leading.casefold() if ch.isalnum())
+        compressed_expected = "".join(ch for ch in compact_ws(setlist_artist).casefold() if ch.isalnum())
+        return bool(compressed_expected and compressed_leading == compressed_expected)
     if len(expected) == 1 and len(actual) > 1:
         remainder = actual[len(expected):]
         if not remainder or not re.fullmatch(r"(?:19|20)\d{2}", remainder[0]):

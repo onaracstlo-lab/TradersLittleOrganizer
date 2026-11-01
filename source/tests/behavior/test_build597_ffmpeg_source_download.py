@@ -24,6 +24,10 @@ class InterruptedStream(io.BytesIO):
 
 
 def _pin(monkeypatch, payload):
+    # Native CI sets an explicit shared source for real compilation. These legacy
+    # tests intentionally exercise the separate *upstream network* fallback;
+    # isolate their environment without ever weakening get_source's CI guard.
+    monkeypatch.delenv('TLO_FFMPEG_SOURCE_ARCHIVE', raising=False)
     monkeypatch.setattr(ff, 'SOURCE_SHA256', hashlib.sha256(payload).hexdigest())
     delays = []
     monkeypatch.setattr(ff.time, 'sleep', delays.append)

@@ -262,3 +262,14 @@ protected.
 
 Q: Why did repeated inventories of the same path previously show WinError 5 in groups2.log?
 A: Prior runs could leave a log stream open on Windows. TLO releases in-process streams for atomic log updates and preserves previous records if a persistent external file lock remains.
+
+Running app shows a generic Tk feather icon?
+The TLO Main and Search Windows display their corresponding TLO icons in current builds. No separate icon installation is needed; users should launch the newly built executable to see the updated icon.
+
+Q: Why does a no-space etree-style folder such as weather-report1975-10-07.146696.sbd.mee.flac1644 identify Weather Report?
+A: TLO extracts the complete date, then uses the Artist DB's punctuation-stripped lowercase term as a fallback when the exact artist spelling is unavailable. It requires a unique artist master and can corroborate the artist using the selected setlist header. Ambiguous compressed names are not guessed; As-Is Artist Name still preserves the input spelling.
+
+Q: Why was the TLO live window icon different after building with GitHub?
+A: The GitHub build process regenerates the Windows packaging script before compilation. Older templates could discard runtime PNG and ICO artwork even when the source script contained it. The revised build process includes both icon assets in Windows onefile and shared-onedir packages, and rejects missing or unconnected icon data before release.
+
+GitHub native build-process note: TLO GitHub Build Process v122 acquires the official FFmpeg 9.0.2 source once in a verified Ubuntu job and shares a hash-checked archive across native Windows/Linux/macOS compile jobs. This does not require end users to install FFmpeg, and all native release/signing gates remain mandatory.

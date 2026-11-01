@@ -1,0 +1,16 @@
+TLO v1.7 Build 602 — LOCAL REGRESSION RESULTS (2026-11-01)
+
+Reproduction: Linux hosted Build 601 run 41313951194 failed 11 pytest checks. The CI environment correctly defined TLO_FFMPEG_SOURCE_ARCHIVE for independent SHA-256-verified artifact consumption. The 10 historical Build 597 HTTP retry/security tests were not insulated from that setting, making every request fail early with the expected CI artifact validation RuntimeError. An evergreen FAQ Build 601 string failed a Build 548 documentation regression.
+
+Corrections:
+* Clear TLO_FFMPEG_SOURCE_ARCHIVE solely within historical upstream retry-test monkeypatch fixture; enforce fail-closed requirement for true shared-artifact operation with new tests.
+* Use version-neutral language in TLO-FAQ.txt and refresh Build 602 requirements, version constants, manual, source README, changelog and metadata.
+* Retain Windows and macOS packaging, native Linux packaging, FFmpeg source downloader implementation and GitHub Build Process v122 unchanged.
+
+Test evidence:
+- Full Linux-style run with CI=1, virtual display, inherited TLO_FFMPEG_SOURCE_ARCHIVE: 2119 passed, 6 skipped, 1 warning.
+- Standalone requirements suite: 1406 passed.
+- Focused Build 597/601/602, documentation and version tests: 33 passed.
+- Unmodified v122 process test suite: 76 passed, 1 skipped.
+- AST/shell syntax and SHA-256 archive validation performed before delivery; Ruff NOT locally attested.
+- Native GitHub builds, signing and release scan gates must execute remotely.

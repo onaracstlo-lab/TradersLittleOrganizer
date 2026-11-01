@@ -11,6 +11,7 @@ __version__ = _TLO_CANONICAL_VERSION
 
 import hashlib
 import os
+import shutil
 import socket
 import ssl
 import stat
@@ -106,6 +107,29 @@ def get_source(cache: Path) -> Path:
     """
     cache.mkdir(parents=True, exist_ok=True)
     archive = cache / SOURCE_NAME
+    # CI receives this archive from a single independently verified source job.
+    # An explicit artifact must exist and match the hard-coded upstream pin;
+    # never fall back to the Internet if the artifact is missing or altered.
+    shared_source = os.environ.get('TLO_FFMPEG_SOURCE_ARCHIVE', '').strip()
+    if shared_source:
+        supplied = Path(shared_source).resolve()
+        if (not supplied.is_file() or supplied.name != SOURCE_NAME or
+                supplied.stat().st_size > MAX_SOURCE_DOWNLOAD_BYTES or
+                sha256(supplied) != SOURCE_SHA256):
+            raise RuntimeError('CI FFmpeg source artifact missing, misnamed, oversized, or SHA-256 mismatch')
+        if archive.is_file():
+            if sha256(archive) != SOURCE_SHA256:
+                raise RuntimeError('FFmpeg upstream source SHA-256 mismatch; refusing build')
+            return archive
+        temp = cache / f'.{SOURCE_NAME}.downloading'
+        try:
+            shutil.copyfile(supplied, temp)
+            if sha256(temp) != SOURCE_SHA256:
+                raise RuntimeError('CI FFmpeg copied source SHA-256 mismatch; refusing build')
+            os.replace(temp, archive)
+        finally:
+            temp.unlink(missing_ok=True)
+        return archive
     if archive.is_file():
         if sha256(archive) != SOURCE_SHA256:
             raise RuntimeError('FFmpeg upstream source SHA-256 mismatch; refusing build')

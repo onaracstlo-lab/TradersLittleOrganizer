@@ -35,6 +35,14 @@ def _letters_only(text: str) -> str:
     return "".join(ch for ch in (text or "").lower() if ch.isalpha())
 
 
+def _compressed_artist_key(text: str) -> str:
+    """Artist DB compressed spelling: lowercase alphanumerics, no punctuation/spaces.
+
+    Digits are significant (for example 10cc is not the same as cc).
+    """
+    return "".join(ch for ch in (text or "").casefold() if ch.isalnum())
+
+
 def _split_terminal_artist_suffix(text: str) -> Tuple[str, str]:
     """Return ``(base_artist, stripped_suffix)`` for one supported terminal suffix.
 
@@ -210,6 +218,7 @@ def artist_search_variants(text: str) -> List[str]:
 class ArtistMatcher:
     db_path: str
     exact_map: Dict[str, Set[str]] = field(default_factory=dict)
+    compressed_map: Dict[str, Set[str]] = field(default_factory=dict)
     master_aliases: Dict[str, List[str]] = field(default_factory=dict)
     master_norms: Dict[str, Set[str]] = field(default_factory=dict)
     query_cache: "OrderedDict[str, Tuple[str, Tuple[str, ...]]]" = field(default_factory=OrderedDict)
@@ -242,9 +251,13 @@ def load_artist_matcher(config) -> ArtistMatcher:
     master_aliases: Dict[str, List[str]] = {}
     master_norms: Dict[str, Set[str]] = {}
     exact_map: Dict[str, Set[str]] = {}
+    compressed_map: Dict[str, Set[str]] = {}
 
     for master in artist_by_id.values():
         master_aliases[master] = [master]
+        key = _compressed_artist_key(master)
+        if key:
+            compressed_map.setdefault(key, set()).add(master)
         norm = _letters_only(master)
         master_norms[master] = {norm} if norm else set()
 
@@ -257,11 +270,15 @@ def load_artist_matcher(config) -> ArtistMatcher:
         if term.casefold() not in {item.casefold() for item in aliases}:
             aliases.append(term)
         exact_map.setdefault(term.casefold(), set()).add(master)
+        key = _compressed_artist_key(term)
+        if key:
+            compressed_map.setdefault(key, set()).add(master)
         norm = _letters_only(term)
         if norm:
             master_norms.setdefault(master, set()).add(norm)
 
     matcher.exact_map = exact_map
+    matcher.compressed_map = compressed_map
     matcher.master_aliases = master_aliases
     matcher.master_norms = master_norms
     return matcher
@@ -340,6 +357,23 @@ def lookup_artist_masters(
     found: Set[str] = set()
     for variant in variants:
         found.update(matcher.exact_map.get(variant.casefold(), set()))
+
+    # Use the existing Artist DB compressed-name representation as a fallback.
+    # Exact masters/aliases always win; never pick one of multiple compressed
+    # collisions (e.g. distinct masters differing only by punctuation).
+    if not found:
+        compressed = getattr(matcher, "compressed_map", None)
+        # Allow older/in-memory test matchers that populate exact_map directly.
+        # Production matchers already have this index from load_artist_matcher.
+        if compressed is not None and not compressed and matcher.exact_map:
+            for term, masters in matcher.exact_map.items():
+                normalized = _compressed_artist_key(term)
+                if normalized:
+                    compressed.setdefault(normalized, set()).update(masters)
+        for variant in variants:
+            key = _compressed_artist_key(variant)
+            if key and compressed:
+                found.update(compressed.get(key, set()))
 
     # Secondary fallback for potential artist names ending in ``Band``,
     # ``Group``, a supported ``All Star(s)`` spelling, or a terminal

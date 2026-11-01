@@ -202,13 +202,15 @@ SEARCH_ICON="$(find_required_icon tlo-search-icon.icns)"
 TAG_ICON="$(find_required_icon tlo-tag-icon.icns)"
 
 build_one "$(find_script search-artist-db.py)" yes
-build_windowed_with_icon "$(find_script tlo-search.py)" "$SEARCH_ICON"
+build_windowed_with_icon "$(find_script tlo-search.py)" "$SEARCH_ICON" \
+    --add-data "${SOURCE_ROOT}/icons/tlo-search-icon.png:icons"
 build_one "$(find_script tlo-gi.py)" no \
     --collect-all mutagen \
     --add-binary "$FFMPEG_ADD_BINARY"
 build_one "$(find_script tlo-research.py)" no
 build_one "$(find_script tlo-reverse.py)" no
 build_windowed_with_icon "$(find_script tlo-main.py)" "$MAIN_ICON" \
+    --add-data "${SOURCE_ROOT}/icons/tlo-main-icon.png:icons" \
     --collect-all mutagen \
     --add-binary "$FFMPEG_ADD_BINARY" \
     --collect-all tkinterdnd2

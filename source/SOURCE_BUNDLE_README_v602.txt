@@ -1,8 +1,8 @@
-TLO Source and Utilities Bundle v597
+TLO Source and Utilities Bundle v602
 
-Public application version: v1.7 Build 597
-Source bundle label: v597
-Paired native release GitHub Build Process: v120
+Public application version: v1.7 Build 602
+Source bundle label: v602
+Paired native release GitHub Build Process: v122
 
 Corruption policy: No inspection without tagging or Deep Audio Check. A tag failure
 other than transient filesystem/resource failure proves corruption and short-circuits
@@ -13,12 +13,12 @@ large collections. Deletion thresholds and safeguards are unchanged. Manual Twea
 has no corruption checking.
 
 Current documentation files:
-- TLO_Inventory_User_Manual_v597.rtf (What's New plus concise usage)
-- TLO_Inventory_Requirements_Working_v597.docx (consolidated specification)
+- TLO_Inventory_User_Manual_v602.rtf (What's New plus concise usage)
+- TLO_Inventory_Requirements_Working_v602.docx (consolidated specification)
 - TLO-FAQ.txt
-- CHANGES_v597.txt
-- BUILD_VERIFICATION_v597.txt
-- SHA256SUMS_v597.txt
+- CHANGES_v602.txt
+- BUILD_VERIFICATION_v602.txt
+- SHA256SUMS_v602.txt
 
 Build 594 retains Build 590 behavior: successful Add New Shows Tag In Place completion before a
 performance is staged, inventoried or exported as a setlist. Incomplete tag
@@ -39,7 +39,7 @@ Build 597 retries transient official FFmpeg source download failures, including 
 Main programs: tlo-main.py, tlo-gi.py, tlo-tag.py, tlo-search.py,
 tlo-research.py, tlo-reverse.py, tlo-deleteDupes.py, search-artist-db.py.
 All platform build programs/tests and LGPL source licensing materials are included.
-Run with TLO GitHub Build Process v120. No process scripts are in this ZIP.
+Run with TLO GitHub Build Process v122. No process scripts are in this ZIP.
 Prior historical change notes are retained in old-change-logs.zip.
 The source-built audio-only FFmpeg 9.0.2 is pinned by SHA256; no GPL FLAC
 binary is redistributed. Native signatures, scans and release validation remain
@@ -49,3 +49,13 @@ No GitHub Build Process artifact is included in this source bundle.
 The GitHub Build Process is independently versioned and distributed as its own separate package.
 tlo-main.py: Main GUI.
 tlo-search.py: collection search.
+
+Build 599: TLO Main/Search GUI uses its own icon for the running window and child dialogs. Windows/macOS/Linux PyInstaller builds bundle the necessary PNG artwork; Windows also bundles ICO. Native builds and signing remain required before distribution.
+
+Build 599 adds unique Artist DB compressed-name fallback for etree-style folders with adjacent dates, with local setlist corroboration and ambiguity safeguards.
+
+Build 600 corrected source Windows PNG/ICO preflight and paired with GitHub Build Process v121, which regenerates Windows onefile and shared-onedir scripts with both runtime icons present and checked.
+
+Build 601 requires GitHub Build Process v122. FFmpeg 9.0.2 upstream source is fetched and SHA-256 checked once on Ubuntu, transferred via short-lived artifact to all native platform jobs, and independently verified by each job before native compilation. The TLO_FFMPEG_SOURCE_ARCHIVE environment variable is a mandatory, fail-closed local artifact override when provided; absent override retains source-fetch behavior for manual/local builds.
+
+Build 602 isolates upstream-download unit tests from the CI shared-archive override and removes an impermissible numeric build reference from the evergreen FAQ. Native source validation, hashing, fail-closed policy, and packaging are unchanged.

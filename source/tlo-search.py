@@ -34,6 +34,7 @@ try:
 except ImportError:
     DISPLAY_VERSION = "version unavailable"
     VERSION = "version unavailable"
+from tlo_window_icons import install_window_icon
 from tlo_gui_shortcuts import install_global_ctrl_a
 from tlo_gui_shortcuts import configure_centered_ttk_button_text, schedule_tk_after
 from tlo_postprocess import setlist_filename_from_show_name
@@ -1451,6 +1452,7 @@ def read_text_file(file_path: Path) -> str:
 
 def show_config_error_dialog(message: str) -> None:
     root = tk.Tk()
+    install_window_icon(root, "search")
     root.withdraw()
     try:
         messagebox.showerror("Error", message, parent=root)
@@ -1473,6 +1475,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     root = tk.Tk()
+    install_window_icon(root, "search")
     paths = build_paths(tlohome)
     BootlistSearchApp(root, paths, initial_find)
 
