@@ -276,3 +276,9 @@ GitHub native build-process note: TLO GitHub Build Process v122 acquires the off
 
 Q: How do I choose startup defaults for the GUI?
 A: TLO creates TLOHome/tlo-preferences.ini when Main or Search first starts. Use the hamburger menu > Edit Preferences to edit the file, then Save and restart the programs. It covers checkbox defaults, performance mode, Max Workers, corruption policies, search options and fonts/sizes. The distributed template uses the existing defaults. Command-line flags take priority for each launch. A 0 Max Workers value uses the performance-mode limit; 0 font sizes use platform defaults. Changes to Auto Update in the menu are also saved. The concise template lists pull-down choices, numeric ranges and other non-obvious settings, with a single shared note about boolean aliases. Sections, keys, and selectable values are case-insensitive; paths and search text keep their original capitalization. All mistakes are shown together with their exact sections, keys and line numbers, and nothing is saved until every error is corrected.
+
+Q: How does non-compliant inventory handle a short organizational directory such as xx?
+A: A nearby exact artist directory backed by the Artist DB takes precedence over a more distant two-character storage directory. Genuine short artist names remain valid and incompatible full artist names still require review.
+
+Q: What if the selected setlist says Unknown venue?
+A: Unknown venue is treated as missing venue information, never as the actual name. A structured artist/location/date header may still identify the show without a venue.

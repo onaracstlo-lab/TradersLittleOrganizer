@@ -1,0 +1,33 @@
+TLO v1.7 Build 608 — LOCAL REGRESSION RESULTS — 2026-11-02
+
+Root cause of the Build 607 release-preflight failure:
+- Windows local Ruff 0.16.9 reported F401: an unused inner
+  `from pathlib import Path` on line 22 of
+  tests/behavior/test_build607_verification_report_contract.py.
+- The module already imported and used Path globally; the inner import was
+  redundant. Removed only the inner import and added a regression test to
+  guard against its return. All production source is unchanged except for
+  tlo_version.py release version constants; GitHub Build Process v122 unchanged.
+
+Completed validation:
+- Full application regression suite with Xvfb and CI=1:
+  2,162 passed, 6 skipped (one expected warning).
+- First full run: 2,160 passed, 6 skipped, 2 failed due to local working-tree
+  .pyc files and missing exact display wording in the new report; both
+  evidence/hygiene issues were corrected.
+- One concurrent rerun was aborted due to local runtime resource exhaustion
+  while rendering documents; no native CI correlation is claimed.
+- Final independent Xvfb rerun completed: 2,162 passed, 6 skipped.
+- Standalone requirements: 1,406 passed.
+- GitHub Build Process v122 tests: 76 passed, 1 skipped.
+- Targeted Build 607/608 lint evidence, historical release contracts,
+  canonical version and documentation tests: 15 passed before full run.
+- Python syntax verified and DOCX rendered to 123 pages; manual converted
+  to a 40-page PDF for review.
+- Package member hashes and SHA-256 manifest verified at packaging.
+
+Limitations:
+- Ruff lint itself was not run locally; internet access prevented installation.
+- Build 608 is not native-compiled, scanned, signed or release-attested in this
+  environment. User's Windows local lint preflight and hosted mandatory release
+  gates must succeed before publishing.

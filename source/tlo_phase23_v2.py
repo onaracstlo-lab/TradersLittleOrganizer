@@ -5024,10 +5024,26 @@ def _resolve_artist_from_subdirs(
     hits: List[Tuple[str, str]] = []
     exclude_norm = {os.path.normcase(os.path.normpath(path)) for path in (exclude_part_paths or set()) if path}
     seen = set()
+    # Path components are ordered nearest-to-farthest from the audio folder.
+    # A distant two-character directory (e.g. /xx/ used as a storage bucket)
+    # can coincidentally be an actual Artist DB name.  It must not conflict
+    # with an *earlier, exact whole-component* artist directory such as
+    # /Weather Report/.  A short artist in the show directory or without a
+    # closer full artist directory remains eligible, and longer incompatible
+    # artist directories retain the existing conflict guard.
+    closer_exact_artist = False
     for part, _part_path in _eligible_artist_path_parts(group):
         if _part_path and os.path.normcase(os.path.normpath(_part_path)) in exclude_norm:
             continue
         part_hits, collision_masters = _db_backed_artist_hits_for_path_part(part, matcher)
+        exact_hits = [
+            (master, matched_text) for master, matched_text in part_hits
+            if normalized_compare_value(part) == normalized_compare_value(matched_text)
+        ]
+        if closer_exact_artist and len(_letters_only_compare(part)) <= 2 and exact_hits:
+            # Do not suppress a collision in the same component or an explicit
+            # short artist closer than a stronger directory.
+            continue
         if collision_masters:
             conflicts.append(_collision_note(f"artist query collision for {source_label}: {part}", collision_masters))
         for master, matched_text in part_hits:
@@ -5035,6 +5051,8 @@ def _resolve_artist_from_subdirs(
             if key not in seen:
                 seen.add(key)
                 hits.append((master, matched_text))
+        if any(_normalized_length(master) >= 4 for master, _matched in exact_hits):
+            closer_exact_artist = True
 
     if not hits:
         return pattern_artist

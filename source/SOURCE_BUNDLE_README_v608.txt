@@ -1,7 +1,7 @@
-TLO Source and Utilities Bundle v605
+TLO Source and Utilities Bundle v608
 
-Public application version: v1.7 Build 605
-Source bundle label: v605
+Public application version: v1.7 Build 608
+Source bundle label: v608
 Paired native release GitHub Build Process: v122
 
 Corruption policy: No inspection without tagging or Deep Audio Check. A tag failure
@@ -13,13 +13,13 @@ large collections. Deletion thresholds and safeguards are unchanged. Manual Twea
 has no corruption checking.
 
 Current documentation files:
-- TLO_Inventory_User_Manual_v605.rtf (What's New plus concise usage)
-- TLO_Inventory_Requirements_Working_v605.docx (consolidated specification)
+- TLO_Inventory_User_Manual_v608.rtf (What's New plus concise usage)
+- TLO_Inventory_Requirements_Working_v608.docx (consolidated specification)
 - TLO-FAQ.txt
 - tlo-preferences.ini (user-approved concise default, choices and ranges annotated; copied on first startup into TLOHome)
-- CHANGES_v605.txt
-- BUILD_VERIFICATION_v605.txt
-- SHA256SUMS_v605.txt
+- CHANGES_v608.txt
+- BUILD_VERIFICATION_v608.txt
+- SHA256SUMS_v608.txt
 
 Build 594 retains Build 590 behavior: successful Add New Shows Tag In Place completion before a
 performance is staged, inventoried or exported as a setlist. Incomplete tag
@@ -61,4 +61,10 @@ Build 601 requires GitHub Build Process v122. FFmpeg 9.0.2 upstream source is fe
 
 Build 602 isolates upstream-download unit tests from the CI shared-archive override and removes an impermissible numeric build reference from the evergreen FAQ. Native source validation, hashing, fail-closed policy, and packaging are unchanged.
 
-Build 605: TLO Main and Search create and read TLOHome/tlo-preferences.ini on startup. All Main checkbox defaults (including Dry Run), corruption policy and threshold, performance mode, Max Workers, font families and sizes, Search Deep/font/query defaults, Manual Tweaks Update Tags, Add New Shows Check For Duplicates, and shared Auto Update are configurable. The hamburger Edit Preferences text editor validates before an atomic save and prompts for restart. Explicit Main CLI flags and Search --find take precedence. Existing preference files are never overwritten. The versioned source bundle includes a default tlo-preferences.ini template.
+Build 606: TLO Main and Search create and read TLOHome/tlo-preferences.ini on startup. All Main checkbox defaults (including Dry Run), corruption policy and threshold, performance mode, Max Workers, font families and sizes, Search Deep/font/query defaults, Manual Tweaks Update Tags, Add New Shows Check For Duplicates, and shared Auto Update are configurable. The hamburger Edit Preferences text editor validates before an atomic save and prompts for restart. Explicit Main CLI flags and Search --find take precedence. Existing preference files are never overwritten. The versioned source bundle includes a default tlo-preferences.ini template.
+
+Build 606: Non-compliant path artist detection suppresses distant two-character storage-directory collisions when a nearer exact full Artist DB directory identifies the performer. Setlist Artist / City, Country / Unknown venue / Date headers identify the performer and location while leaving venue blank. Explicit artist and conflicting full-name safety guards remain in force.
+
+Build 607: Release verification report again includes the required exact Ruff lint: label and explicit lint-not-attested status; this fixes hosted Linux CI test failures without relaxing mandatory lint or changing application behavior.
+
+Build 608: Removes an unused Path import in the Build 607 release-report regression test to satisfy Ruff F401. No application runtime or GitHub Build Process changes. Native release checks are still mandatory.

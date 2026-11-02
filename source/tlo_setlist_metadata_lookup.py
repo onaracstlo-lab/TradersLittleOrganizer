@@ -1171,9 +1171,14 @@ def _extract_explicit_fields(lines: List[str]) -> Dict[str, str]:
     return fields
 
 
+def _is_unknown_venue(value: str) -> bool:
+    """Treat an explicit missing-venue marker as absence, not a venue name."""
+    return _norm_key(value) in {"unknown venue", "venue unknown", "venue not known", "venue not listed"}
+
+
 def _looks_like_unlabeled_venue_line(line: str) -> bool:
     raw = _clean_spaces(str(line or "").strip(" *-_=#~"))
-    if not raw:
+    if not raw or _is_unknown_venue(raw):
         return False
     if _explicit_metadata_match(raw) or _looks_like_tracklist_start(raw):
         return False
@@ -1472,6 +1477,22 @@ def _extract_structured_unlabeled_header_block(lines: List[str], support: _Suppo
         )
 
     for pos, (_idx, line) in enumerate(items):
+        # Traded radio setlists may use Artist / City, Country / "Unknown venue."
+        # / Date.  The missing-venue marker is an explicit negative assertion,
+        # not a venue, but the surrounding location and date strongly anchor
+        # the artist header.  Also accept Artist / City, Country / Date.
+        if pos + 2 < len(items) and _looks_like_unlabeled_artist_header_line(line, support):
+            loc_line = items[pos + 1][1]
+            city, region, country, raw, pattern_id, conf = _parse_unlabeled_location_header_line(loc_line, support)
+            if city and (region or country):
+                date_pos = pos + 2
+                if _is_unknown_venue(items[date_pos][1]):
+                    date_pos += 1
+                if date_pos < len(items) and _looks_like_date_header_line(items[date_pos][1]):
+                    return (
+                        line, "", city, region, country, raw or loc_line,
+                        pattern_id or "LOCATION_STRUCTURED_UNLABELED_HEADER", max(88, conf),
+                    )
         # One-line location/venue or venue/location may sit below an artist/event
         # header.  Try the explicit spaced double-dash form first because it is
         # stronger than generic venue-database substring matching.
@@ -1568,7 +1589,7 @@ def _best_venue_from_lines(lines: List[str], support: _SupportData) -> Tuple[str
     if not usable_lines:
         return best
     for venue, key in support.venue_terms:
-        if len(key) < 3:
+        if len(key) < 3 or _is_unknown_venue(venue):
             continue
         line_index = -1
         raw_line = venue
@@ -1685,6 +1706,8 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
                      "setlist_metadata:STRUCTURED_UNLABELED_ARTIST_HEADER" if structured_artist else "")
     artist_confidence = 95 if explicit_artist else (max(88, structured_conf) if structured_artist else 0)
     venue = _clean_spaces(fields.get("venue", ""))
+    if _is_unknown_venue(venue):
+        venue = ""
     raw_venue = venue
     venue_confidence = 0
     venue_line_index = -1
@@ -1779,6 +1802,10 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
                 location_confidence += 8
             break
 
+    if _is_unknown_venue(venue):
+        venue = ""
+        raw_venue = ""
+        venue_confidence = 0
     location = _join_location(city, region, country)
 
     # A known venue followed by a strong parsed location can establish the

@@ -1,0 +1,31 @@
+TLO v1.7 Build 608 — NOT RELEASE-ATTESTED (local verification only)
+
+Scope: Ruff F401 source-preflight repair after the user's Windows local
+GitHub Build Process v122 attempt for Build 607. The only changed Python
+files are the Build 607 regression test and the canonical version constants.
+The Build 606 Weather Report fixes, compact preferences, native build scripts
+and all other production application code are unchanged. GitHub Build Process
+v122 is unchanged.
+
+Verification (2026-11-02):
+- Full application tests under Xvfb display (CI=1): 2,162 passed, 6 skipped.
+- No display (DISPLAY and CI unset): nested GUI regression subset:
+  50 passed, 6 skipped (run by the full application suite).
+- Standalone requirements: 1,406 passed.
+- GitHub Build Process v122 (unchanged): 76 passed, 1 skipped.
+- Python syntax checks across source and Bash syntax checks: passed.
+- DOCX requirements: 123-page rendered review. RTF manual: 40-page PDF
+  conversion review. No changes to production documentation requirements
+  beyond the Build 608 lint-preflight correction.
+- Source archive member hashes and SHA-256 manifest are verified separately
+  during final packaging; see REGRESSION_RESULTS_v608.txt.
+
+Ruff lint: lint not attested locally; Ruff could not be installed in this
+environment. Ruff 0.16.9 on the user's Windows build machine reported
+one unused local import in Build 607's regression test. This redundant
+import was removed. Mandatory local and hosted Ruff lint remain release
+gates; this report does not claim a Ruff pass.
+
+The hosted native Linux/macOS/Windows builds, mandatory Ruff lint, malware
+scanners, Windows signing and release verification must succeed before public
+distribution.
