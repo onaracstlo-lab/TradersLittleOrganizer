@@ -27,7 +27,17 @@ FFMPEG_VERSION = '9.0.2'
 SOURCE_NAME = f'ffmpeg-{FFMPEG_VERSION}.tar.xz'
 SOURCE_URL = f'https://ffmpeg.org/releases/{SOURCE_NAME}'
 SOURCE_FALLBACK_URL = f'https://www.ffmpeg.org/releases/{SOURCE_NAME}'
-SOURCE_DOWNLOAD_RETRY_DELAYS = (1, 2, 4, 8)  # Five total attempts, bounded backoff
+# OmniOS mirrors the FFmpeg release *source archive*. It is never a source of binaries,
+# and all bytes must match the same immutable upstream SHA-256 pin before use.
+SOURCE_MIRROR_URL = f'https://mirrors.omnios.org/ffmpeg/{SOURCE_NAME}'
+# Move between independent origins immediately instead of waiting for repeated
+# timeouts against a single broken host; one extra circuit for transient failures.
+SOURCE_DOWNLOAD_URLS = (
+    SOURCE_URL, SOURCE_FALLBACK_URL, SOURCE_MIRROR_URL,
+    SOURCE_URL, SOURCE_FALLBACK_URL, SOURCE_MIRROR_URL,
+)
+SOURCE_DOWNLOAD_RETRY_DELAYS = (1, 2, 4, 8, 12)
+SOURCE_SOCKET_TIMEOUT_SECONDS = 25
 SOURCE_RETRY_HTTP_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
 SOURCE_SHA256 = '8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e'
 MAX_SOURCE_DOWNLOAD_BYTES = 64 * 1024 * 1024
@@ -85,7 +95,7 @@ def _download_verified_source(url: str, temp: Path) -> None:
     """Download a *single* candidate into a temporary file; fail closed on hash."""
     digest = hashlib.sha256()
     count = 0
-    with urllib.request.urlopen(url, timeout=90) as response, temp.open('wb') as out:
+    with urllib.request.urlopen(url, timeout=SOURCE_SOCKET_TIMEOUT_SECONDS) as response, temp.open('wb') as out:
         while True:
             block = response.read(1024 * 1024)
             if not block:
@@ -136,21 +146,32 @@ def get_source(cache: Path) -> Path:
         return archive
 
     temp = cache / f'.{SOURCE_NAME}.downloading'
-    attempts = len(SOURCE_DOWNLOAD_RETRY_DELAYS) + 1
-    for attempt in range(attempts):
-        # First two attempts use the canonical origin; remaining attempts use
-        # FFmpeg's own alternate hostname, never a third-party prebuilt binary.
-        url = SOURCE_URL if attempt < 2 else SOURCE_FALLBACK_URL
+    attempts = len(SOURCE_DOWNLOAD_URLS)
+    assert len(SOURCE_DOWNLOAD_RETRY_DELAYS) == attempts - 1
+    for attempt, url in enumerate(SOURCE_DOWNLOAD_URLS):
         try:
             _download_verified_source(url, temp)
             os.replace(temp, archive)
             return archive
         except Exception as error:
-            if attempt + 1 >= attempts or not _transient_download_error(error):
+            # Hash failures, oversized payloads, local I/O problems and TLS
+            # certificate errors are not retried against another host.
+            if not _transient_download_error(error):
                 raise
+            if attempt + 1 == attempts:
+                raise RuntimeError(
+                    f'Pinned FFmpeg {FFMPEG_VERSION} source acquisition failed after '
+                    f'{attempts} network attempts across {len(set(SOURCE_DOWNLOAD_URLS))} hosts. '
+                    f'Last error on {url}: {type(error).__name__}: {error}. '
+                    'No unverified archive was used. Check runner connectivity or '
+                    'rerun after the upstream/mirror outage. '
+                    f'Required SHA-256: {SOURCE_SHA256}'
+                ) from error
             delay = SOURCE_DOWNLOAD_RETRY_DELAYS[attempt]
-            print(f'FFmpeg source download attempt {attempt + 1}/{attempts} interrupted '
-                  f'({type(error).__name__}); retrying in {delay}s', file=sys.stderr)
+            print(f'FFmpeg source download attempt {attempt + 1}/{attempts} from {url} '
+                  f'failed ({type(error).__name__}: {str(error)[:160]}); '
+                  f'next host {SOURCE_DOWNLOAD_URLS[attempt + 1]} in {delay}s',
+                  file=sys.stderr, flush=True)
             time.sleep(delay)
         finally:
             temp.unlink(missing_ok=True)

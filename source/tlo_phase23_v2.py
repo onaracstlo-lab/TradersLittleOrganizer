@@ -1136,6 +1136,150 @@ def _dated_supplemental_descendant_info(music_dir_entries: Sequence[dict], start
     return promoted
 
 
+# Bare word-number parts are not generic wrappers: a directory called "one" can
+# be a legitimate separate release. Admit them only with independent evidence
+# that the siblings contain consecutive tracks from ONE dated performance.
+_SEQUENTIAL_WORD_PART_NUMBERS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+}
+_SEQUENTIAL_WORD_TRACK_RE = re.compile(r"^\s*(\d{1,3})(?=[\s._-])")
+
+
+def _sequential_word_part_track_numbers(music_dir: str) -> List[int]:
+    """Read only direct, regular audio filenames; never infer from samples."""
+    try:
+        with os.scandir(music_dir) as iterator:
+            entries = list(iterator)
+    except OSError:
+        return []
+    tracks = []
+    for entry in entries:
+        try:
+            if not entry.is_file(follow_symlinks=False) or not _is_music_file(entry.path):
+                continue
+        except OSError:
+            return []
+        stem = os.path.splitext(entry.name)[0]
+        match = _SEQUENTIAL_WORD_TRACK_RE.match(stem)
+        if match is None:
+            return []
+        tracks.append(int(match.group(1)))
+    # At least two tracks per part, with a contiguous local sequence.
+    tracks.sort()
+    if len(tracks) < 2 or len(set(tracks)) != len(tracks):
+        return []
+    return tracks if tracks == list(range(tracks[0], tracks[-1] + 1)) else []
+
+
+def _sequential_word_part_aggregation_info(
+    music_dir_entries: Sequence[dict], start_path: str
+) -> Dict[str, Dict[str, str]]:
+    """Guarded ``Dated Show/one`` + ``Dated Show/two`` grouping.
+
+    In addition to a dated common parent and a shared parent setlist, all
+    direct music-bearing children must be uniquely numbered words and their
+    real audio filenames must form a single continuous 01..N sequence. This
+    excludes alternate takes (each starting with 01), artist subshows, mixed
+    children, and broad collections. It does not move or rewrite source files.
+    """
+    start = os.path.abspath(os.path.normpath(start_path))
+    by_parent: Dict[str, List[Tuple[int, str, dict]]] = {}
+    all_by_parent: Dict[str, List[str]] = {}
+    for entry in music_dir_entries or []:
+        music_dir = _entry_music_dir(entry)
+        if not music_dir:
+            continue
+        parent_dir = os.path.dirname(music_dir)
+        parent_key = os.path.normcase(os.path.normpath(parent_dir))
+        all_by_parent.setdefault(parent_key, []).append(music_dir)
+        part = _SEQUENTIAL_WORD_PART_NUMBERS.get(os.path.basename(music_dir).casefold())
+        if part is not None:
+            by_parent.setdefault(parent_key, []).append((part, music_dir, entry))
+
+    promoted: Dict[str, Dict[str, str]] = {}
+    for parent_key, parts in by_parent.items():
+        if len(parts) < 2 or len(parts) != len(all_by_parent.get(parent_key, [])):
+            continue
+        parts.sort(key=lambda item: item[0])
+        if [index for index, _path, _entry in parts] != list(range(1, len(parts) + 1)):
+            continue
+        parent_dir = os.path.dirname(parts[0][1])
+        # A show root cannot be a broad search/collection root, and its dated
+        # name must yield one complete (not partial or unknown) show date.
+        if not _complete_date_match(os.path.basename(parent_dir)):
+            continue
+        try:
+            if os.path.commonpath([start, os.path.abspath(parent_dir)]) != start:
+                continue
+        except ValueError:
+            continue
+        if os.path.islink(parent_dir) or any(os.path.islink(path) for _, path, _ in parts):
+            continue
+        # Use an existing shared, readable-looking setlist at the parent.
+        # Ignore housekeeping files; a child-only setlist is insufficient.
+        try:
+            shared = [
+                item.name for item in os.scandir(parent_dir)
+                if item.is_file(follow_symlinks=False)
+                and os.path.splitext(item.name)[1].casefold() in {".txt", ".nfo"}
+                and not re.search(r"(?i)md5|ffp|fpt|sfv|checksum|fingerprint|torrent|\blog\b", item.name)
+            ]
+        except OSError:
+            continue
+        if not shared:
+            continue
+        # An actual date must be attached to the same physical parent, not a
+        # coincidental string in an unrelated ancestor.
+        if not os.path.isdir(parent_dir):
+            continue
+
+        # A child setlist describing a different show invalidates the shared
+        # parent evidence. For this narrow case, require the shared file only.
+        try:
+            child_sets = [
+                name for _index, music_dir, _entry in parts
+                for name in os.listdir(music_dir)
+                if name.casefold().endswith((".txt", ".nfo"))
+                and not re.search(r"(?i)md5|ffp|fpt|sfv|checksum|fingerprint|torrent|\blog\b", name)
+            ]
+        except OSError:
+            continue
+        if child_sets:
+            continue
+
+        all_tracks: List[int] = []
+        valid = True
+        tagged_artists = set()
+        for _index, music_dir, entry in parts:
+            tracks = _sequential_word_part_track_numbers(music_dir)
+            if not tracks or tracks[0] != len(all_tracks) + 1:
+                valid = False
+                break
+            all_tracks.extend(tracks)
+            # Preserve a genuinely different artist under a shared date/root.
+            samples = list(entry.get("music_sample_files", []) or [])
+            info = collect_group_flac_tag_info(samples, max_files=2) if samples else {}
+            for value in (info.get("flac_tag_albumartist_values") or info.get("flac_tag_artist_values") or []):
+                if normalized_compare_value(value):
+                    tagged_artists.add(normalized_compare_value(value))
+            if len(tagged_artists) > 1:
+                valid = False
+                break
+        if not valid:
+            continue
+        for _index, music_dir, _entry in parts:
+            promoted[os.path.normcase(os.path.normpath(music_dir))] = {
+                "aggregation_key": f"sequential_word_parts::{parent_key}",
+                "main_dir_path": parent_dir,
+                "main_dir_name": os.path.basename(parent_dir),
+                "aggregate_album_name": "",
+                "aggregate_release_base": "",
+                "aggregation_reason": "sequential_word_numbered_parts",
+            }
+    return promoted
+
+
 def _collapse_buckets_by_show_root(buckets: Dict[str, dict]) -> Dict[str, dict]:
     """Merge overlapping buckets that resolve to one physical logical-show root.
 
@@ -1182,6 +1326,7 @@ def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
     )
     consolidated_sibling_info = _consolidated_sibling_collection_info(music_dir_entries)
     dated_supplemental_info = _dated_supplemental_descendant_info(music_dir_entries, start_path)
+    sequential_word_info = _sequential_word_part_aggregation_info(music_dir_entries, start_path)
     if getattr(config, "compliant", False):
         for entry in music_dir_entries:
             music_dir = _entry_music_dir(entry)
@@ -1197,6 +1342,8 @@ def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
             info = consolidated_sibling_info.get(music_key)
             if info is None:
                 info = nested_wrapper_info.get(music_key)
+            if info is None:
+                info = sequential_word_info.get(music_key)
             if info is None:
                 info = dated_supplemental_info.get(music_key)
             if info is None:

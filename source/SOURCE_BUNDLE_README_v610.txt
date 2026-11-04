@@ -1,7 +1,8 @@
-TLO Source and Utilities Bundle v608
+TLO v1.7 Build 610 (paired with GitHub Build Process v123): verified FFmpeg source cache and multi-origin failover; no inventory behavior changes. All source bytes still must match the upstream SHA-256 pin.
+TLO Source and Utilities Bundle v610
 
-Public application version: v1.7 Build 608
-Source bundle label: v608
+Public application version: v1.7 Build 610
+Source bundle label: v610
 Paired native release GitHub Build Process: v122
 
 Corruption policy: No inspection without tagging or Deep Audio Check. A tag failure
@@ -13,13 +14,13 @@ large collections. Deletion thresholds and safeguards are unchanged. Manual Twea
 has no corruption checking.
 
 Current documentation files:
-- TLO_Inventory_User_Manual_v608.rtf (What's New plus concise usage)
-- TLO_Inventory_Requirements_Working_v608.docx (consolidated specification)
+- TLO_Inventory_User_Manual_v610.rtf (What's New plus concise usage)
+- TLO_Inventory_Requirements_Working_v610.docx (consolidated specification)
 - TLO-FAQ.txt
 - tlo-preferences.ini (user-approved concise default, choices and ranges annotated; copied on first startup into TLOHome)
-- CHANGES_v608.txt
-- BUILD_VERIFICATION_v608.txt
-- SHA256SUMS_v608.txt
+- CHANGES_v610.txt
+- BUILD_VERIFICATION_v610.txt
+- SHA256SUMS_v610.txt
 
 Build 594 retains Build 590 behavior: successful Add New Shows Tag In Place completion before a
 performance is staged, inventoried or exported as a setlist. Incomplete tag
@@ -68,3 +69,5 @@ Build 606: Non-compliant path artist detection suppresses distant two-character 
 Build 607: Release verification report again includes the required exact Ruff lint: label and explicit lint-not-attested status; this fixes hosted Linux CI test failures without relaxing mandatory lint or changing application behavior.
 
 Build 608: Removes an unused Path import in the Build 607 release-report regression test to satisfy Ruff F401. No application runtime or GitHub Build Process changes. Native release checks are still mandatory.
+
+Build 610: Non-compliant Full Inventory groups one/two consecutive, numbered audio parts under a dated common show parent with a shared setlist, publishing and tagging one physical show (preserving original part folders). Overlapping takes, unrelated parts and compliant mode remain separate. GitHub Build Process v122 unchanged; native release checks mandatory.

@@ -1,0 +1,28 @@
+TLO v1.7 Build 610 — NOT RELEASE-ATTESTED (local verification only)
+
+Scope: Fix the GitHub Actions 41834899059 source-download outage. A dedicated
+source-acquisition job now uses a persistent GitHub Actions cache keyed to
+the immutable FFmpeg 9.0.2 SHA-256 pin. If it misses or the cache service
+is down, acquisition alternates official FFmpeg hosts and the OmniOS source
+mirror with bounded retries. Every archive is SHA-256 verified; corrupt
+cached or downloaded source fails closed. Native Windows/Linux/macOS jobs
+still consume only one verified source artifact.
+
+Verification (2026-11-04):
+- Full application tests under Xvfb display (CI=1): 2,180 passed,
+  6 skipped, 1 expected warning; completed in 63.53s.
+- No display (DISPLAY and CI unset): nested GUI subset included in the
+  application suite, with the historical 50 passed, 6 skipped contract.
+- Focused FFmpeg source download, mirror, cache and shared-artifact tests:
+  26 passed. Release-version/doc contract tests included in full suite.
+- GitHub Build Process v123 tests: 80 passed, 1 skipped.
+- Python syntax parsing: passed for all source and process Python files.
+- Requirements DOCX and RTF manual: updated and rendered for visual review.
+- Source and process ZIP members and SHA-256 manifests: verified at packaging.
+
+Ruff lint: lint not attested locally; mandatory Windows preflight and hosted
+Ruff lint gates remain required. This report does not claim a Ruff pass.
+
+Hosted native compilation for Windows/Linux/macOS, malware scanning,
+Windows signing, final release verification and GitHub-hosted tests
+must all succeed before public distribution.
