@@ -141,13 +141,13 @@ def test_shared_setlist_and_date_are_required(tmp_path):
     assert other_show.exists()
 
 
-def test_different_artist_sibling_and_third_nonpart_keep_shows_separate(tmp_path, monkeypatch):
+def test_audio_tags_do_not_decide_grouping_but_unrelated_folder_still_blocks(tmp_path, monkeypatch):
     show, files = _recording(tmp_path)
     monkeypatch.setattr(phase, "collect_group_flac_tag_info", lambda samples, max_files=2: {
         "flac_tag_artist_values": ["Return to Forever" if "one" in samples[0] else "Opening Act"],
         "flac_tag_albumartist_values": [],
     })
-    assert len(_groups(tmp_path / "x", files)) == 2
+    assert len(_groups(tmp_path / "x", files)) == 1
     monkeypatch.undo()
     extra = show / "Opening Artist"
     extra.mkdir()

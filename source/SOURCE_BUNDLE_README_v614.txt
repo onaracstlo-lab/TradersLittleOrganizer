@@ -1,9 +1,8 @@
-TLO v1.7 Build 610 (paired with GitHub Build Process v123): verified FFmpeg source cache and multi-origin failover; no inventory behavior changes. All source bytes still must match the upstream SHA-256 pin.
-TLO Source and Utilities Bundle v610
+TLO Source and Utilities Bundle v614
 
-Public application version: v1.7 Build 610
-Source bundle label: v610
-Paired native release GitHub Build Process: v122
+Public application version: v1.7 Build 614
+Source bundle label: v614
+Paired native release GitHub Build Process: v123
 
 Corruption policy: No inspection without tagging or Deep Audio Check. A tag failure
 other than transient filesystem/resource failure proves corruption and short-circuits
@@ -14,13 +13,13 @@ large collections. Deletion thresholds and safeguards are unchanged. Manual Twea
 has no corruption checking.
 
 Current documentation files:
-- TLO_Inventory_User_Manual_v610.rtf (What's New plus concise usage)
-- TLO_Inventory_Requirements_Working_v610.docx (consolidated specification)
+- TLO_Inventory_User_Manual_v614.rtf (What's New plus concise usage)
+- TLO_Inventory_Requirements_Working_v614.docx (consolidated specification)
 - TLO-FAQ.txt
 - tlo-preferences.ini (user-approved concise default, choices and ranges annotated; copied on first startup into TLOHome)
-- CHANGES_v610.txt
-- BUILD_VERIFICATION_v610.txt
-- SHA256SUMS_v610.txt
+- CHANGES_v614.txt
+- BUILD_VERIFICATION_v614.txt
+- SHA256SUMS_v614.txt
 
 Build 594 retains Build 590 behavior: successful Add New Shows Tag In Place completion before a
 performance is staged, inventoried or exported as a setlist. Incomplete tag
@@ -41,7 +40,7 @@ Build 597 retries transient official FFmpeg source download failures, including 
 Main programs: tlo-main.py, tlo-gi.py, tlo-tag.py, tlo-search.py,
 tlo-research.py, tlo-reverse.py, tlo-deleteDupes.py, search-artist-db.py.
 All platform build programs/tests and LGPL source licensing materials are included.
-Run with TLO GitHub Build Process v122. No process scripts are in this ZIP.
+Run with TLO GitHub Build Process v123. No process scripts are in this ZIP.
 Prior historical change notes are retained in old-change-logs.zip.
 The source-built audio-only FFmpeg 9.0.2 is pinned by SHA256; no GPL FLAC
 binary is redistributed. Native signatures, scans and release validation remain
@@ -70,4 +69,12 @@ Build 607: Release verification report again includes the required exact Ruff li
 
 Build 608: Removes an unused Path import in the Build 607 release-report regression test to satisfy Ruff F401. No application runtime or GitHub Build Process changes. Native release checks are still mandatory.
 
-Build 610: Non-compliant Full Inventory groups one/two consecutive, numbered audio parts under a dated common show parent with a shared setlist, publishing and tagging one physical show (preserving original part folders). Overlapping takes, unrelated parts and compliant mode remain separate. GitHub Build Process v122 unchanged; native release checks mandatory.
+Build 609: Non-compliant Full Inventory groups one/two consecutive, numbered audio parts under a dated common show parent with a shared setlist, publishing and tagging one physical show (preserving original part folders). Overlapping takes, unrelated parts and compliant mode remain separate. GitHub Build Process v122 unchanged; native release checks mandatory.
+
+Build 611: Dated same-name nested (copyN)/(altN)/(one)/(two) and numbered part folders combine in non-compliant mode when their common dated show parent establishes one physical performance. Grouping never uses audio tags; source metadata precedence after grouping is unchanged. Standalone release titles and unrelated music folders remain independent. GitHub Build Process v123 unchanged.
+
+Build 612: Matching named part branches beneath a dated show parent may contain CD/Disc/Set/FLAC layers, without splitting the show. Independent music branches and separate dated performers block the grouping. No tagging-based grouping, no flattening or duplicate parent transfers. Standalone named parts and non-date collection rules are unchanged.
+
+Build 613: Fix unused import (F401) and an unnecessary f-string (F541) in Build 611 regression tests; no application behavior change. GitHub Build Process v123 unchanged.
+
+Build 614: Restore the original Build 532 genuine headless-GUI six-skip verification-report contract and explicitly distinguish it from the 26 skipped tests in the full failed Build 613 Linux CI run. No application behavior change; Build Process v123 unchanged.

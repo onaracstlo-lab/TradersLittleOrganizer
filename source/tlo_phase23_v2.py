@@ -1035,37 +1035,6 @@ def _complete_date_match(text: str) -> Optional[Dict[str, str]]:
     return None
 
 
-def _root_artist_hint_from_dated_name(name: str) -> str:
-    match = _complete_date_match(name)
-    if not match:
-        return ""
-    return compact_ws(str(name or "")[: int(match.get("start") or 0)].strip(" ._-"))
-
-
-def _artist_tag_matches_root_hint(value: str, root_hint: str) -> bool:
-    left = normalized_compare_value(value)
-    right = normalized_compare_value(root_hint)
-    if not left or not right:
-        return True
-    if left == right:
-        return True
-    # Preserve normal master/as-is punctuation and common suffix differences
-    # while still treating a genuinely different tagged act as independent.
-    if min(len(left), len(right)) >= 5 and (left in right or right in left):
-        return True
-    return False
-
-
-def _supplemental_entry_has_independent_artist(entry: dict, dated_root_name: str) -> bool:
-    root_hint = _root_artist_hint_from_dated_name(dated_root_name)
-    if not root_hint:
-        return False
-    tag_info = collect_group_flac_tag_info(list(entry.get("music_sample_files", []) or []), max_files=2)
-    values = list(tag_info.get("flac_tag_albumartist_values", []) or []) or list(tag_info.get("flac_tag_artist_values", []) or [])
-    values = [compact_ws(value) for value in values if compact_ws(value)]
-    return bool(values) and all(not _artist_tag_matches_root_hint(value, root_hint) for value in values)
-
-
 def _dated_supplemental_descendant_info(music_dir_entries: Sequence[dict], start_path: str) -> Dict[str, Dict[str, str]]:
     """Promote only clearly supplemental descendants into their dated show root.
 
@@ -1118,8 +1087,6 @@ def _dated_supplemental_descendant_info(music_dir_entries: Sequence[dict], start
                         break
                 if unrelated_branch:
                     break
-                if _supplemental_entry_has_independent_artist(entry, root_name):
-                    break
                 root_key = os.path.normcase(os.path.normpath(current))
                 promoted[os.path.normcase(os.path.normpath(music_dir))] = {
                     "aggregation_key": f"dated_supplemental::{root_key}",
@@ -1133,6 +1100,126 @@ def _dated_supplemental_descendant_info(music_dir_entries: Sequence[dict], start
             if os.path.normcase(os.path.normpath(current)) == os.path.normcase(start_abs):
                 break
             current = os.path.dirname(current)
+    return promoted
+
+
+# A manually or automatically assembled show can contain source editions or
+# named parts under a directory bearing the *full, dated* show name. Those
+# nested labels describe the material, not additional performances. Unlike the
+# narrower one/two sequential fallback, this requires no setlist or matching
+# audio-track numbers: alternatives often restart at track 01. Audio tags are
+# intentionally excluded from all grouping decisions.
+_DATED_NAMED_CHILD_SUFFIX_RE = re.compile(
+    r"(?i)^(?P<base>.+?)\s*\(\s*(?:"
+    r"(?:copy|alt)\s*[0-9]{1,3}"
+    r"|one|two|three|four|five|six|seven|eight|nine|ten"
+    r"|(?:cd|disc|disk|set|part|pt\.?|side|tape)\s*(?:[0-9]{1,3}|one|two|three|four|a|b|i|ii|iii|iv)"
+    r")\s*\)\s*$"
+)
+
+
+def _dated_named_child_aggregation_info(
+    music_dir_entries: Sequence[dict], start_path: str
+) -> Dict[str, Dict[str, str]]:
+    """Keep related named parts below an explicit dated show parent together.
+
+    The parent name, child names, and intervening *wrapper directory names*
+    establish the grouping. Tags and inferred metadata are not involved.
+    Accept either direct audio (``Show/Show (copy1)``) or audio under the
+    child's existing disc/media wrappers (``Show/Show (copy1)/CD1``). A lone
+    named part, an opening act, or a separately dated nested show must not
+    cause unrelated trees to be merged. Never flatten child directories.
+    """
+    start = os.path.normpath(os.path.abspath(start_path))
+    music_dirs = [os.path.normpath(_entry_music_dir(item)) for item in music_dir_entries or []]
+    music_dirs = [path for path in music_dirs if path]
+    promoted: Dict[str, Dict[str, str]] = {}
+
+    # Walk ancestors so music living beneath CD1 / FLAC is attributed to its
+    # *first* named-part child, rather than misidentified as a new show.
+    possible_parents: Dict[str, Tuple[str, List[str]]] = {}
+    for music_dir in music_dirs:
+        current = os.path.dirname(music_dir)
+        while current and current != os.path.dirname(current):
+            try:
+                if os.path.commonpath([start, os.path.abspath(current)]) != start:
+                    break
+            except ValueError:
+                break
+            if _complete_date_match(os.path.basename(current)):
+                key = os.path.normcase(current)
+                if key not in possible_parents:
+                    possible_parents[key] = (current, [])
+                possible_parents[key][1].append(music_dir)
+            if os.path.normcase(current) == os.path.normcase(start):
+                break
+            current = os.path.dirname(current)
+
+    for parent, descendants in sorted(possible_parents.values(), key=lambda value: (-len(value[0]), value[0])):
+        parent_name = os.path.basename(parent)
+        # A dated root with its own direct audio is not a pure named-part
+        # container; preserve the existing root-audio and wrapper rules.
+        if any(os.path.normcase(path) == os.path.normcase(parent) for path in descendants):
+            continue
+        if os.path.islink(parent):
+            continue
+
+        related: Dict[str, List[str]] = {}
+        has_named_suffix = False
+        invalid = False
+        for music_dir in descendants:
+            rel_parts = [piece for piece in os.path.relpath(music_dir, parent).split(os.sep) if piece]
+            if not rel_parts:
+                invalid = True
+                break
+            first = rel_parts[0]
+            part_match = _DATED_NAMED_CHILD_SUFFIX_RE.fullmatch(first)
+            if part_match and normalized_compare_value(part_match.group("base")) == normalized_compare_value(parent_name):
+                has_named_suffix = True
+            elif normalized_compare_value(first) != normalized_compare_value(parent_name):
+                invalid = True
+                break
+            # A named part can contain a normal CD, Disc, Set, FLAC or other
+            # recognized wrapper. Anything else may be a separate performance
+            # and is never absorbed just because its outer folder matches.
+            if any(
+                _complete_date_match(piece) or not (
+                    is_supplemental_show_child_name(piece)
+                    or is_exact_wrapper_name(piece)
+                    or looks_like_non_main_dir(piece)
+                )
+                for piece in rel_parts[1:]
+            ):
+                invalid = True
+                break
+            # Avoid following any symlink (including nested wrapper segments).
+            current = parent
+            for piece in rel_parts:
+                current = os.path.join(current, piece)
+                if os.path.islink(current):
+                    invalid = True
+                    break
+            if invalid:
+                break
+            related.setdefault(os.path.normcase(first), []).append(music_dir)
+
+        if invalid or len(related) < 2 or not has_named_suffix:
+            continue
+        parent_key = os.path.normcase(os.path.normpath(parent))
+        for paths in related.values():
+            for music_dir in paths:
+                music_key = os.path.normcase(os.path.normpath(music_dir))
+                if music_key in promoted:
+                    # The deepest eligible dated show parent owns its parts.
+                    continue
+                promoted[music_key] = {
+                    "aggregation_key": f"dated_named_parts::{parent_key}",
+                    "main_dir_path": parent,
+                    "main_dir_name": parent_name,
+                    "aggregate_album_name": "",
+                    "aggregate_release_base": "",
+                    "aggregation_reason": "dated_named_show_parts",
+                }
     return promoted
 
 
@@ -1250,22 +1337,12 @@ def _sequential_word_part_aggregation_info(
 
         all_tracks: List[int] = []
         valid = True
-        tagged_artists = set()
-        for _index, music_dir, entry in parts:
+        for _index, music_dir, _entry in parts:
             tracks = _sequential_word_part_track_numbers(music_dir)
             if not tracks or tracks[0] != len(all_tracks) + 1:
                 valid = False
                 break
             all_tracks.extend(tracks)
-            # Preserve a genuinely different artist under a shared date/root.
-            samples = list(entry.get("music_sample_files", []) or [])
-            info = collect_group_flac_tag_info(samples, max_files=2) if samples else {}
-            for value in (info.get("flac_tag_albumartist_values") or info.get("flac_tag_artist_values") or []):
-                if normalized_compare_value(value):
-                    tagged_artists.add(normalized_compare_value(value))
-            if len(tagged_artists) > 1:
-                valid = False
-                break
         if not valid:
             continue
         for _index, music_dir, _entry in parts:
@@ -1325,6 +1402,7 @@ def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
         wrapper_parent_info=wrapper_parent_info,
     )
     consolidated_sibling_info = _consolidated_sibling_collection_info(music_dir_entries)
+    dated_named_info = _dated_named_child_aggregation_info(music_dir_entries, start_path)
     dated_supplemental_info = _dated_supplemental_descendant_info(music_dir_entries, start_path)
     sequential_word_info = _sequential_word_part_aggregation_info(music_dir_entries, start_path)
     if getattr(config, "compliant", False):
@@ -1339,7 +1417,9 @@ def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
             throttle_point(config)
             music_dir = _entry_music_dir(entry)
             music_key = os.path.normcase(os.path.normpath(music_dir))
-            info = consolidated_sibling_info.get(music_key)
+            info = dated_named_info.get(music_key)
+            if info is None:
+                info = consolidated_sibling_info.get(music_key)
             if info is None:
                 info = nested_wrapper_info.get(music_key)
             if info is None:

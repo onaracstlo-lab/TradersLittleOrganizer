@@ -1,0 +1,40 @@
+TLO v1.7 Build 614 — NOT RELEASE-ATTESTED (local verification only)
+
+Scope: Correct verification-report text that blocked Build 613 Linux GitHub Actions.
+The original Build 532 headless GUI test remains unchanged; application logic,
+grouping, tagging, transfer, security and GitHub Build Process v123 are unchanged.
+
+Root cause (GitHub Actions run 42153624196, 2026-11-06):
+- A historical release-contract test requires the exact phrase "6 skipped".
+- Build 613 report said "6 expected platform/environment skips", which is a
+  different string despite a similar meaning.
+- The full GitHub Actions run reported 2,188 passed, 26 skipped, 1 failed.
+  These 26 include native-platform and FFmpeg-dependent skips; they are NOT
+  the historical small headless GUI subset count.
+
+Display verification evidence:
+- Xvfb display (CI=1): Build 613 hosted Linux run completed its tests but
+  failed the Build 532 report-string assertion; NOT RELEASE-ATTESTED.
+- No display (DISPLAY and CI unset): Build 532 GUI subset (four test files)
+  reproduced 50 passed, 6 skipped. This is a subset result, not the full-suite
+  total or a claim that the hosted Linux run had only six skips.
+
+Verification for Build 614 (2026-11-06):
+- Complete local behavior suite without graphical display: 1,940 passed,
+  21 expected environment/platform skips, one expected warning from a deliberate
+  duplicate ZIP-entry negative test, and 0 failures.
+- Contract, unit, integration and pinned audit suites: 256 passed, 0 skipped,
+  0 failed. The Build 502 revision-index size contract was rerun after shortening
+  the navigational Build 614 entry; it passes.
+- Combined completed local suites: 2,196 passed, 21 skipped, 0 failures.
+- Historic Build 532 GUI subset reproduced in its own test: 50 passed,
+  6 skipped (not part of the full Linux CI totals).
+- All 318 Python files parsed successfully using Python 3.13.5.
+- Requirements v614 DOCX rendered to 124 pages, inspected for layout issues,
+  and its current-version/index metadata checked. User Manual RTF rendered to
+  41 pages, with correct title and final Build 614 release note.
+- Source ZIP full-file SHA-256 manifest SHA256SUMS_v614.txt and ZIP CRC
+  integrity are independently checked during package creation.
+- Ruff lint: lint not attested locally (Ruff unavailable in this sandbox).
+- Native executable builds, malware scanning, Windows signing, and hosted
+  release verification are pending; this source is NOT RELEASE-ATTESTED.

@@ -76,7 +76,7 @@ def test_unrelated_nested_show_blocks_supplemental_promotion(tmp_path):
     assert all(group["main_dir_path"] != os.path.normpath(str(show)) for group in groups)
 
 
-def test_conflicting_tagged_artist_keeps_supplemental_branch_independent(tmp_path, monkeypatch):
+def test_conflicting_audio_tag_does_not_change_supplemental_folder_grouping(tmp_path, monkeypatch):
     root = tmp_path / "boots"
     show = root / "Main Artist 1999-04-03 Venue City, ST"
     extra = show / "EXTRAS"
@@ -97,7 +97,7 @@ def test_conflicting_tagged_artist_keeps_supplemental_branch_independent(tmp_pat
     groups = phase._build_groups_from_search_path(_config(log), str(root))
 
     assert len(groups) == 1
-    assert groups[0]["main_dir_path"] == os.path.normpath(str(extra))
+    assert groups[0]["main_dir_path"] == os.path.normpath(str(show))
 
 
 def test_root_audio_and_disc_children_collapse_to_one_logical_show(tmp_path):
