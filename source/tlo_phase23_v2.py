@@ -2827,6 +2827,176 @@ def _apply_anchored_artist_place_before_date(
         return match
     return None
 
+def _match_comma_artist_city_date(
+    group: dict, matcher: Optional[ArtistMatcher], config
+) -> Optional[Dict[str, str]]:
+    """Recognize a uniquely DB-backed ``Artist, City Date`` show folder.
+
+    The comma supplies the artist/city boundary.  A single ordinary city word
+    need not be present in venues.txt or cities.csv; multiword cities must be
+    in the city reference.  The date token must be at the end of the folder,
+    but its numeric *interpretation* is deferred to normal setlist and online
+    corroboration.  No venue, state, or country is guessed.
+    """
+    if matcher is None:
+        return None
+    folder = compact_ws(group.get("main_dir_name", ""))
+    if folder.count(",") != 1:
+        return None
+    raw_artist, tail = folder.split(",", 1)
+    raw_artist = compact_ws(raw_artist).strip(" -.;")
+    if not raw_artist or not tail:
+        return None
+    detail, _apostrophe_fallback = _lookup_artist_detail_with_apostrophe_fallback(raw_artist, matcher)
+    if detail["status"] != "matched" or len(detail["masters"]) != 1:
+        return None
+    matches = _find_date_matches(tail)
+    if not matches:
+        return None
+    positions = {(int(item["start"]), int(item["end"])) for item in matches}
+    if len(positions) != 1:
+        return None
+    start, end = next(iter(positions))
+    if _clean_piece(tail[end:]):
+        return None
+    raw_date = tail[start:end].strip()
+    if not any(_is_complete_normalized_date(item.get("normalized", "")) for item in matches):
+        return None
+    city = compact_ws(tail[:start]).strip(" ,.;:-")
+    if not city or len(city) > 70 or any(char.isdigit() for char in city):
+        return None
+    known_cities = {name.casefold() for name in _anchored_city_suffixes(config)}
+    if city.casefold() not in known_cities:
+        # The comma is an independent boundary for a single plausible city
+        # word, but cannot safely split arbitrary multiword album/venue text.
+        if not re.fullmatch(r"[A-Z][A-Za-z'\-]{2,44}", city):
+            return None
+        if city.casefold() in {"live", "album", "demo", "demos", "unknown", "studio", "flac", "sbd", "aud", "remastered", "concert", "show", "compilation"}:
+            return None
+    return {"artist": _artist_output_name(config, raw_artist, detail["masters"][0]),
+            "city": city, "raw_date": raw_date, "raw_artist": raw_artist}
+
+
+def _add_optional_dmy_candidate(candidates: List[Dict[str, str]], raw_date: str) -> None:
+    """Include DD-MM-YY only for a guarded ambiguous terminal numeric date.
+
+    The legacy parser handles YY-MM-DD and MM-DD-YY and also identifies a
+    possible year range.  We don't globally reinterpret old folder names;
+    the explicit Artist, City boundary admits the extra DD-MM-YY possibility.
+    """
+    match = re.fullmatch(r"(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})", raw_date)
+    if not match or not candidates:
+        return
+    day, month, year = match.groups()
+    normalized = _normalize_date(_normalize_year_token(year), month, day)
+    if not normalized or any(item.get("normalized") == normalized for item in candidates):
+        return
+    seed = candidates[0]
+    candidates.append({"raw": raw_date, "normalized": normalized,
+                       "part": seed.get("part", ""), "part_path": seed.get("part_path", ""),
+                       "source": "comma_artist_city_date_dmy", "date_order": "dmy"})
+
+
+def _resolve_ambiguous_dates_from_online(
+    config, record: ShowMetadata, group: dict, matches: Sequence[Dict[str, str]],
+    evidence: Dict[str, List[Candidate]], observations: List[str],
+) -> str:
+    """Resolve one ambiguous numeric token only with a unique corroboration.
+
+    Selected setlist validation runs BEFORE this.  Compare ALL plausible full
+    dates against each enabled source, never stopping at the first positive
+    result.  Contradictory results and city mismatches fail closed.  Limit
+    probes to at most three dates to respect online request budgets.
+    """
+    if not record.artist or record.date or not (getattr(config, "etree_lookup", False) or getattr(config, "setlistfm_lookup", False)):
+        return ""
+    path_matches = [item for item in matches if str(item.get("source", "")).startswith(("path", "comma_artist_city_date"))]
+    if not path_matches:
+        return ""
+    raw_tokens = {str(item.get("raw", "")).strip() for item in path_matches}
+    # This is not a general solver for contradictory independent path dates.
+    # Every proposed date must arise from the SAME ambiguous date token.
+    if len(raw_tokens) != 1:
+        return ""
+    # Identical spellings in separate path components are independent clues;
+    # only one physical date token can be disambiguated by this fallback.
+    if len({str(item.get("part_path", "")) for item in path_matches}) != 1:
+        return ""
+    token = next(iter(raw_tokens))
+    if not re.fullmatch(r"\d{1,2}[-/.]\d{1,2}[-/.]\d{2}", token):
+        return ""
+    candidates = sorted({item.get("normalized", "") for item in path_matches
+                         if _is_exact_yyyy_mm_dd_date(item.get("normalized", ""))})
+    if not 2 <= len(candidates) <= 3:
+        return ""
+    # A selected setlist containing conflicting explicit complete dates is
+    # not license to override local evidence with a remotely guessed date.
+    setlist_values = {item.get("normalized", "") for item in _collect_setlist_date_matches(group)
+                      if _is_exact_yyyy_mm_dd_date(item.get("normalized", ""))}
+    if len(setlist_values) > 1:
+        observations.append("ambiguous date online validation declined: selected setlist has conflicting complete dates")
+        return ""
+    supported = set()
+    attempted = []
+    for candidate_date in candidates:
+        for source in ("etreedb", "setlist.fm"):
+            if not getattr(config, "etree_lookup" if source == "etreedb" else "setlistfm_lookup", False):
+                continue
+            attempted.append((source, candidate_date))
+            try:
+                if source == "etreedb":
+                    results = lookup_venue_and_location(record.artist, candidate_date, debug=bool(getattr(config, "debug", False)))
+                else:
+                    kwargs = {
+                        "debug": bool(getattr(config, "debug", False)),
+                        "min_interval_seconds": float(getattr(config, "setlistfm_min_interval_seconds", 0.600) or 0.600),
+                        "max_calls": int(getattr(config, "setlistfm_max_calls", 1400) or 0),
+                        "max_calls_per_day": int(getattr(config, "setlistfm_max_calls_per_day", 0) or 0),
+                        "run_id": str(getattr(config, "setlistfm_run_id", "") or ""),
+                        "tlo_home": str(getattr(config, "TLOHome", "") or ""),
+                        "lock_timeout_seconds": float(getattr(config, "setlistfm_lock_timeout_seconds", 20.0) or 20.0),
+                    }
+                    if getattr(config, "thorough_setlist_matching", False):
+                        kwargs["thorough"] = True
+                    results = lookup_setlistfm_venue_and_location(record.artist, candidate_date, **kwargs)
+            except Exception as exc:
+                # An unavailable source cannot establish that other candidate
+                # dates are absent, so the decision must remain unresolved.
+                observations.append(f"ambiguous date {source} validation failed for {candidate_date}: {exc}")
+                return ""
+            for result in (results or []):
+                result_artist = compact_ws(getattr(result, "artist", "") or "")
+                if normalized_compare_value(result_artist) != normalized_compare_value(record.artist):
+                    continue
+                result_date = str(getattr(result, "normalized_date", "") if source == "etreedb"
+                                  else getattr(result, "event_date", "") or "").strip()
+                expected = candidate_date if source == "etreedb" else datetime.strptime(candidate_date, "%Y-%m-%d").strftime("%d-%m-%Y")
+                if result_date != expected:
+                    continue
+                result_city = compact_ws(getattr(result, "city", "") or "")
+                result_venue = compact_ws(getattr(result, "venue", "") or "")
+                if not result_city or not result_venue:
+                    continue
+                if record.city and normalized_compare_value(result_city) != normalized_compare_value(record.city):
+                    continue
+                supported.add(candidate_date)
+    if not attempted:
+        return ""
+    if len(supported) != 1:
+        observations.append(
+            "ambiguous date online validation remained unresolved: "
+            f"dates={','.join(candidates)} corroborated={','.join(sorted(supported)) or 'none'}"
+        )
+        return ""
+    chosen = next(iter(supported))
+    evidence.setdefault("date", []).append(Candidate(chosen, "ambiguous_date_online_corroboration", 83))
+    observations.append(
+        f"ambiguous date resolved by unique online artist/date/place corroboration: "
+        f"{token} -> {chosen} after checking {len(attempted)} source/date combinations"
+    )
+    return chosen
+
+
 def _match_date_artist_venue_location(
     text: str, matcher: Optional[ArtistMatcher]
 ) -> Tuple[Optional[Dict[str, object]], List[str]]:
@@ -7168,6 +7338,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
     deferred_tag_source = ""
     dash_album_match: Optional[Dict[str, str]] = None
     dash_album_mode = False
+    comma_city_match: Optional[Dict[str, str]] = None
     artist_place_date_technical_suffix_match: Optional[Dict[str, object]] = None
     artist_place_date_technical_suffix_hint_kind = ""
     aggregate_album_name = compact_ws(group.get("aggregate_album_name", ""))
@@ -7241,6 +7412,23 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             if deferred_detail["status"] != "matched":
                 observations.append(
                     f"deferring raw tag artist while path/setlist evidence is checked: {deferred_tag_artist}"
+                )
+
+        # Build 621: a literal comma after a uniquely matched artist gives a
+        # usable City boundary, even when the terminal numeric date is
+        # ambiguous.  Do not select a date here; let selected setlist evidence
+        # and the bounded online candidate comparison do so later.
+        if not record.artist and not setlist_place_date and not aggregate_album_name and len(conflicts) == 0:
+            comma_city_match = _match_comma_artist_city_date(group, artist_matcher, config)
+            if comma_city_match:
+                record.artist = comma_city_match["artist"]
+                record.city = comma_city_match["city"]
+                record.location = record.city
+                evidence.setdefault("artist", []).append(Candidate(record.artist, "comma_artist_city_date", 76))
+                evidence.setdefault("city", []).append(Candidate(record.city, "comma_artist_city_date", 65))
+                observations.append(
+                    f"guarded Artist, City Date fallback: {record.artist} | {record.city} | "
+                    f"date token {comma_city_match['raw_date']} awaiting validation"
                 )
 
         # A terminal date after an explicit performance preposition is not a
@@ -7399,6 +7587,8 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                     if match.get(key):
                         item[key] = match[key]
                 date_candidates.append(item)
+            if comma_city_match:
+                _add_optional_dmy_candidate(date_candidates, comma_city_match["raw_date"])
             record.date, date_matches = _resolve_date_with_structural_precedence(
                 group, date_candidates, tag_date_matches, evidence, conflicts, observations,
                 "date conflict across path pattern matches",
@@ -7439,6 +7629,21 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                                 observations.append("setlist date fallback found conflicting dates")
                         else:
                             observations.append("unable to identify date in path, DATE tags, music filenames, or setlist file")
+
+        # Build 621: compare each plausible interpretation of one ambiguous
+        # terminal numeric date only AFTER the selected-setlist resolver has
+        # declined to choose.  Keep unrelated conflict flags intact.
+        for date_conflict in ("date conflict across path pattern matches", "date conflict across path parts"):
+            if not record.date and date_conflict in conflicts and record.artist:
+                online_date = _resolve_ambiguous_dates_from_online(
+                    config, record, group, date_matches, evidence, observations
+                )
+                if online_date:
+                    record.date = online_date
+                    conflicts.remove(date_conflict)
+                    date_matches.append({"raw": online_date, "normalized": online_date,
+                                         "source": "ambiguous_date_online_corroboration"})
+                break
 
         if chosen_string2_match:
             _apply_string2_to_record(record, chosen_string2_match, evidence)

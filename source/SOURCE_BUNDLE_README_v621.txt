@@ -1,7 +1,7 @@
-TLO Source and Utilities Bundle v620
+TLO Source and Utilities Bundle v621
 
-Public application version: v1.7 Build 620
-Source bundle label: v620
+Public application version: v1.7 Build 621
+Source bundle label: v621
 Paired native release GitHub Build Process: v123
 
 Corruption policy: No inspection without tagging or Deep Audio Check. A tag failure
@@ -13,13 +13,13 @@ large collections. Deletion thresholds and safeguards are unchanged. Manual Twea
 has no corruption checking.
 
 Current documentation files:
-- TLO_Inventory_User_Manual_v620.rtf (What's New plus concise usage)
-- TLO_Inventory_Requirements_Working_v620.docx (consolidated specification)
+- TLO_Inventory_User_Manual_v621.rtf (What's New plus concise usage)
+- TLO_Inventory_Requirements_Working_v621.docx (consolidated specification)
 - TLO-FAQ.txt
 - tlo-preferences.ini (user-approved concise default, choices and ranges annotated; copied on first startup into TLOHome)
-- CHANGES_v620.txt
-- BUILD_VERIFICATION_v620.txt
-- SHA256SUMS_v620.txt
+- CHANGES_v621.txt
+- BUILD_VERIFICATION_v621.txt
+- SHA256SUMS_v621.txt
 
 Build 594 retains Build 590 behavior: successful Add New Shows Tag In Place completion before a
 performance is staged, inventoried or exported as a setlist. Incomplete tag
@@ -105,7 +105,7 @@ ambiguous city endings stay unresolved; full dates and Artist DB prefix
 checks are still required. The existing grouping, dash/MDY and Compliant
 behaviors remain unchanged. Build Process v123 was not modified.
 
-Build 620: Non-compliant artist resolution no longer treats numbered CD/Disc/Set
+Build 621: Non-compliant artist resolution no longer treats numbered CD/Disc/Set
 part-title suffixes as possible artists. For tightly joined short artist/date
 show folders such as who1974-05-18.sbd and who1997-07-23.flac16..., generic
 artist scans consider only the leading prefix; titles/venues/locations following

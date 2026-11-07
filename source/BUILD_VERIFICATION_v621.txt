@@ -1,3 +1,14 @@
+TLO v1.7 Build 621 — NOT RELEASE-ATTESTED (local verification only)
+
+Scope: Guarded comma-delimited city-only recognition and ambiguous-date candidate
+corroboration. Existing setlist validation precedes bounded online checks; no
+automatic date guess, no Compliant change. GitHub Build Process v123 unchanged.
+
+Local checks: Behavior batches 2,062 passed, 6 expected platform/tool skips, no remaining failures after clean-tree cache removal and integrity-test rerun. Contract, unit, integration and audit-pin tests: 256 passed. Legacy requirements: 1,406 passed (overlapping). Focused Build 621 plus adjacent parse/regressions: 73 passed. Syntax: 325 Python files passed AST. Requirements rendered at 127 pages and User Manual at 42 pages. Ruff lint not run locally.
+Ruff lint: NOT ATTESTED LOCALLY (Ruff unavailable).
+Native executables, malware scans, Windows signing and hosted release gates: PENDING.
+Historical Build 532 display subset: Xvfb display (CI=1); No display (DISPLAY and CI unset); 6 skipped (subset, not full hosted suite).
+
 TLO v1.7 Build 620 — NOT RELEASE-ATTESTED (local verification only)
 
 Scope: Apply a guarded right-to-left city suffix venue/location inference only

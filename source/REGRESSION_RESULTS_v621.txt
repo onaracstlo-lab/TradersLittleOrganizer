@@ -1,3 +1,8 @@
+TLO v1.7 Build 621 — LOCAL REGRESSION RESULTS — 2026-11-07
+
+Guarded Artist, City Date plus unique-source validation for ambiguous dates.
+Focused and adjacent parse/regression tests: 73 passed; separate final code change spot-check: 30 passed. Complete behavior batches: 2,062 passed, 6 skipped, 0 remaining failures. One source-tree integrity test initially failed due to locally generated __pycache__ files; after removal the exact failing test passed and the release tree was cleaned. Contracts/unit/integration/audit-pin: 256 passed. Legacy requirements: 1,406 passed (overlaps). AST parses all 325 Python source files. DOCX requirements: 127 rendered pages; User Manual RTF: 42 rendered pages. Ruff/native executable builds/security scans/signatures not attested locally.
+
 TLO v1.7 Build 620 — LOCAL REGRESSION RESULTS — 2026-11-07
 
 Scope: Protect Artist DB resolution against false positives in descriptive
