@@ -30,6 +30,7 @@ class SetlistVenueLocationResult:
     artist: str = ""
     artist_source: str = ""
     artist_confidence: int = 0
+    year_hint: str = ""
     venue: str = ""
     city: str = ""
     region: str = ""
@@ -1646,6 +1647,66 @@ def _confirmed_event_date_location_header(lines: List[str], support: _SupportDat
     return "", "", "", "", "", ""
 
 
+
+_RECORDED_LIVE_YEAR_HEADER = re.compile(
+    r"(?i)^recorded\s+live\s+in\s+(?P<place>[A-Za-z][A-Za-z .,'-]{1,65}?)"
+    r"\s+(?P<year>(?:19|20)\d{2})\s*[.!]?\s*$"
+)
+_RECORDED_LIVE_ARTIST_NOTE = re.compile(
+    r"(?i)\b(?:call|named?|list(?:ed)?)\s+the\s+artist\s*[,;:= -]+\s*"
+    r"(?P<name>[A-Za-z][A-Za-z&'. -]{1,85}?)\s*(?:[.!?]|$)"
+)
+
+
+def _recorded_live_year_header(
+    header_lines: List[str], content_lines: List[str], support: _SupportData,
+) -> Tuple[str, str, str, str, str, bool]:
+    """Read a first-line artist + 'Recorded Live in City YEAR' concert header.
+
+    This is intentionally not a general year-in-prose parser.  The artist
+    must be the first non-decorative header line; a direct recording statement
+    must appear immediately below it (allowing a brief release title).  A
+    distinct later author note can corroborate a non-DB artist without relying
+    on audio tags or inferring an unprovided day/month/venue/state.
+    """
+    if len(header_lines) < 2:
+        return "", "", "", "", "", False
+    artist = _clean_spaces(header_lines[0])
+    if (
+        not _looks_like_unlabeled_artist_header_line(artist, support)
+        or _explicit_metadata_match(artist)
+        or _norm_key(artist) in {"various artists", "unknown", "unknown artist", "live", "concert"}
+    ):
+        return "", "", "", "", "", False
+    for line in header_lines[1:4]:
+        match = _RECORDED_LIVE_YEAR_HEADER.fullmatch(_clean_spaces(line))
+        if not match:
+            continue
+        place = _clean_spaces(match.group('place')).strip(' ,')
+        if not re.fullmatch(r"[A-Z][A-Za-z' -]*(?:,\s*[A-Z]{2})?", place):
+            continue
+        if len(place.split()) > 5:
+            continue
+        city, region, country, _raw, _pattern, _conf = _parse_location_from_text(place, support)
+        if not city:
+            # 'Denver' without a state/country is usable city evidence in an
+            # explicit recorded-live statement.  Do not invent a region.
+            split = re.fullmatch(r"(?P<city>[A-Z][A-Za-z' -]*)(?:,\s*(?P<state>[A-Z]{2}))?", place)
+            if split is None:
+                continue
+            city = _clean_spaces(split.group('city'))
+            region = split.group('state') or ''
+            country = ''
+        if not city or _norm_key(city) in {"unknown", "various", "somewhere"}:
+            continue
+        confirmed = any(
+            _norm_key(note.group('name')) == _norm_key(artist)
+            for text_line in content_lines[5:]
+            for note in _RECORDED_LIVE_ARTIST_NOTE.finditer(text_line)
+        )
+        return artist, city, region, country, match.group('year'), confirmed
+    return "", "", "", "", "", False
+
 def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> SetlistVenueLocationResult:
     """Extract venue/location from one selected setlist text file.
 
@@ -1673,6 +1734,9 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
         return SetlistVenueLocationResult(source="setlist_metadata:no_usable_header_metadata_before_tracklist")
 
     support = _SupportData(tlo_dbs_dir)
+    recorded_artist, recorded_city, recorded_region, recorded_country, recorded_year, recorded_confirmed = (
+        _recorded_live_year_header(metadata_lines, lines, support)
+    )
     structured_artist, structured_venue, structured_city, structured_region, structured_country, structured_raw, structured_pattern, structured_conf = _extract_structured_unlabeled_header_block(metadata_lines, support)
     event_artist, event_venue, event_city, event_region, event_country, event_location_raw = _confirmed_event_date_location_header(_metadata_header_lines(lines, 80), support)
     if event_artist:
@@ -1680,6 +1744,9 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
         structured_conf = max(structured_conf, 94)
         structured_venue, structured_city, structured_region, structured_country = event_venue, event_city, event_region, event_country
         structured_raw, structured_pattern = event_location_raw, "LOCATION_EVENT_DATE_CITY_AT_VENUE"
+    if not structured_artist and recorded_artist:
+        structured_artist = recorded_artist
+        structured_conf = max(structured_conf, 91 if recorded_confirmed else 86)
     inline_artist, inline_venue, inline_conf = _extract_inline_artist_date_header(metadata_lines, support)
     if not structured_artist and inline_artist:
         structured_artist = inline_artist
@@ -1701,7 +1768,11 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
     explicit_artist = safe_title(_normalize_artist_header_text(fields.get("artist", "")))
     structured_artist = safe_title(_normalize_artist_header_text(structured_artist))
     artist = explicit_artist or structured_artist
-    artist_source = ("setlist_metadata:EXPLICIT_ARTIST_KEY" if explicit_artist else
+    artist_source = ("setlist_metadata:CORROBORATED_RECORDED_LIVE_HEADER"
+                     if recorded_artist and recorded_confirmed and _norm_key(recorded_artist) == _norm_key(artist) else
+                     "setlist_metadata:RECORDED_LIVE_YEAR_HEADER"
+                     if recorded_artist and _norm_key(recorded_artist) == _norm_key(artist) else
+                     "setlist_metadata:EXPLICIT_ARTIST_KEY" if explicit_artist else
                      "setlist_metadata:CONFIRMED_EVENT_HEADER" if event_artist else
                      "setlist_metadata:STRUCTURED_UNLABELED_ARTIST_HEADER" if structured_artist else "")
     artist_confidence = 95 if explicit_artist else (max(88, structured_conf) if structured_artist else 0)
@@ -1802,6 +1873,11 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
                 location_confidence += 8
             break
 
+    if not city and recorded_artist and recorded_city:
+        city, region, country = recorded_city, recorded_region, recorded_country
+        raw_location = f"Recorded Live in {recorded_city} {recorded_year}"
+        pattern_id = "LOCATION_RECORDED_LIVE_YEAR_HEADER"
+        location_confidence = max(location_confidence, 88)
     if _is_unknown_venue(venue):
         venue = ""
         raw_venue = ""
@@ -1839,6 +1915,7 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
         artist=artist,
         artist_source=artist_source,
         artist_confidence=min(99, int(artist_confidence or 0)),
+        year_hint=recorded_year if recorded_artist and artist else "",
         venue=venue,
         city=city,
         region=region,

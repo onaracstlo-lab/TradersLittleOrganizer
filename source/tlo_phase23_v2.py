@@ -5,6 +5,7 @@ __version__ = _TLO_CANONICAL_VERSION
 
 from tlo_diagnostics import debug_suppressed_exception
 from tlo_text_utils import read_text_file_full
+import csv
 import json
 import os
 import re
@@ -1644,7 +1645,18 @@ def _eligible_artist_path_parts(group: dict) -> List[Tuple[str, str]]:
         music_dirs = [group.get("main_dir_path")]
     for music_dir in music_dirs:
         for cleaned, part_path in _all_clean_path_parts(music_dir):
-            if INTEGER_RE.fullmatch(cleaned) or len(cleaned) == 1 or _is_wrapper(cleaned):
+            if (
+                INTEGER_RE.fullmatch(cleaned)
+                or len(cleaned) == 1
+                or _is_wrapper(cleaned)
+                # Build 620: a descriptive Disc/CD/Set child names a recording
+                # part, NOT its performer.  A real artist embedded in a track
+                # title ("Disc2 - Love Rain O'er Me") must not conflict with
+                # the exact artist directory above the dated show.  Only
+                # skip it for generic artist scans; the original folder name
+                # remains intact for grouping, transfer, and setlist handling.
+                or _DATED_DESCRIBED_PART_RE.fullmatch(cleaned)
+            ):
                 continue
             key = cleaned.casefold()
             if key in seen:
@@ -2582,6 +2594,238 @@ def _pre_date_place_hint_kind(config, place_hint: str) -> Tuple[str, Dict[str, s
         return "raw_single_word", {"location": hint}
     return "", {}
 
+
+
+
+# A modest, deliberately conservative city vocabulary for city-only venue
+# suffixes.  The optional TLOHome/TLO_DBs/cities.csv can extend this list.
+# No state/country is inferred from a city name: Boston alone means Boston.
+# "New York" is intentionally omitted because its city/state boundary is
+# ambiguous without stronger independent evidence.
+_ANCHORED_CITY_SUFFIXES = frozenset({
+    "Atlanta", "Austin", "Baltimore", "Berkeley", "Boston", "Boulder",
+    "Brooklyn", "Buffalo", "Cambridge", "Chicago", "Cincinnati",
+    "Cleveland", "Dallas", "Denver", "Detroit", "Houston", "Las Vegas",
+    "Los Angeles", "Madison", "Miami", "Minneapolis", "Nashville",
+    "New Orleans", "New York City", "Oakland", "Philadelphia",
+    "Pittsburgh", "Portland", "Sacramento", "San Diego",
+    "San Francisco", "Santa Cruz", "Seattle", "St. Louis", "Tampa",
+    "Toronto", "Vancouver", "Washington, DC",
+})
+
+
+def _anchored_city_suffixes(config) -> List[str]:
+    """Return documented cities plus optional cities.csv names and aliases.
+
+    cities.csv uses caret-delimited city^region^country^aliases, as the
+    existing TLO setlist-support data does.  An entry establishes the *city
+    spelling only*, never an unmentioned region.  Malformed files fail closed.
+    """
+    cities = set(_ANCHORED_CITY_SUFFIXES)
+    db_dir = compact_ws(getattr(config, "tlo_dbs_dir", "") or "")
+    if not db_dir:
+        home = compact_ws(getattr(config, "TLOHome", "") or "")
+        db_dir = os.path.join(home, "TLO_DBs") if home else ""
+    if db_dir:
+        filename = os.path.join(db_dir, "cities.csv")
+        if os.path.isfile(filename):
+            try:
+                with open(filename, "r", encoding="utf-8-sig", newline="") as handle:
+                    for row in csv.DictReader(handle, delimiter="^"):
+                        if not row:
+                            continue
+                        for value in [row.get("city", ""), *(row.get("aliases", "") or "").split("|")]:
+                            name = compact_ws(value or "").strip(" ,")
+                            if name and len(name) >= 3 and not any(ch.isdigit() for ch in name):
+                                cities.add(name)
+            except (OSError, UnicodeError, csv.Error):
+                pass
+    return sorted(cities, key=lambda name: (-len(name.split()), -len(name), name.casefold()))
+
+
+def _infer_anchored_city_suffix(config, place: str, preposition: str) -> Tuple[str, str, str]:
+    """Infer a venue and a city from the right, after lookup sources fail.
+
+    Only exact whole city suffixes are allowed, using a conservative builtin
+    vocabulary or optional cities.csv.  Requiring a nonempty left remainder
+    for 'at' avoids treating a city-only phrase as a venue; 'in' permits
+    location-only.  No guessed state or country is returned.
+    """
+    raw = compact_ws(place or "").strip(" ,.;:-")
+    prep = str(preposition or "").casefold()
+    if not raw or prep not in {"at", "in"}:
+        return "", "", ""
+    for name in _anchored_city_suffixes(config):
+        # Exact suffix token boundary; tolerate a comma or whitespace before
+        # the city but do not match embedded words such as East Boston.
+        match = re.search(r"(?i)(?:^|[\s,])(?P<city>" + re.escape(name) + r")$", raw)
+        if not match:
+            continue
+        venue = compact_ws(raw[:match.start("city")]).strip(" ,.;:-")
+        if venue and not re.search(r"[A-Za-z0-9]", venue):
+            continue
+        if prep == "at" and not venue:
+            continue
+        # Preserve source spelling, avoid confidence inflation from database
+        # capitalization, and keep terminal punctuation out of venue/city.
+        city = compact_ws(match.group("city")).strip(" ,.;:-")
+        return venue, city, "cities.csv" if name not in _ANCHORED_CITY_SUFFIXES else "built-in city reference"
+    return "", "", ""
+
+
+def _known_venue_with_trailing_city(config, place: str) -> Tuple[str, str]:
+    """Split a regionless ``Venue City`` only with an exact known venue.
+
+    A trailing capitalized city alone is not sufficient to guess where a
+    multi-word venue ends.  The venues.txt match supplies the missing
+    boundary; it does not supply an unmentioned state/country.
+    """
+    text = compact_ws(place).strip(" ,")
+    tokens = list(re.finditer(r"[A-Za-z][A-Za-z'.-]*", text))
+    if len(tokens) < 2:
+        return "", ""
+    for token in reversed(tokens[:-1]):
+        venue_raw = compact_ws(text[:token.end()]).strip(" ,")
+        city = compact_ws(text[token.end():]).strip(" ,")
+        if not re.fullmatch(r"[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){0,2}", city):
+            continue
+        venue = _known_venue_exact(config, venue_raw)
+        if venue:
+            return venue, city
+    return "", ""
+
+
+def _match_anchored_artist_place_before_date(
+    text: str, matcher: Optional[ArtistMatcher], config
+) -> Optional[Dict[str, str]]:
+    """Conservative ``Artist (at|in|Live at|Live in) Place Date`` fallback.
+
+    This deliberately does not guess artists by taking the first one or two
+    words.  Try every complete DB prefix, longest first, and require a real
+    delimiter followed by independently parseable place evidence.  A unique
+    complete date must be *last*, so embedded album dates do not activate it.
+    A known venue is required to split a regionless ``Venue City`` tail.
+    """
+    if matcher is None:
+        return None
+    folder = compact_ws(text)
+    dates = [item for item in _find_date_matches(folder)
+             if _is_exact_yyyy_mm_dd_date(item.get("normalized", ""))]
+    # Do not choose between conflicting or multiple dates in a free-text name.
+    if len(dates) != 1 or _clean_piece(folder[int(dates[0]["end"]):]):
+        return None
+    before = _clean_piece(folder[:int(dates[0]["start"])])
+    tokens = list(re.finditer(r"[A-Za-z][A-Za-z'&.+-]*", before))
+    if len(tokens) < 2:
+        return None
+    for token in reversed(tokens[:-1]):
+        raw_artist = _clean_piece(before[:token.end()])
+        remainder = before[token.end():]
+        boundary = re.match(r"^\s*(?:-\s+)?(?:(?P<live>live)\s+)?(?P<prep>at|in)\b\s+(?P<place>.+)$", remainder, re.I)
+        if not boundary:
+            continue
+        detail, apostrophe_fallback = _lookup_artist_detail_with_apostrophe_fallback(raw_artist, matcher)
+        if detail["status"] == "collision":
+            # An ambiguous longer artist cannot be replaced by a shorter one.
+            return None
+        if detail["status"] != "matched" or len(detail["masters"]) != 1:
+            continue
+        place = _clean_piece(boundary.group("place"))
+        # Without a comma, 'New York' may denote the state or be part
+        # of the venue name.  Do not turn it into the state anchor NY.
+        unqualified_new_york = bool(re.search(r"(?i)\bNew York$", place) and "," not in place)
+        if unqualified_new_york:
+            venue = city = region = country = extra = ""
+        else:
+            venue, city, region, country, extra = _parse_string2(
+                place, allow_lowercase_region_codes=_is_consistently_lowercase_path_fragment(place)
+            )
+        # "in Santa Cruz, CA" names a city, not a venue called Santa.
+        if boundary.group("prep").lower() == "in" and "," in place:
+            city_raw, _, anchor_raw = place.rpartition(",")
+            if city_raw and "," not in city_raw and re.fullmatch(r"[A-Za-z][A-Za-z'. -]{0,70}", city_raw.strip()):
+                anchored_region = _state_term_to_code(anchor_raw.strip())
+                if anchored_region:
+                    venue, city, region, country, extra = (
+                        "", compact_ws(city_raw).strip(), anchored_region,
+                        _region_code_country(anchored_region), ""
+                    )
+        if not city or not (region or country) or extra:
+            # Regionless city boundaries are deferred until all online and
+            # selected-setlist sources have been tried. Exact venue DB matches
+            # remain independently usable for the 'at' form.
+            if boundary.group("prep").lower() == "at" and not unqualified_new_york:
+                venue, city = _known_venue_with_trailing_city(config, place)
+                region = country = extra = ""
+            else:
+                venue = city = region = country = extra = ""
+        if not city or (boundary.group("prep").lower() == "at" and not venue):
+            # A unique leading artist with an explicit performance preposition
+            # is still stronger than a later venue word accidentally matching
+            # the Artist DB. Preserve artist/date, leave ambiguous place blank.
+            venue = city = region = country = ""
+            place_unresolved = "1"
+        else:
+            place_unresolved = ""
+        return {
+            "artist_raw": raw_artist, "artist_master": detail["masters"][0],
+            "date_raw": dates[0]["raw"], "date_norm": dates[0]["normalized"],
+            "venue": venue, "city": city, "region": region, "country": country,
+            "apostrophe_fallback": str(bool(apostrophe_fallback)),
+            "place_raw": place, "place_unresolved": place_unresolved,
+            "preposition": boundary.group("prep").lower(),
+        }
+    return None
+
+
+def _apply_anchored_artist_place_before_date(
+    config, group: dict, record: ShowMetadata,
+    evidence: Dict[str, List[Candidate]], observations: List[str],
+    matcher: Optional[ArtistMatcher],
+) -> Optional[Dict[str, str]]:
+    if getattr(config, "current_slam", ""):
+        return None
+    for part, part_path in _candidate_path_parts(group.get("main_dir_path", "")):
+        match = _match_anchored_artist_place_before_date(part, matcher, config)
+        if not match:
+            continue
+        artist = _artist_output_name(config, match["artist_raw"], match["artist_master"])
+        # Respect previously established independent metadata rather than
+        # silently replacing a strong setlist or tag value.
+        if record.artist and not _metadata_values_equivalent(record.artist, artist):
+            continue
+        if record.date and not _dates_compatible(record.date, match["date_norm"]):
+            continue
+        record.artist = artist
+        record.date = match["date_norm"]
+        record.venue = match["venue"]
+        record.city = match["city"]
+        record.region = match["region"]
+        record.country = match["country"]
+        record.location = _join_location(record.city, record.region, record.country)
+        evidence.setdefault("artist", []).append(Candidate(artist, f"anchored_artist_place_date:{part_path}", 74))
+        evidence.setdefault("date", []).append(Candidate(record.date, f"anchored_artist_place_date:{part_path}", 72))
+        if record.venue:
+            evidence.setdefault("venue", []).append(Candidate(record.venue, f"anchored_artist_place_date:{part_path}", 64))
+        if record.city:
+            evidence.setdefault("city", []).append(Candidate(record.city, f"anchored_artist_place_date:{part_path}", 62))
+        if record.region:
+            evidence.setdefault("region", []).append(Candidate(record.region, f"anchored_artist_place_date:{part_path}", 62))
+        if record.country:
+            evidence.setdefault("country", []).append(Candidate(record.country, f"anchored_artist_place_date:{part_path}", 62))
+        observations.append(
+            "guarded Artist (Live) at/in Place Date fallback matched: "
+            f"{artist} | {record.venue} | {record.location} | {record.date}"
+        )
+        if match.get("place_unresolved"):
+            observations.append(
+                "pre-date place not independently anchored; preserved DB-backed "
+                "artist/date without guessing venue or city"
+            )
+        match["part"] = part
+        match["part_path"] = part_path
+        return match
+    return None
 
 def _match_date_artist_venue_location(
     text: str, matcher: Optional[ArtistMatcher]
@@ -4805,6 +5049,8 @@ def _contains_blankable_noncompliant_artist_tag(value: str, matcher: Optional[Ar
     if term and _lookup_artist_detail(term, matcher)["status"] == "matched":
         return ""
     folded = standard_ascii_text(term).casefold()
+    if folded and not any(ch.isalnum() for ch in folded):
+        return "punctuation-only"
     for marker in NONCOMPLIANT_BLANK_ARTIST_TAG_MARKERS:
         if marker in folded:
             return marker
@@ -5232,6 +5478,23 @@ def _db_backed_artist_hits_for_path_part(
     reversed_name = _reverse_last_first_artist_component(part)
     if reversed_name and add_lookup(reversed_name, reversed_name):
         return hits, collisions
+
+    # Build 620: when an etree-style folder starts with a short unseparated
+    # artist/date prefix ("who1974-06-14.flac16 ..."), the remainder is a
+    # description, source, venue, and location -- not a second artist search
+    # space.  Preserve a real, DB-backed short prefix (including conflicts
+    # with an incompatible parent artist), but never let "New York", "Love",
+    # "Marcus", etc. embedded after the date become competing performers.
+    # Other dated structures retain the normal artist-scanning behavior.
+    abbreviation_dates = [
+        match for match in _find_date_matches(part)
+        if _is_complete_normalized_date(match["normalized"])
+        and _is_abbreviation_candidate(part, int(match["start"]), part[: int(match["start"])])
+    ]
+    if len(abbreviation_dates) == 1:
+        leading = compact_ws(part[: int(abbreviation_dates[0]["start"])])
+        add_lookup(leading, leading)
+        return hits, _unique_preserve(collisions)
 
     for master, phrase in match_line_to_artists(part, matcher):
         cleaned_phrase = compact_ws(phrase)
@@ -5881,6 +6144,24 @@ def _apply_string2_to_record(record: ShowMetadata, match: Optional[Dict[str, str
     if not match or not match.get("string2"):
         return
     string2 = match["string2"]
+    # Build 620: a media marker immediately AFTER the date is not a place.
+    # Only strip it when the original path has the explicit "DATE.flac16"
+    # boundary; an ordinary venue whose name begins with e.g. "FM" or
+    # "Audio" must not be trimmed.  The remainder can still be interpreted
+    # by the existing guarded location parser or later online lookups.
+    raw_part = str(match.get("part", ""))
+    date_raw = str(match.get("date_raw", ""))
+    if date_raw and re.search(
+        rf"{re.escape(date_raw)}[._](?:flac(?:16|24)?|shnf?|sbd|aud|wav|mp3)(?=$|[ .,_-])",
+        raw_part,
+        re.IGNORECASE,
+    ):
+        string2 = re.sub(
+            r"(?i)^(?:flac(?:16|24)?|shnf?|sbd|aud|wav|mp3)(?=$|\s)[\s._-]*",
+            "",
+            string2,
+            count=1,
+        )
     venue, city, region, country, extra_parenthetical = _parse_string2(
         string2,
         allow_lowercase_region_codes=_is_consistently_lowercase_path_fragment(string2),
@@ -6185,6 +6466,14 @@ def _match_db_artist_venue_city_date_without_string2(
     if matcher is None:
         return None
     folder = compact_ws(group.get("main_dir_name", ""))
+    # Explicit (Live) at/in has its own Artist DB anchored parser.  The older
+    # whitespace-based fallback would otherwise fold 'Live at' into the venue.
+    if _match_anchored_artist_place_before_date(folder, matcher, config):
+        return None
+    # Do not choose the venue as a DB-backed artist when the unknown leading
+    # performer is followed by an explicit 'at'/'in' boundary.
+    if re.search(r"(?i)\b(?:live\s+)?(?:at|in)\s+\S", folder):
+        return None
     dates = [item for item in _find_date_matches(folder) if item.get("date_order") == "ymd" and re.fullmatch(r"(?:19|20)\d{2}-\d{2}-\d{2}", item.get("raw", ""))]
     if len(dates) != 1 or _clean_piece(folder[int(dates[0]["end"]):]):
         return None
@@ -6331,7 +6620,10 @@ def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata,
         )
         artist_source = getattr(result, "artist_source", "") or "setlist_metadata:EXPLICIT_ARTIST_KEY"
         artist_confidence = int(getattr(result, "artist_confidence", 0) or max(confidence, 80))
-        structured_unlabeled = artist_source == "setlist_metadata:STRUCTURED_UNLABELED_ARTIST_HEADER"
+        structured_unlabeled = artist_source in {
+            "setlist_metadata:STRUCTURED_UNLABELED_ARTIST_HEADER",
+            "setlist_metadata:RECORDED_LIVE_YEAR_HEADER",
+        }
         folder_agrees = _artist_agrees_with_leading_show_folder(
             lookup_setlist_artist, record.main_dir_name
         ) or any(
@@ -6449,6 +6741,21 @@ def _apply_setlist_metadata_to_noncompliant_record(config, record: ShowMetadata,
                     record, lookup_setlist_artist, folder_agrees,
                     detail["status"], observations,
                 )
+
+    # A year attached to a confirmed recorded-live header improves only an
+    # entirely unknown date.  Never displace a complete or partial path date,
+    # and do not trust a header whose artist was rejected as ambiguous.
+    if (
+        getattr(result, "year_hint", "")
+        and record.date in {"", "xxxx-xx-xx"}
+        and getattr(result, "artist", "")
+        and record.artist
+        and _metadata_values_equivalent(record.artist, result.artist)
+    ):
+        record.date = f"{result.year_hint}-xx-xx"
+        evidence.setdefault("date", []).append(Candidate(record.date, source + ":year_only", 82))
+        observations.append(f"selected setlist recorded-live year used as partial date: {record.date}")
+        applied = True
 
     if _apply_setlist_scalar_field(
         record, evidence, observations, field="venue", candidate_value=result.venue, source=source, confidence=confidence
@@ -6936,7 +7243,25 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                     f"deferring raw tag artist while path/setlist evidence is checked: {deferred_tag_artist}"
                 )
 
-        if not string_date_string_found:
+        # A terminal date after an explicit performance preposition is not a
+        # generic String1 Date artist boundary.  Parse the full DB artist
+        # prefix and the remaining place before the dash-album fallback can
+        # misclassify 'Live at ...' as an album.
+        anchored_place_date = None
+        if not record.artist and not setlist_place_date and not aggregate_album_name and len(conflicts) == 0:
+            anchored_place_date = _apply_anchored_artist_place_before_date(
+                config, group, record, evidence, observations, artist_matcher
+            )
+            if anchored_place_date:
+                date_matches.append({
+                    "raw": anchored_place_date["date_raw"],
+                    "normalized": anchored_place_date["date_norm"],
+                    "part": anchored_place_date["part"],
+                    "part_path": anchored_place_date["part_path"],
+                    "source": "anchored_artist_place_date",
+                })
+
+        if not string_date_string_found and not anchored_place_date:
             if record.artist:
                 dash_album_match = _find_string_dash_string_match(group)
             else:
@@ -7163,6 +7488,32 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             etree_success, etree_lookup_key = _apply_setlistfm_only_after_etree_fallback(
                 config, record, evidence, observations, etree_success, etree_lookup_key
             )
+
+        # Build 619: online/setlist sources retain precedence.  Only when
+        # none supplied place fields may the explicit at/in path contribute a
+        # conservative right-anchored city/venue inference.  Do not combine a
+        # guessed city with an independently populated venue or location.
+        if (
+            anchored_place_date and not dash_album_mode and
+            not any((record.venue, record.city, record.region, record.country, record.location))
+        ):
+            inferred_venue, inferred_city, inference_source = _infer_anchored_city_suffix(
+                config, anchored_place_date.get("place_raw", ""),
+                anchored_place_date.get("preposition", ""),
+            )
+            if inferred_city:
+                record.venue = inferred_venue
+                record.city = inferred_city
+                record.location = _join_location(record.city, "", "")
+                if inferred_venue:
+                    evidence.setdefault("venue", []).append(Candidate(inferred_venue, "anchored_city_suffix_inference", 38))
+                evidence.setdefault("city", []).append(Candidate(inferred_city, "anchored_city_suffix_inference", 38))
+                observations.append(
+                    "medium-confidence right-to-left venue/city inference "
+                    f"after online/setlist lookups ({inference_source}): "
+                    f"place={anchored_place_date.get('place_raw', '')!r}; "
+                    f"venue={inferred_venue!r}; city={inferred_city!r}; no state inferred"
+                )
 
         _apply_pre_date_place_hint_last_resort(
             record,

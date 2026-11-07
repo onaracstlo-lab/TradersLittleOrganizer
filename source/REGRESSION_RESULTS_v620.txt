@@ -1,0 +1,132 @@
+TLO v1.7 Build 620 — LOCAL REGRESSION RESULTS — 2026-11-07
+
+Scope: Protect Artist DB resolution against false positives in descriptive
+Disc/CD/Set part names and in media/venue/location suffixes after a glued
+short artist+complete-date prefix. Normalize date-adjacent media tokens
+before String2 location parsing. No change to physical grouping rules.
+
+Reproduction: With a mock Artist DB containing Who, Love, Soccer Rock,
+New York, Madison, Marcus, Jones Beach, Milwaukee, Osaka and Castle, Build
+619 failed 6 new assertions (conflicting artists and incorrect flac16
+location), while Build 620 passes them all.
+
+Executed validations:
+- All 8 Xvfb behavior batches: 2,043 passed, 6 expected skips, zero failures.
+- Focused Who, Weather Report and artist-date/parser/grouping cases passed.
+- Contract/unit/integration/audit: 256 passed; no failures.
+- Legacy requirements: 1,406 passed; no failures.
+- Syntax AST: 324 files. Requirements render 127 pages; manual 42 pages.
+- ZIP CRC + SHA-256 and clean-extraction smoke verified at packaging.
+- Hosted Ruff lint and signed native release gates not attested locally.
+
+TLO v1.7 Build 619 — LOCAL REGRESSION RESULTS — 2026-11-07
+
+New behavior: after etreeDB, selected setlist, and setlist.fm fail/skip to
+supply venue/location for a recognized Artist (Live) at/in Place Date,
+infer longest recognized city from right, with remaining trimmed text as
+venue. Do not infer states or countries from city names alone. Builtin
+conservative city names can be augmented via TLOHome/TLO_DBs/cities.csv.
+
+Regression subjects: Twiddle at House of Blues Boston; Twiddle Live at
+The Fillmore Philadelphia; Great American Music Hall San Francisco;
+The Echo Los Angeles; Live in Boston/Denver; optional Ithaca in cities.csv;
+nonmatching Boston Music Hall / New York / Unknownville; online/setlist
+precedence; original Lucinda Williams MDY date; Compliant unchanged.
+
+Validation:
+- Post-lookup new/old guarded examples: 76 passed.
+- Full behavior suite in 8 groups with Xvfb: 2,031 passed, 6 skips, no failures.
+- Contract/unit/integration/audit suite: 256 passed, no failures.
+- Legacy and requirements (with dummy matched setlist.fm test keys):
+  1,926 passed; overlaps tests above.
+- All 323 Python files AST validated; Requirements 126 pages;
+  RTF manual 42 pages; archive checks verified separately.
+- Ruff and hosted native security/build/signing remain pending.
+
+TLO v1.7 Build 618 — LOCAL REGRESSION RESULTS — 2026-11-07
+
+Baseline: original Lucinda Williams dash/location/MDY date already passes
+on Build 617. The DB-backed 'Twiddle at House of Blues Boston 2022-05-08'
+case could incorrectly resolve the venue 'House of Blues' as the artist.
+Fix: explicitly parse an anchored full artist and at/in place before the
+older whitespace-based Artist/Venue/Date fallback. Longer DB-backed artist
+names are preferred over shorter valid names. Confirmed venues.txt records
+can separate a regionless venue from city; absent independent evidence,
+location is withheld while artist/date are retained.
+
+Validation (2026-11-07):
+- Baseline Lucinda Williams dash example: correct 2007-08-31 show name.
+- Twiddle at / Live at House of Blues Boston: recognized with House of
+  Blues in venues.txt; never invent a state from city-only evidence.
+- Without venue DB confirmation: artist/date retained, place unresolved.
+- Live in Boston and Live in Santa Cruz, CA: location-only recognized.
+- Longest Artist DB match preferred over shorter prefix; Compliant unaffected.
+- Behavior suite: 2,011 passed, 6 expected skips; no failures.
+- Contract/unit/integration: 255 passed; no failures.
+- Historical requirements suite: 1,406 passed; overlaps other suites.
+- 322 Python files AST parsed; DOCX 126 pages; RTF 42 pages.
+- Ruff lint, native builds, scanning/signing and hosted release: pending.
+
+TLO v1.7 Build 617 — LOCAL REGRESSION RESULTS — 2026-11-07
+
+Case: Parliament-Funkadelic / Rocky Mountain Shakedown.
+Before: selected setlist metadata returned no artist/venue/location; '-' tag
+became artist; unknown date stayed xxxx-xx-xx and descriptor fell back to
+funkadelic1976info.
+After: selected setlist identifies Parliament-Funkadelic, Denver, and year
+1976; a unique Artist DB match yields Parliament Funkadelic. Show name:
+Parliament Funkadelic 1976-xx-xx Denver. No venue, month/day or state invented.
+Punctuation-only ARTIST tag is blanked; existing complete dates are retained.
+Compliant mode and the previous grouping behavior are unchanged.
+
+Verification:
+  - Build 617 positive/negative tests: 13 passed.
+  - Focused adjacent parser/artist/descriptor/grouping suite: 59 passed.
+  - Behavior suite: 2,000 passed / 6 expected skips / zero failed.
+  - Contracts/unit/integration: 255 passed / zero failed.
+  - Compatibility requirements subset: 1,406 passed / zero failed (duplicates counted above).
+  - Syntax parse: all source Python files.
+  - DOCX v617: 126 pages; RTF User Manual v617: 42 pages.
+  - Local Ruff, executable builds, native signing and malware scans: pending.
+
+
+TLO v1.7 Build 616 — LOCAL REGRESSION RESULTS — 2026-11-06
+
+Root cause of Bill Wyman's Rhythm Kings 2004-07-11 split:
+  CD1 final / CD2 final fell outside the existing terminal numbered disc
+  wrapper regex and were inventoried independently despite a dated parent.
+  Naming collision handling then created an erroneous (copy1) output.
+
+Corrective action:
+  A strictly structural, non-compliant dated-parent rule recognizes complete
+  consecutively numbered final-labelled CD/Disc/Disk/Set/Part/Tape siblings.
+  All direct music-bearing descendants must belong to that one series.
+  Preserve parent setlist, original disc layout and once-only Copy/Delete.
+  No global parser changes and no audio-tag data in grouping decisions.
+
+Validation:
+  Initial reproduction against Build 614: 2 groups (expected failing case).
+  Real Phase 1 directory-walk and 22-file, shared-setlist regression: passed.
+  New Build 615 tests (incl. negatives and transfer): 17 passed.
+  Existing Build 611-614 grouping, multi-CD, collection, copy tests: passed.
+  Full behavior suite via Xvfb: 1,972 passed, 6 expected skips, 0 failures.
+  Contracts, unit, integration and audit-pin suites: 256 passed, 0 skips.
+  Combined completed suites: 2,228 passed, 6 skipped, 0 failed.
+  Python AST syntax: all 319 Python files parsed successfully.
+  DOCX v615 rendered 125 pages; RTF manual v615 rendered 41 pages.
+  One expected warning from intentional duplicate ZIP entry negative test.
+
+Ruff lint: NOT ATTESTED LOCALLY (Ruff unavailable in this environment).
+Mandatory hosted lint, native platform compilation, malware scanning,
+Windows signing and final release attestation still pending.
+GitHub Build Process v123 unchanged; no build-process package included.
+
+Build 616: Mixed numeric/cardinal/ordinal siblings are grouped with differing descriptors, while standalone folders, duplicate or incomplete sequences, and unrelated audio branches remain independent.
+
+Final Build 616 regression counts:
+Behavior: 1,987 passed, 6 skipped, 0 failures.
+Additional requirements/contract/unit/integration: 1,661 passed, 0 failures.
+Local combined completed suites: 3,648 passed, 6 skipped, 0 failures.
+Original CD1 final/CD2 final (Build 615) expectations preserved.
+Unrelated audio, duplicate sequence numbers, skips in numbering, and conflicting dated suffixes remain ungrouped.
+Local Ruff / hosted signing not attested.

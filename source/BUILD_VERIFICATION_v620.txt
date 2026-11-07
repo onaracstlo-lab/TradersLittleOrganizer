@@ -1,0 +1,148 @@
+TLO v1.7 Build 620 — NOT RELEASE-ATTESTED (local verification only)
+
+Scope: Apply a guarded right-to-left city suffix venue/location inference only
+AFTER the existing etreeDB, local setlist and setlist.fm lookup sequence has
+had its opportunity; preserve confirmed sources and earlier parsing rules.
+GitHub Build Process v123 is unchanged.
+
+Root cause (GitHub Actions run 42153624196, 2026-11-06):
+- A historical release-contract test requires the exact phrase "6 skipped".
+- Build 613 report said "6 expected platform/environment skips", which is a
+  different string despite a similar meaning.
+- The full GitHub Actions run reported 2,188 passed, 26 skipped, 1 failed.
+  These 26 include native-platform and FFmpeg-dependent skips; they are NOT
+  the historical small headless GUI subset count.
+
+Display verification evidence:
+- Xvfb display (CI=1): Build 613 hosted Linux run completed its tests but
+  failed the Build 532 report-string assertion; NOT RELEASE-ATTESTED.
+- No display (DISPLAY and CI unset): Build 532 GUI subset (four test files)
+  reproduced 50 passed, 6 skipped. This is a subset result, not the full-suite
+  total or a claim that the hosted Linux run had only six skips.
+
+Verification for Build 614 (2026-11-06):
+- Complete local behavior suite without graphical display: 1,940 passed,
+  21 expected environment/platform skips, one expected warning from a deliberate
+  duplicate ZIP-entry negative test, and 0 failures.
+- Contract, unit, integration and pinned audit suites: 256 passed, 0 skipped,
+  0 failed. The Build 502 revision-index size contract was rerun after shortening
+  the navigational Build 614 entry; it passes.
+- Combined completed local suites: 2,196 passed, 21 skipped, 0 failures.
+- Historic Build 532 GUI subset reproduced in its own test: 50 passed,
+  6 skipped (not part of the full Linux CI totals).
+- All 318 Python files parsed successfully using Python 3.13.5.
+- Requirements v614 DOCX rendered to 124 pages, inspected for layout issues,
+  and its current-version/index metadata checked. User Manual RTF rendered to
+  41 pages, with correct title and final Build 614 release note.
+- Source ZIP full-file SHA-256 manifest SHA256SUMS_v614.txt and ZIP CRC
+  integrity are independently checked during package creation.
+- Ruff lint: lint not attested locally (Ruff unavailable in this sandbox).
+- Native executable builds, malware scanning, Windows signing, and hosted
+  release verification are pending; this source is NOT RELEASE-ATTESTED.
+
+Verification for Build 615 (2026-11-06):
+- Full local behavior suite under Xvfb: 1,972 passed, 6 skipped, zero failures,
+  with one expected duplicate-ZIP-entry warning from a negative test.
+- Additional contracts, unit, integration and audit-pin tests: 256 passed,
+  zero skipped, zero failures. Combined: 2,228 passed, 6 skipped, zero failed.
+- Build 615 structural grouping tests cover the 16+6 recording, real Phase 1
+  walk, shared parent setlist, once-only Copy/Delete, no-tag decision, and guards.
+- Python AST syntax validated across all 319 Python files.
+- Requirements v615 DOCX rendered to 125 pages; User Manual v615 RTF rendered
+  to 41 pages and the changed sections visually inspected.
+- Ruff lint: lint not attested locally (Ruff unavailable in this environment).
+- ZIP CRC and manifest SHA-256 verification performed independently.
+- Hosted Linux/Windows/macOS builds, malware scan, signing and attestation pending.
+
+Build 616 local verification (2026-11-06): numeric/cardinal/ordinal described sibling grouping regression tests added. Ruff and hosted native release attestation remain pending. The historical no-display GUI subset states 6 skipped; hosted Linux skip totals are distinct.
+
+Build 616 completed local checks:
+- Behavior suite executed in six batches (to avoid local timeouts): 1,987 passed, 6 skipped, 0 failures.
+- Contract/unit/integration and requirements suite: 1,661 passed, 0 skipped, 0 failures.
+- Focused Build 615/616 and nested part regressions: 61 passed.
+- Source Python AST parse: all 320 files passed.
+- Current requirements and User Manual rendered as PDFs for visual QA (126 / 41 pages).
+- Ruff: NOT ATTESTED LOCALLY (not installed). Native signing, malware scanning, hosted CI and final release verification are pending.
+
+Build 617 local verification (2026-11-07): see REGRESSION_RESULTS_v617.txt.
+Ruff lint: NOT ATTESTED LOCALLY (ruff unavailable). Native builds, scans,
+Windows signing and hosted release verification are pending.
+
+Build 617 completed local verification (2026-11-07):
+- Focused Build 617 and selected prior metadata tests: 59 passed, zero failed.
+- Full tests/behavior suite, executed in nine batches under Xvfb: 2,000 passed,
+  6 expected platform/environment skips, zero failures; one expected warning
+  from a deliberate duplicate ZIP-entry rejection fixture.
+- Separate contract, unit and integration suites: 255 passed, 0 skipped,
+  zero failed.
+- Historical test_tlo_requirements.py compatibility subset: 1,406 passed,
+  zero failed (overlaps the above and is not added to unique test totals).
+- All source Python files passed syntax-only AST parsing.
+- Requirements v617 DOCX rendered to 126 pages; current/version and new
+  normative text visually checked. User Manual RTF rendered to 42 pages;
+  the Build 616/617 final notes and version were verified visually.
+- Release SHA-256 manifest and archive CRC are verified independently.
+- Local Ruff lint is NOT ATTESTED (Ruff not installed); native Windows,
+  macOS and Linux builds, scanning, signing and hosted release verification
+  remain pending. This source is NOT RELEASE-ATTESTED.
+
+Build 618 local source verification (2026-11-07):
+- Scope: guarded non-compliant leading Artist at/in Venue City Date fallback,
+  preserving the already-working Lucinda Williams dash parsing.
+- Historical Build 532 headless tests: 6 skipped in the no-display fixture;
+  hosted Linux skip counts depend on installed native tools and runtime.
+- Full tests/behavior suite: 2,011 passed, 6 expected platform/tool skips,
+  zero failures, 1 expected duplicate-ZIP-entry negative-fixture warning.
+- Separate contract, unit and integration tests: 255 passed, zero failures.
+- Historical test_tlo_requirements.py: 1,406 passed, zero failures
+  (overlaps with the suites above and is not an additional unique count).
+- Combined completed behavior and contract suites: 2,266 passed, 6 skipped.
+- Focused original Lucinda, Twiddle, NRBQ and pre-date regressions: 54 passed.
+- Python AST syntax validated across all 322 Python files.
+- DOCX requirements rendered at 126 pages with first/last page inspection;
+  User Manual RTF rendered to 42 pages with Build 618 note verified.
+- ZIP CRC and SHA-256 entries to be verified independently on output.
+- Ruff and native executable compilation, malware scan, Windows signing
+  and hosted release verification are NOT ATTESTED locally.
+
+Build 619 local verification (2026-11-07):
+- Scope: guarded post-online-lookup city suffix venue/location inference.
+- Original no-display Build 532 fixture states 6 skipped; full suites
+  count environment-dependent skips separately.
+- Ruff and hosted Linux/Windows/macOS packaging, scanning, Windows signing
+  and update-manifest release attestation have NOT run locally.
+- Behavior suite run under Xvfb in eight batches: 2,031 passed, 6 expected
+  skips, zero failures; one expected duplicate-ZIP negative-fixture warning.
+- Contract/unit/integration/audit suite: 256 passed; zero failures.
+- Legacy and requirements tests: 1,926 passed with dummy matching test
+  setlist.fm environment keys, zero failures (overlap other suites).
+- Focused new/previous artist and grouping regression checks: 76 passed.
+- Syntax AST parsed across 323 Python files.
+- Requirements DOCX rendered to 126 pages; RTF manual rendered to 42 pages.
+- Source ZIP CRC integrity, complete manifest SHA-256 and clean extraction
+  checked during final packaging; results recorded below.
+- Ruff unavailable here; native compilation, scan, signing, attestation pending.
+
+Build 620 local verification (2026-11-07):
+- Scope: ignore artist-like disc track titles and post-date place text in
+  generic artist scans; retain parent Artist DB evidence and date priority.
+- Reproduction: Build 619 failed six focused assertions with competing DB
+  artist names; Build 620 corrected them without consulting setlist files.
+- Xvfb behavior suite in 8 batches: 2,043 passed, 6 expected skips,
+  zero failures. The six skips here are platform/Ruff dependent and are
+  distinct from the historical Build 532 no-display subset's "6 skipped".
+- Ruff unavailable locally. Native Windows/Linux/macOS executable compilation,
+  security scanning, Windows code signing and update release signing are
+  NOT performed or attested by this source-package verification.
+
+Build 620 release-source verification completion:
+- All 8 behavior batches under Xvfb: 2,043 passed, 6 expected skips,
+  zero failures; one expected duplicate-ZIP negative-test warning.
+- Contract/unit/integration/audit: 256 passed, no failures.
+- Legacy requirements: 1,406 passed, no failures; overlapping cases.
+- Syntax AST validated for 324 Python files.
+- Requirements DOCX rendered and inspected at 127 pages; RTF manual
+  rendered and inspected at 42 pages.
+- Complete ZIP CRC integrity, SHA-256 manifest and clean-extraction smoke
+  checked during final packaging.
+- Ruff could not be executed locally and remains an external CI gate.

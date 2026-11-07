@@ -1,7 +1,7 @@
-TLO Source and Utilities Bundle v616
+TLO Source and Utilities Bundle v620
 
-Public application version: v1.7 Build 616
-Source bundle label: v616
+Public application version: v1.7 Build 620
+Source bundle label: v620
 Paired native release GitHub Build Process: v123
 
 Corruption policy: No inspection without tagging or Deep Audio Check. A tag failure
@@ -13,13 +13,13 @@ large collections. Deletion thresholds and safeguards are unchanged. Manual Twea
 has no corruption checking.
 
 Current documentation files:
-- TLO_Inventory_User_Manual_v616.rtf (What's New plus concise usage)
-- TLO_Inventory_Requirements_Working_v616.docx (consolidated specification)
+- TLO_Inventory_User_Manual_v620.rtf (What's New plus concise usage)
+- TLO_Inventory_Requirements_Working_v620.docx (consolidated specification)
 - TLO-FAQ.txt
 - tlo-preferences.ini (user-approved concise default, choices and ranges annotated; copied on first startup into TLOHome)
-- CHANGES_v616.txt
-- BUILD_VERIFICATION_v616.txt
-- SHA256SUMS_v616.txt
+- CHANGES_v620.txt
+- BUILD_VERIFICATION_v620.txt
+- SHA256SUMS_v620.txt
 
 Build 594 retains Build 590 behavior: successful Add New Shows Tag In Place completion before a
 performance is staged, inventoried or exported as a setlist. Incomplete tag
@@ -79,6 +79,41 @@ Build 613: Fix unused import (F401) and an unnecessary f-string (F541) in Build 
 
 Build 614: Restore the original Build 532 genuine headless-GUI six-skip verification-report contract and explicitly distinguish it from the 26 skipped tests in the full failed Build 613 Linux CI run. No application behavior change; Build Process v123 unchanged.
 
-Build 616: Non-compliant Full Inventory groups numbered CD1 final/CD2 final sibling audio directories under their fully dated common show parent. A complete consecutive numbered sequence with no unrelated audio-bearing descendants is required. The parent shared setlist, original part hierarchy and one Copy/Delete transfer are preserved. Grouping never uses audio tags. Standalone folders, undated collections and Compliant mode are unchanged. GitHub Build Process v123 unchanged.
+Build 617: Non-compliant Full Inventory groups numbered CD1 final/CD2 final sibling audio directories under their fully dated common show parent. A complete consecutive numbered sequence with no unrelated audio-bearing descendants is required. The parent shared setlist, original part hierarchy and one Copy/Delete transfer are preserved. Grouping never uses audio tags. Standalone folders, undated collections and Compliant mode are unchanged. GitHub Build Process v123 unchanged.
 
-Build 616 generalizes the dated direct sibling part grouping from final-only labels to numeric, cardinal-word, and ordinal-word sequences with differing descriptors; the strict physical safeguards remain.
+Build 617 generalizes the dated direct sibling part grouping from final-only labels to numeric, cardinal-word, and ordinal-word sequences with differing descriptors; the strict physical safeguards remain.
+
+Build 617 restores artist, recorded year, and city recognition from a selected setlist
+headed by an artist and “Recorded Live in City YYYY”, without inventing venue or day/month.
+Unmatched punctuation-only ARTIST tags are treated as missing. Compliant mode
+and previous grouping logic remain unchanged.
+
+Build 618 adds guarded non-compliant Artist (Live) at/in Place Date matching,
+using a unique longest anchored Artist DB prefix, a single trailing complete
+date, and a strong location anchor. Unqualified Venue City requires exact
+venues.txt venue evidence; if absent, preserve artist/date but do not invent
+venue, city or state. The existing Lucinda Williams dash/date parser remains.
+Compliant, tagging, grouping and hosted build-process behavior are unchanged.
+
+Build 619 adds guarded right-to-left venue/city inference for non-compliant
+Artist (Live) at/in Venue City Date names, only after etreeDB, selected
+setlist, and setlist.fm have had their chance to identify venue/location.
+It uses a conservative built-in city set or optional caret-delimited
+TLOHome/TLO_DBs/cities.csv, prefers longest city suffix, trims punctuation,
+and never supplies a missing state from a city reference. Unrecognized or
+ambiguous city endings stay unresolved; full dates and Artist DB prefix
+checks are still required. The existing grouping, dash/MDY and Compliant
+behaviors remain unchanged. Build Process v123 was not modified.
+
+Build 620: Non-compliant artist resolution no longer treats numbered CD/Disc/Set
+part-title suffixes as possible artists. For tightly joined short artist/date
+show folders such as who1974-05-18.sbd and who1997-07-23.flac16..., generic
+artist scans consider only the leading prefix; titles/venues/locations following
+the date cannot become conflicting Artist DB matches. An actual DB-backed
+shorter-prefix performer still conflicts with an incompatible parent artist;
+other full-artist path conflicts retain safeguards. A technical media token
+immediately after a date, e.g. DATE.flac16, is stripped from location-parsing
+input (without stripping ordinary venue text). Setlist confirmation remains
+available but is not required for path-only artist/date extraction.
+Compliant-mode and physical grouping behavior are unchanged; native build
+process v123 remains unchanged.
