@@ -1,0 +1,40 @@
+TLO v1.7 Build 616 — LOCAL REGRESSION RESULTS — 2026-11-06
+
+Root cause of Bill Wyman's Rhythm Kings 2004-07-11 split:
+  CD1 final / CD2 final fell outside the existing terminal numbered disc
+  wrapper regex and were inventoried independently despite a dated parent.
+  Naming collision handling then created an erroneous (copy1) output.
+
+Corrective action:
+  A strictly structural, non-compliant dated-parent rule recognizes complete
+  consecutively numbered final-labelled CD/Disc/Disk/Set/Part/Tape siblings.
+  All direct music-bearing descendants must belong to that one series.
+  Preserve parent setlist, original disc layout and once-only Copy/Delete.
+  No global parser changes and no audio-tag data in grouping decisions.
+
+Validation:
+  Initial reproduction against Build 614: 2 groups (expected failing case).
+  Real Phase 1 directory-walk and 22-file, shared-setlist regression: passed.
+  New Build 615 tests (incl. negatives and transfer): 17 passed.
+  Existing Build 611-614 grouping, multi-CD, collection, copy tests: passed.
+  Full behavior suite via Xvfb: 1,972 passed, 6 expected skips, 0 failures.
+  Contracts, unit, integration and audit-pin suites: 256 passed, 0 skips.
+  Combined completed suites: 2,228 passed, 6 skipped, 0 failed.
+  Python AST syntax: all 319 Python files parsed successfully.
+  DOCX v615 rendered 125 pages; RTF manual v615 rendered 41 pages.
+  One expected warning from intentional duplicate ZIP entry negative test.
+
+Ruff lint: NOT ATTESTED LOCALLY (Ruff unavailable in this environment).
+Mandatory hosted lint, native platform compilation, malware scanning,
+Windows signing and final release attestation still pending.
+GitHub Build Process v123 unchanged; no build-process package included.
+
+Build 616: Mixed numeric/cardinal/ordinal siblings are grouped with differing descriptors, while standalone folders, duplicate or incomplete sequences, and unrelated audio branches remain independent.
+
+Final Build 616 regression counts:
+Behavior: 1,987 passed, 6 skipped, 0 failures.
+Additional requirements/contract/unit/integration: 1,661 passed, 0 failures.
+Local combined completed suites: 3,648 passed, 6 skipped, 0 failures.
+Original CD1 final/CD2 final (Build 615) expectations preserved.
+Unrelated audio, duplicate sequence numbers, skips in numbering, and conflicting dated suffixes remain ungrouped.
+Local Ruff / hosted signing not attested.

@@ -1,7 +1,7 @@
-TLO Source and Utilities Bundle v614
+TLO Source and Utilities Bundle v616
 
-Public application version: v1.7 Build 614
-Source bundle label: v614
+Public application version: v1.7 Build 616
+Source bundle label: v616
 Paired native release GitHub Build Process: v123
 
 Corruption policy: No inspection without tagging or Deep Audio Check. A tag failure
@@ -13,13 +13,13 @@ large collections. Deletion thresholds and safeguards are unchanged. Manual Twea
 has no corruption checking.
 
 Current documentation files:
-- TLO_Inventory_User_Manual_v614.rtf (What's New plus concise usage)
-- TLO_Inventory_Requirements_Working_v614.docx (consolidated specification)
+- TLO_Inventory_User_Manual_v616.rtf (What's New plus concise usage)
+- TLO_Inventory_Requirements_Working_v616.docx (consolidated specification)
 - TLO-FAQ.txt
 - tlo-preferences.ini (user-approved concise default, choices and ranges annotated; copied on first startup into TLOHome)
-- CHANGES_v614.txt
-- BUILD_VERIFICATION_v614.txt
-- SHA256SUMS_v614.txt
+- CHANGES_v616.txt
+- BUILD_VERIFICATION_v616.txt
+- SHA256SUMS_v616.txt
 
 Build 594 retains Build 590 behavior: successful Add New Shows Tag In Place completion before a
 performance is staged, inventoried or exported as a setlist. Incomplete tag
@@ -78,3 +78,7 @@ Build 612: Matching named part branches beneath a dated show parent may contain 
 Build 613: Fix unused import (F401) and an unnecessary f-string (F541) in Build 611 regression tests; no application behavior change. GitHub Build Process v123 unchanged.
 
 Build 614: Restore the original Build 532 genuine headless-GUI six-skip verification-report contract and explicitly distinguish it from the 26 skipped tests in the full failed Build 613 Linux CI run. No application behavior change; Build Process v123 unchanged.
+
+Build 616: Non-compliant Full Inventory groups numbered CD1 final/CD2 final sibling audio directories under their fully dated common show parent. A complete consecutive numbered sequence with no unrelated audio-bearing descendants is required. The parent shared setlist, original part hierarchy and one Copy/Delete transfer are preserved. Grouping never uses audio tags. Standalone folders, undated collections and Compliant mode are unchanged. GitHub Build Process v123 unchanged.
+
+Build 616 generalizes the dated direct sibling part grouping from final-only labels to numeric, cardinal-word, and ordinal-word sequences with differing descriptors; the strict physical safeguards remain.

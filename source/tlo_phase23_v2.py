@@ -1386,6 +1386,84 @@ def _collapse_buckets_by_show_root(buckets: Dict[str, dict]) -> Dict[str, dict]:
             target["aggregation_reason"] = "shared_show_root"
     return {f"root::{key}": value for key, value in collapsed.items()}
 
+
+# A numbered sibling may carry an arbitrary processing/source description, for
+# example CD1 final, Disc two remastered, or Set first flac16. Parse the part
+# identifier only at the beginning of a DIRECT child of a fully dated show;
+# never change global folder/artist parsing or consult audio tags. Descriptors
+# are not required to match because each disc may have been processed separately.
+_DATED_DESCRIBED_PART_RE = re.compile(
+    r"(?i)^(?:cd|disc|disk|set|part|tape)[\s._-]*"
+    r"(?P<number>[1-9][0-9]?|one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)"
+    r"(?P<descriptor>(?:[\s._-]+[^\\/]+)?)$"
+)
+_PART_ORDINALS = {
+    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
+    "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
+}
+
+
+def _dated_described_part_sibling_info(music_dir_entries: Sequence[dict]) -> Dict[str, Dict[str, str]]:
+    """Aggregate a complete series of direct numbered siblings of a dated show.
+
+    Accept numeric/cardinal/ordinal labels, with any harmless trailing
+    descriptor; require 1..N without duplicates and reject any other audio
+    branch beneath that dated parent. This prevents mixing alternate editions
+    or unrelated performances even when their individual tags agree. A lone
+    part and Compliant mode keep their established independent behavior.
+    """
+    music_dirs = [_entry_music_dir(entry) for entry in music_dir_entries or []]
+    music_dirs = [path for path in music_dirs if path]
+    candidates: Dict[str, List[Tuple[str, int, str]]] = {}
+    for music_dir in music_dirs:
+        parent = os.path.dirname(music_dir)
+        if not parent or not _complete_date_match(os.path.basename(parent)):
+            continue
+        matched = _DATED_DESCRIBED_PART_RE.fullmatch(os.path.basename(music_dir))
+        if not matched or os.path.islink(parent) or os.path.islink(music_dir):
+            continue
+        number = matched.group("number").casefold()
+        index = int(number) if number.isdigit() else (
+            _PART_ORDINALS.get(number) or _consolidated_part_number(number)
+        )
+        descriptor = matched.group("descriptor").strip(" ._-")
+        # A second show date is not a processing descriptor: fail closed.
+        if _complete_date_match(descriptor):
+            continue
+        if index:
+            parent_key = os.path.normcase(os.path.normpath(parent))
+            candidates.setdefault(parent_key, []).append((music_dir, index, descriptor))
+
+    promoted: Dict[str, Dict[str, str]] = {}
+    for parent_key, members in candidates.items():
+        if len(members) < 2:
+            continue
+        numbers = sorted(index for _path, index, _desc in members)
+        if numbers != list(range(1, len(members) + 1)):
+            continue
+        parent = os.path.dirname(members[0][0])
+        below = [path for path in music_dirs if os.path.normcase(os.path.normpath(path)) == parent_key or _is_path_below(parent, path)]
+        member_keys = {os.path.normcase(os.path.normpath(path)) for path, _index, _desc in members}
+        if len(below) != len(members) or {os.path.normcase(os.path.normpath(path)) for path in below} != member_keys:
+            continue
+        legacy_final_pair = all(desc.casefold() == "final" for _path, _index, desc in members)
+        for path, _index, _desc in members:
+            promoted[os.path.normcase(os.path.normpath(path))] = {
+                "aggregation_key": f"dated_described_part::{parent_key}",
+                "main_dir_path": parent,
+                "main_dir_name": os.path.basename(parent),
+                "aggregate_album_name": "",
+                "aggregate_release_base": "",
+                "aggregation_reason": (
+                    "dated_final_disc_siblings" if legacy_final_pair
+                    else "dated_described_part_siblings"
+                ),
+            }
+    return promoted
+
+
+
 def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
     logged_paths = load_complete_path_lines(config)
     music_dir_entries = _discover_music_dirs_from_logged_paths(config, logged_paths, start_path)
@@ -1403,6 +1481,7 @@ def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
     )
     consolidated_sibling_info = _consolidated_sibling_collection_info(music_dir_entries)
     dated_named_info = _dated_named_child_aggregation_info(music_dir_entries, start_path)
+    dated_described_part_info = _dated_described_part_sibling_info(music_dir_entries)
     dated_supplemental_info = _dated_supplemental_descendant_info(music_dir_entries, start_path)
     sequential_word_info = _sequential_word_part_aggregation_info(music_dir_entries, start_path)
     if getattr(config, "compliant", False):
@@ -1418,6 +1497,8 @@ def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
             music_dir = _entry_music_dir(entry)
             music_key = os.path.normcase(os.path.normpath(music_dir))
             info = dated_named_info.get(music_key)
+            if info is None:
+                info = dated_described_part_info.get(music_key)
             if info is None:
                 info = consolidated_sibling_info.get(music_key)
             if info is None:
