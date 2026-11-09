@@ -186,6 +186,8 @@ def test_build529_shn_target_race_preserves_user_file_and_source(tmp_path, monke
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(TL.subprocess, "run", fake_run)
+    # Race detection now occurs after a mandatory source/output PCM proof.
+    monkeypatch.setattr(TL, "_verified_pcm_fingerprint", lambda *_: ("d" * 32, 4096))
     with pytest.raises(TL.TaggerError, match="appeared during conversion"):
         TL.convert_shn_to_flac(str(source))
 

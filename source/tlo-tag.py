@@ -20,7 +20,7 @@ def _parse_args(argv=None):
         prog="tlo-tag",
         description="Tag audio files beneath a required search folder.",
     )
-    parser.add_argument("--TLOHome", dest="TLOHome", default="", metavar="DIR", help="TLOHome directory. Defaults from the TLOHome environment variable when present.")
+    parser.add_argument("--TLOHome", "--tlo-home", dest="TLOHome", default="", metavar="DIR", help="TLOHome directory. Defaults from the TLOHome environment variable when present.")
     parser.add_argument("--myTLO", dest="myTLO", default="", metavar="DIR", help=argparse.SUPPRESS)
     add_options_to_parser(parser, fields=(
         "compliant",

@@ -67,7 +67,7 @@ def test_build548_manual_warns_about_corruption_defaults_and_fixes_stale_example
     manual = (ROOT / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
     assert "set Corrupt files to Keep and report" in manual
     assert "This also makes Folder removal effectively Never" in manual
-    assert "The default corruption settings are unchanged" in manual
+    assert "The default corruption settings are Keep and report for files, Never for folders" in manual
     assert "TLO_V1.7Build<BUILD>_complete_Linux.zip" in manual
     assert "Build524" not in release_history()
     assert "tlo-main, tlo-gi, tlo-tag, tlo-deleteDupes, tlo-research, tlo-reverse, tlo-search, search-artist-db" in manual
@@ -81,8 +81,8 @@ def test_build548_manual_warns_about_corruption_defaults_and_fixes_stale_example
 def test_build548_faq_describes_current_behavior_and_default_destructive_corruption_action():
     faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8")
     assert "Q: Does TLO inventory absolutely every music file?\nA: No." in faq
-    assert "By default, Full Inventory and standalone tlo-tag move proven-corrupt FLAC/MP3 files" in faq
-    assert "Full Inventory also moves a folder when 100% of its audio files are corrupt" in faq
+    assert "the default corruption policies are Keep and report for files and Never for folders" in faq
+    assert "A user must explicitly select deletion" in faq
     assert "Keep and report" in faq
     assert "SHA-256" in faq
     assert "Q: What does Close do in Redundancy Groups?" in faq

@@ -67,6 +67,8 @@ def test_build534_shn_conversion_forces_shn_demuxer_and_file_protocol(tmp_path, 
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(TL.subprocess, "run", fake_run)
+    monkeypatch.setattr(TL, "_verified_pcm_fingerprint", lambda *_: ("d" * 32, 4096))
+    monkeypatch.setattr(TL, "_trash_converted_shn_original", lambda path: Path(path).unlink())
     target = TL.convert_shn_to_flac(str(source))
 
     command = commands[0]

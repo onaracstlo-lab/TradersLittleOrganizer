@@ -15,6 +15,7 @@ import errno
 import sys
 import unicodedata
 import html
+import hashlib
 import uuid
 import difflib
 from datetime import date
@@ -504,8 +505,8 @@ def build_tagger_config(
     setlistfm_lookup: bool = False,
     setlistfm_upgrade: bool = False,
     thorough_setlist_matching: bool = False,
-    corrupt_files: str = "delete",
-    corrupt_folders: str = "all",
+    corrupt_files: str = "keep",
+    corrupt_folders: str = "never",
     corrupt_folder_threshold: int = 100,
     debug: bool = False,
     rename_compliantly: bool = False,
@@ -3066,7 +3067,7 @@ def _unique_destination_path(parent_dir: str, folder_name: str, source_root: str
     exists, `(copyN)` is permitted only when the incoming source tree exactly
     matches an existing directory in that target-name family. Otherwise the
     collision is named `(altN)`. Exact means identical recursive folder
-    structure and byte-identical files, not merely matching names or sizes.
+    structure, relative filenames and exact sizes (no byte hashing).
     """
     base = safe_compliant_folder_name(folder_name)
     candidate = os.path.normpath(os.path.join(parent_dir, base))
@@ -3086,7 +3087,7 @@ def _unique_destination_path(parent_dir: str, folder_name: str, source_root: str
 def _copy_tree_into_reserved_directory(source_root: str, destination_root: str) -> None:
     if _tree_contains_symlink(source_root):
         raise TaggerError(f"Tag Copy refuses a source tree containing symbolic links: {source_root}")
-    shutil.copytree(source_root, destination_root, symlinks=True, dirs_exist_ok=True)
+    shutil.copytree(source_root, destination_root, symlinks=True, dirs_exist_ok=True, ignore=_ignore_held_shn_originals)
 
 
 def _rewrite_path_under_root(path_name: str, old_root: str, new_root: str) -> str:
@@ -3192,11 +3193,16 @@ def _tree_contains_symlink(root: str) -> bool:
     return False
 
 
+def _ignore_held_shn_originals(_directory: str, names) -> set[str]:
+    """Recovery-only originals must never be copied to a trader's directory."""
+    return {name for name in names if name.casefold() == '.tlo-shn-originals'}
+
+
 def _copy_entire_directory_tree(source_root: str, destination_root: str) -> None:
     """Copy the complete source folder, refusing untrusted symlink trees."""
     if _tree_contains_symlink(source_root):
         raise TaggerError(f"Tag Copy refuses a source tree containing symbolic links: {source_root}")
-    shutil.copytree(source_root, destination_root, symlinks=True)
+    shutil.copytree(source_root, destination_root, symlinks=True, ignore=_ignore_held_shn_originals)
 
 
 def _owned_partial_copy_path(destination_root: str) -> str:
@@ -3507,19 +3513,114 @@ def _converted_flac_path_for_shn(path_name: str) -> str:
     return stem + ".flac"
 
 
-def convert_shn_to_flac(path_name: str, emit: Optional[Callable[[str], None]] = None) -> str:
-    """Convert one .shn/.shnf file to .flac and delete the source on success.
+def _verified_pcm_fingerprint(ffmpeg: str, path: str, demuxer: str) -> Tuple[str, int]:
+    """Decode *all* audio to canonical 32-bit PCM; hash and count output bytes.
 
-    Returns the new FLAC path. Raises TaggerError on any failure. Conversion is
-    intentionally explicit and conservative: an existing destination is not
-    overwritten, and the source is deleted only after a non-empty FLAC has been
-    produced and moved into place.
+    A temporary file avoids buffering large concert recordings in RAM.  The
+    bundled minimal FFmpeg supports pcm_s32le, but not md5/framemd5 muxers.
+    Identical PCM bytes and length establish a lossless, sample-for-sample
+    conversion without accepting a self-consistent but truncated FLAC MD5.
+    """
+    command = [
+        ffmpeg, "-nostdin", "-hide_banner", "-v", "error", "-xerror",
+        "-f", demuxer, "-protocol_whitelist", "file", "-i", path,
+        "-map", "0:a:0", "-c:a", "pcm_s32le", "-f", "s32le", "pipe:1",
+    ]
+    with tempfile.TemporaryFile(mode="w+b") as pcm:
+        try:
+            result = subprocess.run(
+                command, stdout=pcm, stderr=subprocess.PIPE, text=True,
+                timeout=SHN_CONVERSION_TIMEOUT_SECONDS,
+                **_hidden_windows_subprocess_kwargs(),
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise TaggerError("SHN lossless PCM verification timed out") from exc
+        error_text = compact_ws(result.stderr or "")
+        if result.returncode != 0 or error_text:
+            raise TaggerError(
+                f"SHN lossless PCM verification failed ({demuxer}, exit {result.returncode})"
+                + (f": {error_text[-250:]}" if error_text else "")
+            )
+        pcm.seek(0)
+        digest = hashlib.md5(usedforsecurity=False)  # noqa: S324 - non-security audio equivalence checksum
+        byte_count = 0
+        for chunk in iter(lambda: pcm.read(1024 * 1024), b""):
+            digest.update(chunk)
+            byte_count += len(chunk)
+        if byte_count == 0 or byte_count % 4:
+            raise TaggerError("SHN lossless PCM verification produced no complete samples")
+        return digest.hexdigest(), byte_count
+
+
+def _hold_converted_shn_original(source: str) -> str:
+    """Recoverably move an original to a private holding folder on its volume.
+
+    The folder is within the SHN's parent, so USB, exFAT and WSL mounts need
+    no root-directory privileges or working native Trash implementation.
+    Phase-1 traversal ignores this TLO-owned holding folder.
+    """
+    holder = os.path.join(os.path.dirname(source), ".tlo-shn-originals")
+    if os.path.islink(holder):
+        raise TaggerError(f"SHN holding folder is a symbolic link: {holder}")
+    try:
+        os.makedirs(holder, mode=0o700, exist_ok=True)
+        if os.path.islink(holder) or not os.path.isdir(holder):
+            raise TaggerError(f"Unsafe SHN holding folder: {holder}")
+        if os.stat(holder).st_dev != os.lstat(source).st_dev:
+            raise TaggerError("SHN holding folder is not on the source volume")
+        for _ in range(16):
+            unique_holder = os.path.join(holder, uuid.uuid4().hex)
+            try:
+                os.mkdir(unique_holder, mode=0o700)
+            except FileExistsError:
+                continue
+            target = os.path.join(unique_holder, os.path.basename(source))
+            try:
+                if os.path.lexists(target):
+                    raise TaggerError(f"Unsafe held SHN destination already exists: {target}")
+                os.rename(source, target)  # same-volume, never copy/delete
+                if os.path.lexists(source) or not os.path.isfile(target):
+                    raise TaggerError(f"SHN holding move could not be confirmed: {target}")
+                return target
+            finally:
+                if os.path.isdir(unique_holder) and not os.listdir(unique_holder):
+                    os.rmdir(unique_holder)
+    except OSError as exc:
+        raise TaggerError(f"SHN holding move failed, original retained when possible: {exc}") from exc
+    raise TaggerError("Could not select a collision-free SHN holding filename")
+
+
+def _trash_converted_shn_original(source: str) -> str:
+    """Use native Trash first, then a recoverable same-volume holding folder."""
+    from tlo_corruption import move_to_trash
+    try:
+        move_to_trash(source)
+    except Exception:
+        # If Trash has already moved the file, its state is uncertain: never
+        # move unrelated data, and do not assume the original was lost.
+        if not os.path.lexists(source):
+            raise TaggerError("Trash reported failure after the SHN source disappeared; manual recovery required")
+        return _hold_converted_shn_original(source)
+    if os.path.lexists(source):
+        # Some Trash backends report success without relocating the file.
+        # Preserve the source using the same-volume holding fallback.
+        return _hold_converted_shn_original(source)
+    return "Trash"
+
+
+def convert_shn_to_flac(path_name: str, emit: Optional[Callable[[str], None]] = None) -> str:
+    """Convert SHN losslessly, retain original until PCM equality is proven.
+
+    Error, truncation and unverified output fail closed. If native Trash is
+    unavailable, the verified SHN is renamed into a same-volume recoverable
+    holding folder. The source is never permanently deleted by the converter.
     """
     source = os.path.abspath(os.path.normpath(str(path_name or "")))
     if not _is_shn_audio_file(source):
         raise TaggerError(f"not an SHN file: {source}")
     if os.path.islink(source) or not os.path.isfile(source):
         raise TaggerError(f"SHN source must be a local regular file, not a symbolic link: {source}")
+    source_stat = os.stat(source, follow_symlinks=False)
     target = _converted_flac_path_for_shn(source)
     if os.path.lexists(target):
         raise TaggerError(f"FLAC destination already exists: {target}")
@@ -3531,37 +3632,44 @@ def convert_shn_to_flac(path_name: str, emit: Optional[Callable[[str], None]] = 
     )
     os.close(temp_fd)
     reserved_target = False
+    published_target = False
     try:
         command = [
-            converter,
-            "-nostdin",
-            "-y",
-            "-f",
-            "shn",
-            "-protocol_whitelist",
-            "file",
-            "-i",
-            source,
-            "-compression_level",
-            "5",
-            temp_target,
+            converter, "-nostdin", "-y", "-hide_banner", "-v", "error", "-xerror",
+            "-f", "shn", "-protocol_whitelist", "file", "-i", source,
+            "-compression_level", "5", temp_target,
         ]
         try:
             result = subprocess.run(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
+                command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                 timeout=SHN_CONVERSION_TIMEOUT_SECONDS,
                 **_hidden_windows_subprocess_kwargs(),
             )
         except subprocess.TimeoutExpired as exc:
             raise TaggerError(f"bundled SHN converter timed out after {SHN_CONVERSION_TIMEOUT_SECONDS} seconds") from exc
-        if result.returncode != 0:
-            details = compact_ws((result.stderr or result.stdout or "").splitlines()[-1] if (result.stderr or result.stdout) else "")
-            raise TaggerError(f"bundled SHN converter failed with exit code {result.returncode}" + (f": {details}" if details else ""))
+        errors = compact_ws(result.stderr or "")
+        if result.returncode != 0 or errors:
+            raise TaggerError(
+                f"bundled SHN converter failed with exit code {result.returncode}"
+                + (f": {errors[-250:]}" if errors else "")
+            )
         if not os.path.isfile(temp_target) or os.path.getsize(temp_target) <= 0:
             raise TaggerError("ffmpeg did not create a non-empty FLAC output")
+
+        original_digest, original_bytes = _verified_pcm_fingerprint(converter, source, "shn")
+        converted_digest, converted_bytes = _verified_pcm_fingerprint(converter, temp_target, "flac")
+        if (original_digest, original_bytes) != (converted_digest, converted_bytes):
+            raise TaggerError(
+                "SHN->FLAC PCM mismatch: decoded sample data or count differs; original retained"
+            )
+        # Verify the source still refers to the original path before mutation.
+        if not os.path.isfile(source) or os.path.islink(source):
+            raise TaggerError("SHN source changed during conversion; refusing removal")
+        current_stat = os.stat(source, follow_symlinks=False)
+        if (current_stat.st_dev, current_stat.st_ino, current_stat.st_size,
+                current_stat.st_mtime_ns) != (source_stat.st_dev, source_stat.st_ino,
+                source_stat.st_size, source_stat.st_mtime_ns):
+            raise TaggerError("SHN source identity changed during verification; refusing removal")
         try:
             reservation_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             os.close(reservation_fd)
@@ -3572,8 +3680,14 @@ def convert_shn_to_flac(path_name: str, emit: Optional[Callable[[str], None]] = 
             raise TaggerError(f"could not reserve FLAC destination exclusively: {target}: {exc}") from exc
         os.replace(temp_target, target)
         reserved_target = False
-        os.remove(source)
-        _emit(emit, f"  CONVERTED SHN: {os.path.basename(source)} -> {os.path.basename(target)} | converter=app-bundled")
+        published_target = True
+        # Deleting only *after* both independent decodes succeed and the
+        # complete output is published avoids loss if ffmpeg silently truncates.
+        original_location = _trash_converted_shn_original(source) or "Trash"
+        _emit(emit,
+              f"  CONVERTED SHN: {os.path.basename(source)} -> {os.path.basename(target)} "
+              f"| verified_pcm_md5={original_digest} | pcm_bytes={original_bytes} "
+              f"| original={original_location} | converter=app-bundled")
         return target
     except Exception:
         try:
@@ -3581,7 +3695,9 @@ def convert_shn_to_flac(path_name: str, emit: Optional[Callable[[str], None]] = 
                 os.remove(temp_target)
         except Exception as exc:  # noqa: BLE001 - best-effort boundary
             debug_suppressed_exception(__name__, exc)
-        if reserved_target:
+        # When the original was not relocated, remove only this run's FLAC.
+        # A successfully held original remains recoverable in its own folder.
+        if reserved_target or (published_target and os.path.lexists(source)):
             try:
                 if os.path.lexists(target):
                     os.remove(target)
@@ -3602,7 +3718,7 @@ def _prepare_audio_files_for_tagging(
     is enabled, convert them before title selection so the setlist/audio count is
     compared against the files that will actually be tagged.  Failed conversions
     are logged and skipped; successful conversions replace the SHN path with the
-    new FLAC path and delete the original.
+    verified FLAC path and move the original to Trash.
     """
     converted_or_existing: List[str] = []
     errors = 0
@@ -5922,8 +6038,8 @@ def run_tagger(
     setlistfm_lookup: bool = False,
     setlistfm_upgrade: bool = False,
     thorough_setlist_matching: bool = False,
-    corrupt_files: str = "delete",
-    corrupt_folders: str = "all",
+    corrupt_files: str = "keep",
+    corrupt_folders: str = "never",
     corrupt_folder_threshold: int = 100,
     debug: bool = False,
     rename_compliantly: bool = False,
@@ -5972,7 +6088,7 @@ def run_tagger(
 
     if bool(getattr(config, "deep_audio_check", False)):
         _emit(tag_emit, "DEEP_AUDIO_CHECK: Checking every full audio stream can be very slow, especially on large collections.")
-    _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | setlist.fm fallback={'yes' if config.setlistfm_lookup else 'no'} | setlist.fm upgrade={'yes' if getattr(config, 'setlistfm_upgrade', False) else 'no'} | thorough setlist matching={'yes' if getattr(config, 'thorough_setlist_matching', False) else 'no'} | corrupt files={getattr(config, 'corrupt_files', 'delete')} | corrupt folders={getattr(config, 'corrupt_folders', 'all')} | corrupt folder threshold={getattr(config, 'corrupt_folder_threshold', 100)}% | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | artist in album={'yes' if getattr(config, 'artist_in_album', True) else 'no'} | delete extra tags={'yes' if getattr(config, 'delete_extra_tags', False) else 'no'} | as-is artist name={'yes' if getattr(config, 'as_is_artist_name', False) else 'no'} | proper grammar={'yes' if getattr(config, 'proper_grammar', False) else 'no'} | deep audio check={'yes' if getattr(config, 'deep_audio_check', False) else 'no'} | debug={'yes' if config.debug else 'no'}")
+    _emit(tag_emit, f"Starting TLO Tagger | compliant={'yes' if config.compliant else 'no'} | etreeDB fallback={'yes' if config.etree_lookup else 'no'} | setlist.fm fallback={'yes' if config.setlistfm_lookup else 'no'} | setlist.fm upgrade={'yes' if getattr(config, 'setlistfm_upgrade', False) else 'no'} | thorough setlist matching={'yes' if getattr(config, 'thorough_setlist_matching', False) else 'no'} | corrupt files={getattr(config, 'corrupt_files', 'keep')} | corrupt folders={getattr(config, 'corrupt_folders', 'never')} | corrupt folder threshold={getattr(config, 'corrupt_folder_threshold', 100)}% | rename compliantly={'yes' if config.rename_compliantly else 'no'} | convert shn={'yes' if config.convert_shn else 'no'} | artist in album={'yes' if getattr(config, 'artist_in_album', True) else 'no'} | delete extra tags={'yes' if getattr(config, 'delete_extra_tags', False) else 'no'} | as-is artist name={'yes' if getattr(config, 'as_is_artist_name', False) else 'no'} | proper grammar={'yes' if getattr(config, 'proper_grammar', False) else 'no'} | deep audio check={'yes' if getattr(config, 'deep_audio_check', False) else 'no'} | debug={'yes' if config.debug else 'no'}")
     _emit(tag_emit, f"TLOHome: {config.TLOHome}")
     _emit(tag_emit, f"Tagging Path: {tagging_path}")
 

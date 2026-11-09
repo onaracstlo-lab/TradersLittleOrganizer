@@ -50,17 +50,17 @@ def test_build364_archives_prior_change_log():
 
 def test_build364_requirements_define_exact_copy_vs_alt_classification():
     text = _docx_text(RA.REQUIREMENTS_FILENAME)
-    assert "Copy-versus-alternate naming is determined by exact recursive tree identity" in text
-    assert "relative descendant directory set (including empty directories)" in text
-    assert "byte contents of every corresponding file are all identical" in text
-    assert "use (altN), never (copyN)" in text
-    assert "input folder already ending in (copyN) must be revalidated" in text
+    assert "Copy-versus-alternate naming is determined by the same recursive filename and exact-size rule" in text
+    assert "relative descendant folder names (including empty folders)" in text
+    assert "without reading or hashing file bytes" in text
+    assert "differ yield (altN)" in text
+    assert "already ending with (copyN) is revalidated" in text
 
 
 def test_build364_manual_documents_copy_vs_alt_classification():
     text = (ROOT / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
     assert "does not call the new folder a copy merely because the name is already present" in text
-    assert "A (copyN) suffix is used only when" in text
+    assert "A (copyN) suffix is used when the recursive relative folder names" in text
     assert "make the new item an (altN) instead" in text
     assert "existing folder already named with (copyN) is also rechecked" in text
 

@@ -320,7 +320,8 @@ def _build_help_text() -> str:
         "  Inventory (full)  Validate the form and show Review Operation before inventory.\n"
         "  Pause / Resume    Pause or resume traversal between directory operations.\n"
         "\nStartup defaults are stored in TLOHome/tlo-preferences.ini (created on first startup).\n"
-        "Use hamburger > Edit Preferences; Save then restart Main and Search to apply edits.\n"
+        "Use hamburger > Edit Preferences; Save & Close records changes for the next launch.\n"
+        "Current controls and running operations remain unchanged.\n"
         "Explicit command-line flags override the preference defaults for that launch.\n"
         "\nRun settings are appended to TLOHome/logs/runSettings.log before an operation starts.\n"
     )
@@ -730,7 +731,7 @@ def _parse_gui_command_line(argv=None):
         description="Launch the TLO Main GUI.",
         add_help=True,
     )
-    parser.add_argument("--TLOHome", dest="TLOHome", default="", help="TLOHome directory. Defaults from the TLOHome environment variable when present.")
+    parser.add_argument("--TLOHome", "--tlo-home", dest="TLOHome", default="", help="TLOHome directory. Defaults from the TLOHome environment variable when present.")
     parser.add_argument("--myTLO", dest="myTLO", default="", help=argparse.SUPPRESS)
     parser.add_argument("--/slam", dest="search_path_slam_override", default="", help="Artist override paired with --search-path.")
     parser.add_argument("--/copy", dest="search_path_copy_override", default="", help="Per-search-path Tag Copy destination. Only valid with --search-path.")
@@ -767,7 +768,9 @@ def _parse_gui_command_line(argv=None):
     args = parser.parse_args(argv_list)
     args._explicit_preferences_fields = frozenset(
         option.config_field for option in OPTIONS_BY_FIELD.values()
-        if option.flag in argv_list or any(token.startswith(option.flag + '=') for token in argv_list)
+        if (option.flag in argv_list or any(token.startswith(option.flag + '=') for token in argv_list)
+            or (option.config_field == 'tag_copy_and_delete_path' and any(
+                token == '--tag-move-to' or token.startswith('--tag-move-to=') for token in argv_list)))
     )
     if getattr(args, "search_path_slam_override", "") and not getattr(args, "search_path_override", ""):
         parser.error("--/slam is only valid with --search-path")
@@ -924,8 +927,10 @@ class App:
             target_size = int(base_font.cget("size")) + 2
         except Exception:
             target_size = 12
+        if not hasattr(self, '_base_gui_font_size'):
+            self._base_gui_font_size = target_size
         pref = self.preferences['main']
-        target_size = pref['font_size'] or target_size
+        target_size = pref['font_size'] or self._base_gui_font_size
         family = tlo_preferences.resolve_font_family(
             pref['font_family'], tkfont.families(self.root))
         self.gui_font_size = target_size
@@ -1083,9 +1088,9 @@ class App:
         self._max_workers_auto_default = False
         self._setting_max_workers_programmatically = False
         cli_corrupt_files = parse_corrupt_file_policy(
-            getattr(self.cli_args, 'corrupt_files', 'delete') if 'corrupt_files' in explicit else pref['corrupt_files'])
+            getattr(self.cli_args, 'corrupt_files', 'keep') if 'corrupt_files' in explicit else pref['corrupt_files'])
         cli_corrupt_folders = parse_corrupt_folder_policy(
-            getattr(self.cli_args, 'corrupt_folders', 'all') if 'corrupt_folders' in explicit else pref['corrupt_folders'])
+            getattr(self.cli_args, 'corrupt_folders', 'never') if 'corrupt_folders' in explicit else pref['corrupt_folders'])
         cli_corrupt_threshold = parse_percent_0_100(
             getattr(self.cli_args, 'corrupt_folder_threshold', 100)
             if 'corrupt_folder_threshold' in explicit else pref['corrupt_folder_threshold'])
@@ -1447,7 +1452,7 @@ class App:
 
     def _sync_corruption_controls_state(self):
         """Keep/report means report only: no corrupt-file or folder removal controls apply."""
-        file_policy = CORRUPT_FILE_GUI_TO_POLICY.get(self.vars["corrupt_files"].get(), "delete")
+        file_policy = CORRUPT_FILE_GUI_TO_POLICY.get(self.vars["corrupt_files"].get(), "keep")
         keep_report = file_policy == "keep"
         folder_combo = getattr(self, "corrupt_folders_combo", None)
         entry = getattr(self, "corruption_threshold_entry", None)
@@ -1521,8 +1526,8 @@ class App:
         except Exception:
             max_workers_valid = False
 
-        corrupt_file_policy = CORRUPT_FILE_GUI_TO_POLICY.get(self.vars["corrupt_files"].get(), "delete")
-        corrupt_folder_policy = CORRUPT_FOLDER_GUI_TO_POLICY.get(self.vars["corrupt_folders"].get(), "all")
+        corrupt_file_policy = CORRUPT_FILE_GUI_TO_POLICY.get(self.vars["corrupt_files"].get(), "keep")
+        corrupt_folder_policy = CORRUPT_FOLDER_GUI_TO_POLICY.get(self.vars["corrupt_folders"].get(), "never")
         if corrupt_file_policy == "keep":
             corrupt_folder_policy = "never"
         corruption_percent_valid = True
@@ -2846,6 +2851,15 @@ class App:
         dest_var = tk.StringVar(value=normalize_platform_input_path(initial) if initial else "")
         entry = ttk.Entry(dialog, textvariable=dest_var, width=72)
         entry.grid(row=1, column=1, columnspan=2, sticky="ew", padx=(4, 12), pady=4)
+        # Tag Copy and Tag Copy/Delete Original use this same destination dialog.
+        # All folder-path entries must accept Explorer drops on native Windows.
+        # dest_var's trace below also updates validation after a drop.
+        enable_folder_path_drop(
+            entry,
+            dest_var,
+            field_label="Destination of Copies",
+            on_error=lambda msg: messagebox.showwarning(_dialog_title(title), msg, parent=dialog),
+        )
         status_var = tk.StringVar(value="Enter an existing fully qualified destination directory.")
         ttk.Label(dialog, textvariable=status_var, justify="left", wraplength=650).grid(
             row=2, column=1, columnspan=2, sticky="w", padx=(4, 12), pady=(0, 6)
@@ -2972,23 +2986,23 @@ class App:
             setlistfm_upgrade=bool(getattr(self.bool_vars.get("setlistfm_upgrade"), "get", lambda: False)()),
             thorough_setlist_matching=bool(getattr(self.bool_vars.get("thorough_setlist_matching"), "get", lambda: False)()),
             corrupt_files=CORRUPT_FILE_GUI_TO_POLICY.get(
-                getattr(self.vars.get("corrupt_files"), "get", lambda: CORRUPT_FILE_GUI_VALUES["delete"])(), "delete"
+                getattr(self.vars.get("corrupt_files"), "get", lambda: CORRUPT_FILE_GUI_VALUES["keep"])(), "keep"
             ),
             corrupt_folders=(
                 "never"
                 if CORRUPT_FILE_GUI_TO_POLICY.get(
-                    getattr(self.vars.get("corrupt_files"), "get", lambda: CORRUPT_FILE_GUI_VALUES["delete"])(), "delete"
+                    getattr(self.vars.get("corrupt_files"), "get", lambda: CORRUPT_FILE_GUI_VALUES["keep"])(), "keep"
                 ) == "keep"
                 else CORRUPT_FOLDER_GUI_TO_POLICY.get(
-                    getattr(self.vars.get("corrupt_folders"), "get", lambda: CORRUPT_FOLDER_GUI_VALUES["all"])(), "all"
+                    getattr(self.vars.get("corrupt_folders"), "get", lambda: CORRUPT_FOLDER_GUI_VALUES["never"])(), "never"
                 )
             ),
             corrupt_folder_threshold=(
                 parse_percent_0_100(getattr(self.vars.get("corrupt_folder_threshold"), "get", lambda: "100")())
                 if CORRUPT_FILE_GUI_TO_POLICY.get(
-                    getattr(self.vars.get("corrupt_files"), "get", lambda: CORRUPT_FILE_GUI_VALUES["delete"])(), "delete"
+                    getattr(self.vars.get("corrupt_files"), "get", lambda: CORRUPT_FILE_GUI_VALUES["keep"])(), "keep"
                 ) != "keep" and CORRUPT_FOLDER_GUI_TO_POLICY.get(
-                    getattr(self.vars.get("corrupt_folders"), "get", lambda: CORRUPT_FOLDER_GUI_VALUES["all"])(), "all"
+                    getattr(self.vars.get("corrupt_folders"), "get", lambda: CORRUPT_FOLDER_GUI_VALUES["never"])(), "never"
                 ) == "threshold"
                 else 100
             ),

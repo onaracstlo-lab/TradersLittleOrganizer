@@ -24,7 +24,7 @@ Important:
 
 from __future__ import annotations
 
-from tlo_version import VERSION as _TLO_CANONICAL_VERSION
+from tlo_version import VERSION as _TLO_CANONICAL_VERSION, DISPLAY_VERSION
 __version__ = _TLO_CANONICAL_VERSION
 
 
@@ -252,7 +252,7 @@ def graphql_request(
         headers={
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "tlo-etreedb-venue-lookup/6.0",
+            "User-Agent": f"TradersLittleOrganizer/{DISPLAY_VERSION.replace(chr(32), chr(45))} (https://traderslittleorganizer.com; etreeDB lookup)",
         },
         method="POST",
     )

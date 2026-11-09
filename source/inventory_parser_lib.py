@@ -65,8 +65,8 @@ class Config:
     setlistfm_lookup: bool = False
     setlistfm_upgrade: bool = False
     thorough_setlist_matching: bool = False
-    corrupt_files: str = "delete"
-    corrupt_folders: str = "all"
+    corrupt_files: str = "keep"
+    corrupt_folders: str = "never"
     corrupt_folder_threshold: int = 100
     setlistfm_min_interval_seconds: float = 0.600
     setlistfm_max_calls: int = 1400
@@ -309,8 +309,8 @@ def build_config():
         setlistfm_lookup=bool(values.get("setlistfm_lookup", False)),
         setlistfm_upgrade=bool(values.get("setlistfm_upgrade", False)),
         thorough_setlist_matching=bool(values.get("thorough_setlist_matching", False)),
-        corrupt_files=parse_corrupt_file_policy(values.get("corrupt_files", "delete")),
-        corrupt_folders=parse_corrupt_folder_policy(values.get("corrupt_folders", "all")),
+        corrupt_files=parse_corrupt_file_policy(values.get("corrupt_files", "keep")),
+        corrupt_folders=parse_corrupt_folder_policy(values.get("corrupt_folders", "never")),
         corrupt_folder_threshold=parse_percent_0_100(values.get("corrupt_folder_threshold", 100)),
         performance_mode=values.get("performance_mode", "balanced") or "balanced",
         max_workers=int(values.get("max_workers", 0) or 0),

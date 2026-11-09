@@ -3098,11 +3098,16 @@ def test_v238_prepare_audio_files_converts_shn_and_deletes_original(monkeypatch,
     monkeypatch.setattr(T, "_bundled_ffmpeg_executable", lambda: "/usr/bin/ffmpeg")
 
     def fake_run(command, stdout=None, stderr=None, text=None, timeout=None):
-        out = Path(command[-1])
-        out.write_bytes(b"fake flac")
+        if command[-1] != "pipe:1":
+            out = Path(command[-1])
+            out.write_bytes(b"fake flac")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(T.subprocess, "run", fake_run)
+    # Fake FLAC bytes cannot pass a real PCM decode; explicitly simulate the
+    # now mandatory equality proof and reversible Trash disposition.
+    monkeypatch.setattr(T, "_verified_pcm_fingerprint", lambda *_: ("d" * 32, 4096))
+    monkeypatch.setattr(T, "_trash_converted_shn_original", lambda path: Path(path).unlink())
 
     audio_files, errors = T._prepare_audio_files_for_tagging(config, group, [str(shn), str(wav)], emit=messages.append)
 
@@ -3164,10 +3169,13 @@ def test_v238_tag_group_converts_shn_then_tags_flac(monkeypatch, tmp_path):
     monkeypatch.setattr(T, "_bundled_ffmpeg_executable", lambda: "/usr/bin/ffmpeg")
 
     def fake_run(command, stdout=None, stderr=None, text=None, timeout=None):
-        Path(command[-1]).write_bytes(b"fake flac")
+        if command[-1] != "pipe:1":
+            Path(command[-1]).write_bytes(b"fake flac")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(T.subprocess, "run", fake_run)
+    monkeypatch.setattr(T, "_verified_pcm_fingerprint", lambda *_: ("d" * 32, 4096))
+    monkeypatch.setattr(T, "_trash_converted_shn_original", lambda path: Path(path).unlink())
     monkeypatch.setattr(T, "write_audio_tags", lambda path, artist, album, track, title, total_tracks=0: tagged.append((path, artist, album, track, title)))
 
     stats = T.tag_group_with_record(
@@ -3199,10 +3207,15 @@ def test_v239_shn_conversion_uses_only_bundled_converter(monkeypatch, tmp_path):
 
     def fake_run(command, stdout=None, stderr=None, text=None, timeout=None):
         called.append(command)
-        Path(command[-1]).write_bytes(b"fake flac")
+        if command[-1] != "pipe:1":
+            Path(command[-1]).write_bytes(b"fake flac")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(T.subprocess, "run", fake_run)
+    # Fake FLAC bytes cannot pass a real PCM decode; explicitly simulate the
+    # now mandatory equality proof and reversible Trash disposition.
+    monkeypatch.setattr(T, "_verified_pcm_fingerprint", lambda *_: ("d" * 32, 4096))
+    monkeypatch.setattr(T, "_trash_converted_shn_original", lambda path: Path(path).unlink())
 
     out = T.convert_shn_to_flac(str(shn), emit=lambda _text: None)
 
@@ -3255,10 +3268,13 @@ def test_v240_tag_group_logs_convert_shn_enabled_when_shn_detected(monkeypatch, 
     monkeypatch.setattr(T, "_bundled_ffmpeg_executable", lambda: "/usr/bin/ffmpeg")
 
     def fake_run(command, stdout=None, stderr=None, text=None, timeout=None):
-        Path(command[-1]).write_bytes(b"fake flac")
+        if command[-1] != "pipe:1":
+            Path(command[-1]).write_bytes(b"fake flac")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(T.subprocess, "run", fake_run)
+    monkeypatch.setattr(T, "_verified_pcm_fingerprint", lambda *_: ("d" * 32, 4096))
+    monkeypatch.setattr(T, "_trash_converted_shn_original", lambda path: Path(path).unlink())
     monkeypatch.setattr(T, "write_audio_tags", lambda *args, **kwargs: None)
 
     stats = T.tag_group_with_record(
@@ -7647,7 +7663,10 @@ def test_v330_update_destination_uses_sanitized_basename_and_warns_without_diges
     result = G.check_for_updates(tmp_path / "TLOHome", manual=True)
 
     assert result.status == "downloaded"
-    assert seen == [tmp_path / asset_name]
+    # Build 626: physical network transfer must use an unpublished staged path.
+    assert len(seen) == 1
+    assert seen[0].parent == tmp_path and seen[0].name.endswith('.pending')
+    assert (tmp_path / asset_name).is_file()
     assert result.path == str(tmp_path / asset_name)
     assert result.databases_included is False
     assert "does not contain your inventory, setlists, logs, or databases" in result.message
@@ -7985,10 +8004,15 @@ def test_v335_shn_converter_passes_hidden_windows_subprocess_options(monkeypatch
 
     def fake_run(command, **kwargs):
         captured.update(kwargs)
-        Path(command[-1]).write_bytes(b"fake flac")
+        if command[-1] != "pipe:1":
+            Path(command[-1]).write_bytes(b"fake flac")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(taglib.subprocess, "run", fake_run)
+    # Fake FLAC bytes cannot pass a real PCM decode; explicitly simulate the
+    # now mandatory equality proof and reversible Trash disposition.
+    monkeypatch.setattr(taglib, "_verified_pcm_fingerprint", lambda *_: ("d" * 32, 4096))
+    monkeypatch.setattr(taglib, "_trash_converted_shn_original", lambda path: Path(path).unlink())
     taglib.convert_shn_to_flac(str(shn), emit=lambda _text: None)
 
     assert captured["creationflags"] == 12345

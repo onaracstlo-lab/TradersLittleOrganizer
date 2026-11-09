@@ -4,16 +4,16 @@ from tlo_version import VERSION as _TLO_CANONICAL_VERSION
 __version__ = _TLO_CANONICAL_VERSION
 
 import os
+import hashlib
 from pathlib import Path
 import re
 import tempfile
-import tkinter as tk
-from tkinter import messagebox, ttk
 
 from tlo_options import GUI_CHECKBOX_OPTIONS
 
 FILENAME = 'tlo-preferences.ini'
 MAX_BYTES = 128 * 1024
+_EDIT_WINDOWS = {}
 
 _BOOLEAN_DEFAULTS = {option.config_field: bool(option.default) for option in GUI_CHECKBOX_OPTIONS}
 DEFAULTS = {
@@ -23,8 +23,8 @@ DEFAULTS = {
         'dry_run': False,
         'performance_mode': 'balanced',
         'max_workers': 0,
-        'corrupt_files': 'delete',
-        'corrupt_folders': 'all',
+        'corrupt_files': 'keep',
+        'corrupt_folders': 'never',
         'corrupt_folder_threshold': 100,
         'search_path': '',
         'font_family': 'system',
@@ -34,6 +34,7 @@ DEFAULTS = {
     },
     'search': {
         'deep': False,
+        'clipboard_prefill': False,
         'search_query': '',
         'font_family': 'system',
         'font_size': 0,
@@ -45,7 +46,7 @@ DEFAULTS = {
 }
 
 BOOL_KEYS = {('main', field) for field in _BOOLEAN_DEFAULTS} | {
-    ('general', 'auto_update'), ('main', 'dry_run'), ('search', 'deep'),
+    ('general', 'auto_update'), ('main', 'dry_run'), ('search', 'deep'), ('search', 'clipboard_prefill'),
     ('manual_updates', 'update_tags'), ('add_new_shows', 'check_for_duplicates'),
 }
 FONT_SIZES = {('main', field) for field in ('font_size', 'heading_font_size', 'fixed_font_size')} | {
@@ -86,7 +87,7 @@ def allowed_description(section, key):
     if key == 'search_path':
         return 'a path or semicolon-separated paths; leave blank for default (case preserved)'
     if key == 'search_query':
-        return 'any query up to 4096 characters; blank uses clipboard (case preserved)'
+        return 'any query up to 4096 characters; blank runs an empty search (case preserved)'
     raise KeyError((section, key))
 
 
@@ -128,9 +129,9 @@ performance_mode = balanced
 # max_workers: 0 (automatic for Performance Mode) or 1-256
 max_workers = 0
 # corrupt_files: keep | delete (keep=Keep and report; delete=Delete corrupt files)
-corrupt_files = delete
+corrupt_files = keep
 # corrupt_folders: never | all | threshold (never=Never; all=100% corrupt only; threshold=At threshold)
-corrupt_folders = all
+corrupt_folders = never
 # corrupt_folder_threshold: 0-100 (%)
 corrupt_folder_threshold = 100
 # search_path: a path or semicolon-separated paths; leave blank for default (case preserved)
@@ -144,10 +145,12 @@ heading_font_size = 0
 # fixed_font_size: 0 (platform default) or 7-40 points
 fixed_font_size = 0
 
-# Search window; empty search_query keeps clipboard startup.
+# Search window; clipboard prefill defaults off for privacy.
 [search]
 deep = false
-# search_query: any query up to 4096 characters; blank uses clipboard (case preserved)
+# Clipboard prefill is opt-in; --find and search_query take precedence.
+clipboard_prefill = false
+# search_query: any query up to 4096 characters; blank stays empty unless clipboard_prefill=true (case preserved)
 search_query = 
 font_family = system
 font_size = 0
@@ -209,6 +212,9 @@ def _read_entries(text):
             errors.append(f'Line {number}: Invalid preference assignment {stripped!r}; expected key = value')
             continue
         key, value = match.group(1).casefold(), match.group(2).strip()
+        # Inline comments are accepted only after horizontal whitespace.  An
+        # embedded '#' in a path or a search query is left untouched.
+        value = re.split(r'[ \t]+[;#]', value, maxsplit=1)[0].rstrip()
         if current is None:
             errors.append(f'Line {number}: [{"no section"}] {key}: key is not inside a valid section')
             continue
@@ -338,7 +344,7 @@ def load(tlo_home, *, initial_auto_update=False):
     return parse_text(file_path.read_text(encoding='utf-8-sig'))
 
 
-def save_text(tlo_home, new_text):
+def save_text(tlo_home, new_text, *, expected_digest=None):
     """Validate then atomically replace; invalid edits never damage the saved file."""
     if len(new_text.encode('utf-8')) > MAX_BYTES:
         raise ValueError('Preferences file exceeds 128 KB')
@@ -346,6 +352,12 @@ def save_text(tlo_home, new_text):
     path = path_for(tlo_home)
     if not path.is_file() or path.is_symlink():
         raise ValueError('Preferences file is missing or is a symbolic link')
+    def check_expected_version():
+        if expected_digest is not None:
+            actual = hashlib.sha256(path.read_bytes()).hexdigest()
+            if actual != expected_digest:
+                raise ValueError('Preferences changed since this editor opened. Cancel and reopen to review newer settings; no changes saved.')
+    check_expected_version()
     fd, temp_path = tempfile.mkstemp(prefix='.tlo-preferences-', suffix='.tmp', dir=path.parent)
     try:
         with os.fdopen(fd, 'w', encoding='utf-8', newline='\n') as stream:
@@ -353,6 +365,7 @@ def save_text(tlo_home, new_text):
             stream.flush()
             os.fsync(stream.fileno())
         os.chmod(temp_path, path.stat().st_mode & 0o777)
+        check_expected_version()
         os.replace(temp_path, path)
     finally:
         if os.path.exists(temp_path):
@@ -361,28 +374,68 @@ def save_text(tlo_home, new_text):
 
 
 def set_auto_update(tlo_home, enabled):
-    """Keep the shared Auto Update checkbox and editable defaults consistent."""
+    """Update the [general] setting in place, preserving its syntax/comments.
+
+    The editor accepts either '=' or ':'; use the same parsed line rather
+    than a second, narrower grammar.  Validation is performed before write.
+    """
     path = path_for(tlo_home)
-    original = path.read_text(encoding='utf-8-sig')
-    matcher = re.compile(r'(?im)^(\s*auto_update\s*=\s*)(true|false|yes|no|on|off|0|1)(\s*)$')
-    matches = list(matcher.finditer(original))
+    original_bytes = path.read_bytes()
+    original = original_bytes.decode('utf-8-sig')
+    parse_text(original)
+    matches = [(line_no, sec, key) for line_no, sec, key, _ in _read_entries(original)[0]
+               if (sec, key) == ('general', 'auto_update')]
     if len(matches) != 1:
         raise ValueError('Preferences must contain exactly one [general] auto_update entry')
-    updated = original[:matches[0].start(2)] + str(bool(enabled)).lower() + original[matches[0].end(2):]
-    save_text(tlo_home, updated)
+    lines = original.splitlines(keepends=True)
+    index = matches[0][0] - 1
+    pattern = re.compile(r'^(\s*auto_update\s*[=:]\s*)(true|false|yes|no|on|off|0|1)(?=\s*(?:[;#].*)?$)', re.I)
+    updated_line, count = pattern.subn(
+        lambda match: match.group(1) + str(bool(enabled)).lower(),
+        lines[index], count=1,
+    )
+    if count != 1:
+        raise ValueError('Invalid [general] auto_update assignment')
+    lines[index] = updated_line
+    save_text(tlo_home, ''.join(lines), expected_digest=hashlib.sha256(original_bytes).hexdigest())
+
+
+def __getattr__(name):
+    # Preserve the public pref.messagebox interface for GUI callers/tests while
+    # allowing a fully headless process to import pure preference validation.
+    if name == 'messagebox':
+        from tkinter import messagebox
+        return messagebox
+    raise AttributeError(name)
 
 
 def edit(root, tlo_home):
-    """Editable built-in text window; no external editor or file association needed."""
+    """Load Tk only when the editor is opened; pure preferences stay headless."""
+    import tkinter as tk
+    from tkinter import messagebox, ttk
     path = path_for(tlo_home)
-    original = path.read_text(encoding='utf-8-sig')
+    key = os.path.normcase(os.path.abspath(str(path)))
+    previous = _EDIT_WINDOWS.get(key)
+    if previous is not None:
+        try:
+            if previous.winfo_exists():
+                previous.lift()
+                previous.focus_force()
+                return previous
+        except (AttributeError, tk.TclError):
+            pass
+        _EDIT_WINDOWS.pop(key, None)
+    original_bytes = path.read_bytes()
+    original = original_bytes.decode('utf-8-sig')
+    expected_digest = hashlib.sha256(original_bytes).hexdigest()
     window = tk.Toplevel(root)
+    _EDIT_WINDOWS[key] = window
     window.title('TLO Edit Preferences')
     window.transient(root)
     window.geometry('850x680')
     window.columnconfigure(0, weight=1)
     window.rowconfigure(1, weight=1)
-    ttk.Label(window, text=f'{path}\nSave your changes, then restart TLO Main and Search to apply startup defaults.',
+    ttk.Label(window, text=f'{path}\nChanges take effect after restarting TLO Main and Search. Current settings remain unchanged.',
               padding=10).grid(row=0, column=0, sticky='w')
     container = ttk.Frame(window)
     container.grid(row=1, column=0, sticky='nsew', padx=10)
@@ -398,29 +451,36 @@ def edit(root, tlo_home):
     editor.insert('1.0', original)
     editor.edit_modified(False)
 
+    def destroy_editor():
+        _EDIT_WINDOWS.pop(key, None)
+        window.destroy()
+
     def close():
         if editor.get('1.0', 'end-1c') != original:
             if not messagebox.askyesno('Unsaved preferences', 'Discard unsaved preferences changes?', parent=window):
                 return
-        window.destroy()
+        destroy_editor()
 
-    def save():
-        nonlocal original
+    def save_and_close():
         updated = editor.get('1.0', 'end-1c')
         if updated == original:
+            destroy_editor()
             return
         try:
-            save_text(tlo_home, updated)
+            save_text(tlo_home, updated, expected_digest=expected_digest)
         except (OSError, ValueError) as exc:
             messagebox.showerror('Invalid preferences', str(exc), parent=window)
-            return
-        original = updated
-        editor.edit_modified(False)
-        messagebox.showinfo('Restart required', 'Preferences saved. Restart TLO Main and TLO Search for the new startup defaults to take effect.', parent=window)
+            return  # Keep the editor and current session unchanged.
+        # A preferences edit changes the file for the NEXT launch only.
+        # Never mutate the owning app's in-memory defaults or GUI variables.
+        destroy_editor()
+        messagebox.showinfo('Restart required',
+            'Preferences saved. Restart TLO Main and Search to apply the changes. '
+            'The currently running app and its selected settings are unchanged.', parent=root)
 
     buttons = ttk.Frame(window, padding=10)
     buttons.grid(row=2, column=0, sticky='e')
-    ttk.Button(buttons, text='Save', command=save).pack(side='left', padx=5)
-    ttk.Button(buttons, text='Close', command=close).pack(side='left', padx=5)
+    ttk.Button(buttons, text='Save & Close', command=save_and_close).pack(side='left', padx=5)
+    ttk.Button(buttons, text='Cancel', command=close).pack(side='left', padx=5)
     window.protocol('WM_DELETE_WINDOW', close)
     return window

@@ -118,7 +118,7 @@ def test_editor_shows_all_items_and_does_not_save_on_error(tmp_path):
         text_widget.replace('1.0', 'end', '[main]\nmax_workers = 999\nperformance_mode = WARP\n')
         buttons = window.winfo_children()[-1]
         with mock.patch.object(pref.messagebox, 'showerror') as error:
-            next(item for item in buttons.winfo_children() if item.cget('text') == 'Save').invoke()
+            next(item for item in buttons.winfo_children() if item.cget('text') == 'Save & Close').invoke()
         error.assert_called_once()
         description = error.call_args.args[1]
         assert 'Line 2' in description and 'max_workers' in description
@@ -132,7 +132,7 @@ def test_editor_shows_all_items_and_does_not_save_on_error(tmp_path):
 def test_keep_and_report_disallows_corrupt_folder_removal(tmp_path):
     pref.load(tmp_path)
     existing = (tmp_path / pref.FILENAME).read_text()
-    changed = existing.replace('corrupt_files = delete', 'corrupt_files = KEEP')
+    changed = existing.replace('corrupt_folders = never', 'corrupt_folders = all')
     with pytest.raises(ValueError, match='corrupt_files=keep requires corrupt_folders=never'):
         pref.save_text(tmp_path, changed)
     assert (tmp_path / pref.FILENAME).read_text() == existing

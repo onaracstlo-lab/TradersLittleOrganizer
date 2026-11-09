@@ -58,6 +58,8 @@ command -v "$PYTHON_BIN" >/dev/null 2>&1 || fail "Python executable not found: $
 [[ -f "$VERIFY_ENV_SCRIPT" ]] || fail "Required build-environment verifier not found: $VERIFY_ENV_SCRIPT"
 [[ -f "$PREPARE_FFMPEG_SCRIPT" ]] || fail "Required ffmpeg preparation utility not found: $PREPARE_FFMPEG_SCRIPT"
 "$PYTHON_BIN" "$VERIFY_ENV_SCRIPT" || fail "Pinned Linux build environment verification failed."
+# Ensure a physical TLO_DBs/cities.csv is shipped alongside the master DB files.
+"$PYTHON_BIN" "${SOURCE_ROOT}/tools/stage_city_database.py" --source-root "$SOURCE_ROOT" --dist-root "$DIST_ROOT" || fail "City database staging failed"
 [[ -f "$SCAN_SCRIPT" ]] || fail "Required scan utility not found: $SCAN_SCRIPT"
 
 find_script() {

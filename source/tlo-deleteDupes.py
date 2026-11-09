@@ -145,60 +145,53 @@ def _relative_key(path_name: str, root: str) -> str:
 
 
 def _scan_tree(root: str) -> TreeManifest:
-    """Return recursive structure plus file names/sizes for one directory tree.
+    """Match duplicate folders by relative names and exact byte sizes only.
 
-    Directory identity for this utility intentionally does not compare file bytes,
-    timestamps, ownership, permissions, or other filesystem metadata. It requires
-    the same relative directory structure, the same relative file names, and the
-    same file sizes. Symlinks are not followed; corresponding symlinks must have
-    the same relative name and link target.
+    No file content is read or hashed for duplicate identification. Unsafe
+    symlinks and unsupported filesystem objects still fail closed.
     """
+    if os.path.islink(root):
+        raise DeleteDupesError(f"Unverifiable directory symlink: {root}")
     directories: Set[str] = set()
     files: Dict[str, int] = {}
-    symlinks: Dict[str, str] = {}
 
     def visit(current: str) -> None:
         try:
             entries = list(os.scandir(current))
         except OSError as exc:
             raise DeleteDupesError(f"Unable to read directory during comparison: {current}: {exc}") from exc
-
         for entry in entries:
             full_path = entry.path
             relative = _relative_key(full_path, root)
             try:
                 if entry.is_symlink():
-                    symlinks[relative] = os.readlink(full_path)
-                    continue
+                    raise DeleteDupesError(f"Unverifiable symlink in duplicate tree: {full_path}")
                 if entry.is_dir(follow_symlinks=False):
                     if is_phase1_pruned_directory(entry.name):
                         continue
                     directories.add(relative)
                     visit(full_path)
-                    continue
-                if entry.is_file(follow_symlinks=False):
+                elif entry.is_file(follow_symlinks=False):
                     files[relative] = entry.stat(follow_symlinks=False).st_size
-                    continue
+                else:
+                    raise DeleteDupesError(f"Unsupported filesystem object during comparison: {full_path}")
             except OSError as exc:
                 raise DeleteDupesError(f"Unable to inspect path during comparison: {full_path}: {exc}") from exc
-
-            raise DeleteDupesError(f"Unsupported filesystem object during comparison: {full_path}")
 
     visit(root)
     return TreeManifest(
         directories=frozenset(directories),
         files=tuple(sorted(files.items())),
-        symlinks=tuple(sorted(symlinks.items())),
+        symlinks=(),
     )
 
 
 def _tree_manifest_mismatch_reason(left: TreeManifest, right: TreeManifest) -> str:
-    """Return one short human-readable reason two scanned trees do not match."""
+    """Explain a disagreement in relative names, folders or exact sizes."""
     if len(left.files) != len(right.files):
         return "different number of files"
-    if left.directories != right.directories or left.symlinks != right.symlinks:
+    if left.directories != right.directories:
         return "different sub-structure"
-
     left_files = dict(left.files)
     right_files = dict(right.files)
     if set(left_files) != set(right_files):
@@ -206,11 +199,11 @@ def _tree_manifest_mismatch_reason(left: TreeManifest, right: TreeManifest) -> s
     for relative_path in sorted(left_files):
         if left_files[relative_path] != right_files[relative_path]:
             return f"{relative_path} different sizes"
-    return "different contents"
+    return "different names or sizes"
 
 
 def compare_directory_trees_for_duplicate_deletion(original: str, copy_path: str) -> Tuple[bool, str]:
-    """Return (matches, simple reason) under deleteDupes' structure/name/size rule."""
+    """Return (matches, reason) for recursive filename and exact-size identity."""
     original = os.path.normpath(str(original or ""))
     copy_path = os.path.normpath(str(copy_path or ""))
     if not os.path.isdir(original) or not os.path.isdir(copy_path):
@@ -228,7 +221,7 @@ def compare_directory_trees_for_duplicate_deletion(original: str, copy_path: str
 
 
 def directory_trees_match_for_duplicate_deletion(original: str, copy_path: str) -> bool:
-    """Return True when trees have identical names/structure and file sizes."""
+    """Return True only for matching relative names, exact sizes and folders."""
     matches, _reason = compare_directory_trees_for_duplicate_deletion(original, copy_path)
     return matches
 
@@ -511,7 +504,7 @@ def _matching_duplicate_groups(
     candidates regardless of their remaining name text, and exact X/(copyN)
     families are candidates even when artist/date cannot be parsed.  Every
     candidate tree is scanned once and folders with identical manifests form a
-    content-equivalence cluster.  This means copies are compared with one another
+    candidate cluster; each candidate is checked again by names and sizes just before relocation; copies are compared with one another
     as well as with unsuffixed folders.
 
     Each cluster with two or more identical trees keeps exactly one folder.  An
@@ -1060,6 +1053,16 @@ def delete_duplicate_copy_directories(
                 if not os.path.isdir(copy_path):
                     continue
                 source_path = os.path.abspath(os.path.normpath(copy_path))
+                # Recheck exact relative names and file sizes after any keeper repair
+                # immediately before moving; duplicate detection never hashes bytes.
+                try:
+                    same_structure, reason = compare_directory_trees_for_duplicate_deletion(original_path, copy_path)
+                except DeleteDupesError as exc:
+                    same_structure, reason = False, f"unverifiable: {exc}"
+                if not same_structure:
+                    record_mismatch(original_path, copy_path, reason)
+                    emit(f"Preserved non-identical duplicate candidate {copy_path}: {reason}", error=True)
+                    continue
                 if legacy_trash_hook is not None:
                     legacy_trash_hook(source_path)
                     destination_path = os.path.join(holding_root or "duplicates", os.path.basename(source_path))
@@ -1081,10 +1084,10 @@ def _parse_args(argv=None):
         description=(
             "Recursively find duplicate sibling directories. Candidate folders are discovered from exact "
             "X/(copyN) families and from same-artist/date sibling names. Copies are compared with one another "
-            "as well as with unsuffixed folders, and identical recursive trees form content-equivalence "
+            "as well as with unsuffixed folders, and matching filename/size trees form equivalence "
             "clusters. Each cluster keeps one preferred folder (an unsuffixed name when available; otherwise "
-            "the lowest-numbered copy) and relocates the other identical members. The recursive directory "
-            "structure, file names, and file sizes must match before relocation. Before moving matching "
+            "the lowest-numbered copy) and relocates the other matching members. The recursive directory "
+            "structure, relative file names and exact byte sizes must match before relocation; no content hash is used. Before moving matching "
             "duplicates, fully decode-check FLAC files in the kept folder and repair corrupt files from the "
             "other qualifying cluster members. Each duplicate directory is moved as a whole into a folder "
             "named duplicates at the root of the partition containing the Input Path."

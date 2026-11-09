@@ -27,5 +27,6 @@ def test_real_shared_source_override_still_fails_closed(tmp_path, monkeypatch):
 def test_version_neutral_faq_does_not_break_legacy_contract():
     faq = (ROOT / 'TLO-FAQ.txt').read_text(encoding='utf8')
     assert 'GitHub native build-process note:' in faq
-    assert 'TLO GitHub Build Process v122' in faq
+    assert 'The separately versioned TLO GitHub Build Process acquires' in faq
+    assert 'TLO GitHub Build Process v122' not in faq
     assert not re.search(r'\bBuild\s+\d+\b', faq)

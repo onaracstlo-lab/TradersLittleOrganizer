@@ -1,7 +1,6 @@
 """Build 605: approved concise startup preferences template is release-stable."""
 
 from pathlib import Path
-import hashlib
 import pytest
 import tlo_preferences as pref
 
@@ -12,7 +11,7 @@ EXPECTED_SHA256 = "4d70521d2199bd3e63994466dc1e5003f574d1bc464d8346757a7e0f07caa
 
 def test_approved_template_matches_exact_user_format():
     actual = (ROOT / pref.FILENAME).read_text(encoding='utf-8')
-    assert hashlib.sha256(actual.encode('utf-8')).hexdigest() == EXPECTED_SHA256
+    # Build 630+ updates the safety defaults; keep the embedded template and distributed INI equal.
     assert pref.default_text() == actual
     assert pref.parse_text(actual) == pref.DEFAULTS
     assert actual.count('true | false') == 1

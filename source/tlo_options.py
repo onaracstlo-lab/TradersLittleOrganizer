@@ -40,14 +40,14 @@ def parse_percent_0_100(value):
 
 
 def parse_corrupt_file_policy(value):
-    val = str(value or "delete").strip().lower()
+    val = str(value or "keep").strip().lower()
     if val not in {"keep", "delete"}:
         raise argparse.ArgumentTypeError("corrupt-files must be keep or delete")
     return val
 
 
 def parse_corrupt_folder_policy(value):
-    val = str(value or "all").strip().lower()
+    val = str(value or "never").strip().lower()
     if val not in {"never", "all", "threshold"}:
         raise argparse.ArgumentTypeError("corrupt-folders must be never, all, or threshold")
     return val
@@ -211,15 +211,15 @@ OPTIONS = [
     ),
     Option(
         "corrupt_files", "--corrupt-files", "choice",
-        default="delete", choices=("keep", "delete"), metavar="ACTION",
+        default="keep", choices=("keep", "delete"), metavar="ACTION",
         type_func=parse_corrupt_file_policy,
-        help="Individual corrupt-file handling when the containing folder is retained: keep reports the corrupt files without moving them; delete moves the corrupt files to the OS Trash/Recycle Bin. Default delete.",
+        help="Individual corrupt-file handling when the containing folder is retained: keep reports the corrupt files without moving them; delete moves the corrupt files to the OS Trash/Recycle Bin. Default keep and report.",
     ),
     Option(
         "corrupt_folders", "--corrupt-folders", "choice",
-        default="all", choices=("never", "all", "threshold"), metavar="POLICY",
+        default="never", choices=("never", "all", "threshold"), metavar="POLICY",
         type_func=parse_corrupt_folder_policy,
-        help="Folder-removal policy for proven corruption: never means never remove a folder because of corruption; all removes a folder only when 100%% of its directly inventoried audio is corrupt; threshold removes a folder when its proven corruption percentage is at or above --corrupt-folder-threshold. Default all.",
+        help="Folder-removal policy for proven corruption: never means never remove a folder because of corruption; all removes a folder only when 100%% of its directly inventoried audio is corrupt; threshold removes a folder when its proven corruption percentage is at or above --corrupt-folder-threshold. Default never.",
     ),
     Option(
         "corrupt_folder_threshold", "--corrupt-folder-threshold", "int",
@@ -291,7 +291,10 @@ def add_option_to_parser(parser: argparse.ArgumentParser, option: Option) -> Non
         kwargs["default"] = argparse.SUPPRESS
     else:
         kwargs["default"] = option.default
-    parser.add_argument(option.flag, **kwargs)
+    if option.config_field == 'tag_copy_and_delete_path':
+        parser.add_argument(option.flag, '--tag-move-to', **kwargs)
+    else:
+        parser.add_argument(option.flag, **kwargs)
 
 
 def add_options_to_parser(parser: argparse.ArgumentParser, fields: Optional[Sequence[str]] = None) -> None:
@@ -336,8 +339,8 @@ def namespace_values(namespace: argparse.Namespace, fields: Optional[Sequence[st
 
 def validate_corruption_policy(values: dict, *, require_explicit_threshold: bool = False) -> None:
     """Validate the independent corrupt-file and corrupt-folder policy fields."""
-    file_policy = parse_corrupt_file_policy(values.get("corrupt_files", "delete"))
-    folder_policy = parse_corrupt_folder_policy(values.get("corrupt_folders", "all"))
+    file_policy = parse_corrupt_file_policy(values.get("corrupt_files", "keep"))
+    folder_policy = parse_corrupt_folder_policy(values.get("corrupt_folders", "never"))
     threshold_present = "corrupt_folder_threshold" in values and values.get("corrupt_folder_threshold") is not None
 
     if folder_policy == "threshold":

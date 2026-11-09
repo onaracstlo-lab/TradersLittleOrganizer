@@ -55,8 +55,8 @@ def test_build442_options_replace_acceptable_corruption_cli():
     assert O.OPTIONS_BY_FIELD["corrupt_files"].flag == "--corrupt-files"
     assert O.OPTIONS_BY_FIELD["corrupt_folders"].flag == "--corrupt-folders"
     assert O.OPTIONS_BY_FIELD["corrupt_folder_threshold"].flag == "--corrupt-folder-threshold"
-    assert O.OPTIONS_BY_FIELD["corrupt_files"].default == "delete"
-    assert O.OPTIONS_BY_FIELD["corrupt_folders"].default == "all"
+    assert O.OPTIONS_BY_FIELD["corrupt_files"].default == "keep"
+    assert O.OPTIONS_BY_FIELD["corrupt_folders"].default == "never"
 
 
 def test_build442_cli_threshold_requires_matching_folder_mode():

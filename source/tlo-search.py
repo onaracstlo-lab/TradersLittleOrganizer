@@ -94,7 +94,7 @@ TLOHome:
 Startup behavior:
 - On startup, the app fills the Search box and automatically runs the first search.
 - If --find is supplied, that value is used for the first search instead of the clipboard.
-- If --find is not supplied, the app uses the current paste buffer.
+- The clipboard is read only if [search] clipboard_prefill=true and no --find/search_query exists.
 - The Search box stays focused in the main window.
 
 Search modes:
@@ -143,8 +143,8 @@ Font selector:
 
 Preferences:
 - TLOHome/tlo-preferences.ini stores shared startup settings for TLO Main and Search.
-- The hamburger > Edit Preferences command opens an editable text window; Save validates and prompts for a restart.
-- An explicit --find takes precedence over search_query, then the existing clipboard default is used.
+- The hamburger > Edit Preferences command opens an editable text window; Save & Close validates and writes startup defaults; the current session is unchanged.
+- An explicit --find takes precedence over search_query; clipboard prefill requires an opt-in setting.
 """
 
 
@@ -617,7 +617,7 @@ class BootlistSearchApp:
             initial_value = self.initial_find
         elif self.preferences['search']['search_query']:
             initial_value = self.preferences['search']['search_query']
-        else:
+        elif self.preferences['search'].get('clipboard_prefill', False):
             try:
                 initial_value = self.root.clipboard_get().strip()
             except tk.TclError:
@@ -1207,7 +1207,7 @@ def parse_cli_args(argv: Sequence[str]) -> tuple[Path, str | None]:
             print(HELP_TEXT)
             raise SystemExit(0)
 
-        if arg in ("--TLOHome", "--myTLO"):
+        if arg in ("--TLOHome", "--tlo-home", "--myTLO"):
             if i + 1 >= len(argv):
                 raise AppConfigError(f"{arg} requires a value.")
             value = strip_outer_quotes(argv[i + 1])

@@ -1,0 +1,48 @@
+[
+  {
+    "folder": "Jethro Tull, Derby 2007-02-04",
+    "artist": "Jethro Tull",
+    "date": "2007-02-04",
+    "city": "Derby"
+  },
+  {
+    "folder": "Kinks, The 1972-03-02",
+    "artist": "The Kinks",
+    "date": "1972-03-02",
+    "not_city": "The"
+  },
+  {
+    "folder": "Grateful Dead, Soundboard 1977-05-08",
+    "artist": "Grateful Dead",
+    "date": "1977-05-08",
+    "not_city": "Soundboard"
+  },
+  {
+    "folder": "Grateful Dead, Matrix 1977-05-08",
+    "artist": "Grateful Dead",
+    "date": "1977-05-08",
+    "not_city": "Matrix"
+  },
+  {
+    "folder": "Twiddle Live in Denver 2022-05-08",
+    "artist": "Twiddle",
+    "date": "2022-05-08",
+    "city": "Denver"
+  },
+  {
+    "folder": "Lucinda Williams - The Catalyst, Santa Cruz, CA 8-31-07",
+    "artist": "Lucinda Williams",
+    "date": "2007-08-31",
+    "city": "Santa Cruz"
+  },
+  {
+    "folder": "Jethro Tull, Derby 02-04-07",
+    "artist": "Jethro Tull",
+    "not_date": "2007-02-04"
+  },
+  {
+    "folder": "Who, The 1974-05-18",
+    "artist": "The Who",
+    "date": "1974-05-18"
+  }
+]

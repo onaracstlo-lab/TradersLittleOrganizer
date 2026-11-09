@@ -1,0 +1,21 @@
+TLO v1.7 Build 647 — NOT RELEASE-ATTESTED
+
+Source snapshot: corrected Build 646 reissued as NEW Build 647.
+Known Ruff F401: the unused _cached_layered top-level import was removed
+  in tests/behavior/test_build646_staged_city_database.py.
+Physical city catalog: TLO_DBs/cities.csv is byte-identical to root cities.csv.
+No embedded Python city catalog or PyInstaller city --add-data copy.
+GitHub Build Process v124: available separately, not included in source bundle.
+Xvfb display (CI=1): Build 647 unit/contracts + selected behavior tests
+  263 passed, 0 failed. Full historical suite attempted but not completed.
+No display (DISPLAY and CI unset): previous Build 532 GUI-only subset,
+  50 passed, 6 skipped; not rerun for Build 647.
+Historical full GitHub Actions run (Build 613): 26 skipped; unrelated
+  test population and not Build 647 evidence.
+Ruff lint: lint not attested; executable unavailable in local environment.
+Mandatory Ruff release gate: NOT EXECUTED LOCALLY for Build 647.
+Python AST syntax: all source Python modules parsed successfully.
+Requirements DOCX: rendered to 129 pages; current version/build metadata verified.
+Source ZIP SHA256: all included member hashes verified after archive creation.
+Native Windows/macOS/Linux builds, signed updates and timestamping:
+  NOT EXECUTED; release is NOT ATTESTED.

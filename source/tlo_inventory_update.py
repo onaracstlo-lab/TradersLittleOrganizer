@@ -1074,6 +1074,8 @@ def _append_delete_command(script_path: str, path_to_delete: str, volume_label: 
         if not existed and not is_bat:
             outfile.write("#!/bin/sh" + newline)
             outfile.write("set -eu" + newline)
+            outfile.write("TLO_DELETED_COUNT=0; TLO_SKIPPED_COUNT=0" + newline)
+            outfile.write("trap 'printf \"TLO cleanup: deleted=%s skipped=%s\\n\" \"$TLO_DELETED_COUNT\" \"$TLO_SKIPPED_COUNT\"' EXIT" + newline)
         if is_bat:
             if not existed:
                 outfile.write("setlocal DisableDelayedExpansion" + newline)
@@ -1133,14 +1135,20 @@ def _append_delete_command(script_path: str, path_to_delete: str, volume_label: 
                 outfile.write("if command -v powershell.exe >/dev/null 2>&1 && printf '%s' \"$TLO_ROOT\" | grep -Eq '^/mnt/[A-Za-z]$'; then TLO_DRIVE=$(printf '%s' \"$TLO_ROOT\" | cut -c6 | tr '[:lower:]' '[:upper:]'); TLO_ACTUAL_LABEL=$(powershell.exe -NoProfile -Command \"(Get-Volume -DriveLetter '$TLO_DRIVE').FileSystemLabel\" 2>/dev/null | tr -d '\\r' || true); " +
                               "elif command -v diskutil >/dev/null 2>&1; then TLO_ACTUAL_LABEL=$(diskutil info \"$TLO_ROOT\" 2>/dev/null | awk -F: '/Volume Name/{sub(/^[ \\t]+/,\"\",$2); print $2; exit}'); " +
                               "elif command -v findmnt >/dev/null 2>&1; then TLO_ACTUAL_LABEL=$(findmnt -n -o LABEL --target \"$TLO_ROOT\" 2>/dev/null || true); fi" + newline)
-                outfile.write("[ \"$TLO_ACTUAL_LABEL\" = \"$TLO_EXPECTED_LABEL\" ] || { echo \"Wrong or unverifiable volume at $TLO_ROOT; expected $TLO_EXPECTED_LABEL\" >&2; exit 1; }" + newline)
-                outfile.write(f"printf '%s\\n' {shlex.quote('Deleting ' + translated)}" + newline)
-                outfile.write(f"rm -rf -- {shlex.quote(translated)}" + newline)
+                outfile.write('if [ -n "$TLO_ACTUAL_LABEL" ] && [ "$TLO_ACTUAL_LABEL" = "$TLO_EXPECTED_LABEL" ]; then' + newline)
+                outfile.write(f"  printf '%s\\n' {shlex.quote('Deleting ' + translated)}" + newline)
+                outfile.write(f"  rm -rf -- {shlex.quote(translated)}" + newline)
+                outfile.write('  TLO_DELETED_COUNT=$((TLO_DELETED_COUNT + 1))' + newline)
+                outfile.write('else' + newline)
+                outfile.write('  printf \"SKIPPED: wrong or unverifiable volume for %s; expected %s\\n\" \"' + '$TLO_ROOT' + '\" \"' + '$TLO_EXPECTED_LABEL' + '\" >&2' + newline)
+                outfile.write('  TLO_SKIPPED_COUNT=$((TLO_SKIPPED_COUNT + 1))' + newline)
+                outfile.write('fi' + newline)
             else:
                 outfile.write(
                     f"printf '%s\\n' {shlex.quote('SKIPPED: unlabeled volume cannot be verified automatically; manually verify before deleting ' + translated)}"
                     + newline
                 )
+                outfile.write("TLO_SKIPPED_COUNT=$((TLO_SKIPPED_COUNT + 1))" + newline)
                 outfile.write("# SAFETY: destructive command disabled because this volume had no label to verify." + newline)
                 outfile.write(f"# rm -rf -- {shlex.quote(translated)}" + newline)
     if not is_bat:

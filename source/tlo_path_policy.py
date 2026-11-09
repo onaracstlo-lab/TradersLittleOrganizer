@@ -25,6 +25,7 @@ TLO_TEMP_DIR_PREFIXES = (
     ".tlo-partial-",
     ".tlo-restore-",
     ".tlo-convert-",
+    ".tlo-shn-originals",
 )
 
 

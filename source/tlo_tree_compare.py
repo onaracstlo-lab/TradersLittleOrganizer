@@ -42,6 +42,8 @@ def _tree_manifest(
     for current_dir, dir_names, file_names in os.walk(
         root, topdown=True, followlinks=False, onerror=_raise_walk_error
     ):
+        if '.tlo-shn-originals' in ignored:
+            dir_names[:] = [name for name in dir_names if name.casefold() != '.tlo-shn-originals']
         if os.path.normcase(os.path.abspath(os.path.normpath(current_dir))) == root_norm and ignored:
             dir_names[:] = [name for name in dir_names if name.casefold() not in ignored]
             file_names = [name for name in file_names if name.casefold() not in ignored]
@@ -114,6 +116,25 @@ def directory_trees_exactly_match(left_root: str, right_root: str, *, ignore_roo
         return False
 
 
+def directory_trees_match_names_and_sizes(left_root: str, right_root: str) -> bool:
+    """Duplicate identity: recursive relative names, folders and exact sizes.
+
+    Never read or hash file content. Symbolic links are not treated as
+    duplicate files. Copy/delete transfer verification uses the separate
+    directory_trees_exactly_match() byte-integrity gate above.
+    """
+    if not left_root or not right_root:
+        return False
+    if not os.path.isdir(left_root) or not os.path.isdir(right_root):
+        return False
+    try:
+        left_dirs, left_files, left_links = _tree_manifest(left_root)
+        right_dirs, right_files, right_links = _tree_manifest(right_root)
+        return not left_links and not right_links and left_dirs == right_dirs and left_files == right_files
+    except OSError:
+        return False
+
+
 def collision_family_directories(parent_dir: str, base: str) -> List[str]:
     """Return existing base/copy/alt directories belonging to one show-name family."""
     result: List[str] = []
@@ -137,7 +158,7 @@ def collision_family_directories(parent_dir: str, base: str) -> List[str]:
 
 
 def has_exact_tree_match_in_family(source_root: str, parent_dir: str, base: str, *, exclude_source: bool = False) -> bool:
-    """Return whether source exactly matches another member of the name family."""
+    """Return whether source has matching relative names and exact sizes."""
     source_root = os.path.normpath(str(source_root or ""))
     for existing in collision_family_directories(parent_dir, base):
         if exclude_source:
@@ -147,6 +168,6 @@ def has_exact_tree_match_in_family(source_root: str, parent_dir: str, base: str,
             except OSError:
                 if os.path.normcase(source_root) == os.path.normcase(existing):
                     continue
-        if directory_trees_exactly_match(source_root, existing):
+        if directory_trees_match_names_and_sizes(source_root, existing):
             return True
     return False

@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Iterable, Optional
 
 from logging_lib import ensure_logs_dir
+from tlo_locking import _open_lock_file, _lock_file, _unlock_file
 
 
 RUN_SETTINGS_LOG_FILENAME = "runSettings.log"
@@ -58,12 +59,22 @@ def append_run_settings(
     """Append one complete run entry and return the log path.
 
     The entry is assembled in memory and written with one append operation so
-    concurrent command-line starts cannot interleave individual lines.
+    concurrent TLO processes cannot interleave individual entries.
     """
     path_name = run_settings_log_path(tlo_home)
     entry = format_run_settings_entry(action, review_lines, started_at=started_at)
     with _RUN_SETTINGS_LOCK:
-        with open(path_name, "a", encoding="utf-8", newline="\n") as outfile:
-            outfile.write(entry)
-            outfile.flush()
+        lock = _open_lock_file(path_name + '.lock')
+        try:
+            if not _lock_file(lock, blocking=True):
+                raise OSError('Cannot serialize run-settings writes across processes')
+            try:
+                with open(path_name, 'ab') as outfile:
+                    outfile.write(entry.encode('utf-8'))
+                    outfile.flush()
+                    os.fsync(outfile.fileno())
+            finally:
+                _unlock_file(lock)
+        finally:
+            lock.close()
     return path_name

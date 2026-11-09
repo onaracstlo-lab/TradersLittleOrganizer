@@ -1,11 +1,25 @@
-PyInstaller note for FFmpeg / SHN conversion
+PyInstaller native build notes - TLO v1.7 Build 624
+==================================================
 
-TLO does not ask the user to install ffmpeg, shorten, shntool, or another SHN converter.
+TLO ships a restricted, source-built, audio-only FFmpeg 9.0.2 binary.
+prepare_ffmpeg.py verifies the pinned upstream source archive hash, builds
+FFmpeg for the *native host* architecture, checks the compiled binary and
+stages it under tlo_ffmpeg_bin/ffmpeg[.exe] for PyInstaller.
+The shared source archive may arrive from the separate GitHub Build Process's
+verified Ubuntu acquisition step; the platform builder re-verifies its hash.
+No prebuilt FFmpeg static release asset is downloaded or trusted.
 
-Build 535 removes imageio-ffmpeg from native packaging. Native builders must run prepare_ffmpeg.py for the target platform/architecture. The helper downloads the exact FFmpeg 9.0.2 static release asset listed in its manifest, verifies the pinned SHA-256 before extraction, validates the reported ffmpeg version, and stages the executable for PyInstaller as tlo_ffmpeg_bin/ffmpeg[.exe].
+The runtime resolver uses only the packaged FFmpeg and does not consult PATH,
+IMAGEIO_FFMPEG_EXE, conda or a working-directory executable. Missing or
+out-of-bundle FFmpeg is treated as an error, never a PATH fallback.
 
-The TLO runtime resolver never consults IMAGEIO_FFMPEG_EXE, conda, PATH, or a current-directory ffmpeg. Frozen applications resolve only the packaged tlo_ffmpeg_bin executable and fail closed when it is absent or outside the permitted packaged roots.
+Build environments are pinned by requirements-build.txt. Install with
+--require-hashes and --only-binary=:all:. The platform runner uses CPython
+3.13.16, PyInstaller 6.22.3 and the source-hash-pinned FFmpeg build recipe.
+Native build receipts, validation, security scans, signing, and distribution
+are handled by the independently versioned GitHub Build Process v123.
 
-Build environments are pinned by requirements-build.txt and verify_build_environment.py. Native builders must install the lock with --require-hashes, use CPython 3.13.16 and PyInstaller 6.22.3, and run the packaging smoke test before scanning/packaging. The smoke test intentionally sets a hostile IMAGEIO_FFMPEG_EXE value to verify that it is ignored.
-
-The official GitHub build process additionally runs audit_build_requirements.py and records Python, PyInstaller, FFmpeg, and requirements-lock identity in the platform build receipt.
+Build 623 SHN-to-FLAC conversion relies on FFmpeg's pcm_s32le decoder/encoder
+and raw PCM muxer, which are explicitly enabled by build_audio_ffmpeg.sh.
+If strict decoding, independent PCM verification, or native Trash fails,
+the converter retains the original SHN instead of destroying evidence.

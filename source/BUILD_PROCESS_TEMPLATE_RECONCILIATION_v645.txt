@@ -1,0 +1,25 @@
+TLO Build 645 - GitHub Build Process v123 follow-up
+
+Cause: The GitHub Build Process regenerates createWindowsDist.ps1 (and potentially
+other create*Dist scripts) using its own templates, replacing newer scripts from
+the TLO source archive. GitHub Actions run 42540319580 showed the generated
+Windows distribution script did not contain cities.csv, even though the source
+archive script did. This is a build-process integration defect, not a bad CSV.
+
+Build 645 makes the Python application self-sufficient by embedding an exact,
+checksum-verified copy of cities.csv, automatically imported by PyInstaller.
+Consequently native city recognition no longer depends on --add-data wiring.
+
+Recommended permanent build-process fix (requires Build Process v123 source):
+1. Update the generation templates for createWindowsDist.ps1,
+   createLinuxDist.sh and createMacOSDist.sh from their latest source equivalents.
+2. Preserve the --add-data cities.csv attachment for each frozen inventory/search
+   entrypoint. Avoid dropping Windows icon/signing/FFmpeg precautions.
+3. Assert each generated script still adds cities.csv or prove the embedded module
+   is included by examining the frozen executable contents.
+4. Run a native frozen-application city lookup smoke test (e.g. London, Cologne,
+   Brighton, and an intentionally ambiguous or music-term name) on all OSes.
+5. Continue required signing, supply-chain, scan, and manifest gates.
+
+This build does NOT modify GitHub Build Process v123; do not claim that separate
+codebase has been repaired without verifying its generator and generated scripts.

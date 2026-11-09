@@ -315,7 +315,7 @@ def test_collision_name_uses_copy_only_for_byte_identical_tree(tmp_path):
     assert allocated == str(destination / f"{existing.name} (copy1)")
 
 
-def test_collision_name_uses_alt_when_same_size_file_bytes_differ(tmp_path):
+def test_collision_name_uses_copy_when_same_size_file_bytes_differ(tmp_path):
     import tlo_tag_lib as tag
 
     destination = tmp_path / "destination"
@@ -327,7 +327,7 @@ def test_collision_name_uses_alt_when_same_size_file_bytes_differ(tmp_path):
 
     allocated = tag._unique_destination_path(destination, existing.name, incoming)
 
-    assert allocated == str(destination / f"{existing.name} (alt1)")
+    assert allocated == str(destination / f"{existing.name} (copy1)")
 
 
 def test_collision_name_uses_alt_when_folder_structure_differs(tmp_path):
@@ -408,7 +408,7 @@ def test_tag_copy_collision_labels_exact_tree_copy(tmp_path):
     assert expected.is_dir()
 
 
-def test_rename_collision_labels_nonidentical_tree_alt(tmp_path):
+def test_rename_collision_labels_same_name_and_size_copy(tmp_path):
     import tlo_tag_lib as tag
 
     parent = tmp_path / "shows"
@@ -430,7 +430,7 @@ def test_rename_collision_labels_nonidentical_tree_alt(tmp_path):
         record,
     )
 
-    expected = parent / f"{record.show_name} (alt1)"
+    expected = parent / f"{record.show_name} (copy1)"
     assert renamed_group["main_dir_path"] == str(expected)
     assert renamed_record.main_dir_path == str(expected)
     assert expected.is_dir()
@@ -448,7 +448,7 @@ def test_existing_copy_show_qualifier_requires_exact_sibling_tree(tmp_path):
     assert phase._group_trailing_parentheticals(group) == "(copy2)"
 
 
-def test_existing_copy_show_qualifier_becomes_alt_when_contents_differ(tmp_path):
+def test_existing_copy_show_qualifier_kept_when_only_contents_differ(tmp_path):
     import tlo_phase23_v2 as phase
 
     base = tmp_path / "Artist 1970-01-01 Venue City ST"
@@ -457,7 +457,7 @@ def test_existing_copy_show_qualifier_becomes_alt_when_contents_differ(tmp_path)
     _make_collision_tree(copied, payload=b"BBBB")
     group = {"main_dir_path": str(copied), "main_dir_name": copied.name}
 
-    assert phase._group_trailing_parentheticals(group) == "(alt2)"
+    assert phase._group_trailing_parentheticals(group) == "(copy2)"
 
 
 def test_existing_copy_show_qualifier_becomes_alt_when_structure_differs(tmp_path):

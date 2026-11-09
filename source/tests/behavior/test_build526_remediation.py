@@ -132,7 +132,7 @@ def test_build526_posix_labeled_cleanup_still_requires_identity_before_delete(tm
     body = script.read_text(encoding="utf-8")
 
     assert "TLO_EXPECTED_LABEL=Backup" in body
-    assert "Wrong or unverifiable volume" in body
+    assert "SKIPPED: wrong or unverifiable volume" in body
     assert "rm -rf -- /mnt/e/Shows/Band" in body
 
 

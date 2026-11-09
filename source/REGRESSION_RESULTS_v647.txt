@@ -1,0 +1,19 @@
+TLO v1.7 Build 647 — source verification results
+
+Verified current Build 647:
+- Python 3.13.5 (Linux), xvfb-run with CI=1; TLO_RELEASE_VERIFY=0.
+- Unit tests, contract tests, and current documentation/city/version tests:
+  263 passed, 0 failed in 6.97 s.
+- Focused version/document/city tests: 21 passed, 0 failed.
+- Broader historical suite was attempted with one previously known hanging
+  deep-audio test excluded, but did not finish; it stalled around 40% in the
+  local environment. NOT a successful full-suite attestation.
+- No claims are made for the tests that did not finish.
+- Ruff not installed locally; mandatory GitHub/Windows lint not attested.
+- Native Windows/macOS/Linux builds and Windows signing not performed.
+- Build Process v124 is separate; no Build Process modification in Build 647.
+- Versioned Requirements DOCX rendered to 129 pages; first page inspected.
+- Python AST parse and source ZIP checksum verification performed on packaging.
+
+Historically for corrected Build 646 (not current Build 647 evidence):
+  2466 passed, 6 skipped, 1 excluded; F401 correction carried into 647.

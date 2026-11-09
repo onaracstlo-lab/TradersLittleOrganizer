@@ -6,12 +6,14 @@ from tlo_version import VERSION as _TLO_CANONICAL_VERSION
 __version__ = _TLO_CANONICAL_VERSION
 
 import csv
+from functools import lru_cache
 import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from tlo_cities import catalog_for_tlo
 from tlo_constants import (
     AMBIGUOUS_CANADIAN_REGION_CODES, CANADIAN_REGION_ALIASES, CANADIAN_REGION_CODES,
     COUNTRY_ALIASES, COUNTRY_SEARCH_TERMS, LOCATION_CONNECTIVE_WORDS,
@@ -126,19 +128,31 @@ def _load_venues(tlo_dbs_dir: str) -> List[str]:
 
 
 def _load_cities(tlo_dbs_dir: str) -> List[Dict[str, object]]:
-    rows: List[Dict[str, object]] = []
-    for row in _read_caret_csv(Path(tlo_dbs_dir) / "cities.csv"):
-        city = _clean_spaces(row.get("city", ""))
-        if not city:
+    """Load the same conservative catalog used by the folder parser.
+
+    Canonical names and ASCII aliases are equivalent for recognition, never
+    substituted for the spelling appearing in a source header.
+    """
+    catalog = catalog_for_tlo(tlo_dbs_dir)
+    if catalog is None:
+        return []
+    return _city_support_rows(catalog)
+
+
+@lru_cache(maxsize=16)
+def _city_support_rows(catalog) -> List[Dict[str, object]]:
+    """Materialize rows once per immutable catalog, not once per setlist."""
+    rows = []
+    # The shared catalog already rejects colliding aliases; avoid making a
+    # formerly rejected name available via setlist-only parsing.
+    for city in catalog.cities:
+        names = [city.city, *city.aliases]
+        allowed = [n for n in names if catalog.lookup_exact(n) == city]
+        if not allowed:
             continue
-        aliases = [_clean_spaces(alias) for alias in str(row.get("aliases", "")).split("|") if _clean_spaces(alias)]
-        rows.append({
-            "city": city,
-            "region": _clean_spaces(row.get("region", "")),
-            "country": _clean_spaces(row.get("country", "")),
-            "aliases": aliases,
-        })
-    return sorted(rows, key=lambda row: (-len(str(row["city"])), str(row["city"]).casefold()))
+        rows.append({'city': city.city, 'region': city.region,
+                     'country': city.country, 'aliases': [n for n in city.aliases if catalog.lookup_exact(n) == city]})
+    return sorted(rows, key=lambda row: (-len(str(row['city'])), str(row['city']).casefold()))
 
 
 def _load_regions(tlo_dbs_dir: str) -> Dict[str, Dict[str, str]]:
@@ -185,6 +199,7 @@ class _SupportData:
         self.venues = _load_venues(self.tlo_dbs_dir)
         self.venue_terms = [(venue, _norm_key(venue)) for venue in self.venues if _norm_key(venue)]
         self.cities = _load_cities(self.tlo_dbs_dir)
+        self.city_catalog = catalog_for_tlo(self.tlo_dbs_dir)
         self.regions = _load_regions(self.tlo_dbs_dir)
         self.countries = _load_countries(self.tlo_dbs_dir)
 
@@ -933,33 +948,49 @@ def _parse_location_from_text(raw: str, support: _SupportData) -> Tuple[str, str
     if parsed_city and parsed_region:
         return parsed_city, parsed_region, parsed_country, parsed_raw, parsed_pattern, parsed_conf
 
-    line_norm_blob = f" {_norm_key(line)} "
-    for cityrow in support.cities:
-        names = [str(cityrow.get("city", ""))] + list(cityrow.get("aliases", []))
-        for name in names:
-            nk = _norm_key(name)
-            if not nk or f" {nk} " not in line_norm_blob:
+    # The shared index looks up primary city names and aliases in exactly
+    # the same way.  Inspect only phrases actually present in the header;
+    # never linearly scan thousands of catalog rows for every setlist line.
+    catalog = getattr(support, 'city_catalog', None)
+    if catalog is not None:
+        tokens = list(re.finditer(r'[^\W_]+', line, re.UNICODE))
+        hits = []
+        for i in range(len(tokens)):
+            for count in range(min(catalog.max_words, len(tokens) - i), 0, -1):
+                j = i + count - 1
+                spelling = line[tokens[i].start():tokens[j].end()]
+                found = catalog.lookup_exact(spelling)
+                if found:
+                    hits.append((count, tokens[i].start(), spelling, found, tokens[j].end()))
+        hits.sort(key=lambda item: (-item[0], item[1]))
+        for _word_count, start, spelling, cityrow, finish in hits:
+            # A short name must not eat the tail of a longer well-known city.
+            # In particular York from the catalog must not turn an explicitly
+            # structured New York, NY header into York, NY. The established
+            # generic state parser handles New York without asserting country.
+            if _norm_key(spelling) == 'york' and re.search(r'(?i)\bnew\s+$', line[:start]):
                 continue
-            city = str(cityrow.get("city", ""))
-            region = str(cityrow.get("region", ""))
-            country = str(cityrow.get("country", ""))
-            mcity = re.search(re.escape(name).replace(r"\ ", r"\s+"), line, re.I)
-            if _should_skip_los_angeles_shorthand(line, city, name, mcity):
+            if _should_skip_los_angeles_shorthand(line, cityrow.city, spelling, re.search(re.escape(spelling), line, re.I)):
                 continue
-            tail = _clean_spaces(line[mcity.end():].strip(" ,;-()[]"))[:80] if mcity else ""
+            tail = _clean_spaces(line[finish:].strip(' ,;-()[]'))[:80]
+            # Lowercase common-word postal codes are not region evidence,
+            # even when a city in the new catalog happens to precede them.
+            if tail in ({code.lower() for code in LOWERCASE_COMMON_STATE_CODES} | {'on'}):
+                continue
             tail_norm = _norm_key(tail)
+            region, country = cityrow.region, cityrow.country
             found_tail = False
-            mt = re.match(r"([A-Z]{2,3})\b", tail)
+            mt = re.match(r'([A-Z]{2,3})\b', tail)
             if mt and mt.group(1).upper() in support.regions:
                 info = support.regions[mt.group(1).upper()]
-                region = info.get("region", region)
-                country = info.get("country", country)
+                region = info.get('region', region)
+                country = info.get('country', country)
                 found_tail = True
             else:
                 for key, info in support.regions.items():
                     if not key.isupper() and tail_norm.startswith(key):
-                        region = info.get("region", region)
-                        country = info.get("country", country)
+                        region = info.get('region', region)
+                        country = info.get('country', country)
                         found_tail = True
                         break
                 if not found_tail:
@@ -968,18 +999,18 @@ def _parse_location_from_text(raw: str, support: _SupportData) -> Tuple[str, str
                             country = canonical
                             found_tail = True
                             break
-            exactish = _norm_key(line) in {_norm_key(city), _norm_key(name)}
+            exactish = _norm_key(line) in {_norm_key(cityrow.city), _norm_key(spelling)}
             if not found_tail and exactish:
-                # A standalone city-list hit such as "Nice" is too ambiguous in
-                # setlist headers and can be a comment/adjective/title fragment.
-                # Require explicit state/country tail evidence or broader header
-                # context with location punctuation before using DB-supplied
-                # region/country values.
                 continue
             if not found_tail and not _has_explicit_location_evidence(line):
                 continue
+            # Location recognition must not translate the supplied spelling
+            # (e.g. Cologne => Köln).  Do not add a catalog-supplied country
+            # to a line which has no corroborating country/region text.
+            if not found_tail:
+                region, country = '', ''
             confidence = 88 if found_tail else 55
-            return city, region, country, name, "LOCATION_CITY_REGION_COUNTRY_LIST", confidence
+            return spelling, region, country, spelling, 'LOCATION_CITY_REGION_COUNTRY_LIST', confidence
 
     parsed_city, parsed_region, parsed_country, parsed_raw, parsed_pattern, parsed_conf = _parse_trailing_region_location(line, support)
     if parsed_city and (parsed_region or parsed_country):

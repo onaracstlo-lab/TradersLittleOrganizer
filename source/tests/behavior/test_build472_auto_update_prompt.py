@@ -89,7 +89,11 @@ def test_yes_path_downloads_pending_verified_asset(monkeypatch, tmp_path):
     asset, destination = calls[0]
     assert destination.parent == tmp_path / "Downloads"
     assert asset["digest"] == "sha256:" + ("b" * 64)
-    assert result.path == str(destination)
+    # Build 626: network downloads stay under a non-official staged name
+    # until the signed bytes and complete archive pass inspection.
+    assert destination.name.endswith('.pending')
+    assert result.path == str(tmp_path / 'Downloads' / pending.asset_name)
+    assert Path(result.path).read_bytes() == b'fake package' 
 
 
 def test_gui_auto_update_contract_uses_yes_skip_and_discovery_only():

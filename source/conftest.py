@@ -18,26 +18,52 @@ _XVFB_DISPLAY = ""
 _XVFB_FAILURE = ""
 
 
-_TKINTER_DEPENDENT_TEST_MODULES = {
-    "test_build432_bounded_traversal_and_io.py",
-    "test_build469_gui_tag_and_controls.py",
-    "test_build479_stabilization.py",
-    "test_build480_requirements_and_mp3.py",
-    "test_build483_setlistfm_upgrade_env.py",
-    "test_build497_delete_extra_tags_state.py",
-    "test_build499_linux_gui_startup.py",
-    "test_build501_review_remediation.py",
-    "test_build504_gui_state_and_upgrade_env.py",
-    "test_build506_review_remediation.py",
-    "test_build508_remove_dead_tagger_window.py",
-    "test_build512_main_gui_workers_copy_wildcards.py",
-    "test_build515_setlist_search_filename_alignment.py",
-    "test_build520_partial_date_search_filename.py",
-    "test_build521_behavior_security_tests.py",
-    "test_build524_closure_audit.py",
-    "test_build528_security_build_consistency.py",
-    "test_build530_verification_accuracy.py",
-}
+# Detect collection-time Tk dependencies from each test's import tree.  Do
+# not maintain a manually updated list of build-numbered test filenames.
+import ast
+
+
+def _needs_tk_at_collection(path):
+    try:
+        module = ast.parse(Path(path).read_text(encoding='utf-8'))
+    except (OSError, SyntaxError, UnicodeError):
+        return False  # Let pytest report the real syntax/file failure.
+    for item in module.body:
+        # The GUI scheduling module imports Tk at module import time. Tests
+        # that transitively import it also need collection-time gating on
+        # minimal/headless Python installations.
+        if isinstance(item, ast.Import) and any(alias.name == 'tlo_gui_shortcuts'
+                                                     for alias in item.names):
+            return True
+        if isinstance(item, ast.Import):
+            if any(alias.name == 'tkinter' or alias.name.startswith('tkinter.')
+                   or alias.name in ('tkinterdnd2',) for alias in item.names):
+                return True
+        if isinstance(item, ast.ImportFrom):
+            if item.module and (item.module == 'tkinter' or item.module.startswith('tkinter.')
+                                or item.module == 'tkinterdnd2'):
+                return True
+        # A few GUI tests load the hyphenated GUI modules through a module
+        # spec at import time.  Treat these as display-bound test modules.
+        if isinstance(item, ast.Assign) and any(isinstance(v, ast.Call)
+                and isinstance(v.func, ast.Attribute) and v.func.attr == 'spec_from_file_location'
+                and any(isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+                        and arg.value in ('tlo-main.py', 'tlo-search.py') for arg in v.args)
+                for v in ast.walk(item)):
+            return True
+    # Modules that dynamically load the GUI in a test function must also
+    # be skipped when Tk is absent; inspecting top-level imports alone
+    # misses these dependencies. The module name and loader call are
+    # both necessary, to avoid skipping harmless source-text inspections.
+    gui_names = {'tlo-main.py', 'tlo-search.py'}
+    has_gui_filename = any(isinstance(node, ast.Constant) and
+                           isinstance(node.value, str) and node.value in gui_names
+                           for node in ast.walk(module))
+    has_dynamic_import = any(isinstance(node, ast.Call) and
+                             ((isinstance(node.func, ast.Attribute) and node.func.attr == 'spec_from_file_location') or
+                              (isinstance(node.func, ast.Name) and node.func.id == 'spec_from_file_location'))
+                             for node in ast.walk(module))
+    return has_gui_filename and has_dynamic_import
 
 
 def _tkinter_is_available():
@@ -58,7 +84,7 @@ class _TkUnavailableModule(pytest.Module):
 
 def pytest_pycollect_makemodule(module_path, parent):
     """Skip known Tk-importing modules before Python imports them."""
-    if not _TKINTER_AVAILABLE and Path(str(module_path)).name in _TKINTER_DEPENDENT_TEST_MODULES:
+    if not _TKINTER_AVAILABLE and _needs_tk_at_collection(module_path):
         return _TkUnavailableModule.from_parent(parent, path=module_path)
     return None
 

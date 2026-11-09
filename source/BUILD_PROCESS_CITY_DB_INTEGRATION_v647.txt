@@ -1,0 +1,23 @@
+TLO v1.7 Build 647 — GitHub Build Process v124 integration
+
+Source archive name: music_inventory_flat_bundle_v647.zip
+Independent build process: TLO_GitHub_Build_Process_v124.zip
+
+The user-provided Build Process v123 was superseded by complete Build Process v124.
+Build Process v124 stages curated cities.csv beside artists.sqlite and venues.txt
+under TLO_DBs, includes all three in complete distributions and DB-inclusive
+updates, and checks the archived members and manifest. Update packages with
+INCLUDE_DATABASES_IN_UPDATES=false intentionally omit all three databases.
+
+Source ZIP includes physical TLO_DBs/cities.csv and root cities.csv with
+identical vetted bytes. The three platform distribution scripts run the
+stage-city-database utility. There is no Python-embedded city database and no
+PyInstaller --add-data copy of cities.csv. The actual native build must still
+verify database contents in each resulting ZIP before publication.
+
+Command:
+  .\Run-TLO-GitHub-Build.ps1 -vnumber 1.7 -bnumber 647
+
+Never treat source-level tests as proof that native Windows/macOS/Linux
+executables, Windows Authenticode signatures, update manifest signatures or
+production release ZIP contents were validated. Those must pass CI.

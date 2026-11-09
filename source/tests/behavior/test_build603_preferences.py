@@ -29,8 +29,8 @@ def test_default_template_has_every_main_checkbox_and_all_window_settings():
     assert [field for field, value in values['main'].items() if isinstance(value, bool) and value] == ['artist_in_album']
     assert values['main']['performance_mode'] == 'balanced'
     assert values['main']['max_workers'] == 0
-    assert values['main']['corrupt_files'] == 'delete'
-    assert values['main']['corrupt_folders'] == 'all'
+    assert values['main']['corrupt_files'] == 'keep'
+    assert values['main']['corrupt_folders'] == 'never'
     assert values['main']['corrupt_folder_threshold'] == 100
     assert values['main']['font_size'] == 0
     assert values['search']['deep'] is False
@@ -162,7 +162,7 @@ def test_editor_save_prompts_restart_and_does_not_apply_live(tmp_path):
         text_widget.replace('1.0', 'end', pref.default_text().replace('max_workers = 0', 'max_workers = 8'))
         buttons = editor_window.winfo_children()[-1]
         with mock.patch.object(pref.messagebox, 'showinfo') as notification:
-            next(w for w in buttons.winfo_children() if w.cget('text') == 'Save').invoke()
+            next(w for w in buttons.winfo_children() if w.cget('text') == 'Save & Close').invoke()
         notification.assert_called_once()
         assert 'Restart' in notification.call_args.args[0]
         assert pref.load(tmp_path)['main']['max_workers'] == 8
@@ -205,7 +205,7 @@ def test_invalid_existing_file_can_be_reopened_and_repaired(tmp_path):
         text_widget.replace('1.0', 'end', pref.default_text())
         buttons = editor_window.winfo_children()[-1]
         with mock.patch.object(pref.messagebox, 'showinfo'):
-            next(w for w in buttons.winfo_children() if w.cget('text') == 'Save').invoke()
+            next(w for w in buttons.winfo_children() if w.cget('text') == 'Save & Close').invoke()
         assert pref.load(tmp_path)['main']['max_workers'] == 0
         editor_window.destroy()
     finally:

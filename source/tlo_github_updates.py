@@ -702,6 +702,11 @@ def _inspect_downloaded_package(
         raise ValueError(f"Downloaded TLO package build is {build!r}, expected Build {expected_build}.")
 
     required_db_names = {"TLO_DBs/artists.sqlite", "TLO_DBs/venues.txt"}
+    # Older release ZIPs legitimately had two master files. Starting with
+    # Build 646 every DB-bearing update and complete package must also stage
+    # the actual curated city data alongside artists.sqlite and venues.txt.
+    if int(expected_build) >= 646:
+        required_db_names.add("TLO_DBs/cities.csv")
     database_members = {name for name in names if name.startswith("TLO_DBs/") and not name.endswith("/")}
     declared_databases = manifest.get("databases_included")
     if not isinstance(declared_databases, bool):
@@ -712,6 +717,8 @@ def _inspect_downloaded_package(
         raise ValueError("Downloaded TLO package database manifest does not match its ZIP contents.")
 
     declared_database_files = manifest.get("database_files")
+    if int(expected_build) >= 646 and declared_database_files is None:
+        raise ValueError("Downloaded TLO package is missing its database_files manifest declaration.")
     if declared_database_files is not None:
         if not isinstance(declared_database_files, list) or not all(isinstance(item, str) for item in declared_database_files):
             raise ValueError("Downloaded TLO package has an invalid database_files manifest value.")
@@ -738,7 +745,7 @@ def _package_message(package_kind: str, databases_included: bool) -> tuple[str, 
         kind_text = "update"
         if databases_included:
             extra = (
-                "This update includes refreshed TLO_DBs/artists.sqlite and venues.txt. "
+                "This update includes refreshed TLO_DBs/artists.sqlite and venues.txt, plus cities.csv. "
                 "Applying it will replace those database master files. It does not contain "
                 "your inventory, setlists, logs, or other user-created output."
             )
@@ -781,6 +788,54 @@ def _update_download_settings(
     return ""
 
 
+def _publish_verified_download(staged: Path, destination: Path) -> None:
+    """Atomically rename a validated download without overwriting user files.
+
+    Windows' os.rename refuses an existing destination. Linux and macOS have
+    native no-replace rename primitives; never use os.link/hard links or an
+    unsafe POSIX overwrite-on-rename fallback for an official release name.
+    """
+    if destination.is_symlink() or destination.exists():
+        raise FileExistsError(f"A different file already exists in Downloads: {destination}")
+    if os.name == "nt":
+        staged.rename(destination)
+        return
+    import ctypes
+    import ctypes.util
+    import errno
+    if sys.platform.startswith("linux"):
+        libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6", use_errno=True)
+        if not hasattr(libc, "renameat2"):
+            raise OSError("Safe update publication is unavailable on this filesystem; choose a local Downloads folder")
+        func = libc.renameat2
+        func.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+        func.restype = ctypes.c_int
+        result = func(-100, os.fsencode(staged), -100, os.fsencode(destination), 1)  # RENAME_NOREPLACE
+    elif sys.platform == "darwin":
+        libc = ctypes.CDLL(ctypes.util.find_library("c") or "/usr/lib/libSystem.B.dylib", use_errno=True)
+        func = getattr(libc, "renamex_np", None)
+        if func is None:
+            raise OSError("Safe update publication is unavailable on this macOS version; choose a local Downloads folder")
+        func.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+        func.restype = ctypes.c_int
+        result = func(os.fsencode(staged), os.fsencode(destination), 0x00000004)  # RENAME_EXCL
+    else:
+        raise OSError("Atomic no-overwrite rename is unavailable on this platform")
+    if result:
+        code = ctypes.get_errno()
+        if code == errno.EEXIST:
+            raise FileExistsError(f"A different file already exists in Downloads: {destination}")
+        if code in {errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP, errno.ENOSYS}:
+            raise OSError(
+                errno.ENOTSUP,
+                "The selected Downloads filesystem cannot safely rename an update "
+                "without overwriting files. Choose a local Downloads folder on a "
+                "supported filesystem; no unverified update was published.",
+                str(destination),
+            )
+        raise OSError(code, os.strerror(code), str(destination))
+
+
 def _download_and_report_verified_asset(
     asset: dict[str, Any], *, tlo_home: str | os.PathLike[str] | None,
     latest_build: int, asset_name: str, package_kind: str, platform_key: str,
@@ -792,11 +847,41 @@ def _download_and_report_verified_asset(
     ``download_update``. The download itself retains size and digest checks.
     """
     destination = _downloads_dir() / _safe_asset_filename(asset_name)
-    downloaded = _download_asset(asset, destination)
-    package_info = _inspect_downloaded_package(
-        destination, expected_kind=package_kind,
-        expected_platform_key=platform_key, expected_build=latest_build,
-    )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.is_symlink():
+        raise ValueError("Refusing a symbolic link as the official update destination.")
+    if destination.exists():
+        # Never overwrite a user's same-named download. Only re-use a file
+        # that independently passes both signed-asset hash and ZIP inspection.
+        if not _file_matches_asset(destination, asset):
+            raise FileExistsError(f"A different file already exists in Downloads: {destination}")
+        package_info = _inspect_downloaded_package(
+            destination, expected_kind=package_kind,
+            expected_platform_key=platform_key, expected_build=latest_build,
+        )
+        downloaded = False
+    else:
+        # Download and inspect under an unmistakably non-release filename.
+        # A failed inspection must never expose an official-looking package.
+        fd, pending = tempfile.mkstemp(prefix=".tlo-update-", suffix=".pending", dir=str(destination.parent))
+        os.close(fd)
+        staged = Path(pending)
+        staged.unlink()
+        try:
+            _download_asset(asset, staged)  # existing signed-asset digest/size gate
+            package_info = _inspect_downloaded_package(
+                staged, expected_kind=package_kind,
+                expected_platform_key=platform_key, expected_build=latest_build,
+            )
+            # Publish using a same-directory rename, never a hard link.
+            # The no-replace rename also protects a competing user download.
+            _publish_verified_download(staged, destination)
+            downloaded = True
+        finally:
+            try:
+                staged.unlink(missing_ok=True)
+            except OSError as exc:
+                debug_suppressed_exception(__name__, exc)
     databases_included = bool(package_info["databases_included"])
     packaging_mode = str(package_info["packaging_mode"] or "")
     settings_warning = _update_download_settings(

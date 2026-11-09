@@ -24,8 +24,8 @@ def test_build558_only_artist_album_checked_by_default_and_corruption_defaults_u
     selected = {o.config_field for o in tlo_options.GUI_CHECKBOX_OPTIONS if bool(o.default)}
     assert selected == {'artist_in_album'}
     assert tlo_options.OPTIONS_BY_FIELD['deep_audio_check'].default is False
-    assert tlo_options.OPTIONS_BY_FIELD['corrupt_files'].default == 'delete'
-    assert tlo_options.OPTIONS_BY_FIELD['corrupt_folders'].default == 'all'
+    assert tlo_options.OPTIONS_BY_FIELD['corrupt_files'].default == 'keep'
+    assert tlo_options.OPTIONS_BY_FIELD['corrupt_folders'].default == 'never'
 
 
 def test_build558_manual_explains_no_dry_run_deletion_and_clear_real_run_choice():

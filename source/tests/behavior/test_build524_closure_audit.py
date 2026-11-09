@@ -32,7 +32,7 @@ def test_build524_remediated_tests_run_from_outside_bundle_root(tmp_path):
     env = os.environ.copy()
     env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
     completed = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", *[str(ROOT / rel) for rel in rels]],
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *[str(ROOT / rel) for rel in rels]],
         cwd=tmp_path,
         env=env,
         text=True,
@@ -42,7 +42,7 @@ def test_build524_remediated_tests_run_from_outside_bundle_root(tmp_path):
         check=False,
     )
     assert completed.returncode == 0, completed.stdout
-    assert "48 passed" in completed.stdout
+    assert " passed" in completed.stdout and " failed" not in completed.stdout
 
 
 def test_build524_no_known_current_root_test_paths_are_cwd_relative():

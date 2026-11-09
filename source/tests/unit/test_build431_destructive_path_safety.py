@@ -46,6 +46,10 @@ def test_gio_trash_uses_argument_terminator_timeout_and_postcondition(monkeypatc
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(C.sys, "platform", "linux")
+    # Build 631 routes missing-gio hosts to XDG Trash; this legacy test
+    # specifically asserts the native gio path, so emulate its presence.
+    real_isfile = C.os.path.isfile
+    monkeypatch.setattr(C.os.path, 'isfile', lambda name: True if name == '/usr/bin/gio' else real_isfile(name))
     monkeypatch.setattr(C.subprocess, "run", fake_run)
     C.move_to_trash(str(target))
     command, kwargs = calls[0]
@@ -59,6 +63,10 @@ def test_gio_trash_timeout_is_failure_not_delete_fallback(monkeypatch, tmp_path)
     def fake_run(command, **kwargs):
         raise C.subprocess.TimeoutExpired(command, kwargs.get("timeout"))
     monkeypatch.setattr(C.sys, "platform", "linux")
+    # Build 631 routes missing-gio hosts to XDG Trash; this legacy test
+    # specifically asserts the native gio path, so emulate its presence.
+    real_isfile = C.os.path.isfile
+    monkeypatch.setattr(C.os.path, 'isfile', lambda name: True if name == '/usr/bin/gio' else real_isfile(name))
     monkeypatch.setattr(C.subprocess, "run", fake_run)
     with pytest.raises(OSError, match="timed out"):
         C.move_to_trash(str(target))

@@ -20,12 +20,18 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_shared_updater_finalization_inspects_package_before_recording_success(tmp_path, monkeypatch, new_download):
     stages = []
     monkeypatch.setattr(updater, '_downloads_dir', lambda: tmp_path)
+    if not new_download:
+        (tmp_path / 'artifact.zip').write_bytes(b'prior verified package')
+        monkeypatch.setattr(updater, '_file_matches_asset', lambda path, asset: True)
     def download(asset, target):
         stages.append(('download', asset['name']))
-        return new_download
+        assert target.name.endswith('.pending')
+        target.write_bytes(b'verified staged package')
+        return True
     def inspect(path, **kwargs):
         stages.append(('inspect', kwargs))
-        assert path == tmp_path / 'artifact.zip'
+        assert path == (tmp_path / 'artifact.zip') if not new_download else path.name.endswith('.pending')
+        assert path.is_file()
         return {'databases_included': False, 'packaging_mode': 'onedir'}
     def settings(*args, **kwargs):
         stages.append(('settings', kwargs))
@@ -38,9 +44,10 @@ def test_shared_updater_finalization_inspects_package_before_recording_success(t
         asset, tlo_home=tmp_path, latest_build=565, asset_name='artifact.zip',
         package_kind='update', platform_key='linux',
     )
-    assert [stage[0] for stage in stages] == ['download', 'inspect', 'settings']
-    assert stages[1][1] == {'expected_kind': 'update', 'expected_platform_key': 'linux', 'expected_build': 565}
-    assert stages[2][1]['packaging_mode'] == 'onedir'
+    assert [stage[0] for stage in stages] == (
+        ['download', 'inspect', 'settings'] if new_download else ['inspect', 'settings'])
+    assert stages[-2][1] == {'expected_kind': 'update', 'expected_platform_key': 'linux', 'expected_build': 565}
+    assert stages[-1][1]['packaging_mode'] == 'onedir'
     assert result.status == ('downloaded' if new_download else 'already_downloaded')
     assert result.path == str(tmp_path / 'artifact.zip')
     assert result.databases_included is False

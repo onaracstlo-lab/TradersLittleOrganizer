@@ -41,8 +41,8 @@ def test_exact_names_sizes_and_nested_structure_are_trashed_and_logged(tmp_path)
     _write(original / "01.flac", b"abcd")
     _write(original / "art" / "cover.jpg", b"123456")
     (original / "empty").mkdir(parents=True)
-    _write(copy / "01.flac", b"WXYZ")  # same size; byte equality is intentionally not required
-    _write(copy / "art" / "cover.jpg", b"654321")
+    _write(copy / "01.flac", b"abcd")  # all files must be byte-identical
+    _write(copy / "art" / "cover.jpg", b"123456")
     (copy / "empty").mkdir(parents=True)
 
     trashed = []
@@ -120,7 +120,7 @@ def test_search_is_recursive_and_original_is_never_sent_to_trash(tmp_path):
     original = root / "artist" / "year" / "Bill 2013 HOB Boston"
     copy = root / "artist" / "year" / "Bill 2013 HOB Boston (copy2)"
     _write(original / "01.flac", b"abcd")
-    _write(copy / "01.flac", b"zzzz")
+    _write(copy / "01.flac", b"abcd")
     trashed = []
     module.delete_duplicate_copy_directories(
         str(root), str(home), trash_func=lambda path: trashed.append(path), emit=lambda *a, **k: None,
@@ -181,7 +181,7 @@ def test_keyboard_interrupt_inside_cleanup_closes_real_log_context(tmp_path, mon
     original = root / "Bill 2013 HOB Boston"
     copy = root / "Bill 2013 HOB Boston (copy 2)"
     _write(original / "01.flac", b"abcd")
-    _write(copy / "01.flac", b"WXYZ")
+    _write(copy / "01.flac", b"abcd")
 
     builtin_open = open
     tracked = {}
@@ -260,7 +260,7 @@ def test_corrupt_kept_flac_is_repaired_from_lowest_healthy_numeric_copy(tmp_path
         health_check=health,
     )
 
-    assert count == 3
+    assert count == 3  # all equal-name/equal-size copies now qualify
     assert (original / "disc1" / "01.flac").read_bytes() == b"GOOD"
     # copy 1 is checked before copy 2, and copy 10 is never needed as a repair source.
     copy1_index = checked.index(str(copy1 / "disc1" / "01.flac"))
@@ -268,6 +268,7 @@ def test_corrupt_kept_flac_is_repaired_from_lowest_healthy_numeric_copy(tmp_path
     assert copy1_index < copy2_index
     assert str(copy10 / "disc1" / "01.flac") not in checked
     assert trashed == [str(copy1.resolve()), str(copy2.resolve()), str(copy10.resolve())]
+    assert copy1.exists() and copy10.exists()  # legacy hook records rather than moves
 
 
 def test_unrepairable_corrupt_kept_flac_keeps_qualifying_copies_for_later_review(tmp_path):
@@ -385,8 +386,8 @@ def test_same_artist_and_year_can_match_even_when_folder_names_differ(tmp_path):
     copy = root / "Bill 2013 House of Blues Boston (copy 2)"
     _write(original / "01.flac", b"ABCD")
     _write(original / "nested" / "notes.txt", b"notes")
-    _write(copy / "01.flac", b"WXYZ")
-    _write(copy / "nested" / "notes.txt", b"other")
+    _write(copy / "01.flac", b"ABCD")
+    _write(copy / "nested" / "notes.txt", b"notes")
 
     trashed = []
     count = module.delete_duplicate_copy_directories(
@@ -411,7 +412,7 @@ def test_same_artist_and_full_date_can_match_even_when_venue_text_differs(tmp_pa
     original = root / "Bill 2013-05-04 HOB Boston"
     copy = root / "Bill - 2013-05-04 - House of Blues Boston (copy3)"
     _write(original / "01.flac", b"ABCD")
-    _write(copy / "01.flac", b"WXYZ")
+    _write(copy / "01.flac", b"ABCD")
 
     trashed = []
     count = module.delete_duplicate_copy_directories(
@@ -556,7 +557,7 @@ def test_exact_base_mismatch_can_fall_through_to_same_artist_date_matching_origi
     copy = root / "Bill 2013 House of Blues Boston (copy 2)"
     _write(exact_base / "01.flac", b"TOO-LONG")
     _write(matching_original / "01.flac", b"ABCD")
-    _write(copy / "01.flac", b"WXYZ")
+    _write(copy / "01.flac", b"ABCD")
 
     trashed = []
     count = module.delete_duplicate_copy_directories(
@@ -584,7 +585,7 @@ def test_unsuffixed_same_artist_date_duplicates_keep_first_alphabetically(tmp_pa
     beta = root / "Bill 2013 Beta Club Boston"
     gamma = root / "Bill 2013 Gamma Club Boston"
     # Create them in reverse order so filesystem creation order cannot choose the master.
-    for folder, payload in ((gamma, b"GGGG"), (beta, b"BBBB"), (alpha, b"AAAA")):
+    for folder, payload in ((gamma, b"AAAA"), (beta, b"AAAA"), (alpha, b"AAAA")):
         _write(folder / "01.flac", payload)
         _write(folder / "nested" / "notes.txt", b"same-size")
         (folder / "empty").mkdir(parents=True)
@@ -618,7 +619,7 @@ def test_unsuffixed_same_artist_date_later_folder_must_match_master_tree(tmp_pat
     beta = root / "Bill 2013 Beta Club Boston"
     gamma = root / "Bill 2013 Gamma Club Boston"
     _write(alpha / "01.flac", b"AAAA")
-    _write(beta / "01.flac", b"BBBB")
+    _write(beta / "01.flac", b"AAAA")
     _write(gamma / "01.flac", b"TOO-LONG")
 
     trashed = []
@@ -671,6 +672,7 @@ def test_unsuffixed_duplicate_repair_sources_follow_alphabetical_order(tmp_path)
     assert str(beta / "disc1" / "01.flac") in checked
     assert str(gamma / "disc1" / "01.flac") not in checked
     assert trashed == [str(beta.resolve()), str(gamma.resolve())]
+    assert gamma.exists()  # legacy hook records rather than moves
 
 
 def test_unsuffixed_same_content_is_not_candidate_without_same_artist_and_date(tmp_path):
@@ -710,8 +712,8 @@ def test_copy_suffix_attached_to_unsuffixed_duplicate_uses_surviving_alphabetica
     beta = root / "Bill 2013 Beta Club Boston"
     beta_copy = root / "Bill 2013 Beta Club Boston (copy 1)"
     _write(alpha / "01.flac", b"AAAA")
-    _write(beta / "01.flac", b"BBBB")
-    _write(beta_copy / "01.flac", b"CCCC")
+    _write(beta / "01.flac", b"AAAA")
+    _write(beta_copy / "01.flac", b"AAAA")
 
     trashed = []
     count = module.delete_duplicate_copy_directories(
@@ -752,10 +754,10 @@ def test_cleanup_creates_partition_duplicates_folder_and_moves_whole_folder(tmp_
     _write(original / "01.flac", b"ABCD")
     _write(original / "nested" / "notes.txt", b"notes")
     (original / "empty").mkdir(parents=True)
-    _write(copy / "01.flac", b"WXYZ")
-    _write(copy / "nested" / "notes.txt", b"xxxxx")
-    # Same file size is required, not byte equality.
-    (copy / "nested" / "notes.txt").write_bytes(b"other")
+    _write(copy / "01.flac", b"ABCD")
+    _write(copy / "nested" / "notes.txt", b"notes")
+    # Matching byte content, not merely file size, is required.
+    (copy / "nested" / "notes.txt").write_bytes(b"notes")
     (copy / "empty").mkdir(parents=True)
 
     count = module.delete_duplicate_copy_directories(
@@ -772,8 +774,8 @@ def test_cleanup_creates_partition_duplicates_folder_and_moves_whole_folder(tmp_
     assert duplicates.is_dir()
     assert original.exists()
     assert not copy.exists()
-    assert (moved / "01.flac").read_bytes() == b"WXYZ"
-    assert (moved / "nested" / "notes.txt").read_bytes() == b"other"
+    assert (moved / "01.flac").read_bytes() == b"ABCD"
+    assert (moved / "nested" / "notes.txt").read_bytes() == b"notes"
     assert (moved / "empty").is_dir()
     assert (home / "deletedDirs.txt").read_text(encoding="utf-8").splitlines() == [
         str(copy.resolve())
@@ -805,7 +807,7 @@ def test_existing_duplicates_holding_folder_is_excluded_when_searching_partition
     original = partition / "music" / "Bill 2013 HOB Boston"
     copy = partition / "music" / "Bill 2013 HOB Boston (copy 2)"
     _write(original / "01.flac", b"ABCD")
-    _write(copy / "01.flac", b"WXYZ")
+    _write(copy / "01.flac", b"ABCD")
 
     # A prior holding-area pair would qualify if TLO descended into duplicates.
     held_original = duplicates / "Bob 2014 Alpha Club"
@@ -963,8 +965,8 @@ def test_numbered_copies_form_their_own_duplicate_cluster_when_both_differ_from_
     _write(master / "01.flac", b"AAAA")
     _write(copy2 / "01.flac", b"BBBB")
     _write(copy2 / "02.flac", b"CCCC")
-    _write(copy3 / "01.flac", b"DDDD")
-    _write(copy3 / "02.flac", b"EEEE")
+    _write(copy3 / "01.flac", b"BBBB")
+    _write(copy3 / "02.flac", b"CCCC")
 
     moved = []
     count = module.delete_duplicate_copy_directories(
@@ -991,7 +993,7 @@ def test_numbered_copies_compare_with_each_other_even_when_unsuffixed_master_is_
     copy2 = root / "X (copy2)"
     copy3 = root / "X (copy3)"
     _write(copy2 / "disc1" / "01.flac", b"AAAA")
-    _write(copy3 / "disc1" / "01.flac", b"BBBB")
+    _write(copy3 / "disc1" / "01.flac", b"AAAA")
 
     moved = []
     count = module.delete_duplicate_copy_directories(
@@ -1017,7 +1019,7 @@ def test_identical_content_cluster_prefers_unsuffixed_folder_over_lower_numbered
     copy1 = root / "Bill 2013 HOB Boston (copy1)"
     unsuffixed = root / "Bill 2013 House of Blues Boston"
     copy2 = root / "Bill 2013 HOB Boston (copy2)"
-    for folder, payload in ((copy1, b"AAAA"), (unsuffixed, b"BBBB"), (copy2, b"CCCC")):
+    for folder, payload in ((copy1, b"AAAA"), (unsuffixed, b"AAAA"), (copy2, b"AAAA")):
         _write(folder / "01.flac", payload)
 
     moved = []

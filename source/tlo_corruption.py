@@ -13,6 +13,8 @@ import sys
 import tempfile
 import time
 import uuid
+from datetime import datetime
+from urllib.parse import quote
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -830,6 +832,90 @@ def _trash_windows(path):
             ole32.CoUninitialize()
 
 
+def _xdg_trash_base(path):
+    """Find a Trash on the source filesystem; never copy+delete across disks."""
+    home = Path.home()
+    if not home.is_dir():
+        raise OSError('XDG Trash unavailable: home directory is missing')
+    source_device = os.lstat(path).st_dev
+    home_device = os.stat(home).st_dev
+    if source_device == home_device:
+        data_dir = Path(os.environ.get('XDG_DATA_HOME') or (home / '.local/share'))
+        if not data_dir.is_absolute():
+            raise OSError('XDG_DATA_HOME must be an absolute path')
+        if not data_dir.exists():
+            data_dir.mkdir(mode=0o700, parents=True)
+        # A custom XDG_DATA_HOME may be on another device.
+        if os.stat(data_dir).st_dev != source_device:
+            raise OSError('XDG Trash data directory is on another filesystem')
+        return data_dir / 'Trash', str(path)
+
+    mount = Path(path).parent
+    while mount.parent != mount and os.stat(mount.parent).st_dev == source_device:
+        mount = mount.parent
+    shared = mount / '.Trash'
+    if shared.is_dir() and not shared.is_symlink():
+        stat = shared.stat()
+        if stat.st_mode & 0o1000:  # sticky bit required by freedesktop spec
+            return shared / str(os.getuid()), str(Path(path).relative_to(mount))
+    return mount / f'.Trash-{os.getuid()}', str(Path(path).relative_to(mount))
+
+
+def _ensure_owned_private_trash_dir(folder):
+    """Refuse symlinks, wrong owners and publicly writable Trash paths."""
+    folder = Path(folder)
+    if folder.is_symlink():
+        raise OSError(f'Untrusted XDG Trash symlink: {folder}')
+    folder.mkdir(mode=0o700, parents=False, exist_ok=True)
+    st = folder.lstat()
+    if not folder.is_dir() or st.st_uid != os.getuid() or st.st_mode & 0o022:
+        raise OSError(f'Untrusted XDG Trash directory: {folder}')
+
+
+def _trash_linux_xdg(path):
+    """Recoverable freedesktop Trash fallback; never copy or hard-delete originals."""
+    source = Path(path).absolute()
+    if source.is_symlink() or not source.exists():
+        raise OSError(f'Cannot safely trash a missing or symlink source: {source}')
+    base, recorded_path = _xdg_trash_base(source)
+    _ensure_owned_private_trash_dir(base)
+    files = base / 'files'
+    info = base / 'info'
+    _ensure_owned_private_trash_dir(files)
+    _ensure_owned_private_trash_dir(info)
+    if os.stat(base).st_dev != os.lstat(source).st_dev:
+        raise OSError('XDG Trash is not on the source filesystem')
+    # The unpredictable suffix prevents overwriting a different trashed item.
+    for _ in range(16):
+        name = f'{source.name}.{uuid.uuid4().hex}'
+        dest, metadata = files / name, info / f'{name}.trashinfo'
+        if dest.exists() or dest.is_symlink():
+            continue
+        try:
+            fd = os.open(metadata, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            continue
+        moved = False
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8', newline='\n') as stream:
+                stream.write('[Trash Info]\nPath=' + quote(recorded_path, safe='/') +
+                             '\nDeletionDate=' + datetime.now().strftime('%Y-%m-%dT%H:%M:%S') + '\n')
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.rename(source, dest)
+            moved = True
+            if os.path.lexists(source) or not os.path.lexists(dest):
+                raise OSError('XDG Trash move did not preserve the source in Trash')
+            return
+        finally:
+            if not moved:
+                try:
+                    metadata.unlink()
+                except FileNotFoundError:
+                    pass
+    raise OSError('Unable to reserve a collision-free XDG Trash destination')
+
+
 def move_to_trash(path):
     path = os.path.abspath(path)
     if sys.platform.startswith("win"):
@@ -855,6 +941,8 @@ def move_to_trash(path):
             raise OSError("Trash operation reported success but the source still exists")
         return
     gio = "/usr/bin/gio"
+    if not os.path.isfile(gio):
+        return _trash_linux_xdg(path)
     try:
         subprocess.run(
             [gio, "trash", "--", path],

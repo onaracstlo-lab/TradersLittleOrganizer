@@ -63,6 +63,7 @@ STATUS_CLOSED = "Closed"
 VOLUME_ROOT_EXCLUDED_NAMES = OS_MANAGED_DIR_NAMES
 STALE_COPY_PREFIX = ".tlo-copy-"
 COPY_TEMP_MARKER_FILENAME = ".tlo-copy-owned.json"
+HELD_SHN_ORIGINALS_DIRNAME = ".tlo-shn-originals"
 COPY_PASS_LOCK_FILENAME = ".copy-pass.lock"
 DESTINATION_LOCK_PREFIX = ".tlo-lock-copy-"
 FOREIGN_LOCK_STALE_SECONDS = 24 * 60 * 60
@@ -1369,6 +1370,8 @@ def _walk_tree_size_and_reject_links(root: str, *, ignore_root_names: Sequence[s
     root_norm = os.path.normcase(os.path.abspath(os.path.normpath(root)))
     try:
         for current, dir_names, file_names in os.walk(root, followlinks=False, onerror=_raise_walk_error):
+            # SHN originals are a recovery cache, never transfer material.
+            dir_names[:] = [name for name in dir_names if name.casefold() != HELD_SHN_ORIGINALS_DIRNAME]
             if os.path.normcase(os.path.abspath(os.path.normpath(current))) == root_norm and ignored:
                 dir_names[:] = [name for name in dir_names if name.casefold() not in ignored]
                 file_names = [name for name in file_names if name.casefold() not in ignored]
@@ -1392,14 +1395,10 @@ def _walk_tree_size_and_reject_links(root: str, *, ignore_root_names: Sequence[s
 def _copytree_ignore_root_names(source_root: str, ignored_names: Sequence[str]):
     ignored = {str(name).casefold() for name in ignored_names}
     source_norm = os.path.normcase(os.path.abspath(os.path.normpath(source_root)))
-    if not ignored:
-        return None
-
     def ignore(current: str, names: Sequence[str]) -> List[str]:
         current_norm = os.path.normcase(os.path.abspath(os.path.normpath(current)))
-        if current_norm != source_norm:
-            return []
-        return [name for name in names if str(name).casefold() in ignored]
+        return [name for name in names if str(name).casefold() == HELD_SHN_ORIGINALS_DIRNAME
+                or (current_norm == source_norm and str(name).casefold() in ignored)]
 
     return ignore
 
@@ -1458,7 +1457,7 @@ def _process_start_token(pid: int) -> str:
     if os.name == "posix":
         try:
             value = subprocess.check_output(
-                ["ps", "-o", "lstart=", "-p", str(pid)],
+                ["/bin/ps", "-o", "lstart=", "-p", str(pid)],
                 text=True,
                 stderr=subprocess.DEVNULL,
                 timeout=2,
@@ -1660,7 +1659,7 @@ def _recover_pending_copy(tlo_home: str, state: Dict[str, object]) -> List[str]:
             # planning can recognize it as an exact existing copy.
             try:
                 if source and os.path.isdir(source) and directory_trees_exactly_match(
-                    source, target, ignore_root_names={COPY_TEMP_MARKER_FILENAME}
+                    source, target, ignore_root_names={COPY_TEMP_MARKER_FILENAME, HELD_SHN_ORIGINALS_DIRNAME}
                 ):
                     os.remove(marker)
                     recovered.append(target)
@@ -2158,7 +2157,7 @@ def _copy_available_unlocked(tlo_home: str, request_id: str, *, roots: Optional[
             if cancel_check is not None:
                 copy_kwargs["cancel_check"] = cancel_check
             _copy_into_temp_target(source.source_path, temp_target, **copy_kwargs)
-            verify_ignores = set(ignore_names) | {COPY_TEMP_MARKER_FILENAME}
+            verify_ignores = set(ignore_names) | {COPY_TEMP_MARKER_FILENAME, HELD_SHN_ORIGINALS_DIRNAME}
             if not directory_trees_exactly_match(source.source_path, temp_target, ignore_root_names=verify_ignores):
                 raise CopyRequestError("Copied direct tree verification failed.")
             _set_pending_copy(tlo_home, state, item=raw, kind="direct", source=source.source_path, target=target, temp=temp_target, phase="verified")
@@ -2217,7 +2216,7 @@ def _copy_available_unlocked(tlo_home: str, request_id: str, *, roots: Optional[
                 else:
                     _copy_into_temp_target(source.source_path, temp_target, cancel_check=cancel_check)
                 if not directory_trees_exactly_match(
-                    source.source_path, temp_target, ignore_root_names={COPY_TEMP_MARKER_FILENAME}
+                    source.source_path, temp_target, ignore_root_names={COPY_TEMP_MARKER_FILENAME, HELD_SHN_ORIGINALS_DIRNAME}
                 ):
                     raise CopyRequestError("Copied tree verification failed.")
                 _set_pending_copy(tlo_home, state, item=show, kind="show", source=source.source_path, target=target, temp=temp_target, phase="verified")
