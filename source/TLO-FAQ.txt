@@ -291,3 +291,6 @@ A: After strict verified conversion, the original is recoverably moved to a same
 
 Q: Why might an update download fail on a network or unusual filesystem?
 A: An official update is verified under a temporary filename and published only with an atomic no-overwrite rename. When the filesystem cannot support safe publication, TLO fails with a clear message and preserves existing user files instead of switching to a hard link or a replacement rename.
+
+Q: Why does an older version say a downloaded update database manifest does not match its ZIP?
+A: Legacy TLO updaters expected artists.sqlite and venues.txt only. Newer updates also carry a separate cities.csv file. Do not disable verification. Use a trusted official manual update if your already-installed updater rejects the modern package. Future TLO updaters authenticate the whole signed ZIP without a hard-coded database filename list; the build process validates required database files before publication.

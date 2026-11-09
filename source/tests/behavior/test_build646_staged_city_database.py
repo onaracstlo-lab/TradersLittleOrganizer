@@ -67,8 +67,14 @@ def _make_zip(path,build=646,with_cities=True):
 def test_post_646_complete_zip_must_include_city_master(tmp_path):
     bad=tmp_path/'bad.zip'; good=tmp_path/'good.zip'
     _make_zip(bad,with_cities=False);_make_zip(good,with_cities=True)
-    with pytest.raises(ValueError,match='database manifest'):
-        updater._inspect_downloaded_package(bad,expected_kind='complete',expected_platform_key='linux',expected_build=646)
+    # The final packaging verifier (publisher) owns the exact city-file check;
+    # the downloader checks the independently signed whole-ZIP digest instead.
+    from tools.verify_city_database_release import verify
+    with pytest.raises(ValueError,match='database files mismatch'):
+        verify(bad,ROOT,646)
+    assert updater._inspect_downloaded_package(
+        bad,expected_kind='complete',expected_platform_key='linux',expected_build=646
+    )['databases_included'] is True
     result=updater._inspect_downloaded_package(good,expected_kind='complete',expected_platform_key='linux',expected_build=646)
     assert result['databases_included'] is True
 

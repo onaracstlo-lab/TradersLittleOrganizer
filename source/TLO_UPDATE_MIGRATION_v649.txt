@@ -1,0 +1,44 @@
+TLO v1.7 Build 649: update signatures, ZIP hashes and the external city database
+=========================================================================
+
+ALWAYS REQUIRE TRUSTED CRYPTOGRAPHIC VERIFICATION
+-------------------------------------------------
+The app checks official independently signed update metadata using its pinned
+public key and requires the downloaded ZIP's exact signed size and SHA-256.
+ZIP path/traversal/duplicate/symlink/bomb protections and protected user-data
+checks remain mandatory. The app is download-only; it does not install updates.
+The authenticated ZIP's internal database filenames do not need a second
+hard-coded client-side list; database file membership is verified by the build
+process before the ZIP is signed. Only databases_included (boolean) remains for
+protected-path logic and accurate UI reporting.
+
+BUILD 649 SHOULD INCLUDE ALL DATABASES
+--------------------------------------
+The GitHub Build Process v124 MUST receive -IncludeDatabasesInUpdates for the
+normal update package. Its ArtistDB-Master folder supplies three PHYSICAL files:
+artists.sqlite, venues.txt and cities.csv. The built software expects
+TLO_DBs/cities.csv as a physical file. No internal/frozen copy is available.
+
+    .\Run-TLO-GitHub-Build.ps1 -vnumber 1.7 -bnumber 649 -IncludeDatabasesInUpdates
+
+The build process verifies exact database presence and CSV content before
+signature/publication. Build 649's downloader trusts only authenticated whole
+ZIP bytes plus safety/identity checks; its acceptance is not proof that an
+incorrectly built application can run, hence the mandatory publisher gate.
+
+OLDER INSTALLED UPDATERS
+------------------------
+An already installed Build 591 updater has old database membership rules and
+cannot be changed by Build 649 source code. Users of that version must use the
+TRUSTED OFFICIAL MANUAL update procedure appropriate for OS/package layout,
+including authenticity checks and preservation of user data. Do not disable
+existing signatures, hashes or protected-path verification.
+
+Do NOT publish a database-free bridge for users whose new TLO will need
+cities.csv unless some separately verified mechanism supplies that file.
+Database-free updates remain supported for installations that already possess
+a complete TLO_DBs folder, but are not a solution to 591 -> 649 by themselves.
+
+PER-BUILD VERSIONING
+--------------------
+Every correction receives a new build number; never replace an earlier ZIP.

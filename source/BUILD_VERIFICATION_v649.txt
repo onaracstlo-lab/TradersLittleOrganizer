@@ -1,0 +1,21 @@
+TLO v1.7 Build 649 — NOT RELEASE-ATTESTED
+
+Source baseline: v1.7 Build 648.
+Changed: updater verifies signed whole-ZIP SHA-256 without fixed database filename list.
+Original independent pinned-key metadata signature and ZIP size/SHA256 remain mandatory.
+Updater still enforces package build/platform/kind, ZIP structure and protected paths.
+Build Process v124 must verify physical TLO_DBs master files before signing.
+Build Process v124 is supplied separately and unchanged by this source release.
+Physical city catalog: TLO_DBs/cities.csv identical to root cities.csv; no embedded copy.
+Normal Build 649 updates SHOULD include all three databases (pass -IncludeDatabasesInUpdates).
+Old Build 591 clients still need a trusted official manual update.
+Xvfb display (CI=1): full Build 649 suite completed with 2502 passed, 6 skipped, 1 warning(s) in 100.96 seconds.
+No display (DISPLAY and CI unset): prior standalone Build 532 GUI subset,
+  50 passed, 6 skipped; not rerun for Build 649.
+Historical full GitHub Actions run (Build 613): 26 skipped; not Build 649 evidence.
+Ruff lint: lint not attested; Ruff executable unavailable in local test environment.
+Mandatory Ruff lint must run in GitHub Build Process v124 before release.
+Python AST syntax: 358 modules parsed without errors.
+Requirements DOCX: rendered and visually checked, current version/metadata aligned.
+Source ZIP: SHA256 manifest verifies every member after packaging.
+Windows/macOS/Linux native builds, Windows signing and timestamping: NOT EXECUTED.

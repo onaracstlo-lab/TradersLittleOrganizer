@@ -1,0 +1,13 @@
+TLO v1.7 Build 649 — regression results
+
+Python 3.13/Linux with virtual display (CI=1, PYTHONDONTWRITEBYTECODE=1):
+2502 passed, 6 skipped, 1 warning(s) in 100.96 seconds.
+Original preliminary run had nine failures from superseded strict database
+filename checks plus unfinalized release-document/report contracts; those were
+corrected and a subsequent entire clean suite completed as reported above.
+Updater now accepts variable database master names after signed whole-archive
+SHA256 verification; updater still rejects unsafe members and protected paths.
+Legacy pre-646 packages and Build 647 Windows update fixture compatibility
+were exercised in the source tests.
+Ruff unavailable locally; source-only verification, NOT native signed release.
+Full native release gates remain required in separate Build Process v124.

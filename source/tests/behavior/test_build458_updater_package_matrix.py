@@ -126,7 +126,7 @@ def test_build458_partial_or_extra_database_payload_is_rejected(tmp_path):
     with zipfile.ZipFile(package, "w") as archive:
         archive.writestr("UPDATE_MANIFEST.json", json.dumps(manifest))
         archive.writestr("TLO_DBs/artists.sqlite", b"unexpected")
-    with pytest.raises(ValueError, match="database manifest"):
+    with pytest.raises(ValueError, match="protected user-data path"):
         U._inspect_downloaded_package(package, expected_kind="update", expected_platform_key="linux", expected_build=459)
 
 
@@ -160,7 +160,7 @@ def test_build458_check_for_updates_reports_database_refresh(monkeypatch, tmp_pa
     assert result.package_kind == "update"
     assert result.platform_key == "linux"
     assert result.databases_included is True
-    assert "includes refreshed TLO_DBs/artists.sqlite and venues.txt" in result.message
+    assert "includes refreshed TLO_DBs database files" in result.message
 
 
 def test_build458_current_documentation_describes_package_matrix():

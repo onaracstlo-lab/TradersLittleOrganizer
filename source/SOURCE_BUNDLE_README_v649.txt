@@ -1,10 +1,14 @@
-Traders Little Organizer (TLO) - Source and Utilities Bundle v647
+Traders Little Organizer (TLO) - Source and Utilities Bundle v648
 ==================================================================
-Public application version: v1.7 Build 647
+Public application version: v1.7 Build 649
 Native GitHub Build Process: v124 (separate complete package)
 
 CURRENT RELEASE
 ---------------
+Build 649: Verify the whole independently signed ZIP (pinned key and SHA-256) and its safety/identity; do not hard-code a database master filename inventory inside the downloader. Build Process v124 remains responsible for ensuring all three physical TLO_DBs masters (including cities.csv) are present in full and database-inclusive updates. The update should INCLUDE databases; do not use the database-free bridge for old installations that lack cities.csv. Older installed updaters such as Build 591 cannot be retrofitted; use a trusted manual installation as needed. See TLO_UPDATE_MIGRATION_v649.txt.
+
+Build 648: Update package database compatibility and migration. Verify old releases with artists.sqlite + venues.txt and newer releases with artists.sqlite + venues.txt + cities.csv according to downloaded package build/manifest; never trust undeclared or extra database members. Database-free update ZIPs preserve TLO_DBs and provide a bridge for old installed updaters. For legacy clients: use a signed Build 648 database-free update (Build Process v124, leave -IncludeDatabasesInUpdates OFF), then a higher build containing all three databases, or manually install a trusted signed official complete release. Updating source code does not retrofit old Build 591's validator. Signing/native CI are mandatory. See TLO_UPDATE_MIGRATION_v649.txt.
+
 Build 647: New numbered release for the Ruff F401 correction in the city-database staging tests. All Build 646 runtime/city recognition and file-layout semantics are preserved. Use GitHub Build Process v124, which adds cities.csv alongside artists.sqlite and venues.txt in the release/update build workflow. The source bundle includes the three-file staging checks; native builds, Ruff and signing remain release gates.
 
 Build 646: City reference is physically TLO_DBs/cities.csv, just like TLO_DBs/artists.sqlite and TLO_DBs/venues.txt. The embedded Python city catalog introduced in Build 645 is now completely removed. Do not embed cities.csv into PyInstaller executables. Complete and database-inclusive update packages MUST include all three files and declare them in database_files; build verification will fail for missing/mismatched city data. The separately supplied GitHub Build Process v124 stages/validates the three database files. Release signing/native CI still required.

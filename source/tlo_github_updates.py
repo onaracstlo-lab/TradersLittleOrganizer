@@ -701,30 +701,21 @@ def _inspect_downloaded_package(
     if build != int(expected_build):
         raise ValueError(f"Downloaded TLO package build is {build!r}, expected Build {expected_build}.")
 
-    required_db_names = {"TLO_DBs/artists.sqlite", "TLO_DBs/venues.txt"}
-    # Older release ZIPs legitimately had two master files. Starting with
-    # Build 646 every DB-bearing update and complete package must also stage
-    # the actual curated city data alongside artists.sqlite and venues.txt.
-    if int(expected_build) >= 646:
-        required_db_names.add("TLO_DBs/cities.csv")
-    database_members = {name for name in names if name.startswith("TLO_DBs/") and not name.endswith("/")}
+    # Cryptographic provenance is established before this inspection: the
+    # independently signed release metadata authorizes the exact SHA-256 digest
+    # of the WHOLE ZIP. Do not duplicate the publisher's database inventory
+    # contract here: doing so makes otherwise authentic future updates fail
+    # whenever TLO_DBs grows or a database filename changes. The build process
+    # verifies required physical database masters before signing the release.
+    #
+    # Keep only the coarse database flag because it controls protected user
+    # data paths for a database-free update and the download confirmation text.
+    # The ZIP path/symlink/duplicate/size checks and protected path checks
+    # remain mandatory and are unrelated to database filename enumeration.
     declared_databases = manifest.get("databases_included")
     if not isinstance(declared_databases, bool):
         raise ValueError("Downloaded TLO package has an invalid databases_included manifest value.")
     databases_included = declared_databases
-    expected_database_members = required_db_names if databases_included else set()
-    if database_members != expected_database_members:
-        raise ValueError("Downloaded TLO package database manifest does not match its ZIP contents.")
-
-    declared_database_files = manifest.get("database_files")
-    if int(expected_build) >= 646 and declared_database_files is None:
-        raise ValueError("Downloaded TLO package is missing its database_files manifest declaration.")
-    if declared_database_files is not None:
-        if not isinstance(declared_database_files, list) or not all(isinstance(item, str) for item in declared_database_files):
-            raise ValueError("Downloaded TLO package has an invalid database_files manifest value.")
-        expected_database_files = sorted(path.split("/", 1)[1] for path in expected_database_members)
-        if sorted(declared_database_files) != expected_database_files:
-            raise ValueError("Downloaded TLO package database_files manifest does not match its ZIP contents.")
 
     if expected_kind == "complete" and not databases_included:
         raise ValueError("Downloaded complete TLO package is missing the required databases.")
@@ -740,17 +731,20 @@ def _inspect_downloaded_package(
     }
 
 
-def _package_message(package_kind: str, databases_included: bool) -> tuple[str, str]:
+def _package_message(package_kind: str, databases_included: bool, package_build: int | None = None) -> tuple[str, str]:
     if package_kind == "update":
         kind_text = "update"
         if databases_included:
             extra = (
-                "This update includes refreshed TLO_DBs/artists.sqlite and venues.txt, plus cities.csv. "
-                "Applying it will replace those database master files. It does not contain "
-                "your inventory, setlists, logs, or other user-created output."
+                "This update includes refreshed TLO_DBs database files. "
+                "Applying it may replace the database files supplied in this update. "
+                "It does not contain your inventory, setlists, logs, or other user-created output."
             )
         else:
-            extra = "This update does not contain your inventory, setlists, logs, or databases."
+            extra = (
+                "This update does not contain your inventory, setlists, logs, or databases. "
+                "Your existing TLO_DBs files are preserved."
+            )
         return kind_text, extra
     return (
         "complete distribution",
@@ -889,7 +883,7 @@ def _download_and_report_verified_asset(
         platform_key=platform_key, packaging_mode=packaging_mode,
         databases_included=databases_included,
     )
-    kind_text, extra = _package_message(package_kind, databases_included)
+    kind_text, extra = _package_message(package_kind, databases_included, latest_build)
     if downloaded:
         title = "TLO update downloaded"
         lead = f"TLO v{PUBLIC_VERSION} Build {latest_build} {kind_text} was downloaded to:"
