@@ -31,7 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        tlo_home = resolve_tlo_home(args.TLOHome, args.myTLO, error_type=SetlistFMError)
+        tlo_home = resolve_tlo_home(args.TLOHome, args.myTLO, error_type=SetlistFMError, app_name="setlistFM")
         results = search_setlists(args.artist, args.date, tlo_home=tlo_home, run_id="setlistFM-cli")
     except Exception as exc:  # noqa: BLE001 - CLI-safe boundary
         console_emit(f"ERROR: {exc}", error=True)

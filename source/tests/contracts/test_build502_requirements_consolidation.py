@@ -63,7 +63,7 @@ def test_build502_revision_index_is_navigational_and_bounded():
     # The Build 500 review measured the old index at roughly 63k characters.
     # Keep the consolidated pointer index materially smaller than that history dump.
     assert len(text) < 20000
-    assert "detailed historical build narratives are archived in old-change-logs.zip" in text.lower()
+    assert f"detailed historical build narratives are consolidated in the current {RA.CHANGES_FILENAME.lower()}" in text.lower()
 
 
 def test_build502_current_package_names_and_version_are_aligned():

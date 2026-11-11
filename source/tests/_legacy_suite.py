@@ -1,7 +1,7 @@
 """Regression tests for the current TLO requirements and release contract.
 
 The suite pins documented behavior from the current versioned requirements document.
-Historical build-by-build test notes are preserved in old-change-logs.zip rather
+Historical build-by-build notes are retained in the latest CHANGES file rather
 than repeated in this executable test module.
 """
 from tests import _release_artifacts as RA
@@ -2035,7 +2035,7 @@ def test_tlohome_mytlo_env_precedence_is_preserved(monkeypatch, tmp_path):
     assert T.resolve_tlo_home(tlo_home="", my_tlo="") == os.path.normpath(str(env_home))
 
     monkeypatch.delenv("TLOHome", raising=False)
-    with pytest.raises(T.TaggerError, match="TLOHome must be supplied"):
+    with pytest.raises(T.TaggerError, match="TLOHome is not set"):
         T.resolve_tlo_home(tlo_home="", my_tlo="")
 
 
@@ -9354,8 +9354,6 @@ def test_v356_full_inventory_tag_in_place_passes_artist_in_album_to_album_builde
 
 
 def test_v356_safe_grouping_and_artist_in_album_are_documented_in_current_artifacts():
-    import zipfile
-
     requirements = _docx_text(RA.REQUIREMENTS_FILENAME)
     manual = _source_text(RA.MANUAL_FILENAME)
     faq = _source_text("TLO-FAQ.txt")
@@ -9365,8 +9363,7 @@ def test_v356_safe_grouping_and_artist_in_album_are_documented_in_current_artifa
         assert "Artist In Album" in text or "Artist in Album" in text
     assert "(WLIR-FM, rm v.2)" in requirements
     assert "(WLIR-FM, rm v.2)" in manual
-    with zipfile.ZipFile(SOURCE_DIR / "old-change-logs.zip") as archive:
-        assert "CHANGES_v353.txt" in archive.namelist()
+    assert "CHANGES_v353.txt" in (SOURCE_DIR / RA.CHANGES_FILENAME).read_text(encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- #

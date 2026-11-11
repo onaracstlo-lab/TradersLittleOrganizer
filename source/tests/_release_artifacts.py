@@ -10,10 +10,7 @@ BUILD_VERIFICATION_FILENAME = f"BUILD_VERIFICATION_{V.VERSION}.txt"
 
 
 def release_history() -> str:
-    """Full historical build notes belong to CHANGES, not the end-user manual."""
+    """Historical notes are consolidated into the current change log."""
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
-    from zipfile import ZipFile
-    with ZipFile(root / "old-change-logs.zip") as archive:
-        older = archive.read("Manual_selected_build_history_v564.txt").decode("utf-8")
-    return (root / CHANGES_FILENAME).read_text(encoding="utf-8") + "\n" + older
+    return (root / CHANGES_FILENAME).read_text(encoding="utf-8")

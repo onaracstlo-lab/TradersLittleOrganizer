@@ -3,7 +3,6 @@ from tests import _release_artifacts as RA
 
 
 from pathlib import Path
-from zipfile import ZipFile
 
 import pytest
 from docx import Document
@@ -50,5 +49,4 @@ def test_build368_manual_documents_simple_mismatch_log():
 
 
 def test_build368_archives_build367_change_log():
-    with ZipFile(ROOT / "old-change-logs.zip") as zf:
-        assert "CHANGES_v367.txt" in zf.namelist()
+    assert "CHANGES_v367.txt" in (ROOT / RA.CHANGES_FILENAME).read_text(encoding="utf-8")

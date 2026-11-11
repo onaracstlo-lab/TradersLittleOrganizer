@@ -41,6 +41,7 @@ from tlo_options import (
     validate_corruption_policy,
 )
 from tlo_path_inputs import normalize_platform_input_path, resolve_current_storage_volume, resolve_tlo_home as resolve_inventory_tlo_home
+from tlo_startup_help import report_missing_tlo_home
 from inventory_list_lib import parse_search_path_input
 from tlo_setlistfm_lookup import (
     MAX_REQUESTS_PER_RUN,
@@ -4954,6 +4955,10 @@ def main() -> int:
         console_emit(HELP_TEXT)
         return 0
     cli_args = _parse_gui_command_line(sys.argv[1:])
+    if not ((getattr(cli_args, "myTLO", "") or "").strip()
+            or (getattr(cli_args, "TLOHome", "") or "").strip()
+            or os.environ.get("TLOHome", "").strip()):
+        return report_missing_tlo_home("tlo-main")
     root, _drop_provider = create_tk_root(tk)
     install_window_icon(root, "main")
     root.withdraw()

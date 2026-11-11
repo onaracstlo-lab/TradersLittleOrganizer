@@ -3,7 +3,6 @@ from tests import _release_artifacts as RA
 
 
 from pathlib import Path
-from zipfile import ZipFile
 
 import pytest
 from docx import Document
@@ -67,5 +66,4 @@ def test_build367_packaging_no_longer_collects_send2trash():
 
 
 def test_build367_archives_build366_change_log():
-    with ZipFile(ROOT / "old-change-logs.zip") as zf:
-        assert "CHANGES_v366.txt" in zf.namelist()
+    assert "CHANGES_v366.txt" in (ROOT / RA.CHANGES_FILENAME).read_text(encoding="utf-8")

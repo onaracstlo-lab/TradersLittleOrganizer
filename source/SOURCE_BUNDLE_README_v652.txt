@@ -1,10 +1,16 @@
-Traders Little Organizer (TLO) - Source and Utilities Bundle v648
+Traders Little Organizer (TLO) - Source and Utilities Bundle v652
 ==================================================================
-Public application version: v1.7 Build 649
-Native GitHub Build Process: v124 (separate complete package)
+Public application version: v1.7 Build 652
+Native GitHub Build Process: v125 (separate complete package)
 
 CURRENT RELEASE
 ---------------
+Build 652: Remove an unused function-local zipfile import in the legacy tests that blocked the mandatory Ruff F401 gate. No production behavior changes; retain the Build 651 TLOHome setup improvements. Build Process v125 is unchanged.
+
+Build 651: Missing TLOHome setup now provides complete, copyable Windows and Linux/WSL startup commands, Windows shortcut Target instructions, an environment-variable option and the installation website. Main and Search show a copyable GUI setup dialog and stop startup when TLOHome is missing; CLI tools receive the same actionable guidance. Build Process v125 is unchanged.
+
+Build 650: The current consolidated specification is delivered in every signed complete and update release together with the matching RTF User Manual and current CHANGES file. Historical change narratives are consolidated in CHANGES_v652.txt; the old-change-logs.zip archive is no longer distributed. Build Process v125 requires exactly these current three documents in source, complete and update releases, and includes them in SHA-256 package manifests. Runtime behavior is unchanged from Build 649.
+
 Build 649: Verify the whole independently signed ZIP (pinned key and SHA-256) and its safety/identity; do not hard-code a database master filename inventory inside the downloader. Build Process v124 remains responsible for ensuring all three physical TLO_DBs masters (including cities.csv) are present in full and database-inclusive updates. The update should INCLUDE databases; do not use the database-free bridge for old installations that lack cities.csv. Older installed updaters such as Build 591 cannot be retrofitted; use a trusted manual installation as needed. See TLO_UPDATE_MIGRATION_v649.txt.
 
 Build 648: Update package database compatibility and migration. Verify old releases with artists.sqlite + venues.txt and newer releases with artists.sqlite + venues.txt + cities.csv according to downloaded package build/manifest; never trust undeclared or extra database members. Database-free update ZIPs preserve TLO_DBs and provide a bridge for old installed updaters. For legacy clients: use a signed Build 648 database-free update (Build Process v124, leave -IncludeDatabasesInUpdates OFF), then a higher build containing all three databases, or manually install a trusted signed official complete release. Updating source code does not retrofit old Build 591's validator. Signing/native CI are mandatory. See TLO_UPDATE_MIGRATION_v649.txt.
@@ -136,14 +142,14 @@ BUILD CONTENTS
 - tlo-deleteDupes.py : duplicate cleanup
 - Additional scripts, source modules, tests and build recipes in the ZIP root.
 - TLO_Inventory_User_Manual_v644.rtf : end-user instructions
-- TLO_Inventory_Requirements_Working_v644.docx : current specification
+- TLO_Inventory_Requirements_Working_v652.docx : current specification
 - TLO-FAQ.txt : support answers
 - tlo-preferences.ini : default startup configuration (never overwrite
   an existing TLOHome configuration)
 - CHANGES_v644.txt : detailed release/change history
 - REGRESSION_RESULTS_v644.txt and BUILD_VERIFICATION_v644.txt : local checks
 - SHA256SUMS_v644.txt : hashes of all other files in this source ZIP
-- old-change-logs.zip : archived historical notes
+- CHANGES_v652.txt : one current change log, including historical records
 
 BUILD / DISTRIBUTION
 --------------------
@@ -152,7 +158,7 @@ requirements-build.txt installed with --require-hashes. Source-built,
 version/hash-pinned FFmpeg 9.0.2 provides the audio conversion/verification
 binary; no downloaded precompiled FFmpeg release binary is used.
 Native Windows, Linux and macOS compilation and release verification must run
-in the separate TLO GitHub Build Process v123.
+in the separate TLO GitHub Build Process v125.
 
 No GitHub Build Process artifact is included in this source bundle.
 The GitHub Build Process is independently versioned and distributed as its own separate package.
@@ -166,6 +172,6 @@ SHN verification requires the app-bundled FFmpeg executable and working native
 Trash functionality. If either is unavailable, conversion fails without
 permanently deleting the SHN original.
 
-Release artifacts retain their complete change history in CHANGES and the
-historical notes archive. Do not rely on old verification reports to attest
+Release artifacts include only the current Manual, Requirements Specification,
+and CHANGES_v652.txt; historical notes are consolidated in that file. Do not rely on old verification reports to attest
 current-build results.

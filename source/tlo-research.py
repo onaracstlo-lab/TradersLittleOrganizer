@@ -43,7 +43,7 @@ def main(argv=None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        tlo_home = resolve_tlo_home(args.TLOHome, args.myTLO, error_type=ResearchError)
+        tlo_home = resolve_tlo_home(args.TLOHome, args.myTLO, error_type=ResearchError, app_name="tlo-research")
         output = research_logs(tlo_home, " ".join(args.query))
     except (ResearchError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

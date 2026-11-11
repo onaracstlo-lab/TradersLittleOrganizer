@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-import zipfile
 
 import pytest
 from docx import Document
@@ -57,5 +56,5 @@ def test_canonical_current_artifacts_and_manual_version():
 
 def test_current_bundle_has_no_orphaned_loose_graphics():
     assert not list(ROOT.glob('pict00[1-4].png'))
-    with zipfile.ZipFile(ROOT/'old-change-logs.zip') as z:
-        assert len(z.namelist())>0
+    assert not (ROOT / 'old-change-logs.zip').exists()
+    assert 'Historical record: CHANGES_v363.txt' in A.release_history()

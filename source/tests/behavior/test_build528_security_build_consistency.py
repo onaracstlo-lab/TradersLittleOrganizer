@@ -133,7 +133,7 @@ def test_build528_search_requires_real_tlohome_and_uses_central_version(monkeypa
     search = _load_script("tlo-search.py", "tlo_search_build528")
     monkeypatch.delenv(search.TLOHOME_ENV_VAR, raising=False)
 
-    with pytest.raises(search.AppConfigError, match="TLOHome is required"):
+    with pytest.raises(search.AppConfigError, match="TLOHome is not set"):
         search.parse_cli_args([])
     assert search.APP_INTERNAL_VERSION == VERSION.VERSION
     assert "/mnt/c/b" not in (ROOT / "tlo-search.py").read_text(encoding="utf-8")

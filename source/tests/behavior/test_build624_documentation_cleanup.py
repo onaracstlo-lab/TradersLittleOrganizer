@@ -23,7 +23,7 @@ def test_readme_names_the_correct_current_changes_and_separate_build_process():
     assert 'Build 622: Artist, City Date parsing requires positive city-reference evidence' in text
     assert 'Build 623: SHN conversion' in text
     assert 'Build 624 is a documentation-only consolidation' in text
-    assert 'GitHub Build Process: v124' in text
+    assert 'GitHub Build Process: v125' in text
     assert 'No GitHub Build Process artifact is included in this source bundle.' in text
 
 
@@ -62,4 +62,5 @@ def test_ffmpeg_redundancy_eliminated_and_archive_preserved():
     doc = Document(ROOT / f'TLO_Inventory_Requirements_Working_v{version.BUNDLE_BUILD}.docx')
     assert sum('FFmpeg redistribution: TLO native packages must not include binaries configured with' in p.text
                for p in doc.paragraphs) == 1
-    assert (ROOT / 'old-change-logs.zip').is_file()
+    assert not (ROOT / 'old-change-logs.zip').exists()
+    assert 'Historical record: CHANGES_v363.txt' in (ROOT / f'CHANGES_v{version.BUNDLE_BUILD}.txt').read_text(encoding='utf-8')

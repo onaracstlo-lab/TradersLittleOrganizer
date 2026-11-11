@@ -3,7 +3,6 @@ from tests import _release_artifacts as RA
 
 
 from pathlib import Path
-from zipfile import ZipFile
 
 import pytest
 from docx import Document
@@ -56,5 +55,4 @@ def test_faq_mentions_copy_to_copy_comparison():
 
 
 def test_build366_archives_build365_change_log():
-    with ZipFile(ROOT / "old-change-logs.zip") as zf:
-        assert "CHANGES_v365.txt" in zf.namelist()
+    assert "CHANGES_v365.txt" in (ROOT / RA.CHANGES_FILENAME).read_text(encoding="utf-8")

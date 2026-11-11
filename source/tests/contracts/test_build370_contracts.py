@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 pytestmark = pytest.mark.contract
-from zipfile import ZipFile
 
 from docx import Document
 
@@ -49,5 +48,4 @@ def test_build370_manual_and_faq_explain_cluster_preference():
 
 
 def test_build370_archives_build369_change_log():
-    with ZipFile(ROOT / "old-change-logs.zip") as zf:
-        assert "CHANGES_v369.txt" in zf.namelist()
+    assert "CHANGES_v369.txt" in (ROOT / RA.CHANGES_FILENAME).read_text(encoding="utf-8")

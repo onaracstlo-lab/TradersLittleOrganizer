@@ -258,6 +258,7 @@ def parse_command_line():
             tlo_home=getattr(parsed, "TLOHome", ""),
             my_tlo=getattr(parsed, "myTLO", ""),
             error_type=argparse.ArgumentTypeError,
+            app_name="tlo-gi",
         )
     except argparse.ArgumentTypeError as exc:
         parser.error(str(exc))

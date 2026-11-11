@@ -243,8 +243,9 @@ def test_build505_review_documentation_and_packaging_cleanup():
 
     assert not list(root.glob("SHA256SUMS_v50[0-4].txt"))
     assert not list(root.glob("BUILD_VERIFICATION_v50[0-4].txt"))
-    with zipfile.ZipFile(root / "old-change-logs.zip") as zf:
-        names = set(zf.namelist())
+    # Historical notes are preserved in the single current change log;
+    # older verification artifacts never ship as additional release documents.
+    history = (root / RA.CHANGES_FILENAME).read_text(encoding="utf-8")
     for build in range(500, 505):
-        assert f"superseded-verification/SHA256SUMS_v{build}.txt" in names
-        assert f"superseded-verification/BUILD_VERIFICATION_v{build}.txt" in names
+        assert f"Build {build}" in history
+    assert not (root / "old-change-logs.zip").exists()

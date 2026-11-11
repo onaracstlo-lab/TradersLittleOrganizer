@@ -60,6 +60,4 @@ def test_build365_manual_documents_same_artist_date_and_folder_level_move():
 
 
 def test_build365_archives_build364_change_log():
-    import zipfile
-    with zipfile.ZipFile(ROOT / "old-change-logs.zip") as zf:
-        assert "CHANGES_v364.txt" in zf.namelist()
+    assert "CHANGES_v364.txt" in (ROOT / RA.CHANGES_FILENAME).read_text(encoding="utf-8")

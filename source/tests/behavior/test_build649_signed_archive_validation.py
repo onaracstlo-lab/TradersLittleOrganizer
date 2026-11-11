@@ -38,7 +38,7 @@ def inspect(path, *, kind='update', build=649):
 
 
 def test_build649_version():
-    assert BUNDLE_BUILD == 649
+    assert BUNDLE_BUILD >= 649
 
 
 def test_new_database_filename_does_not_break_authentic_signed_zip(tmp_path):

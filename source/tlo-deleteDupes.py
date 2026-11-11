@@ -1108,7 +1108,7 @@ def _parse_args(argv=None):
 def main(argv=None) -> int:
     try:
         args = _parse_args(argv)
-        tlo_home = resolve_tlo_home(args.TLOHome, args.myTLO, error_type=DeleteDupesError)
+        tlo_home = resolve_tlo_home(args.TLOHome, args.myTLO, error_type=DeleteDupesError, app_name="tlo-deleteDupes")
         search_root = validate_input_path(args.path)
         moved_count = delete_duplicate_copy_directories(search_root, tlo_home)
         console_emit(f"Complete: duplicate_folders_moved={moved_count}")

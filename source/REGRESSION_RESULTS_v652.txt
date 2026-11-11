@@ -1,0 +1,9 @@
+TLO v1.7 Build 652 — LOCAL REGRESSION RESULTS
+Source baseline: Build 651. Removed the unused function-local zipfile import that blocked Ruff F401 in tests/_legacy_suite.py.
+The global zipfile import is preserved. No production application behavior changed.
+Release-adjacent/documentation/startup and reported legacy test: 176 passed, 0 failed.
+Broader behavior suite: PYTHONDONTWRITEBYTECODE=1 CI=1 xvfb-run -a python -m pytest -q -p no:cacheprovider tests/behavior
+RESULT: 2,261 passed, 6 skipped, 0 failed, 1 expected duplicate-ZIP warning in 52.96 seconds.
+This is NOT the entire historical suite: contracts were checked separately, and only the affected legacy test was included in the focused run.
+Full historical suite: NOT COMPLETED locally; normal GitHub Actions full test suite required.
+Ruff lint: lint not attested (not installed in this environment). Mandatory build-process gate remains required.

@@ -3,7 +3,6 @@ from tests import _release_artifacts as RA
 
 
 from pathlib import Path
-from zipfile import ZipFile
 
 import pytest
 from docx import Document
@@ -44,8 +43,7 @@ def test_build364_manual_documents_commercial_release_and_complete_tree_copy():
 
 
 def test_build364_archives_prior_change_log():
-    with ZipFile(ROOT / "old-change-logs.zip") as zf:
-        assert "CHANGES_v363.txt" in zf.namelist()
+    assert "CHANGES_v363.txt" in (ROOT / RA.CHANGES_FILENAME).read_text(encoding="utf-8")
 
 
 def test_build364_requirements_define_exact_copy_vs_alt_classification():

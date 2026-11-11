@@ -144,7 +144,7 @@ def prepare_reverse_plan(
     my_tlo: str = "",
     log_path: str = "",
 ) -> ReversePlan:
-    resolved_home = resolve_tlo_home(tlo_home=tlo_home, my_tlo=my_tlo, error_type=ReverseFoldersError)
+    resolved_home = resolve_tlo_home(tlo_home=tlo_home, my_tlo=my_tlo, error_type=ReverseFoldersError, app_name="tlo-reverse")
     requested = _norm(path)
     if not requested or not os.path.isabs(requested):
         raise ReverseFoldersError("Path must be a fully qualified folder path.")

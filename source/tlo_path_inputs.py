@@ -6,6 +6,7 @@ __version__ = _TLO_CANONICAL_VERSION
 import argparse
 import os
 import re
+from tlo_startup_help import missing_tlo_home_message
 from urllib.parse import unquote, urlparse
 
 
@@ -78,12 +79,12 @@ def tlo_home_type(path):
     return path
 
 
-def resolve_tlo_home(tlo_home: str = "", my_tlo: str = "", *, error_type=ValueError) -> str:
+def resolve_tlo_home(tlo_home: str = "", my_tlo: str = "", *, error_type=ValueError, app_name="tlo-main") -> str:
     """Resolve TLOHome with unchanged precedence: myTLO -> TLOHome -> env."""
     env_tlo_home = _strip_optional_quotes(os.environ.get("TLOHome", ""))
     resolved = _strip_optional_quotes(my_tlo).strip() or _strip_optional_quotes(tlo_home).strip() or env_tlo_home
     if not resolved:
-        raise error_type("TLOHome must be supplied with --TLOHome or the TLOHome environment variable.")
+        raise error_type(missing_tlo_home_message(app_name))
     try:
         return os.path.normpath(tlo_home_type(resolved))
     except argparse.ArgumentTypeError as exc:

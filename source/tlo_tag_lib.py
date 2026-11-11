@@ -477,7 +477,7 @@ def _validate_existing_directory(path_name: str, label: str) -> str:
 
 def resolve_tlo_home(tlo_home: str = "", my_tlo: str = "") -> str:
     try:
-        return resolve_tlo_home_common(tlo_home=tlo_home, my_tlo=my_tlo, error_type=TaggerError)
+        return resolve_tlo_home_common(tlo_home=tlo_home, my_tlo=my_tlo, error_type=TaggerError, app_name="tlo-tag")
     except TaggerError:
         raise
 

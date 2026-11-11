@@ -35,6 +35,7 @@ except ImportError:
     DISPLAY_VERSION = "version unavailable"
     VERSION = "version unavailable"
 from tlo_window_icons import install_window_icon
+from tlo_startup_help import missing_tlo_home_message, report_missing_tlo_home, SETUP_HEADING
 import tlo_preferences
 from tlo_gui_shortcuts import install_global_ctrl_a
 from tlo_gui_shortcuts import configure_centered_ttk_button_text, schedule_tk_after
@@ -1229,7 +1230,7 @@ def parse_cli_args(argv: Sequence[str]) -> tuple[Path, str | None]:
 
     tlohome_value = mytlo_arg_value or tlohome_arg_value or env_value
     if not tlohome_value:
-        raise AppConfigError(f"TLOHome is required. Set {TLOHOME_ENV_VAR} or supply --TLOHome with a full path.")
+        raise AppConfigError(missing_tlo_home_message("tlo-search"))
     tlohome_path = validate_tlohome(tlohome_value)
     return tlohome_path, find_value
 
@@ -1522,6 +1523,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     except SystemExit as exc:
         return int(exc.code)
     except AppConfigError as exc:
+        if str(exc).startswith(SETUP_HEADING):
+            return report_missing_tlo_home("tlo-search")
         try:
             show_config_error_dialog(str(exc))
         except Exception:
