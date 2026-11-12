@@ -7637,6 +7637,8 @@ def test_v330_update_destination_uses_sanitized_basename_and_warns_without_diges
         ],
     }
     monkeypatch.setattr(G.sys, "platform", "linux")
+    release["prerelease"] = False
+    release["draft"] = False
     monkeypatch.setattr(G, "_fetch_latest_release", lambda owner, repo: release)
     monkeypatch.setattr(G, "_load_verified_release_metadata", lambda release: {"schema": 1, "build": available_build, "release_tag": release["tag_name"], "assets": [{"name": f"../{asset_name}", "sha256": "a" * 64, "size": 1, "build": available_build, "kind": "update", "platform_key": "linux"}]})
     monkeypatch.setattr(G, "_downloads_dir", lambda: tmp_path)

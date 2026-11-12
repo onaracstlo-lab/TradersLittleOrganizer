@@ -144,6 +144,7 @@ def test_build458_check_for_updates_reports_database_refresh(monkeypatch, tmp_pa
         "tag_name": f"v1.7-build{available_build}",
         "name": f"TLO v1.7 Build {available_build}",
         "assets": [_asset(name)],
+        "prerelease": False, "draft": False,
     }
     monkeypatch.setattr(U.sys, "platform", "linux")
     monkeypatch.setattr(U, "_fetch_latest_release", lambda owner, repo: release)

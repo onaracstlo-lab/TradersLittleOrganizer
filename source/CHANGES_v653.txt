@@ -1,3 +1,27 @@
+TLO v1.7 Build 653 — updater approval guard for public GitHub pre-releases
+==========================================================================
+Build Process v126 publishes complete Windows hybrid, Windows onedir, Linux,
+and macOS test distributions as public pre-releases by default. Promotion is
+a separate manually invoked operation that marks the already-tested release
+as production and updates GitHub Latest. Historical production releases and
+assets are not removed, replaced, or modified by promotion.
+
+Main and Search already obtain update candidates via the official
+/repos/onaracstlo-lab/TradersLittleOrganizer/releases/latest API, which does
+not return pre-releases. Build 653 additionally rejects results that are draft,
+pre-release, or lack explicit boolean false status fields, before considering
+build numbers or signature metadata. Manual checks and Auto Update obey the
+same selection gate. Such a result is reported as no approved update, not as
+an update available to download. All existing signed metadata, authenticated
+ZIP SHA-256, exact platform, archive inspection and download-only checks stay
+intact. The normal update operation never installs a downloaded ZIP.
+
+No GitHub releases were modified while preparing this source bundle. Native
+Windows/macOS/Linux builds, Windows signing and release promotion require the
+separate Build Process v126 and its hosted validation/signing gates.
+
+--- Historical change records (unaltered below) ---
+
 TLO v1.7 Build 652
 Mandatory Ruff F401 preflight correction in the legacy test suite.
 - Remove unused function-local zipfile import in tests/_legacy_suite.py::test_v356_safe_grouping_and_artist_in_album_are_documented_in_current_artifacts. Retain the module-wide zipfile import used by other tests.

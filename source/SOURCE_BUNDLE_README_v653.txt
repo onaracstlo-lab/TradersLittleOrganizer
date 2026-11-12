@@ -1,11 +1,17 @@
-Traders Little Organizer (TLO) - Source and Utilities Bundle v652
+Traders Little Organizer (TLO) - Source and Utilities Bundle v653
 ==================================================================
-Public application version: v1.7 Build 652
-Native GitHub Build Process: v125 (separate complete package)
+Public application version: v1.7 Build 653
+Native GitHub Build Process: v126 (separate complete package)
 
 CURRENT RELEASE
 ---------------
-Build 652: Remove an unused function-local zipfile import in the legacy tests that blocked the mandatory Ruff F401 gate. No production behavior changes; retain the Build 651 TLOHome setup improvements. Build Process v125 is unchanged.
+Build 653: Main and Search update checks enforce the GitHub production-release
+approval gate. Normal v126 builds produce public pre-releases, which are not
+shown in the updater until manually promoted. Previously published full releases
+remain intact; GitHub Latest is the only moving selection. Existing signed ZIP
+verification and download-only behavior are unchanged.
+
+Build 652 (historical): Remove an unused function-local zipfile import in the legacy tests that blocked the mandatory Ruff F401 gate. No production behavior changes; retain the Build 651 TLOHome setup improvements. Build Process v125 is unchanged.
 
 Build 651: Missing TLOHome setup now provides complete, copyable Windows and Linux/WSL startup commands, Windows shortcut Target instructions, an environment-variable option and the installation website. Main and Search show a copyable GUI setup dialog and stop startup when TLOHome is missing; CLI tools receive the same actionable guidance. Build Process v125 is unchanged.
 
@@ -141,15 +147,15 @@ BUILD CONTENTS
 - tlo-research.py : inventory research
 - tlo-deleteDupes.py : duplicate cleanup
 - Additional scripts, source modules, tests and build recipes in the ZIP root.
-- TLO_Inventory_User_Manual_v644.rtf : end-user instructions
-- TLO_Inventory_Requirements_Working_v652.docx : current specification
+- TLO_Inventory_User_Manual_v653.rtf : end-user instructions
+- TLO_Inventory_Requirements_Working_v653.docx : current specification
 - TLO-FAQ.txt : support answers
 - tlo-preferences.ini : default startup configuration (never overwrite
   an existing TLOHome configuration)
-- CHANGES_v644.txt : detailed release/change history
-- REGRESSION_RESULTS_v644.txt and BUILD_VERIFICATION_v644.txt : local checks
-- SHA256SUMS_v644.txt : hashes of all other files in this source ZIP
-- CHANGES_v652.txt : one current change log, including historical records
+- CHANGES_v653.txt : current release and consolidated change history
+- REGRESSION_RESULTS_v653.txt and BUILD_VERIFICATION_v653.txt : local checks
+- SHA256SUMS_v653.txt : hashes of all other files in this source ZIP
+- CHANGES_v653.txt : one current change log, including historical records
 
 BUILD / DISTRIBUTION
 --------------------
@@ -158,7 +164,7 @@ requirements-build.txt installed with --require-hashes. Source-built,
 version/hash-pinned FFmpeg 9.0.2 provides the audio conversion/verification
 binary; no downloaded precompiled FFmpeg release binary is used.
 Native Windows, Linux and macOS compilation and release verification must run
-in the separate TLO GitHub Build Process v125.
+in the separate TLO GitHub Build Process v126.
 
 No GitHub Build Process artifact is included in this source bundle.
 The GitHub Build Process is independently versioned and distributed as its own separate package.
@@ -173,5 +179,5 @@ Trash functionality. If either is unavailable, conversion fails without
 permanently deleting the SHN original.
 
 Release artifacts include only the current Manual, Requirements Specification,
-and CHANGES_v652.txt; historical notes are consolidated in that file. Do not rely on old verification reports to attest
+and CHANGES_v653.txt; historical notes are consolidated in that file. Do not rely on old verification reports to attest
 current-build results.

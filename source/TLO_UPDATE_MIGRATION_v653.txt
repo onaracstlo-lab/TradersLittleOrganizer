@@ -1,4 +1,4 @@
-TLO v1.7 Build 652: update signatures, ZIP hashes and the external city database
+TLO v1.7 Build 653: update signatures, ZIP hashes and the external city database
 =========================================================================
 
 ALWAYS REQUIRE TRUSTED CRYPTOGRAPHIC VERIFICATION
@@ -42,3 +42,13 @@ a complete TLO_DBs folder, but are not a solution to 591 -> 649 by themselves.
 PER-BUILD VERSIONING
 --------------------
 Every correction receives a new build number; never replace an earlier ZIP.
+
+BUILD 653 PRE-RELEASE / PRODUCTION APPROVAL
+------------------------------------------
+Only approved production releases can be offered by TLO automatic or manual
+update checks. The app uses GitHub releases/latest and checks that the returned
+release is neither prerelease nor draft (both must be explicit false).
+Build Process v126 creates publicly downloadable test pre-releases by default.
+The separate manual promotion command changes only the selected release to
+production and GitHub Latest; prior production releases remain untouched.
+All existing independent signed-update authentication remains required.

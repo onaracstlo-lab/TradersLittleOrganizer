@@ -25,6 +25,7 @@ def test_auto_discovery_returns_available_without_downloading(monkeypatch, tmp_p
         "tag_name": f"v1.7-build{build}",
         "name": f"TLO v1.7 Build {build}",
         "assets": [_asset(build)],
+        "prerelease": False, "draft": False,
     }
     monkeypatch.setattr(updates.sys, "platform", "linux")
     monkeypatch.setattr(updates, "_fetch_latest_release", lambda owner, repo: release)

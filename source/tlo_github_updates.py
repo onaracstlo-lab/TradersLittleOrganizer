@@ -953,7 +953,7 @@ def check_for_updates(
     owner: str = DEFAULT_REPO_OWNER,
     repo: str = DEFAULT_REPO_NAME,
 ) -> UpdateCheckResult:
-    """Check the latest GitHub Release and optionally download the preferred ZIP.
+    """Check the latest APPROVED GitHub Release and optionally download the preferred ZIP.
 
     Manual checks retain the historic direct-download behavior. Auto Update uses
     ``download=False`` to discover a newer exact-match package without downloading
@@ -961,7 +961,24 @@ def check_for_updates(
     :func:`download_update`.
     """
     try:
+        # The /releases/latest endpoint is intended to exclude drafts and
+        # pre-releases.  Enforce the approval decision independently, before
+        # comparing build numbers, reading signed assets, or downloading.
+        # GitHub's API supplies explicit boolean release-status fields; missing
+        # or malformed status must never mean implicit production approval.
         release = _fetch_latest_release(owner, repo)
+        if not isinstance(release, dict) or release.get("draft") is not False or release.get("prerelease") is not False:
+            settings_warning = _write_last_check(tlo_home)
+            message = (
+                "No approved TLO production release was returned by GitHub.\n\n"
+                "Drafts and public pre-releases are not available through "
+                "TLO's manual or automatic update checker."
+            )
+            if settings_warning:
+                message += f"\n\n{settings_warning}"
+            return UpdateCheckResult(
+                status="up_to_date", title="No approved TLO update available", message=message
+            )
         assets = _matching_assets(release)
         latest_build = _extract_build_number(
             release.get("tag_name"),

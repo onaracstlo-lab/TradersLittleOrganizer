@@ -13,6 +13,7 @@ def _release(build: int) -> dict:
         "tag_name": f"v1.7-build{build}",
         "name": f"TLO v1.7 Build {build}",
         "assets": [],
+        "prerelease": False, "draft": False,
     }
 
 

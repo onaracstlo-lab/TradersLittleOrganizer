@@ -1,0 +1,12 @@
+TLO v1.7 Build 653 — NOT RELEASE-ATTESTED
+Source baseline: Build 652. New behavior: manual and automatic updates reject GitHub pre-releases, drafts, and missing/malformed approval fields before build comparisons or downloads. Signing, whole-ZIP hashes, platform checks, ZIP safety and download-only logic remain unchanged.
+
+Ruff lint: lint not attested. Ruff executable unavailable locally and cannot be fetched. Hosted Ruff gate required.
+Xvfb display (CI=1): Local Build 653 behavior suite run under virtual display, except test_build638_preferences_editor.py was excluded after full test suite hit a native Tkinter abort. Separate report in REGRESSION_RESULTS_v653.txt. No native Windows verification.
+No display (DISPLAY and CI unset): Historical Build 532 missing-display GUI subset: 50 passed, 6 skipped. Not rerun specifically for Build 653.
+Historical Build 532 no-display GUI subset: 50 passed, 6 skipped; not rerun in this source build.
+Historical Build 613 Linux full-suite run: 26 skipped; not a Build 653 result.
+The full GitHub Actions run: not executed here. Native Windows/macOS/Linux packaging, Windows signing, and timestamping are mandatory outstanding release gates.
+
+Exactly one Build 653 manual, Requirements Specification, and CHANGES file. No archived change-log ZIP.
+Python AST parsing and ZIP SHA-256 verification were performed during final packaging. The hosted full regression and native release gates remain required.

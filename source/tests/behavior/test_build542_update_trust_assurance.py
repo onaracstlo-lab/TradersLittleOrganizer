@@ -100,7 +100,7 @@ def test_build542_check_for_updates_rejects_signed_release_tag_mismatch(monkeypa
     from tlo_version import BUNDLE_BUILD
 
     next_build = BUNDLE_BUILD + 1
-    release = {"tag_name": f"v1.7 Build {next_build}", "name": f"TLO v1.7 Build {next_build}", "assets": []}
+    release = {"tag_name": f"v1.7 Build {next_build}", "name": f"TLO v1.7 Build {next_build}", "assets": [], "prerelease": False, "draft": False}
     monkeypatch.setattr(U, "_fetch_latest_release", lambda *_args, **_kwargs: release)
     monkeypatch.setattr(
         U,
