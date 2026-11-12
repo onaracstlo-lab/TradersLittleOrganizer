@@ -34,6 +34,7 @@ from tlo_path_inputs import normalize_platform_input_path, strip_optional_quotes
 from tlo_locking import acquire_owned_lock, release_owned_lock, lock_is_held, clear_unheld_lock_payload
 from inventory_list_lib import split_search_path_entries
 from tlo_volume_label import resolve_volume_label
+from tlo_unc import root_from_unc_label, compose_unc_path, unc_label, is_unc_path
 from tlo_redundancy import (
     RedundancyGroup,
     group_display_for_volume,
@@ -914,6 +915,12 @@ def _physical_paths_for_volume_stored(
 ) -> Tuple[List[str], bool]:
     stored = str(stored or "").strip()
     vkey = volume_key(volume)
+    share_root = root_from_unc_label(volume)
+    if share_root:
+        candidate = compose_unc_path(volume, stored)
+        # UNC is a directly addressable share, not a mounted drive enumerated
+        # by _candidate_mount_roots(). It may be intermittently unavailable.
+        return ([candidate] if candidate else []), os.path.isdir(share_root)
     candidates: List[str] = []
     volume_connected = bool(roots.get(vkey))
 
@@ -1031,6 +1038,9 @@ def _resolve_direct_source(item: RequestItem, roots: Mapping[str, Sequence[str]]
     if item.kind == "volume":
         volume = str(item.direct_volume or "").strip()
         candidates = [os.path.normpath(path_name) for path_name in roots.get(volume_key(volume), [])]
+        share_root = root_from_unc_label(volume)
+        if share_root:
+            candidates.append(share_root)
         for candidate in candidates:
             try:
                 if os.path.isdir(candidate) and not os.path.islink(candidate):
@@ -1063,7 +1073,7 @@ def _resolve_direct_source(item: RequestItem, roots: Mapping[str, Sequence[str]]
         if os.path.isdir(candidate) and not os.path.islink(candidate):
             label = ""
             try:
-                label = normalize_volume_label(resolve_volume_label(candidate).label)
+                label = unc_label(candidate) if is_unc_path(candidate) else normalize_volume_label(resolve_volume_label(candidate).label)
             except Exception:
                 pass
             return SourceCandidate(show=item.raw, source_path=os.path.normpath(candidate), volume=label, inventory_path=item.direct_path, inventory_volume=label), [], ""
@@ -1078,7 +1088,7 @@ def _direct_destination_leaf(item: RequestItem, source: SourceCandidate) -> str:
     if item.kind == "volume":
         leaf = str(item.direct_volume or source.volume or "").strip()
     else:
-        leaf = os.path.basename(os.path.normpath(source.source_path))
+        leaf = ntpath.basename(ntpath.normpath(source.source_path)) if is_unc_path(source.source_path) else os.path.basename(os.path.normpath(source.source_path))
         if not leaf or leaf in {os.path.sep, "."}:
             leaf = str(source.volume or "").strip()
         if not leaf:

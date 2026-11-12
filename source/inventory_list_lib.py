@@ -8,6 +8,8 @@ import shutil
 from console_output_lib import console_print
 from logging_lib import truncate_logs_for_tokens, prune_logs_for_tokens_and_paths
 from tlo_volume_label import resolve_volume_label
+from tlo_unc import is_unc_path, unc_label
+from tlo_path_inputs import _file_uri_to_path
 from tlo_bootlist_volume_policy import (
     read_group_log_volume_rows,
     paths_related,
@@ -85,7 +87,7 @@ def _is_wsl_drive_root(path_text):
 
 def _normalize_input_path(path_text):
     original_path_text = path_text
-    path_text = path_text.strip()
+    path_text = _file_uri_to_path(path_text).strip()
 
     if not path_text:
         return path_text
@@ -93,6 +95,10 @@ def _normalize_input_path(path_text):
     if _running_on_windows():
         if _is_wsl_mount_path(path_text):
             return _wsl_to_windows_path(path_text)
+        if path_text.replace("/", "\\").startswith("\\\\"):
+            if not is_unc_path(path_text):
+                raise ValueError(f"Invalid UNC share path for Windows: {path_text}")
+            return os.path.normpath(path_text.replace("/", "\\"))
         if not _is_windows_drive_path(path_text):
             raise ValueError(f"Invalid path format for Windows: {path_text}")
 
@@ -101,6 +107,8 @@ def _normalize_input_path(path_text):
 
         return path_text
 
+    if path_text.replace("/", "\\").startswith("\\\\"):
+        raise ValueError("UNC shares must be accessed on Windows; mount the share and supply its local mount path on Linux/WSL.")
     if _is_windows_drive_path(path_text):
         normalized = _windows_to_wsl_path(path_text)
         if _windows_drive_path_has_nonroot_remainder(original_path_text) and _is_wsl_drive_root(normalized):
@@ -679,7 +687,13 @@ def _assign_volume_labels(candidate_items):
         physical_volume_key = info.volume_key or _canonical_search_path(normalized_path)
         os_volume_label = normalize_volume_label(getattr(info, "label", ""))
         os_label_known = bool(os_volume_label or getattr(info, "label_source", ""))
-        if _has_bracketed_volume_prefix(raw_path):
+        if is_unc_path(normalized_path):
+            # Remote volume labels are not reliably available or unique. The
+            # server/share pair is the durable, collision-free inventory identity.
+            volume_label = unc_label(normalized_path)
+            if _has_bracketed_volume_prefix(raw_path) and normalize_volume_label(explicit_volume_label).casefold() != volume_label.casefold():
+                _raise_volume_label_mismatch(raw_path, normalized_path, explicit_volume_label, volume_label)
+        elif _has_bracketed_volume_prefix(raw_path):
             # Explicit bracketed labels, including [], are user-visible labels and
             # must be preserved exactly after normal label cleanup.  When the OS
             # can report a label for the mounted drive, the supplied label must
@@ -1084,4 +1098,12 @@ def load_accessible_inventory_paths(config):
 
     _validate_copy_destination_capacity(config, accessible_items)
 
+    # This allowlist comes from user-supplied, successfully enumerated roots,
+    # never from persisted group logs. It is used for network setlist reading.
+    config.allowed_unc_roots = tuple(
+        item[0] for item in accessible_items if is_unc_path(item[0])
+    ) + tuple(
+        item[5] for item in accessible_items
+        if len(item) > 5 and is_unc_path(item[5]) and os.path.isdir(item[5])
+    )
     return accessible_items

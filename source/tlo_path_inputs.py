@@ -7,6 +7,7 @@ import argparse
 import os
 import re
 from tlo_startup_help import missing_tlo_home_message
+from tlo_unc import is_unc_path
 from urllib.parse import unquote, urlparse
 
 
@@ -36,6 +37,11 @@ def _file_uri_to_path(text: str) -> str:
         return cleaned
     parsed = urlparse(cleaned)
     path = unquote(parsed.path or "")
+    # Explorer and some drag/drop providers emit file://server/share/path for
+    # a UNC folder; preserve its network host rather than treating /share/path
+    # as a local directory. The runtime normalization gate validates the share.
+    if parsed.netloc and parsed.netloc.casefold() != "localhost":
+        return "\\\\" + parsed.netloc + path.replace("/", "\\")
     # Windows file URIs normally arrive as /P:/tagtest.
     if re.match(r"^/[A-Za-z]:/", path):
         path = path[1:]
@@ -61,6 +67,12 @@ def normalize_platform_input_path(path: str) -> str:
     before normal absolute-path validation.
     """
     cleaned = _file_uri_to_path(path)
+    if cleaned.replace("/", "\\").startswith("\\\\"):
+        if not is_unc_path(cleaned):
+            raise ValueError(f"Invalid UNC share path: {cleaned}")
+        if os.name != "nt":
+            raise ValueError("UNC paths require Windows; mount the share locally on Linux or WSL.")
+        cleaned = cleaned.replace("/", "\\")
     if os.name != "nt":
         cleaned = windows_drive_path_to_wsl_path(cleaned)
     return os.path.normpath(cleaned)

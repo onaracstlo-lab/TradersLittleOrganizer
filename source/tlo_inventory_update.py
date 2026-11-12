@@ -48,6 +48,7 @@ from tlo_setlist_file_selection import find_setlist_files_for_music_dir
 from tlo_text_utils import normalized_compare_value
 from tlo_version import versioned_title
 from tlo_folder_rename import folder_name_write_needed, rename_folder_exact_case, same_existing_entry
+from tlo_unc import unc_root, unc_label
 
 
 BOOTLIST_HEADER = ["Show", "VolumePath"]
@@ -744,7 +745,7 @@ _WSL_MOUNT_PATH_RE = re.compile(r"^/mnt/[A-Za-z](?:/.*)?$", re.IGNORECASE)
 
 def _is_rooted_storage_path(path_text: str) -> bool:
     text = str(path_text or "").strip()
-    return bool(_WINDOWS_DRIVE_PATH_RE.match(text) or _WSL_MOUNT_PATH_RE.match(text) or os.path.isabs(text))
+    return bool(unc_root(text) or _WINDOWS_DRIVE_PATH_RE.match(text) or _WSL_MOUNT_PATH_RE.match(text) or os.path.isabs(text))
 
 
 def _path_contains_parent_segment(path_text: str) -> bool:
@@ -813,6 +814,8 @@ def _join_storage_root(root_path: str, folder_leaf: str) -> str:
     leaf = str(folder_leaf or "").strip().strip("\\/")
     if not root:
         return leaf
+    if unc_root(root):
+        return ntpath.normpath(ntpath.join(root.replace("/", "\\"), leaf))
     if _WINDOWS_DRIVE_PATH_RE.match(root):
         root = root.replace("/", "\\")
         if len(root) == 2 and root[1] == ":":
@@ -864,6 +867,8 @@ def _syntactic_partition_key(path_text: str) -> str:
     windows = re.match(r"^(?P<drive>[A-Za-z]):(?:[\\/].*)?$", text)
     if windows:
         return f"drive:{windows.group('drive').casefold()}"
+    if unc_root(text):
+        return unc_label(text)
     slash = text.replace("\\", "/")
     wsl = re.match(r"^/mnt/(?P<drive>[A-Za-z])(?:/.*)?$", slash, re.IGNORECASE)
     if wsl:

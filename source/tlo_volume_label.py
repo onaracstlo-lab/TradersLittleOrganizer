@@ -9,6 +9,7 @@ import subprocess
 from dataclasses import dataclass
 
 from tlo_security import windows_directory_from_api
+from tlo_unc import unc_root, unc_label
 
 
 @dataclass(frozen=True)
@@ -166,6 +167,9 @@ def _mac_volume_label(path_text: str) -> str:
 
 
 def _base_volume_key(path_text: str) -> str:
+    share_root = unc_root(path_text)
+    if share_root:
+        return share_root.casefold()
     if _running_on_windows():
         return _normalize_drive_root(path_text)
     if _running_on_wsl():
@@ -306,6 +310,9 @@ def resolve_physical_drive_id(path_text: str) -> str:
     should fall back to visible-volume grouping.
     """
     try:
+        if unc_root(path_text):
+            # A network share does not correspond to a local Get-Disk number.
+            return ""
         if _running_on_windows():
             return _windows_physical_drive_id(path_text)
         if _running_on_wsl():
@@ -317,6 +324,9 @@ def resolve_physical_drive_id(path_text: str) -> str:
     return ''
 
 def resolve_volume_label(path_text: str) -> VolumeLabelInfo:
+    share_label = unc_label(path_text)
+    if share_label:
+        return VolumeLabelInfo(volume_key=unc_root(path_text).casefold(), label=share_label, label_source="unc_share")
     volume_key = _base_volume_key(path_text)
     label = ''
     source = ''

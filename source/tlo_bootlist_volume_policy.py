@@ -8,6 +8,7 @@ import re
 import tempfile
 from typing import Dict, Iterable, List, Sequence, Tuple
 from tlo_security import csv_formula_escape, csv_formula_unescape
+from tlo_unc import is_unc_path, unc_label, share_relative_path
 
 
 BOOTLIST_FILENAME = "bootlist.csv"
@@ -36,7 +37,9 @@ def normalize_volume_label(volume_label: str) -> str:
 
 
 def format_volume_path(volume_label: str, path_name: str) -> str:
-    volume = normalize_volume_label(volume_label)
+    # Derive a share identifier even for callers that do not have access to
+    # the inventory volume-label assignment step (e.g. Manual Updates).
+    volume = unc_label(path_name) if is_unc_path(path_name) else normalize_volume_label(volume_label)
     path = storage_path_without_drive(path_name) if (path_name or "").strip() else ""
     if path:
         return f"[{volume}] {path}"
@@ -188,6 +191,8 @@ def _strip_storage_root_for_compare(path_name: str) -> str:
         return ""
     if has_bracketed_volume_prefix(text):
         _volume, text = parse_volume_path_value(text)
+    if is_unc_path(text):
+        return share_relative_path(text)
     text = text.strip().strip('\"\'').replace('\\', '/')
     text = re.sub(r"/+", "/", text)
 

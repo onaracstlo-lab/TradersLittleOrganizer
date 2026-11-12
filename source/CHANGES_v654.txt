@@ -1,3 +1,16 @@
+TLO v1.7 Build 654 — Native Windows UNC network shares
+=========================================================
+- Full Inventory Path(s) accepts \\server\share\folder paths without a mapped drive, including .txt control files and quoted/semicolon-separated entries.
+- Assign the stable identity UNC:server/share to each Windows network share (case-insensitive), independent of the remote disk volume label. Persist [UNC:server/share] /relative/folder in bootlist.csv and log SEARCH_PATH records. Local drives retain their existing volume-label behavior.
+- Resolve share-scoped Copy Requests directly from the share identity and relative folder path. A disconnected share remains waiting; do not require a local mapped volume or attempt a physical Get-Disk lookup.
+- Manual Updates compare both share identity and relative folder path, preventing same-named shows on two different servers/shares from being confused.
+- Windows file://server/share/folder drag/drop URIs resolve to UNC paths. Linux/WSL require mounting the share first instead of silently interpreting UNC as a relative path.
+- For generated setlist exports, only read network setlist files from accessible UNC roots explicitly selected during the current inventory, never from untrusted persisted logs alone. Device namespaces and traversal outside the named share are rejected.
+- Add New Shows recognizes UNC destinations; any destructive legacy cleanup against a UNC path remains conservatively guarded. Build Process v129 remains a separate package; source builds are still published as pre-releases by default with signing and manual promotion unchanged.
+- Native Windows, actual NAS/share enumeration, PyInstaller packaging, signing, and GitHub release gates require hosted/local Windows verification. No live production release altered.
+
+--- Historical change records (unaltered below) ---
+
 TLO v1.7 Build 653 — updater approval guard for public GitHub pre-releases
 ==========================================================================
 Build Process v126 publishes complete Windows hybrid, Windows onedir, Linux,

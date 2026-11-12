@@ -1,10 +1,15 @@
-Traders Little Organizer (TLO) - Source and Utilities Bundle v653
+Traders Little Organizer (TLO) - Source and Utilities Bundle v654
 ==================================================================
-Public application version: v1.7 Build 653
-Native GitHub Build Process: v126 (separate complete package)
+Public application version: v1.7 Build 654
+Native GitHub Build Process: v129 (separate complete package)
 
 CURRENT RELEASE
 ---------------
+Build 654: Full Inventory and supporting tools accept Windows UNC share paths
+without drive mapping. Persist the network share as UNC:server/share and the
+folder path relative to it; Copy Requests reconstruct the share path and
+Manual Updates match share-scoped identities. See CHANGES_v654.txt.
+
 Build 653: Main and Search update checks enforce the GitHub production-release
 approval gate. Normal v126 builds produce public pre-releases, which are not
 shown in the updater until manually promoted. Previously published full releases

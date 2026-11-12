@@ -1,0 +1,13 @@
+TLO v1.7 Build 654 — NOT RELEASE-ATTESTED
+Source baseline: Build 653. UNC share inventory, persistent share identity, Copy Requests,
+Manual Updates, authorized UNC setlist handling, and Windows file-URI normalization.
+
+Ruff lint: lint not attested; no Ruff executable was available in this environment.
+Xvfb display (CI=1): Build 654 behavior suite: 2,290 passed, 6 skipped, 4 deselected, 0 failed.
+First pass exposed documentation mismatches; fixed; all relevant retests pass.
+Unit/contract/integration suite: 255 passed. Preferences editor isolated: 4 passed.
+No display (DISPLAY and CI unset): Historical Build 532 headless GUI subset:
+50 passed, 6 skipped (not rerun specifically for Build 654).
+Historical Build 613 Linux full-suite run: 26 skipped (different run population).
+The full GitHub Actions run: not executed here. Native Windows UNC share testing,
+Windows/macOS/Linux packaging, signing and timestamping remain mandatory gates.

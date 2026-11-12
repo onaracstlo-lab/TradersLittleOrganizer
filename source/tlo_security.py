@@ -8,6 +8,8 @@ import ctypes
 import os
 import re
 
+from tlo_unc import is_unc_path, unc_root
+
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f\x85\u2028\u2029]")
 _CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r", "\n")
 _WINDOWS_DEVICE_RE = re.compile(r"(?i)^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\..*)?$")
@@ -75,6 +77,34 @@ def is_safe_local_regular_file(path_name: str, allowed_roots=()) -> bool:
     roots = [str(root or "").strip() for root in allowed_roots if str(root or "").strip()]
     return bool(roots) and any(is_path_within(text, root) for root in roots)
 
+
+
+def authorized_unc_directory(path_name: str, user_selected_roots=()) -> bool:
+    """Allow network traversal only below explicitly selected, accessible roots.
+
+    Persisted log contents do not constitute a trusted network-root allowlist.
+    Windows device namespaces and symlink/junction paths are not authorized.
+    """
+    if os.name != "nt" or not is_unc_path(path_name):
+        return False
+    try:
+        candidate = os.path.normcase(os.path.realpath(path_name))
+        if os.path.islink(path_name):
+            return False
+        for root in user_selected_roots:
+            if not is_unc_path(root) or unc_root(root).casefold() != unc_root(path_name).casefold():
+                continue
+            approved = os.path.normcase(os.path.realpath(root))
+            if os.path.commonpath((candidate, approved)) == approved:
+                return True
+    except (OSError, ValueError):
+        return False
+    return False
+
+
+def is_safe_authorized_unc_file(path_name: str, user_selected_roots=()) -> bool:
+    return (authorized_unc_directory(path_name, user_selected_roots)
+            and os.path.isfile(path_name) and not os.path.islink(path_name))
 
 
 def windows_directory_from_api() -> str:

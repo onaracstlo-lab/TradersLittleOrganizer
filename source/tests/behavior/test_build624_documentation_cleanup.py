@@ -23,7 +23,7 @@ def test_readme_names_the_correct_current_changes_and_separate_build_process():
     assert 'Build 622: Artist, City Date parsing requires positive city-reference evidence' in text
     assert 'Build 623: SHN conversion' in text
     assert 'Build 624 is a documentation-only consolidation' in text
-    assert 'GitHub Build Process: v126' in text
+    assert 'GitHub Build Process: v129' in text
     assert 'No GitHub Build Process artifact is included in this source bundle.' in text
 
 

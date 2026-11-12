@@ -18,7 +18,10 @@ from console_output_lib import console_print
 from logging_lib import logs_dir_for_home
 from tlo_file_listing import is_setlist_family_name, scandir_matching_files
 from tlo_text_utils import compact_ws, read_text_file_full, setlist_text_requests_generated_from_music_files, standard_ascii_text
-from tlo_security import is_safe_local_regular_file, is_network_or_device_path
+from tlo_security import (
+    is_safe_local_regular_file, is_network_or_device_path,
+    authorized_unc_directory, is_safe_authorized_unc_file,
+)
 from tlo_runtime_control import throttle_point, is_cancel_requested, normalize_performance_mode
 from tlo_bootlist_volume_policy import (
     format_volume_path,
@@ -802,10 +805,11 @@ def _generated_marker_info_text(record: Dict[str, str], config=None) -> str:
     return "\n".join(lines).strip()
 
 
-def _write_marker_info_gen(record: Dict[str, str], text: str) -> str:
-    """Best-effort creation/replacement of info-gen.txt in the associated show folder."""
+def _write_marker_info_gen(record: Dict[str, str], text: str, config=None) -> str:
+    """Write info-gen only to a local folder or an explicitly selected UNC root."""
     main_dir = os.path.normpath(str(record.get("main_dir_path") or "").strip())
-    if not main_dir or is_network_or_device_path(main_dir) or not os.path.isdir(main_dir) or os.path.islink(main_dir):
+    allowed_roots = getattr(config, "allowed_unc_roots", ()) if config is not None else ()
+    if not main_dir or (is_network_or_device_path(main_dir) and not authorized_unc_directory(main_dir, allowed_roots)) or not os.path.isdir(main_dir) or os.path.islink(main_dir):
         return ""
     target = os.path.join(main_dir, GENERATED_INFO_FILENAME)
     if os.path.lexists(target) and os.path.islink(target):
@@ -853,25 +857,28 @@ def _generated_missing_setlist_text(record: Dict[str, str], config=None) -> str:
     return "\n".join(lines).strip()
 
 
-def _safe_setlist_source_for_record(source_path: str, record: Dict[str, str] | None) -> bool:
+def _safe_setlist_source_for_record(source_path: str, record: Dict[str, str] | None, config=None) -> bool:
     record = record or {}
     roots = []
     for key in ("main_dir_path", "original_main_dir_path"):
         base = str(record.get(key) or "").strip()
         if base:
             roots.append(os.path.dirname(os.path.normpath(base)))
+    if is_network_or_device_path(source_path):
+        selected = getattr(config, "allowed_unc_roots", ()) if config is not None else ()
+        return is_safe_authorized_unc_file(source_path, selected)
     return is_safe_local_regular_file(source_path, roots)
 
 
 def _export_setlist_text(source_path: str, record: Dict[str, str] | None = None, config=None) -> str:
     normalized = os.path.normpath(source_path or "")
-    if not normalized or not _safe_setlist_source_for_record(normalized, record):
+    if not normalized or not _safe_setlist_source_for_record(normalized, record, config=config):
         return _generated_missing_setlist_text(record or {}, config=config)
 
     text = read_text_file_full(normalized)
     if setlist_text_requests_generated_from_music_files(text):
         generated = _generated_marker_info_text(record or {}, config=config)
-        _write_marker_info_gen(record or {}, generated)
+        _write_marker_info_gen(record or {}, generated, config=config)
         return generated
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     lines = [line.rstrip() for line in text.split("\n")]
