@@ -1,14 +1,29 @@
-Traders Little Organizer (TLO) - Source and Utilities Bundle v654
+Traders Little Organizer (TLO) - Source and Utilities Bundle v659
 ==================================================================
-Public application version: v1.7 Build 654
-Native GitHub Build Process: v129 (separate complete package)
+Public application version: v1.7 Build 659
+Native GitHub Build Process: v130 (separate complete package)
 
 CURRENT RELEASE
 ---------------
+Build 659: Correct missing verification-report literal contracts that failed 3 of 2,573 Linux CI tests in Build 658 (3 failed, 2,544 passed, 26 skipped). Restore "lint not attested" and "full GitHub Actions run" while accurately reporting mandatory release gates as NOT ATTESTED.
+No changes to application runtime, MSI generator, signing, or auto-update behavior; Build Process v130 unchanged. Build 658 ZIP remains preserved.
+
+Build 658: Add MSI ICE64-compliant uninstall entries for every installer-owned per-user directory. Build 657 hosted Windows build generated valid WiX source but failed MSI ICE validation because three intermediate directories lacked removal entries.
+Build Process v130 is unchanged; signed MSI and portable ZIP update paths remain separate, with TLOHome preserved.
+This is a NEW build, not a replacement for Build 657.
+
+Build 657: Correct WiX source creation of nested Windows-onedir folders (KeyError THIRD_PARTY), with regression coverage.
+Build 656: Remove unused MSI regression-test import that fails Ruff F401.
+MSI update identity and TLO runtime unaffected; use Build Process v130.
+This is a new numbered source release, not a reissue of Build 656.
+
+Build 655: Add Windows MSI installation and signed MSI automatic-update handoff
+while preserving the ZIP update path for portable installations.
+
 Build 654: Full Inventory and supporting tools accept Windows UNC share paths
 without drive mapping. Persist the network share as UNC:server/share and the
 folder path relative to it; Copy Requests reconstruct the share path and
-Manual Updates match share-scoped identities. See CHANGES_v654.txt.
+Manual Updates match share-scoped identities. See CHANGES_v659.txt.
 
 Build 653: Main and Search update checks enforce the GitHub production-release
 approval gate. Normal v126 builds produce public pre-releases, which are not

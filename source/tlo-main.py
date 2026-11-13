@@ -66,6 +66,7 @@ from tlo_text_utils import read_text_file_sample
 from tlo_github_updates import (
     check_for_updates,
     download_update,
+    install_downloaded_msi,
     is_auto_update_enabled,
     set_auto_update_enabled,
     should_auto_check,
@@ -1714,7 +1715,7 @@ class App:
         if enabled:
             messagebox.showinfo(
                 _dialog_title("TLO Auto update"),
-                "Auto update is enabled. TLO will check GitHub at startup and ask before downloading a newer release ZIP to your Downloads folder.",
+                "Auto update is enabled. TLO will check GitHub at startup and ask before downloading a newer release ZIP to your Downloads folder (portable installations). MSI installations instead request permission to download and install a signed MSI upgrade.",
                 parent=self.root,
             )
             self._start_update_check(manual=False)
@@ -1804,6 +1805,8 @@ class App:
         if result.status == "error":
             messagebox.showerror(result.title, result.message, parent=self.root)
             return
+        if self._offer_msi_install(result):
+            return
         try:
             self.queue.put(result.title + "\n")
         except Exception as exc:  # noqa: BLE001 - best-effort boundary
@@ -1815,6 +1818,8 @@ class App:
                 self._start_auto_update_download(result)
             return
         if manual or result.status in {"downloaded", "already_downloaded", "no_asset", "error"}:
+            if self._offer_msi_install(result):
+                return
             icon = "error" if result.status == "error" else "info"
             if icon == "error":
                 messagebox.showerror(result.title, result.message, parent=self.root)
@@ -1827,6 +1832,27 @@ class App:
                 self.queue.put(result.title + ": " + result.message.replace("\n", " ") + "\n")
         except Exception as exc:  # noqa: BLE001 - best-effort boundary
             debug_suppressed_exception(__name__, exc)
+
+    def _offer_msi_install(self, result) -> bool:
+        if result.package_kind != "msi" or result.status not in {"downloaded", "already_downloaded"}:
+            return False
+        if self._main_operation_is_running() or self._worker_is_alive() or bool(
+            getattr(getattr(self, "active_copy_requests_window", None), "busy", False)
+        ):
+            messagebox.showwarning(_dialog_title("TLO MSI update"),
+                "An operation is still running. Finish it before installing the downloaded MSI.", parent=self.root)
+            return True
+        if not messagebox.askyesno(_dialog_title("TLO MSI update"),
+            result.message + "\n\nInstall now? TLO will close; other TLO windows must also close.",
+            default=messagebox.NO, parent=self.root):
+            return True
+        try:
+            install_downloaded_msi(result)
+        except Exception as exc:
+            messagebox.showerror(_dialog_title("TLO MSI update"), str(exc), parent=self.root)
+            return True
+        self.root.destroy()
+        return True
 
     def _show_about(self):
         dialog = tk.Toplevel(self.root)
@@ -4955,6 +4981,11 @@ def main() -> int:
         console_emit(HELP_TEXT)
         return 0
     cli_args = _parse_gui_command_line(sys.argv[1:])
+    from tlo_msi_install_mode import ensure_msi_tlo_home, is_msi_install
+    if is_msi_install() and not ((getattr(cli_args, "myTLO", "") or "").strip() or
+                                   (getattr(cli_args, "TLOHome", "") or "").strip()):
+        if not ensure_msi_tlo_home():
+            return 2
     if not ((getattr(cli_args, "myTLO", "") or "").strip()
             or (getattr(cli_args, "TLOHome", "") or "").strip()
             or os.environ.get("TLOHome", "").strip()):

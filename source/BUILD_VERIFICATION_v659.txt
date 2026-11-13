@@ -1,0 +1,14 @@
+TLO v1.7 Build 659 — NOT RELEASE-ATTESTED
+Source baseline: Build 658 application source; GitHub Build Process v130 unchanged.
+Build 658 hosted run 43327144040 failed its generic Linux test job: 3 failed, 2,544 passed, 26 skipped. The three failed checks expected the exact strings "lint not attested" (two tests) and "full GitHub Actions run" (one test) in BUILD_VERIFICATION_v658.txt. These phrases were omitted from the prior report; no application runtime failure was reported in that Linux test job.
+Build 659 restores the report contract without relaxing or editing any previous regression test, and retains Build 658 MSI directory-cleanup authoring and both MSI and portable ZIP update policies unchanged.
+
+Local regression results: see REGRESSION_RESULTS_v659.txt.
+Ruff lint: lint not attested for Build 659 in this preparation environment; pinned Ruff must pass the mandatory local/hosted Windows release gate before publication.
+Native WiX 6.0.2 MSI build/ICE validation, MSI Azure signing, Windows Installer installation/upgrade/repair/uninstall, complete full GitHub Actions run, and production promotion are NOT ATTESTED for Build 659.
+
+Historical verification populations (not Build 659 claims):
+Xvfb display (CI=1): Build 657 application behavior suite 2,307 passed, 6 skipped.
+No display (DISPLAY and CI unset): Build 532 standalone headless subset 50 passed, 6 skipped; not the full GUI suite.
+Full Linux CI job (Build 613): 26 skipped during its full GitHub Actions run; this is a different population from the no-display subset.
+Python syntax checks do not replace the required Ruff or native Windows signing gates.

@@ -1,3 +1,39 @@
+TLO v1.7 Build 659 — hosted Linux verification-report contract correction
+
+- Build 658 GitHub Actions run 43327144040 failed its generic Linux test job: 3 failed, 2,544 passed, 26 skipped. All three failures were literal contract checks on BUILD_VERIFICATION_v658.txt; the mandatory verification report lacked the required phrases "lint not attested" and "full GitHub Actions run".
+- Restore those exact phrases in BUILD_VERIFICATION_v659.txt, retain the truthful NOT RELEASE-ATTESTED status, and explicitly distinguish prior historical test populations from the unverified Build 659 release gates. Do not claim that Ruff, native Windows MSI compilation, signing, upgrade, or a complete GitHub Actions release passed locally.
+- No application runtime, MSI source generator, UpgradeCode, directory-cleanup algorithm, Windows signing configuration, or portable ZIP/automatic-update behavior changes. The separate GitHub Build Process v130 is unchanged.
+- Build 658 source ZIP is preserved; Build 659 is a new, separately versioned release candidate.
+
+TLO v1.7 Build 658 — Windows MSI ICE64 per-user directory cleanup
+
+- WiX ICE validation on Build 657 failed with three ICE64 errors for profile directories that had no RemoveFile-table entry. The directories contained nested payload subdirectories but no files directly at their own level.
+- The MSI generator now registers uninstall-only RemoveFolder entries for every installer-owned nested payload directory, the MSI installation root and TLO's program root. One dedicated, HKCU registry-keyed component owns these entries so intermediate directories are never omitted.
+- RemoveFolder deletes empty installer-owned directories only; it never recursively removes user files, does not touch TLOHome, and preserves the intended per-user installation and stable MSI UpgradeCode/file-component GUIDs. Existing signed MSI and portable ZIP updater policies are unchanged.
+- Add Build 658 regression coverage for nested ICE64 cases, root-only-nested payloads, complete cleanup coverage and version-stable identities. The 1,260 ICE91 notifications in the Build 657 log are per-user-installation warnings, not the cause of the failed build.
+- No change to companion GitHub Build Process v130. Hosted WiX compilation and ICE validation, MSI signing, installation/upgrade/repair/uninstall and release promotion remain required gates.
+- Build 657 ZIP remains unchanged. Build 658 is a new source release candidate.
+
+TLO v1.7 Build 657 — Windows MSI directory hierarchy correction
+
+- Fixed `msi/generate_wix.py` to create every ancestor directory in the WiX source tree before referencing nested Windows-onedir dependencies. This resolves the Build 656 GitHub Actions failure `KeyError: 'THIRD_PARTY'` during MSI generation.
+- Added regression tests reproducing nested THIRD_PARTY directories and verifying stable MSI component GUIDs across releases and staging orders.
+- No changes to application inventory logic, existing ZIP updater, signed-release requirements, or MSI UpgradeCode. GitHub Build Process v130 remains the companion.
+- Build 656 source ZIP and release history remain unchanged. Native WiX compilation/ICE validation, signing, and MSI installation/upgrade tests remain GitHub Windows gates.
+
+TLO v1.7 Build 656 — MSI release lint correction
+
+- Removed the unused `unittest.mock.patch` import from the MSI regression test, fixing Ruff F401 during the mandatory local source validation gate.
+- No runtime, MSI upgrade identity, application/update behavior or GitHub build-process changes relative to Build 655.
+- New application release identity, documentation stamps, regression fixtures and SHA-256 source checksum manifest. Companion GitHub Build Process remains v130.
+
+TLO v1.7 Build 655 — Windows MSI release and updater integration
+
+- Windows MSI built from signed Windows onedir payload; per-user install, upgrade, uninstall and Start menu shortcut.
+- First MSI run requests TLOHome outside the managed program directory, retaining inventory and preferences across upgrades.
+- MSI auto updater selects a signed MSI only, checks published signed metadata and downloaded hash, then transfers to the external Windows Installer worker.
+- Portable ZIP downloads unchanged. No in-place ZIP overwrites of MSI-managed programs.
+
 TLO v1.7 Build 654 — Native Windows UNC network shares
 =========================================================
 - Full Inventory Path(s) accepts \\server\share\folder paths without a mapped drive, including .txt control files and quoted/semicolon-separated entries.

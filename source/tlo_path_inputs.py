@@ -92,9 +92,15 @@ def tlo_home_type(path):
 
 
 def resolve_tlo_home(tlo_home: str = "", my_tlo: str = "", *, error_type=ValueError, app_name="tlo-main") -> str:
-    """Resolve TLOHome with unchanged precedence: myTLO -> TLOHome -> env."""
+    """Resolve TLOHome precedence: explicit option -> environment -> MSI saved home."""
     env_tlo_home = _strip_optional_quotes(os.environ.get("TLOHome", ""))
     resolved = _strip_optional_quotes(my_tlo).strip() or _strip_optional_quotes(tlo_home).strip() or env_tlo_home
+    if not resolved:
+        try:
+            from tlo_msi_install_mode import saved_msi_data_home_for_executable
+            resolved = saved_msi_data_home_for_executable()
+        except ImportError:
+            pass
     if not resolved:
         raise error_type(missing_tlo_home_message(app_name))
     try:

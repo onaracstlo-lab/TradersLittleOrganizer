@@ -42,4 +42,4 @@ def test_current_manual_and_historical_changelog_consistent():
     assert history.startswith(f'TLO {V.DISPLAY_VERSION}')
     assert 'Historical record: CHANGES_v353.txt' in history
     assert f'Bundle v{V.BUNDLE_BUILD}' in readme.splitlines()[0]
-    assert 'Native GitHub Build Process: v129' in readme
+    assert 'Native GitHub Build Process: v130' in readme

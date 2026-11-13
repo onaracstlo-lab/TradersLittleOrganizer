@@ -46,6 +46,7 @@ try:
     from tlo_github_updates import (
         check_for_updates,
         download_update,
+    install_downloaded_msi,
         is_auto_update_enabled,
         set_auto_update_enabled,
         should_auto_check,
@@ -53,6 +54,7 @@ try:
 except ImportError:
     check_for_updates = None
     download_update = None
+    install_downloaded_msi = None
     is_auto_update_enabled = None
     set_auto_update_enabled = None
     should_auto_check = None
@@ -514,7 +516,7 @@ class BootlistSearchApp:
         if enabled:
             messagebox.showinfo(
                 "TLO Auto update",
-                "Auto update is enabled. TLO will check GitHub at startup and ask before downloading a newer release ZIP to your Downloads folder.",
+                "Auto update is enabled. TLO will check GitHub at startup and ask before downloading a newer release ZIP to your Downloads folder (portable installations). MSI installations instead request permission to download and install a signed MSI upgrade.",
             )
             self._start_update_check(manual=False)
 
@@ -599,6 +601,11 @@ class BootlistSearchApp:
     def _finish_auto_update_download(self, result) -> None:
         if result.status == "error":
             messagebox.showerror(result.title, result.message)
+            return
+        if self._offer_msi_install(result):
+            return
+        if result.status in {"downloaded", "already_downloaded"}:
+            messagebox.showinfo(result.title, result.message)
 
     def _finish_update_check(self, result, manual: bool) -> None:
         if not manual and result.status == "available":
@@ -606,10 +613,27 @@ class BootlistSearchApp:
                 self._start_auto_update_download(result)
             return
         if manual or result.status in {"downloaded", "already_downloaded", "no_asset", "error"}:
+            if self._offer_msi_install(result):
+                return
             if result.status == "error":
                 messagebox.showerror(result.title, result.message)
             else:
                 messagebox.showinfo(result.title, result.message)
+
+    def _offer_msi_install(self, result) -> bool:
+        if result.package_kind != "msi" or result.status not in {"downloaded", "already_downloaded"}:
+            return False
+        if not messagebox.askyesno(result.title,
+            result.message + "\n\nInstall now? TLO Search will close.",
+            default=messagebox.NO, parent=self.root):
+            return True
+        try:
+            install_downloaded_msi(result)
+        except Exception as exc:
+            messagebox.showerror("TLO MSI update", str(exc), parent=self.root)
+            return True
+        self.root.destroy()
+        return True
 
     def _startup_first_search(self) -> None:
         initial_value = ""
@@ -1518,6 +1542,10 @@ def show_config_error_dialog(message: str) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
 
+    from tlo_msi_install_mode import ensure_msi_tlo_home, is_msi_install
+    if is_msi_install() and not any(a in {"--TLOHome", "--tlo-home", "--myTLO"} for a in argv):
+        if not ensure_msi_tlo_home():
+            return 2
     try:
         tlohome, initial_find = parse_cli_args(argv)
     except SystemExit as exc:

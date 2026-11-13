@@ -1,8 +1,8 @@
 """GitHub release update checking for TLO GUI applications.
 
-The update checker deliberately downloads only. It does not unzip, install, or
-replace files in TLOHome. This keeps the check/download action safe while TLO is
-running; package contents are validated and any database inclusion is reported.
+The ZIP update checker downloads only and never overlays TLOHome. MSI-owned
+installations can hand off a verified signed MSI to a separate worker after TLO
+exits; package contents and user data remain protected.
 """
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION, OFFICIAL_GITHUB_OWNER, OF
 from tlo_network_io import MAX_METADATA_RESPONSE_BYTES, read_bounded_text
 from tlo_update_trust import pinned_key_configured, verify_metadata_signature
 from tlo_security import windows_reserved_folder_name
+from tlo_msi_install_mode import is_msi_install, launch_verified_msi_upgrade
 
 DEFAULT_REPO_OWNER = OFFICIAL_GITHUB_OWNER
 DEFAULT_REPO_NAME = OFFICIAL_GITHUB_REPO
@@ -285,7 +286,10 @@ def _matching_assets(release: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _asset_release_identity(asset_name: str) -> tuple[int | None, str, str] | None:
-    """Return ``(build, kind, platform_key)`` for an official release ZIP name."""
+    """Return ``(build, kind, platform_key)`` for an official release asset."""
+    msi = re.fullmatch(r"(?i)TLO_V\d+(?:\.\d+){1,2}Build(?P<build>\d{1,6})_Windows_x64\.msi", Path(str(asset_name or "")).name)
+    if msi:
+        return int(msi.group("build")), "msi", "windows_msi"
     name = Path(str(asset_name or "")).name
     match = re.fullmatch(
         r"(?i)TLO_V\d+(?:\.\d+){1,2}Build(?P<build>\d{1,6})_"
@@ -309,13 +313,13 @@ def _choose_asset(
     latest_build: int,
     tlo_home: str | os.PathLike[str] | None = None,
 ) -> tuple[dict[str, Any] | None, str, str]:
-    """Choose only an exact platform/layout TLO update or complete ZIP.
+    """Choose MSI for MSI installs, otherwise exact platform/layout ZIP.
 
     Update ZIPs are preferred. A matching complete ZIP is the only fallback.
     Generic ZIPs (including the source bundle) and the other Windows packaging
     layout are never selected as substitutes.
     """
-    platform_key = _detect_installed_platform_key(tlo_home)
+    platform_key = "windows_msi" if is_msi_install() else _detect_installed_platform_key(tlo_home)
     update_candidates: list[dict[str, Any]] = []
     complete_candidates: list[dict[str, Any]] = []
     for asset in _matching_assets(release):
@@ -325,11 +329,15 @@ def _choose_asset(
         asset_build, kind, asset_platform = identity
         if asset_build != latest_build or asset_platform != platform_key:
             continue
+        if kind == "msi" and platform_key == "windows_msi":
+            return asset, "msi", platform_key
         if kind == "update":
             update_candidates.append(asset)
         elif kind == "complete":
             complete_candidates.append(asset)
 
+    if platform_key == "windows_msi":
+        return None, "", platform_key  # Never overlay Windows Installer files with a ZIP
     if update_candidates:
         return update_candidates[0], "update", platform_key
     if complete_candidates:
@@ -830,6 +838,31 @@ def _publish_verified_download(staged: Path, destination: Path) -> None:
         raise OSError(code, os.strerror(code), str(destination))
 
 
+def _inspect_verified_release_asset(path: Path, *, package_kind: str, platform_key: str, latest_build: int) -> dict[str, Any]:
+    if package_kind == "msi":
+        if platform_key != "windows_msi":
+            raise ValueError("MSI update requested for an unsupported installation")
+        with path.open("rb") as handle:
+            if handle.read(8) != bytes.fromhex("d0cf11e0a1b11ae1"):
+                raise ValueError("Downloaded MSI does not have a valid Installer database header")
+        return {"databases_included": False, "packaging_mode": "msi-per-user"}
+    return _inspect_downloaded_package(path, expected_kind=package_kind,
+        expected_platform_key=platform_key, expected_build=latest_build)
+
+
+def install_downloaded_msi(result: UpdateCheckResult) -> None:
+    """Hand off ONLY the verified, published MSI; caller must close the GUI."""
+    if result.status not in {"downloaded", "already_downloaded"} or result.package_kind != "msi":
+        raise ValueError("Only a downloaded MSI may be installed")
+    if not is_msi_install():
+        raise RuntimeError("Cannot perform an MSI upgrade on a portable installation")
+    if not re.fullmatch(r"[0-9a-f]{64}", result.asset_digest):
+        raise ValueError("Missing the signed MSI hash")
+    if not Path(result.path).is_file() or _sha256_file(Path(result.path)) != result.asset_digest:
+        raise ValueError("Downloaded MSI no longer matches the signed release metadata")
+    launch_verified_msi_upgrade(result.path, result.asset_digest)
+
+
 def _download_and_report_verified_asset(
     asset: dict[str, Any], *, tlo_home: str | os.PathLike[str] | None,
     latest_build: int, asset_name: str, package_kind: str, platform_key: str,
@@ -849,9 +882,9 @@ def _download_and_report_verified_asset(
         # that independently passes both signed-asset hash and ZIP inspection.
         if not _file_matches_asset(destination, asset):
             raise FileExistsError(f"A different file already exists in Downloads: {destination}")
-        package_info = _inspect_downloaded_package(
-            destination, expected_kind=package_kind,
-            expected_platform_key=platform_key, expected_build=latest_build,
+        package_info = _inspect_verified_release_asset(
+            destination, package_kind=package_kind, platform_key=platform_key,
+            latest_build=latest_build,
         )
         downloaded = False
     else:
@@ -863,9 +896,9 @@ def _download_and_report_verified_asset(
         staged.unlink()
         try:
             _download_asset(asset, staged)  # existing signed-asset digest/size gate
-            package_info = _inspect_downloaded_package(
-                staged, expected_kind=package_kind,
-                expected_platform_key=platform_key, expected_build=latest_build,
+            package_info = _inspect_verified_release_asset(
+                staged, package_kind=package_kind, platform_key=platform_key,
+                latest_build=latest_build,
             )
             # Publish using a same-directory rename, never a hard link.
             # The no-replace rename also protects a competing user download.
@@ -883,7 +916,13 @@ def _download_and_report_verified_asset(
         platform_key=platform_key, packaging_mode=packaging_mode,
         databases_included=databases_included,
     )
-    kind_text, extra = _package_message(package_kind, databases_included, latest_build)
+    if package_kind == "msi":
+        kind_text, extra = "MSI installer", (
+            "This is a signed MSI major upgrade. Windows Installer will update the registered application "
+            "after TLO closes. Inventory files, databases and preferences in TLOHome are untouched."
+        )
+    else:
+        kind_text, extra = _package_message(package_kind, databases_included, latest_build)
     if downloaded:
         title = "TLO update downloaded"
         lead = f"TLO v{PUBLIC_VERSION} Build {latest_build} {kind_text} was downloaded to:"
@@ -898,6 +937,7 @@ def _download_and_report_verified_asset(
         latest_build=latest_build, path=str(destination), asset_name=asset_name,
         package_kind=package_kind, platform_key=platform_key,
         packaging_mode=packaging_mode, databases_included=databases_included,
+        asset_digest=_expected_digest(asset),
     )
 
 
@@ -1031,15 +1071,16 @@ def check_for_updates(
         asset, package_kind, platform_key = _choose_asset(release, latest_build, tlo_home)
         if not asset:
             settings_warning = _write_last_check(tlo_home, latest_build)
-            message = (
-                f"Installed: {DISPLAY_VERSION}\n"
-                f"Latest: v{PUBLIC_VERSION} Build {latest_build}\n\n"
+            missing_message = (
+                "No signed MSI installer was published for this installation."
+                if platform_key == "windows_msi" else
                 f"No update ZIP or complete ZIP matching {platform_key} was found in the latest GitHub Release."
             )
+            message = f"Installed: {DISPLAY_VERSION}\nLatest: v{PUBLIC_VERSION} Build {latest_build}\n\n{missing_message}"
             if settings_warning:
                 message += f"\n\n{settings_warning}"
             return UpdateCheckResult(
-                status="no_asset", title="TLO update found, but no ZIP matched this platform",
+                status="no_asset", title="TLO update found, but no matching installer was published",
                 message=message, latest_build=latest_build,
             )
 
@@ -1049,7 +1090,7 @@ def check_for_updates(
         )
         if not download:
             settings_warning = _write_last_check(tlo_home, latest_build)
-            kind_text = "update" if package_kind == "update" else "complete distribution"
+            kind_text = "MSI installer" if package_kind == "msi" else ("update" if package_kind == "update" else "complete distribution")
             message = (
                 f"Installed: {DISPLAY_VERSION}\n"
                 f"Latest: v{PUBLIC_VERSION} Build {latest_build}\n\n"

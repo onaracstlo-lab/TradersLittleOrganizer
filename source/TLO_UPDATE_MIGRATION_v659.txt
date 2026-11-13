@@ -52,3 +52,25 @@ Build Process v126 creates publicly downloadable test pre-releases by default.
 The separate manual promotion command changes only the selected release to
 production and GitHub Latest; prior production releases remain untouched.
 All existing independent signed-update authentication remains required.
+
+MSI installations use authenticated Windows_x64 MSI major upgrades exclusively. Portable ZIP installations keep existing update behavior.
+
+BUILD 657 WINDOWS MSI DIRECTORY FIX
+----------------------------------
+WiX source generation now explicitly includes every ancestor of Windows-onedir payload files before nested directories. MSI product identity, signed update policy and ZIP update handling are unchanged. Windows-native compilation, signing and upgrade testing are mandatory.
+
+BUILD 658 WINDOWS MSI DIRECTORY CLEANUP
+---------------------------------------
+Installer-owned per-user subdirectories have explicit uninstall cleanup
+entries for Windows Installer ICE64 validation. Cleanup removes empty folders
+only; user TLOHome and portable ZIP update procedures are unchanged.
+Native Windows MSI compile, ICE validation, signing, and upgrades remain
+required release gates.
+
+BUILD 659 VERIFICATION REPORT CONTRACT
+--------------------------------------
+Restore the exact truthful verification-report phrases required by hosted
+Linux CI. No change to signed MSI upgrade handling, MSI-owned paths, portable
+ZIP downloads, or preservation of TLOHome data. GitHub Build Process v130
+remains the independent build package; a new complete hosted release run is
+required before production promotion.
