@@ -52,7 +52,7 @@ def test_wix_ice64_all_created_profile_directories_have_remove_entries(tmp_path)
     ))
     component = _cleanup(root)
     created = {node.get("Id") for node in root.findall(".//w:Directory", NS)
-               if node.get("Id") != "TLOProgramsMenu"}
+               if node.get("Id") not in {"TLOProgramsMenu", "TARGETDIR", "TLODATAFOLDER"}}
     # Only cleanup our own %LOCALAPPDATA%\\Programs\\TLO tree, not a shared
     # parent profile directory (or TLOHome).
     created.update(("TLOLocalProgramsDir", "INSTALLFOLDER"))
@@ -63,6 +63,7 @@ def test_wix_ice64_all_created_profile_directories_have_remove_entries(tmp_path)
     assert all(node.get("On") == "uninstall" for node in remove)
     assert "LocalAppDataFolder" not in removed
     assert "TLOHome" not in removed
+    assert "TLODATAFOLDER" not in removed
     # ICE64 would have flagged these directories with no direct file child.
     for path in ("THIRD_PARTY", "THIRD_PARTY/vendor", "tlo-main_runtime", "isolated/child"):
         assert WIX.stable_id("Dir", path) in removed

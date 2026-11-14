@@ -430,6 +430,7 @@ class BootlistSearchApp:
         self.hamburger_menu = tk.Menu(self.hamburger_button, tearoff=False)
         self.hamburger_menu.add_command(label="Check for updates", command=lambda: self._run_after_menu_closes(lambda: self._start_update_check(manual=True)))
         self.hamburger_menu.add_checkbutton(label="Auto Update", variable=self.auto_update_var, command=lambda: self._run_after_menu_closes(self._toggle_auto_update))
+        self.hamburger_menu.add_command(label="Open TLO Folder", command=lambda: self._run_after_menu_closes(self._open_tlo_home_folder))
         self.hamburger_menu.add_command(label="Edit Preferences", command=lambda: self._run_after_menu_closes(self._edit_preferences))
         self.hamburger_button.configure(menu=self.hamburger_menu)
         self.hamburger_button.pack(side="right", anchor="e")
@@ -480,6 +481,13 @@ class BootlistSearchApp:
             self.root.after_idle(callback)
         except tk.TclError:
             callback()
+
+    def _open_tlo_home_folder(self):
+        try:
+            from tlo_msi_install_mode import open_tlo_home_folder
+            open_tlo_home_folder(self.paths.tlohome)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("TLOHome", str(exc), parent=self.root)
 
     def _edit_preferences(self):
         try:

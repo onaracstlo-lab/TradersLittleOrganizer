@@ -1,0 +1,10 @@
+TLO v1.7 Build 661 — local regression verification
+Baseline: Build 660 application source; GitHub Build Process v133 unchanged.
+Build 660 Linux job 43540568768: 2 failed, 2,556 passed, 26 skipped (menu index and duplicate historical release reports).
+Build 660 Windows job: signing/scan passed; MSI WiX 6.0.2 WIX7009 TARGETDIR collision. Build 661 changes WiX generator to StandardDirectory and adds a root virtual-symbol test.
+Source package includes only current-version verification, regression and checksum reports.
+Verification (local, Xvfb): 475 recent behavior tests passed; 255 unit, contracts and integration tests passed; combined 730 passed. A focused Main/Search GUI and WiX root check passed 22 tests.
+Full Xvfb suite did not finish locally; it stalls in historical regression tests in this environment. No complete-suite pass is claimed.
+Requirements DOCX revision 661; revised bounded index 19,912 characters; rendered 131 pages. Python source AST: 371 passed.
+Ruff lint: NOT ATTESTED until GitHub gate; no native Windows WiX compilation or MSI signing is claimed.
+Native WiX 6.0.2+UI extension, ICE validation, Azure signing, upgrade/repair/uninstall and full GitHub Actions run are NOT ATTESTED for Build 661.

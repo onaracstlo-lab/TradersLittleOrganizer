@@ -15,7 +15,9 @@ import uuid
 import xml.etree.ElementTree as ET
 
 NS = "http://wixtoolset.org/schemas/v4/wxs"
+UI_NS = "http://wixtoolset.org/schemas/v4/wxs/ui"
 ET.register_namespace("", NS)
+ET.register_namespace("ui", UI_NS)
 # Stable identity. Do NOT change after shipping the first MSI.
 UPGRADE_CODE = "{B5B5E48C-0AC6-44F5-8E80-8EB1AE8BA2B2}"
 COMPONENT_NAMESPACE = uuid.UUID("96bd23cc-55ca-4916-836d-9b811e5a1556")
@@ -129,6 +131,36 @@ def generate(stage, wxs, version, main_exe=None):
     elt(pkg, "MajorUpgrade", DowngradeErrorMessage="A newer TLO version is already installed.",
         Schedule="afterInstallInitialize", AllowSameVersionUpgrades="no")
     elt(pkg, "MediaTemplate", EmbedCab="yes")
+    # The UI chooses DATA, not the executable installation directory. WiX
+    # InstallDir's folder selection requires an uppercase public Directory ID.
+    # The user's choice is stored as an HKCU environment variable; no UAC.
+    # WiX 6 supplies TARGETDIR as a virtual standard-directory symbol. Do not
+    # redeclare it as a Directory: WixUI then links wixstd.wixlib and rejects
+    # the duplicate with WIX7009. StandardDirectory references the built-in
+    # root without producing a conflicting Directory symbol.
+    target = elt(pkg, "StandardDirectory", Id="TARGETDIR")
+    elt(target, "Directory", Id="TLODATAFOLDER", Name=".tlo")
+    for name, registry_key, condition in (
+        ("TLOEXISTINGHOME", r"Environment", "TLOEXISTINGHOME"),
+        ("TLOLEGACYHOME", r"Software\TradersLittleOrganizer\UserSettings",
+         "NOT TLOEXISTINGHOME AND TLOLEGACYHOME"),
+    ):
+        prop = elt(pkg, "Property", Id=name)
+        elt(prop, "RegistrySearch", Id="Find" + name,
+            Root="HKCU", Key=registry_key,
+            Name="TLOHome" if name == "TLOEXISTINGHOME" else "DataHome",
+            Type="raw")
+    # 'first' means the initial location is not re-applied during execution
+    # after the user has selected a different folder through InstallDirDlg.
+    for name, value, condition in (
+        ("Existing", "[TLOEXISTINGHOME]", "TLOEXISTINGHOME"),
+        ("Legacy", "[TLOLEGACYHOME]", "NOT TLOEXISTINGHOME AND TLOLEGACYHOME"),
+        ("Default", r"C:\.tlo", "NOT TLOEXISTINGHOME AND NOT TLOLEGACYHOME"),
+    ):
+        elt(pkg, "SetDirectory", Id="TLODATAFOLDER", Action="SetTLOData" + name,
+            Value=value, Condition=condition, Sequence="first")
+    ET.SubElement(pkg, f"{{{UI_NS}}}WixUI", {"Id": "WixUI_InstallDir",
+                                               "InstallDirectory": "TLODATAFOLDER"})
     local = elt(pkg, "StandardDirectory", Id="LocalAppDataFolder")
     programs = elt(local, "Directory", Id="TLOLocalProgramsDir", Name="Programs")
     install = elt(programs, "Directory", Id="INSTALLFOLDER", Name="Traders Little Organizer")
@@ -149,6 +181,17 @@ def generate(stage, wxs, version, main_exe=None):
         directory_nodes[directory] = elt(directory_nodes[parent_rel], "Directory",
                                          Id=stable_id("Dir", directory), Name=parts[-1])
     feature = elt(pkg, "Feature", Id="Complete", Title=PACKAGE_NAME, Level="1")
+    # Permanent MSI-owned configuration entries survive MSI uninstall and the
+    # uninstall stage of a major upgrade. They live in HKCU only.
+    config = elt(install, "Component", Id="TLOUserDataHomeConfiguration",
+                 Guid=stable_guid("user-data/home-configuration"), Permanent="yes")
+    elt(config, "RegistryValue", Root="HKCU",
+        Key=r"Software\TradersLittleOrganizer\UserSettings", Name="DataHome",
+        Type="string", Value="[TLODATAFOLDER]", KeyPath="yes")
+    elt(config, "Environment", Id="TLOHomeUserEnvironment", Name="TLOHome",
+        Action="set", Part="all", Permanent="yes", System="no",
+        Value="[TLODATAFOLDER]")
+    elt(feature, "ComponentRef", Id="TLOUserDataHomeConfiguration")
     for f in files:
         rel = f.relative_to(stage).as_posix()
         parent_rel = "/".join(rel.split("/")[:-1])
@@ -211,7 +254,8 @@ def generate(stage, wxs, version, main_exe=None):
     xml_file(root, wxs)
     return {"version": version, "file_count": len(files), "main_exe": main_rel,
             "stage": str(stage), "wxs": str(wxs), "upgrade_code": UPGRADE_CODE,
-            "scope": "perUser", "install_root": "%LOCALAPPDATA%\\Programs\\Traders Little Organizer"}
+            "scope": "perUser", "install_root": "%LOCALAPPDATA%\\Programs\\Traders Little Organizer",
+            "data_home_default": r"C:\.tlo"}
 
 
 def main(argv=None):

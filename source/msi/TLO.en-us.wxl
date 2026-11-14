@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization xmlns="http://wixtoolset.org/schemas/v4/wxl" Culture="en-US">
+  <String Id="InstallDirDlgTitle" Value="{\WixUI_Font_Title}Choose TLOHome" />
+  <String Id="InstallDirDlgDescription" Value="Choose where TLO stores your editable preferences, logs, inventory, and managed databases. Application files install separately." />
+  <String Id="InstallDirDlgFolderLabel" Value="TLOHome data folder:" />
+  <String Id="InvalidDirDlgText" Value="Choose an accessible local folder for TLOHome; C:\.tlo is the default. You can change this folder." />
+</WixLocalization>

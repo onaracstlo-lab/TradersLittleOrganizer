@@ -10,6 +10,8 @@ from pathlib import Path
 import json
 import os
 import sys
+import shutil
+import tempfile
 
 
 def msi_install_root(executable=None):
@@ -86,88 +88,196 @@ def launch_verified_msi_upgrade(msi_file, trusted_expected_sha256, *,
     return True
 
 
+# The only files that MSI may replace in TLOHome. Everything else, including
+# preferences, inventory, logs, and setlists, remains user-managed.
+MSI_MANAGED_DATABASES = ("artists.sqlite", "venues.txt", "cities.csv")
+MSI_DATABASE_BUILD_MARKER = ".tlo-msi-db-build"
+MSI_USER_SETTINGS_KEY = r"Software\TradersLittleOrganizer\UserSettings"
+
+
+def _write_atomic_from_file(source, dest):
+    """Replace one installer-managed database atomically on its own volume."""
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix=".tlo-msi-db-", dir=dest.parent,
+                                         delete=False) as output:
+            temporary = Path(output.name)
+            with source.open("rb") as reader:
+                shutil.copyfileobj(reader, output)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, dest)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def _write_atomic_text(dest, content):
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix=".tlo-msi-state-", dir=dest.parent,
+                                         mode="w", encoding="utf-8", delete=False) as out:
+            temporary = Path(out.name)
+            out.write(content)
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(temporary, dest)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
 def seed_msi_data_home(home):
-    """Copy missing DB master files only; never overwrite existing inventory data."""
+    """Seed user files once; synchronize managed database masters per MSI build.
+
+    A new MSI release may replace everything in TLOHome/TLO_DBs that it owns.
+    User changes to these managed database masters are not guaranteed to be
+    preserved or backward-compatible. Non-DB files are never overwritten.
+    """
     program = msi_install_root()
     if program is None:
         return
+    home = Path(home)
     source = program / "TLO_DBs"
-    dest = Path(home) / "TLO_DBs"
+    dest = home / "TLO_DBs"
     dest.mkdir(exist_ok=True, parents=True)
-    import shutil
     for name in ("TLO-FAQ.txt", "tlo-preferences.ini"):
-        existing = Path(home) / name
-        if not existing.exists():
+        target = home / name
+        if not target.exists():
             original = program / name
             if original.is_file():
                 try:
-                    with original.open("rb") as reader, existing.open("xb") as writer:
+                    with original.open("rb") as reader, target.open("xb") as writer:
                         shutil.copyfileobj(reader, writer)
                 except FileExistsError:
                     pass
-    for name in ("artists.sqlite", "venues.txt", "cities.csv"):
-        base = source / name
-        output = dest / name
-        if not output.exists():
-            if not base.is_file():
-                raise FileNotFoundError(f"MSI database master missing: {base}")
-            # Exclusive create ensures user data never gets overwritten if another
-            # instance seeded the same TLOHome concurrently.
-            try:
-                with base.open("rb") as reader, output.open("xb") as writer:
-                    shutil.copyfileobj(reader, writer)
-            except FileExistsError:
-                continue
+
+    # Marker is in the installer-managed DB folder. A new program build causes
+    # one synchronized replacement at the first subsequent TLO launch, not on
+    # every launch; modifications during the same build are not policed.
+    from tlo_version import BUNDLE_BUILD
+    desired = str(BUNDLE_BUILD)
+    marker = dest / MSI_DATABASE_BUILD_MARKER
+    current = marker.read_text(encoding="utf-8").strip() if marker.is_file() else ""
+    missing = any(not (dest / name).is_file() for name in MSI_MANAGED_DATABASES)
+    if current == desired and not missing:
+        return
+    for name in MSI_MANAGED_DATABASES:
+        master = source / name
+        if not master.is_file() or master.stat().st_size == 0:
+            raise FileNotFoundError(f"MSI database master missing: {master}")
+    # Never advance the build marker until all master database replacements
+    # have completed. A partial write/lock failure retries on next launch.
+    for name in MSI_MANAGED_DATABASES:
+        _write_atomic_from_file(source / name, dest / name)
+    _write_atomic_text(marker, desired + "\n")
+
+
+def _validated_msi_home(value, program):
+    """Accept existing or new writable folders; reject the program tree."""
+    text = str(value or "").strip().strip('"')
+    if not text:
+        raise ValueError("TLOHome must not be empty")
+    candidate = Path(text).expanduser()
+    if not candidate.is_absolute():
+        raise ValueError("TLOHome must be an absolute directory path")
+    candidate = candidate.resolve()
+    program = Path(program).resolve()
+    if candidate == program or program in candidate.parents:
+        raise ValueError("TLOHome must be outside the application installation directory")
+    candidate.mkdir(parents=True, exist_ok=True)
+    # A real write probe is safer than os.access on Windows and network shares.
+    with tempfile.TemporaryFile(dir=candidate):
+        pass
+    return candidate
+
+
+def _remember_msi_home(home):
+    """Persist the selected folder without UAC and notify future processes."""
+    import winreg
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, MSI_USER_SETTINGS_KEY) as key:
+        winreg.SetValueEx(key, "DataHome", 0, winreg.REG_SZ, str(home))
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Environment") as key:
+        winreg.SetValueEx(key, "TLOHome", 0, winreg.REG_SZ, str(home))
+    os.environ["TLOHome"] = str(home)
+    # Windows' user environment registry changes do not update processes that
+    # are already running. Broadcast to Explorer for newly launched processes.
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            result = ctypes.c_size_t()
+            ctypes.windll.user32.SendMessageTimeoutW(
+                0xFFFF, 0x001A, 0, "Environment", 0x0002, 5000,
+                ctypes.byref(result))
+        except (AttributeError, OSError):
+            pass
 
 
 def ensure_msi_tlo_home():
-    """Ask on first MSI run for a persistent TLOHome OUTSIDE installer-owned files."""
-    if not is_msi_install():
-        return True
-    configured = os.environ.get("TLOHome", "").strip()
-    if configured:
-        if Path(configured).is_dir():
-            seed_msi_data_home(Path(configured).resolve())
+    """Use installer-selected TLOHome, with a safe fallback for legacy installs."""
+    program = msi_install_root()
+    if program is None:
         return True
     import winreg
-    # Keep DataHome separate from the MSI-owned Installer registry values so
-    # major upgrades, repairs and uninstall cannot erase the user's choice.
-    key_path = r"Software\TradersLittleOrganizer\UserSettings"
+    configured = os.environ.get("TLOHome", "").strip()
+    saved = ""
     try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, MSI_USER_SETTINGS_KEY) as key:
             saved, _ = winreg.QueryValueEx(key, "DataHome")
-        if Path(saved).is_dir():
-            seed_msi_data_home(Path(saved).resolve())
-            os.environ["TLOHome"] = str(Path(saved).resolve())
-            return True
-    except (OSError, ValueError):
+    except OSError:
         pass
+    last_error = ""
+    for candidate in dict.fromkeys([configured, str(saved).strip()]):
+        if not candidate:
+            continue
+        try:
+            home = _validated_msi_home(candidate, program)
+            _remember_msi_home(home)
+            seed_msi_data_home(home)
+            return True
+        except (OSError, ValueError) as exc:
+            last_error = str(exc)
+    # Only legacy or invalid setups reach this fallback. New MSI installation
+    # captures the folder in the installer and sets HKCU\Environment itself.
     import tkinter as tk
-    from tkinter import filedialog, messagebox
+    from tkinter import messagebox, simpledialog
     root = tk.Tk()
     root.withdraw()
+    proposed = configured or saved or r"C:\.tlo"
     try:
-        messagebox.showinfo("TLO first-run setup",
-            "Select your existing TLOHome folder, or create a new one in the chooser. "
-            "Your inventory and preferences stay outside the installed program folder.", parent=root)
-        path = filedialog.askdirectory(parent=root, title="Select TLOHome", mustexist=True)
-        if not path:
-            return False
-        home = Path(path).resolve()
-        program = msi_install_root()
-        if not home.is_dir() or (program and (home == program or program in home.parents)):
-            messagebox.showerror("TLO first-run setup", "Choose a folder outside the application install directory.", parent=root)
-            return False
-        if not os.access(home, os.W_OK):
-            messagebox.showerror("TLO first-run setup", "TLOHome must be writable.", parent=root)
-            return False
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
-            winreg.SetValueEx(key, "DataHome", 0, winreg.REG_SZ, str(home))
-        seed_msi_data_home(home)
-        os.environ["TLOHome"] = str(home)
-        return True
+        while True:
+            if last_error:
+                messagebox.showwarning("TLOHome folder", "The selected TLOHome folder is unavailable or not writable: "
+                                       + last_error + "\nChoose another folder.", parent=root)
+            chosen = simpledialog.askstring("TLOHome folder",
+                        "Enter a writable folder for TLO preferences, inventory, and databases.",
+                        initialvalue=proposed, parent=root)
+            if chosen is None:
+                return False
+            proposed = chosen
+            try:
+                home = _validated_msi_home(chosen, program)
+                _remember_msi_home(home)
+                seed_msi_data_home(home)
+                return True
+            except (OSError, ValueError) as exc:
+                last_error = str(exc)
     finally:
         root.destroy()
+
+
+def open_tlo_home_folder(home):
+    """Open TLOHome in the system file manager (Windows, macOS, Linux)."""
+    import subprocess
+    folder = Path(home).expanduser().resolve()
+    if not folder.is_dir():
+        raise FileNotFoundError(f"TLOHome does not exist: {folder}")
+    if sys.platform == "win32":
+        os.startfile(str(folder))
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", str(folder)], close_fds=True)
+    else:
+        subprocess.Popen(["xdg-open", str(folder)], close_fds=True)
 
 
 def saved_msi_data_home_for_executable(executable=None):

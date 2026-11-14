@@ -1,3 +1,20 @@
+TLO v1.7 Build 661 — WiX 6 MSI directory reference and Linux CI regression correction
+
+- Correct WiX 6 WIX7009/WIX0092: reference WiX's built-in TARGETDIR virtual symbol through StandardDirectory instead of redeclaring it as a Directory. Keep TLODATAFOLDER selectable through WixUI_InstallDir and preserve all TLOHome configuration, environment, databases, upgrade identity and MSI/ZIP updater behavior.
+- Correct Linux GUI preferences regression: verify the Edit Preferences and Open TLO Folder menu commands by label instead of an obsolete fixed index. Both commands remain available in Main and Search.
+- Remove stale Build 659 verification and regression reports from the Build 660 source baseline. Keep exactly one current SHA256SUMS, BUILD_VERIFICATION and REGRESSION_RESULTS versioned artifact for Build 661.
+- Build 660 hosted GitHub Actions run 43540568768 failed: Linux tests 2 failed, 2,556 passed, 26 skipped (menu index and duplicate historical release reports); Windows signed executables and scanners passed, but WixToolset 6.0.2 MSI link failed with TARGETDIR virtual symbol conflict.
+- Build Process v133 remains unchanged. Native WiX compile, ICE validation, Azure signing and upgrade/uninstall must pass in GitHub Actions before release promotion. Build 660 ZIP remains preserved.
+
+TLO v1.7 Build 660 — Windows MSI TLOHome setup and managed DB refresh
+
+- Add a standard WiX folder-selection dialog for TLOHome, defaulting to C:\.tlo and preferring an existing per-user TLOHome environment variable or previous HKCU DataHome setting. Application binaries remain under %LOCALAPPDATA%\Programs\Traders Little Organizer.
+- Persist TLOHome automatically as a USER environment variable in HKCU\Environment, without elevation, and synchronize HKCU\Software\TradersLittleOrganizer\UserSettings\DataHome. Preserve both and all TLOHome user data during uninstall/major upgrades. MSI starts with the selected folder; the legacy first-launch chooser remains an invalid-path fallback.
+- On first TLO launch after a new MSI build, replace the three installer-managed master databases in TLOHome\TLO_DBs (artists.sqlite, venues.txt, cities.csv) with the current installed masters using atomic same-directory replacements and a per-build marker. User modifications to these files may be overwritten and compatibility is not guaranteed. No deletion of unrecognized files; all preferences, inventory, logs and setlists outside TLO_DBs are preserved.
+- Add Open TLO Folder in the Main and Search hamburger menus. The shortcut opens the user-configured data folder in the platform file manager.
+- Add targeted MSI folder, environment, preservation and database-sync regression tests. Companion GitHub Build Process v130 and MSI UpgradeCode remain unchanged. Native Windows WiX 6.0.2 UI compilation, signing and full installer lifecycle remain mandatory external validation gates.
+- Build 659 is preserved. This is a distinct Build 660 bundle and checksum manifest.
+
 TLO v1.7 Build 659 — hosted Linux verification-report contract correction
 
 - Build 658 GitHub Actions run 43327144040 failed its generic Linux test job: 3 failed, 2,544 passed, 26 skipped. All three failures were literal contract checks on BUILD_VERIFICATION_v658.txt; the mandatory verification report lacked the required phrases "lint not attested" and "full GitHub Actions run".

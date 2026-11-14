@@ -53,7 +53,11 @@ Push-Location $root
 try {
     & dotnet tool restore
     if ($LASTEXITCODE -ne 0) { throw 'Pinned WiX 6.0.2 tool restore failed.' }
-    & dotnet tool run wix -- build -arch x64 -o $msi $wxs
+    # Pin WixUI to the exact WiX tool version. The MSI data-folder chooser
+    # must be present in the release; no silent fallback to a UI-less MSI.
+    & dotnet tool run wix -- extension add WixToolset.UI.wixext/6.0.2
+    if ($LASTEXITCODE -ne 0) { throw 'Pinned WiX UI extension installation failed.' }
+    & dotnet tool run wix -- build -arch x64 -ext WixToolset.UI.wixext -loc (Join-Path $root 'msi\TLO.en-us.wxl') -o $msi $wxs
     if ($LASTEXITCODE -ne 0) { throw 'WiX MSI build failed.' }
     & dotnet tool run wix -- msi validate $msi
     if ($LASTEXITCODE -ne 0) { throw 'MSI ICE validation failed.' }

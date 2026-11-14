@@ -1155,6 +1155,10 @@ class App:
         self.hamburger_menu.add_command(label="Check for updates", command=self._check_for_updates_from_menu)
         self.hamburger_menu.add_checkbutton(label="Auto Update", variable=self.auto_update_var, command=self._toggle_auto_update_from_menu)
         self.hamburger_menu.add_command(
+            label="Open TLO Folder",
+            command=lambda: self._run_after_menu_closes(self._open_tlo_home_folder),
+        )
+        self.hamburger_menu.add_command(
             label="Edit Preferences",
             command=lambda: self._run_after_menu_closes(self._edit_preferences),
         )
@@ -1645,6 +1649,13 @@ class App:
             self.root.after_idle(callback)
         except tk.TclError:
             callback()
+
+    def _open_tlo_home_folder(self):
+        try:
+            from tlo_msi_install_mode import open_tlo_home_folder
+            open_tlo_home_folder(self._resolve_gui_tlo_home(error_type=ValueError))
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("TLOHome", str(exc), parent=self.root)
 
     def _edit_preferences(self):
         try:

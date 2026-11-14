@@ -1,0 +1,13 @@
+TLO v1.7 Build 661 — NOT RELEASE-ATTESTED
+Source baseline: Build 660 application source; GitHub Build Process v133 unchanged.
+WiX 6 MSI TARGETDIR directory declaration fixed to reference the built-in virtual symbol; Windows MSI TLOHome/DB behavior unchanged. Linux fixed-position hamburger menu contract corrected and outdated Build 659 verification/results artifacts removed. Build 660 ZIP remains preserved.
+Local regression results: see REGRESSION_RESULTS_v661.txt.
+Ruff lint: lint not attested for Build 661 until a mandatory CI Ruff release gate passes.
+Native Windows WiX 6.0.2 + WixUI MSI compilation, ICE validation, Windows MSI signing, MSI install/repair/upgrade/uninstall, and full GitHub Actions run are NOT ATTESTED for Build 661.
+Build 660 hosted GitHub Actions run 43540568768 failed: Linux 2 failed, 2,556 passed, 26 skipped; Windows executable signing and scans completed but MSI linkage failed WIX7009 (TARGETDIR virtual symbol).
+Historical verification populations (not current build claims):
+Xvfb display (CI=1): Build 657 application behavior suite 2,307 passed, 6 skipped.
+No display (DISPLAY and CI unset): Build 532 standalone headless subset 50 passed, 6 skipped; not the full GUI suite.
+Full Linux CI job (Build 613): 26 skipped during its full GitHub Actions run; different population from the no-display subset.
+Build 658 hosted run 43327144040 failed: 3 failed, 2,544 passed, 26 skipped.
+Python syntax checks do not replace the required Ruff or native Windows signing gates.

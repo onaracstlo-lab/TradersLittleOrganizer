@@ -101,7 +101,7 @@ def test_msi_build_script_requires_trusted_signing_and_data_masters():
         assert key in text
 
 
-def test_msi_first_run_seeds_only_missing_databases_and_user_files(tmp_path, monkeypatch):
+def test_msi_updates_managed_database_masters_and_seeds_user_files_only_once(tmp_path, monkeypatch):
     program = tmp_path / "program"
     home = tmp_path / "TLOHome"
     (program / "TLO_DBs").mkdir(parents=True)
@@ -116,13 +116,15 @@ def test_msi_first_run_seeds_only_missing_databases_and_user_files(tmp_path, mon
     (home / "tlo-preferences.ini").write_bytes(b"USER PREFERENCES")
     monkeypatch.setattr(mode, "msi_install_root", lambda *_args, **_kw: program)
     mode.seed_msi_data_home(home)
-    assert (home / "TLO_DBs" / "artists.sqlite").read_bytes() == b"USER DATABASE"
+    assert (home / "TLO_DBs" / "artists.sqlite").read_bytes() == b"new master"
     assert (home / "tlo-preferences.ini").read_bytes() == b"USER PREFERENCES"
     assert (home / "TLO_DBs" / "cities.csv").read_bytes() == b"new cities"
     assert (home / "TLO_DBs" / "venues.txt").read_bytes() == b"new venues"
     assert (home / "TLO-FAQ.txt").read_bytes() == b"new FAQ"
-    mode.seed_msi_data_home(home)  # idempotent
-    assert (home / "TLO_DBs" / "artists.sqlite").read_bytes() == b"USER DATABASE"
+    (home / "TLO_DBs" / "artists.sqlite").write_bytes(b"edited same-build master")
+    mode.seed_msi_data_home(home)  # no re-copy within the same installed build
+    assert (home / "TLO_DBs" / "artists.sqlite").read_bytes() == b"edited same-build master"
+    assert (home / "TLO_DBs" / mode.MSI_DATABASE_BUILD_MARKER).read_text().strip() == str(__import__("tlo_version").BUNDLE_BUILD)
 
 
 def test_wix_preparation_seeds_docs_but_not_source_tree(tmp_path):

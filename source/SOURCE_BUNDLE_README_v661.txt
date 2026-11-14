@@ -1,10 +1,14 @@
-Traders Little Organizer (TLO) - Source and Utilities Bundle v659
+Traders Little Organizer (TLO) - Source and Utilities Bundle v661
 ==================================================================
-Public application version: v1.7 Build 659
-Native GitHub Build Process: v130 (separate complete package)
+Public application version: v1.7 Build 661
+Native GitHub Build Process: v133 (separate complete package)
 
 CURRENT RELEASE
 ---------------
+Build 661: Correct WiX 6 TARGETDIR virtual-symbol conflict in MSI generation; leave the MSI TLOHome selection and HKCU settings unchanged. Fix Main/Search menu regression test to check labels regardless of menu order. Remove stale Build 659 verification/results reports accidentally shipped in Build 660. Linux Build 660: 2 failed, 2,556 passed, 26 skipped; Windows signed executables and scanners passed, MSI WiX compilation failed with WIX7009. GitHub Build Process v133 unchanged. Native MSI validation still required.
+
+Build 660: MSI setup chooses a TLOHome data folder (default C:\.tlo), persists per-user TLOHome, and keeps executables under LocalAppData. On the first launch after an MSI upgrade, replaces installer-managed master database files in TLOHome\TLO_DBs; never overwrites user preferences, logs, inventory or setlists. Open TLO Folder added to Main and Search. Existing folders take precedence. Prior release ZIPs unchanged; GitHub Build Process v130 unchanged.
+
 Build 659: Correct missing verification-report literal contracts that failed 3 of 2,573 Linux CI tests in Build 658 (3 failed, 2,544 passed, 26 skipped). Restore "lint not attested" and "full GitHub Actions run" while accurately reporting mandatory release gates as NOT ATTESTED.
 No changes to application runtime, MSI generator, signing, or auto-update behavior; Build Process v130 unchanged. Build 658 ZIP remains preserved.
 
@@ -23,7 +27,7 @@ while preserving the ZIP update path for portable installations.
 Build 654: Full Inventory and supporting tools accept Windows UNC share paths
 without drive mapping. Persist the network share as UNC:server/share and the
 folder path relative to it; Copy Requests reconstruct the share path and
-Manual Updates match share-scoped identities. See CHANGES_v659.txt.
+Manual Updates match share-scoped identities. See CHANGES_v661.txt.
 
 Build 653: Main and Search update checks enforce the GitHub production-release
 approval gate. Normal v126 builds produce public pre-releases, which are not

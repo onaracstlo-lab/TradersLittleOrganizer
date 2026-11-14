@@ -129,7 +129,13 @@ def test_gui_startup_applies_main_and_search_preferences(tmp_path):
         assert gui.title_font.actual('size') == 18
         assert gui.bool_vars['artist_in_album'].get()
         assert gui.dry_run_var.get() is False
-        assert gui.hamburger_menu.entrycget(2, 'label') == 'Edit Preferences'
+        # Menu positions can change when new actions are added. Assert the
+        # user-facing commands exist, not a brittle numeric slot.
+        menu_labels = [gui.hamburger_menu.entrycget(index, 'label')
+                       for index in range(gui.hamburger_menu.index('end') + 1)
+                       if gui.hamburger_menu.type(index) == 'command']
+        assert menu_labels.count('Edit Preferences') == 1
+        assert menu_labels.count('Open TLO Folder') == 1
     finally:
         root.destroy()
     root = tk.Tk()
@@ -141,7 +147,13 @@ def test_gui_startup_applies_main_and_search_preferences(tmp_path):
             gui = search.BootlistSearchApp(root, paths, None)
         assert gui.deep_var.get() is True
         assert int(tkfont.nametofont('TkDefaultFont').actual('size')) == 15
-        assert gui.hamburger_menu.entrycget(2, 'label') == 'Edit Preferences'
+        # Menu positions can change when new actions are added. Assert the
+        # user-facing commands exist, not a brittle numeric slot.
+        menu_labels = [gui.hamburger_menu.entrycget(index, 'label')
+                       for index in range(gui.hamburger_menu.index('end') + 1)
+                       if gui.hamburger_menu.type(index) == 'command']
+        assert menu_labels.count('Edit Preferences') == 1
+        assert menu_labels.count('Open TLO Folder') == 1
         with mock.patch.object(gui, 'execute_search'):
             gui._startup_first_search()
         assert gui.search_var.get() == 'Allman Brothers Band'

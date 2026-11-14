@@ -74,3 +74,14 @@ Linux CI. No change to signed MSI upgrade handling, MSI-owned paths, portable
 ZIP downloads, or preservation of TLOHome data. GitHub Build Process v130
 remains the independent build package; a new complete hosted release run is
 required before production promotion.
+
+BUILD 660 WINDOWS MSI TLOHOME CONFIGURATION
+--------------------------------------------
+The Windows MSI prompts for the editable TLOHome data folder, defaulting to
+C:\.tlo or existing per-user TLOHome/DataHome configuration. It writes a
+per-user environment variable, not a system variable; no admin is required.
+Managed executables remain in LocalAppData Programs. Existing TLOHome content
+is not removed on uninstall. Only the three MSI-managed master files in
+TLOHome\TLO_DBs may be replaced upon the first launch after an MSI upgrade;
+user-edited databases are unsupported across upgrades. All other user files
+remain preserved.
