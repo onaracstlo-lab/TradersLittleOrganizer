@@ -1,10 +1,14 @@
-Traders Little Organizer (TLO) - Source and Utilities Bundle v661
+Traders Little Organizer (TLO) - Source and Utilities Bundle v663
 ==================================================================
-Public application version: v1.7 Build 661
-Native GitHub Build Process: v133 (separate complete package)
+Public application version: v1.7 Build 663
+Native GitHub Build Process: v134 (separate complete package)
 
 CURRENT RELEASE
 ---------------
+Build 663: Restore Linux CI documentation contract by moving historical Build 662 labels to Section 21 of the Requirements document; add an extensive pre-release consistency test. No application logic or MSI behavior changes. Build Process v134 unchanged. Build 662 preserved. Local complete pytest suite: 2,587 passed, 6 skipped (FFmpeg present here). Hosted Linux, Windows and macOS gates pending.
+
+Build 662: The MSI's WiX license-agreement dialog displays the full GNU GPL v3 text, not the Latin placeholder. Source LICENSE and msi/TLO-GPLv3.rtf are included. Companion Build Process v134 writes the release-wide version into each newly created distribution ZIP, Release Notes and build logs. Previously issued releases untouched. No TLO application runtime behavior changed.
+
 Build 661: Correct WiX 6 TARGETDIR virtual-symbol conflict in MSI generation; leave the MSI TLOHome selection and HKCU settings unchanged. Fix Main/Search menu regression test to check labels regardless of menu order. Remove stale Build 659 verification/results reports accidentally shipped in Build 660. Linux Build 660: 2 failed, 2,556 passed, 26 skipped; Windows signed executables and scanners passed, MSI WiX compilation failed with WIX7009. GitHub Build Process v133 unchanged. Native MSI validation still required.
 
 Build 660: MSI setup chooses a TLOHome data folder (default C:\.tlo), persists per-user TLOHome, and keeps executables under LocalAppData. On the first launch after an MSI upgrade, replaces installer-managed master database files in TLOHome\TLO_DBs; never overwrites user preferences, logs, inventory or setlists. Open TLO Folder added to Main and Search. Existing folders take precedence. Prior release ZIPs unchanged; GitHub Build Process v130 unchanged.
@@ -27,7 +31,7 @@ while preserving the ZIP update path for portable installations.
 Build 654: Full Inventory and supporting tools accept Windows UNC share paths
 without drive mapping. Persist the network share as UNC:server/share and the
 folder path relative to it; Copy Requests reconstruct the share path and
-Manual Updates match share-scoped identities. See CHANGES_v661.txt.
+Manual Updates match share-scoped identities. See CHANGES_v663.txt.
 
 Build 653: Main and Search update checks enforce the GitHub production-release
 approval gate. Normal v126 builds produce public pre-releases, which are not

@@ -1,3 +1,17 @@
+TLO v1.7 Build 663 — Linux CI documentation-contract correction and release preflight hardening
+
+- Correct the Build 662 hosted Linux failure (run 43651357012): 1 failed, 2,563 passed, 26 skipped. Two current MSI/provenance requirement paragraphs were incorrectly labeled with an historical "Build 662" prefix before the Section 21 Revision Index. Keep their normative content and put historical build labels exclusively in Section 21.
+- Add regression coverage for the entire pre-revision portion of Requirements, document metadata/current version, current-only release-report artifact names, and generated WiX MSI prerequisites. This documentation/packaging contract is now a required prepackaging check.
+- No runtime inventory, MSI installer implementation, license content, signing policy or updater behavior changes. GitHub Build Process v134 remains unchanged; Build 662 source ZIP and previous releases remain untouched.
+- Full Linux CI and native Windows MSI/ICE/signing gates remain mandatory before the new release is considered successful.
+
+TLO v1.7 Build 662 — GNU GPL v3 MSI license dialog and release provenance readiness
+
+- Replace WiX's default placeholder text in the MSI license dialog with the actual complete GNU General Public License version 3 (June 2007), matching the public GitHub LICENSE. Include the plain-text LICENSE in the application source bundle and an MSI-compatible RTF rendering of the same legal text.
+- Add regression checks that generated WiX binds WixUILicenseRtf to that real RTF, that it contains GPL v3's complete terms, and that a missing file fails instead of showing placeholder Latin.
+- The separate GitHub Build Process v134 adds one simple build-process version in each new distribution ZIP, GitHub Release Notes, and preflight/build logs. Source bundles have no guessed historical provenance; previous releases remain untouched.
+- Build 661 archive and Process v133 archive remain unchanged; native WiX/MSI compilation and full GitHub Actions tests are mandatory external release gates.
+
 TLO v1.7 Build 661 — WiX 6 MSI directory reference and Linux CI regression correction
 
 - Correct WiX 6 WIX7009/WIX0092: reference WiX's built-in TARGETDIR virtual symbol through StandardDirectory instead of redeclaring it as a Directory. Keep TLODATAFOLDER selectable through WixUI_InstallDir and preserve all TLOHome configuration, environment, databases, upgrade identity and MSI/ZIP updater behavior.

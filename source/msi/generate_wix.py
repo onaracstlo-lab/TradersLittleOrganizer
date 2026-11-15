@@ -159,6 +159,13 @@ def generate(stage, wxs, version, main_exe=None):
     ):
         elt(pkg, "SetDirectory", Id="TLODATAFOLDER", Action="SetTLOData" + name,
             Value=value, Condition=condition, Sequence="first")
+    # WixUI_InstallDir otherwise embeds WiX's sample Latin placeholder.
+    # This full GNU GPL v3 RTF matches the license selected for the public
+    # TLO source repository. Resolve it relative to this generator, not CWD.
+    license_rtf = Path(__file__).resolve().with_name("TLO-GPLv3.rtf")
+    if not license_rtf.is_file() or license_rtf.stat().st_size == 0:
+        raise FileNotFoundError(f"Missing GNU GPL v3 MSI license: {license_rtf}")
+    elt(pkg, "WixVariable", Id="WixUILicenseRtf", Value=str(license_rtf))
     ET.SubElement(pkg, f"{{{UI_NS}}}WixUI", {"Id": "WixUI_InstallDir",
                                                "InstallDirectory": "TLODATAFOLDER"})
     local = elt(pkg, "StandardDirectory", Id="LocalAppDataFolder")
