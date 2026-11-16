@@ -105,4 +105,4 @@ def test_gui_auto_update_contract_uses_yes_skip_and_discovery_only():
         assert 'text="Skip"' in text
         assert "download=manual" in text
         assert "download_update(" in text
-        assert "ask before downloading a newer release ZIP" in text
+        assert "ask before downloading the preferred signed update to Downloads" in text

@@ -1,7 +1,8 @@
 """Importable helper for TLO's existing update dispatcher.
 
 Do not use only an untrusted marker file. Require the MSI-owned HKCU path and
-matching actual executable directory. Non-MSI installations keep ZIP updater.
+matching executable directory to use the MSI-owned upgrade worker. Portable
+Windows installations can also download a verified MSI by default.
 """
 from tlo_version import VERSION as _TLO_CANONICAL_VERSION
 __version__ = _TLO_CANONICAL_VERSION
@@ -85,6 +86,37 @@ def launch_verified_msi_upgrade(msi_file, trusted_expected_sha256, *,
         args += ["-RestartExe", str(current_exe)]
     subprocess.Popen(args, close_fds=True,
                      creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+    return True
+
+
+def launch_verified_portable_msi_install(msi_file, trusted_expected_sha256):
+    """Launch the interactive Windows installer for an existing ZIP installation.
+
+    Authentication of the official release manifest and the exact download
+    hash occurs before this boundary. An MSI worker tied to an existing
+    registered installation is intentionally not used for portable TLO.
+    """
+    import hashlib
+    import re
+    import subprocess
+    if sys.platform != 'win32':
+        raise RuntimeError('MSI installation is supported on Windows only')
+    if not re.fullmatch(r'[A-Fa-f0-9]{64}', trusted_expected_sha256):
+        raise ValueError('Missing authenticated MSI SHA-256 hash')
+    msi = Path(msi_file).resolve(strict=True)
+    if msi.suffix.casefold() != '.msi':
+        raise ValueError('MSI asset required')
+    with msi.open('rb') as handle:
+        if handle.read(8) != bytes.fromhex('d0cf11e0a1b11ae1'):
+            raise ValueError('Downloaded MSI has an invalid Installer database header')
+    hasher = hashlib.sha256()
+    with msi.open('rb') as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+            hasher.update(chunk)
+    digest = hasher.hexdigest()
+    if digest.casefold() != trusted_expected_sha256.casefold():
+        raise ValueError('Downloaded MSI no longer matches signed release metadata')
+    subprocess.Popen(['msiexec.exe', '/i', str(msi)], close_fds=True)
     return True
 
 

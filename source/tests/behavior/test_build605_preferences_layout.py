@@ -1,6 +1,7 @@
 """Build 605: approved concise startup preferences template is release-stable."""
 
 from pathlib import Path
+import re
 import pytest
 import tlo_preferences as pref
 
@@ -40,6 +41,6 @@ def test_auto_update_option_preserves_layout_and_validation(tmp_path):
 def test_allowed_values_remain_documented_for_nonnumeric_modes():
     contents = pref.default_text()
     for (section, field), options in pref.CHOICES.items():
-        assert f'# {field}: ' + ' | '.join(options) in contents
+        assert re.search(rf'(?m)^# {re.escape(field)}\s*:\s*{re.escape(" | ".join(options))}', contents)
     assert '0 (automatic for Performance Mode) or 1-256' in contents
     assert 'case preserved' in contents

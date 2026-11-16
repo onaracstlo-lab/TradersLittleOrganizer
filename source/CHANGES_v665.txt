@@ -1,3 +1,19 @@
+TLO v1.7 Build 665 — release regression checks repaired; MSI updater unchanged
+===============================================================================
+- Repair Build 664 Linux CI run 43780507949, which failed five tests: both enum-comment validators, the legacy v134 build-process expectation, and two current Requirements version/reference contracts.
+- Retain the exact approved `# update_downloads : msi | zip (msi = Download .msi update; zip = Download .zip update)` comment and default `update_downloads = msi` in [general]. Tests now accept optional whitespace before the comment colon while still validating all documented enumerations.
+- Compare independent Build Process provenance between the current README and verification record instead of hard-coding a historical process version.
+- Synchronize the Requirements revision-index upper bound, current CHANGES references, version and DOCX metadata to Build 665.
+- No changes to MSI/ZIP download selection, installer, personal files, Windows signing, or deletion behavior. Build 664 artifacts remain immutable; companion GitHub Build Process v135 unchanged. Hosted native gates still mandatory.
+
+TLO v1.7 Build 664 — configurable Windows update downloads (MSI default)
+
+- Add [general] update_downloads = msi | zip to the standard tlo-preferences.ini, defaulting to msi. When the INI is missing, predates the key, or cannot be parsed, default to MSI instead of choosing ZIP.
+- Windows Main/Search manual and automatic update checks use the preference rather than the installation method. MSI mode picks only the authenticated Windows_x64 MSI, with no ZIP fallback. ZIP mode retains matching platform/layout update-then-complete selection, and remains download-only.
+- MSI downloads on previously ZIP-based installations can launch the existing interactive Windows Installer after separately confirming installation. MSI-owned installs retain their external update worker. No automatic deletion of the previous TLOHome/apps folder; users may clean it manually.
+- Linux and macOS continue using ZIP updates. Independently signed release metadata, SHA-256 validation, ZIP structural verification, atomic download publishing, user-file protections and MSI signing gates are preserved.
+- Added Build 664 behavior tests and updated earlier tests whose portable-install assumptions were superseded. Companion GitHub Build Process v135 used without process changes. Build 663 failure/run 43656434596 remains historical evidence. Full native CI and installer tests remain mandatory before promotion.
+
 TLO v1.7 Build 663 — Linux CI documentation-contract correction and release preflight hardening
 
 - Correct the Build 662 hosted Linux failure (run 43651357012): 1 failed, 2,563 passed, 26 skipped. Two current MSI/provenance requirement paragraphs were incorrectly labeled with an historical "Build 662" prefix before the Section 21 Revision Index. Keep their normative content and put historical build labels exclusively in Section 21.

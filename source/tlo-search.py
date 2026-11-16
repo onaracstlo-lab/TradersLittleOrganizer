@@ -524,7 +524,7 @@ class BootlistSearchApp:
         if enabled:
             messagebox.showinfo(
                 "TLO Auto update",
-                "Auto update is enabled. TLO will check GitHub at startup and ask before downloading a newer release ZIP to your Downloads folder (portable installations). MSI installations instead request permission to download and install a signed MSI upgrade.",
+                "Auto update is enabled. TLO will check GitHub at startup and ask before downloading the preferred signed update to Downloads. On Windows, update_downloads = msi is the default; set update_downloads = zip to download a portable ZIP instead.",
             )
             self._start_update_check(manual=False)
 

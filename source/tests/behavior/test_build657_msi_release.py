@@ -34,6 +34,7 @@ def release():
 
 def test_msi_selects_only_installer(monkeypatch):
     monkeypatch.setattr(U, "is_msi_install", lambda: True)
+    monkeypatch.setattr(U.sys, 'platform', 'win32')
     result = U._choose_asset(release(), 657)
     assert result[1:] == ("msi", "windows_msi")
     assert result[0]["name"].endswith(".msi")
@@ -41,15 +42,17 @@ def test_msi_selects_only_installer(monkeypatch):
 
 def test_msi_cannot_fall_back_to_zip(monkeypatch):
     monkeypatch.setattr(U, "is_msi_install", lambda: True)
+    monkeypatch.setattr(U.sys, 'platform', 'win32')
     only_zip = {"assets": [release()["assets"][0]]}
     assert U._choose_asset(only_zip, 657) == (None, "", "windows_msi")
 
 
-def test_portable_cannot_select_msi(monkeypatch):
+def test_portable_defaults_to_msi(monkeypatch):
+    monkeypatch.setattr(U.sys, 'platform', 'win32')
     monkeypatch.setattr(U, "is_msi_install", lambda: False)
     monkeypatch.setattr(U, "_detect_installed_platform_key", lambda _: "windows_onedir")
     selected = U._choose_asset(release(), 657)
-    assert selected[1:] == ("update", "windows_onedir")
+    assert selected[1:] == ("msi", "windows_msi")
 
 
 def test_verified_msi_header_required(tmp_path):

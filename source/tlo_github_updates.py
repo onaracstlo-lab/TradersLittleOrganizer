@@ -30,7 +30,8 @@ from tlo_version import BUNDLE_BUILD, DISPLAY_VERSION, OFFICIAL_GITHUB_OWNER, OF
 from tlo_network_io import MAX_METADATA_RESPONSE_BYTES, read_bounded_text
 from tlo_update_trust import pinned_key_configured, verify_metadata_signature
 from tlo_security import windows_reserved_folder_name
-from tlo_msi_install_mode import is_msi_install, launch_verified_msi_upgrade
+from tlo_msi_install_mode import is_msi_install, launch_verified_msi_upgrade, launch_verified_portable_msi_install
+import tlo_preferences
 
 DEFAULT_REPO_OWNER = OFFICIAL_GITHUB_OWNER
 DEFAULT_REPO_NAME = OFFICIAL_GITHUB_REPO
@@ -308,18 +309,40 @@ def _asset_release_identity(asset_name: str) -> tuple[int | None, str, str] | No
     return int(match.group("build")), match.group("kind").casefold(), platform_key
 
 
+def update_download_preference(tlo_home: str | os.PathLike[str] | None) -> str:
+    """Resolve the user's Windows update format, defaulting to MSI.
+
+    Reading the INI must not create or overwrite it; installations that have
+    no preferences file or predate this field still default to MSI. Invalid
+    preferences must not cause an implicit fallback to a ZIP download.
+    """
+    if not tlo_home:
+        return 'msi'
+    try:
+        path = tlo_preferences.path_for(tlo_home)
+        if not path.is_file() or path.stat().st_size > tlo_preferences.MAX_BYTES:
+            return 'msi'
+        values = tlo_preferences.parse_text(path.read_text(encoding='utf-8-sig'))
+        return values['general']['update_downloads']
+    except (OSError, UnicodeError, ValueError):
+        return 'msi'
+
+
 def _choose_asset(
     release: dict[str, Any],
     latest_build: int,
     tlo_home: str | os.PathLike[str] | None = None,
 ) -> tuple[dict[str, Any] | None, str, str]:
-    """Choose MSI for MSI installs, otherwise exact platform/layout ZIP.
+    """Choose Windows MSI by default, or an exact-layout ZIP when requested.
 
-    Update ZIPs are preferred. A matching complete ZIP is the only fallback.
-    Generic ZIPs (including the source bundle) and the other Windows packaging
-    layout are never selected as substitutes.
+    The Windows download preference is independent of whether TLO originated
+    from an MSI or portable ZIP. On Linux/macOS, retain the ZIP update path.
+    Explicit ZIP mode prefers an update ZIP, then a matching complete ZIP.
+    Never substitute a mismatched layout or silently change formats.
     """
-    platform_key = "windows_msi" if is_msi_install() else _detect_installed_platform_key(tlo_home)
+    platform_key = _detect_installed_platform_key(tlo_home)
+    if sys.platform.startswith("win") and update_download_preference(tlo_home) == 'msi':
+        platform_key = 'windows_msi'
     update_candidates: list[dict[str, Any]] = []
     complete_candidates: list[dict[str, Any]] = []
     for asset in _matching_assets(release):
@@ -337,7 +360,7 @@ def _choose_asset(
             complete_candidates.append(asset)
 
     if platform_key == "windows_msi":
-        return None, "", platform_key  # Never overlay Windows Installer files with a ZIP
+        return None, "", platform_key  # MSI preference requires the published MSI; no ZIP fallback
     if update_candidates:
         return update_candidates[0], "update", platform_key
     if complete_candidates:
@@ -854,13 +877,16 @@ def install_downloaded_msi(result: UpdateCheckResult) -> None:
     """Hand off ONLY the verified, published MSI; caller must close the GUI."""
     if result.status not in {"downloaded", "already_downloaded"} or result.package_kind != "msi":
         raise ValueError("Only a downloaded MSI may be installed")
-    if not is_msi_install():
-        raise RuntimeError("Cannot perform an MSI upgrade on a portable installation")
     if not re.fullmatch(r"[0-9a-f]{64}", result.asset_digest):
         raise ValueError("Missing the signed MSI hash")
     if not Path(result.path).is_file() or _sha256_file(Path(result.path)) != result.asset_digest:
         raise ValueError("Downloaded MSI no longer matches the signed release metadata")
-    launch_verified_msi_upgrade(result.path, result.asset_digest)
+    if is_msi_install():
+        launch_verified_msi_upgrade(result.path, result.asset_digest)
+    else:
+        # A portable ZIP install cannot use the MSI-owned worker; start the
+        # signed Windows Installer UI without touching the old apps directory.
+        launch_verified_portable_msi_install(result.path, result.asset_digest)
 
 
 def _download_and_report_verified_asset(
@@ -918,8 +944,9 @@ def _download_and_report_verified_asset(
     )
     if package_kind == "msi":
         kind_text, extra = "MSI installer", (
-            "This is a signed MSI major upgrade. Windows Installer will update the registered application "
-            "after TLO closes. Inventory files, databases and preferences in TLOHome are untouched."
+            "This signed Windows installer updates an MSI installation or installs alongside an existing "
+            "portable ZIP installation. Your original portable apps folder is not automatically removed. "
+            "Choose your existing TLOHome in the installer to continue using its files."
         )
     else:
         kind_text, extra = _package_message(package_kind, databases_included, latest_build)
@@ -1072,7 +1099,7 @@ def check_for_updates(
         if not asset:
             settings_warning = _write_last_check(tlo_home, latest_build)
             missing_message = (
-                "No signed MSI installer was published for this installation."
+                "No signed MSI installer was published for this Windows update preference."
                 if platform_key == "windows_msi" else
                 f"No update ZIP or complete ZIP matching {platform_key} was found in the latest GitHub Release."
             )

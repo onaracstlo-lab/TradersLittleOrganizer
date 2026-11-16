@@ -1,7 +1,0 @@
-TLO v1.7 Build 663 — local regression verification (NOT RELEASE-ATTESTED)
-Source baseline: Build 662 source bundle; companion GitHub Build Process v134 unchanged.
-Change: Correct historical build-number placement in Requirements; update the revision index, DOCX metadata, and current CHANGES references. Add explicit documentation, report-name and WiX preflight tests. No application, updater or MSI runtime logic changes.
-Linux virtual display (CI=1, PYTHONDONTWRITEBYTECODE=1): complete application pytest suite 2,587 passed, 6 skipped, 1 expected duplicate-ZIP fixture warning. Command: xvfb-run -a env CI=1 PYTHONDONTWRITEBYTECODE=1 python -m pytest -vv -p no:cacheprovider. Local skip count differs from the hosted runner because system FFmpeg is installed here; this is not a claim of the hosted CI outcome.
-Targeted Build 505/502/650/663 document and package regressions: 21 passed. Requirements DOCX rendered to 131 pages. New Windows MSI WiX source/RTF preflight generated a small nested payload and passed.
-Native Windows WiX compilation and ICE validation, MSI signing/install/upgrade, hosted Ruff release lint, GitHub Actions full run, and release publication are NOT ATTESTED locally. Do not infer release success from this local verification.
-Build 662 source ZIP and companion Build Process v134 remain untouched.

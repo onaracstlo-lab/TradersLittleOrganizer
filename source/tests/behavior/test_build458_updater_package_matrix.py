@@ -83,6 +83,7 @@ def test_build458_generic_or_source_zip_is_never_update_fallback(monkeypatch):
 def test_build458_windows_onedir_selects_only_onedir(monkeypatch, tmp_path):
     monkeypatch.setattr(U.sys, "platform", "win32")
     (tmp_path / "apps" / "Windows" / "_internal").mkdir(parents=True)
+    (tmp_path / 'tlo-preferences.ini').write_text('[general]\nupdate_downloads = zip\n')
     release = _release(
         "TLO_V1.6Build459_update_Windows.zip",
         "TLO_V1.6Build459_update_Windows_onedir.zip",
@@ -95,6 +96,7 @@ def test_build458_windows_onedir_selects_only_onedir(monkeypatch, tmp_path):
 def test_build458_windows_hybrid_does_not_cross_fallback_to_onedir(monkeypatch, tmp_path):
     monkeypatch.setattr(U.sys, "platform", "win32")
     (tmp_path / "apps" / "Windows").mkdir(parents=True)
+    (tmp_path / 'tlo-preferences.ini').write_text('[general]\nupdate_downloads = zip\n')
     release = _release("TLO_V1.6Build459_complete_Windows_onedir.zip")
     asset, kind, platform = U._choose_asset(release, 459, tmp_path)
     assert asset is None

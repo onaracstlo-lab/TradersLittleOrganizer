@@ -1,0 +1,12 @@
+TLO v1.7 Build 665 — local test report (NOT RELEASE-ATTESTED)
+Baseline: Build 664 application ZIP; companion GitHub Build Process v135 remains unchanged.
+Build 664 GitHub run 43780507949: Linux failed five regression assertions (2,585 passed, 26 skipped), while Windows and macOS builds succeeded; package job skipped.
+Five original failures corrected: update_downloads documented enum spacing (2 tests); hardcoded obsolete GitHub Build Process v134 expectation; Requirements revision index heading and current CHANGES references (2 tests).
+Focused preferences/release/docs suite: 33 passed after index compacting.
+Initial complete Linux suite identified three additional historical verification-report checks; preserved all previously recorded hosted/local evidence and reran the entire suite.
+Full local command: CI=1 PYTHONDONTWRITEBYTECODE=1 xvfb-run -a python -m pytest -q -p no:cacheprovider
+Full local result: 2,613 passed, 6 skipped, 0 failed, 1 expected duplicate-name ZIP warning; 74.55 seconds.
+Skipped locally: Ruff is not installed (1); five tests require actual Windows cmd.exe/volumes/Recycle Bin. This is a local Xvfb environment, not native Windows/macOS acceptance.
+Requirements DOCX successfully rendered to 132 pages; first page and Build 665 revision index visually checked. Same total page count as Build 664.
+No changes to application update-selection or MSI installation code; the user-facing update_downloads=msi default and optional zip remain as delivered in Build 664.
+Native Windows MSI installation, signing, macOS and Linux hosted gates, and full GitHub Actions release packaging remain NOT ATTESTED for Build 665; companion Build Process v135 unchanged.

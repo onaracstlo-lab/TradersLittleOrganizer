@@ -17,7 +17,7 @@ _EDIT_WINDOWS = {}
 
 _BOOLEAN_DEFAULTS = {option.config_field: bool(option.default) for option in GUI_CHECKBOX_OPTIONS}
 DEFAULTS = {
-    'general': {'auto_update': False},
+    'general': {'auto_update': False, 'update_downloads': 'msi'},
     'main': {
         **_BOOLEAN_DEFAULTS,
         'dry_run': False,
@@ -56,6 +56,7 @@ FONT_SIZES = {('main', field) for field in ('font_size', 'heading_font_size', 'f
 
 # Lists mirror the Main GUI pull-downs. Use the INI keys, not the GUI labels.
 CHOICES = {
+    ('general', 'update_downloads'): ('msi', 'zip'),
     ('main', 'performance_mode'): ('gentle', 'balanced', 'fast', 'extreme'),
     ('main', 'corrupt_files'): ('keep', 'delete'),
     ('main', 'corrupt_folders'): ('never', 'all', 'threshold'),
@@ -72,6 +73,7 @@ def allowed_description(section, key):
         return 'true | false (also yes/no, on/off, 1/0)'
     if (section, key) in CHOICES:
         suffix = {
+            'update_downloads': ' (msi=Download .msi update; zip=Download .zip update)',
             'corrupt_files': ' (keep=Keep and report; delete=Delete corrupt files)',
             'corrupt_folders': ' (never=Never; all=100% corrupt only; threshold=At threshold)',
         }.get(key, '')
@@ -105,6 +107,8 @@ _DEFAULT_TEMPLATE = """# Traders Little Organizer startup preferences
 # Auto Update is shared by Main and Search.
 [general]
 auto_update = false
+# update_downloads : msi | zip (msi = Download .msi update; zip = Download .zip update)
+update_downloads = msi
 
 # Main window; max_workers=0 uses the Performance Mode ceiling.
 [main]

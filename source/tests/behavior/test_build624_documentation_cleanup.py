@@ -23,7 +23,13 @@ def test_readme_names_the_correct_current_changes_and_separate_build_process():
     assert 'Build 622: Artist, City Date parsing requires positive city-reference evidence' in text
     assert 'Build 623: SHN conversion' in text
     assert 'Build 624 is a documentation-only consolidation' in text
-    assert 'GitHub Build Process: v134' in text
+    # The build-process version is independent of the TLO application build.
+    # Validate against the current verification report rather than a stale
+    # historical v134 literal.
+    process_match = re.search(r'Native GitHub Build Process: (v\d+)', text)
+    assert process_match, 'Build-process version missing from release README'
+    verification = (ROOT / f'BUILD_VERIFICATION_v{version.BUNDLE_BUILD}.txt').read_text(encoding='utf-8')
+    assert f'GitHub Build Process {process_match.group(1)}' in verification
     assert 'No GitHub Build Process artifact is included in this source bundle.' in text
 
 

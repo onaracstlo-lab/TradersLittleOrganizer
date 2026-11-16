@@ -1,5 +1,6 @@
 """Build 604: document all valid INI options, normalize choices and report every error."""
 from pathlib import Path
+import re
 from unittest import mock
 import tkinter as tk
 
@@ -28,7 +29,7 @@ def test_template_lists_every_enum_pull_down_option_and_labels():
     template = pref.default_text()
     for (section, key), choices in pref.CHOICES.items():
         assert f'[{section}]' in template
-        assert f'# {key}: ' + ' | '.join(choices) in template
+        assert re.search(rf'(?m)^# {re.escape(key)}\s*:\s*{re.escape(" | ".join(choices))}', template)
     assert 'Keep and report' in template
     assert '100% corrupt only' in template
     assert '0 (automatic' in template
