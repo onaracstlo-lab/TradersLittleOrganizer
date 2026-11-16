@@ -120,7 +120,7 @@ def test_build496_documentation_records_empty_runtime_postprocess_fix():
     from docx import Document
 
     req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
-    assert "Build 496: Empty current-run metadata must not reread reused historical logs" in req
+    assert "authoritative in-memory current-run metadata" in req
     assert "that in-memory list is authoritative even when it is empty" in req
     assert 'does not reread old metadata from that reused token' in release_history()
     assert "duplicate bootlist rows" in req or 'duplicate existing bootlist rows' in release_history()

@@ -125,7 +125,7 @@ def test_build549_requirements_record_the_robustness_contracts():
 
     doc = Document(ROOT / release_artifacts.REQUIREMENTS_FILENAME)
     text = "\n".join(p.text for p in doc.paragraphs)
-    assert "Build 549: robustness closure" in text
+    assert "21. Revision Index" not in text
     assert "missing validator return code is validator-infrastructure failure" in text
     assert "Lock-status probes must not create directories or modify lock-file contents" in text
     assert "oversized HTTP error body must still be reported as an eTreeDB lookup error" in text

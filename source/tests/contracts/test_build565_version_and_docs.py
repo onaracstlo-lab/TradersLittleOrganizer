@@ -43,12 +43,12 @@ def test_canonical_current_artifacts_and_manual_version():
     assert (ROOT / A.BUILD_VERIFICATION_FILENAME).is_file()
     requirements='\n'.join(p.text for p in Document(ROOT / A.REQUIREMENTS_FILENAME).paragraphs)
     assert f'Current document version: {V.VERSION} (TLO {"v"+V.PUBLIC_VERSION}).' in requirements
-    assert f'21. Revision Index (Build 398-{V.BUNDLE_BUILD})' in requirements
-    for appendix in 'ABCDEFGHIJ':
+    assert '21. Revision Index' not in requirements
+    for appendix in 'ABDEFGHIJK':
         assert f'Appendix {appendix} -' in requirements
     manual=(ROOT / A.MANUAL_FILENAME).read_text(encoding='utf8')
     assert f'Version {V.DISPLAY_VERSION}' in manual
-    assert "What's New" in manual
+    assert "What's New" not in manual
     assert 'Release history' not in manual
     assert 'Build history (selected changes)' not in manual
     assert (ROOT / A.CHANGES_FILENAME).read_text().startswith(f'TLO {V.DISPLAY_VERSION}')

@@ -42,7 +42,7 @@ def test_requirements_authoritative_range_has_no_numbered_heading_above_20():
         if p.style.name == "Heading 1":
             m=re.match(r"^(\d+)\.", p.text.strip())
             if m: numbered.append(int(m.group(1)))
-    assert numbered and max(numbered) == 21
+    assert numbered and max(numbered) == 20
 
 
 def test_no_stale_per_module_version_summary_metadata_remains():

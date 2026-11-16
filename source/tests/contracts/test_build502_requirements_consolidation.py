@@ -22,12 +22,10 @@ def _text():
 
 def test_build502_page1_title_purpose_and_country_note_are_current():
     paragraphs = _paragraphs()
-    assert paragraphs[0] == "Traders Little Organizer Requirements - Consolidated Current Specification"
-    assert paragraphs[1] == (
-        "Purpose: To provide a set of functions for music traders and collectors who want to inventory, tag, search, update, manage and share a collection of music performances. "
-        "The goal is to identify performance Artist, Date, Venue, Location (City, State/Region, and Country*) and disk storage location of each show, provide a collection of setlist files and make the data linked and searchable."
-    )
-    assert paragraphs[2] == "*Only if the country is not the United States"
+    assert paragraphs[0] == "Traders Little Organizer (TLO) — Functional and Technical Requirements"
+    assert paragraphs[1].startswith("Purpose. TLO inventories, tags, searches, updates, manages")
+    assert "City and State/Region" in paragraphs[1]
+    assert paragraphs[2] == "Location convention: omit Country for United States performances."
 
 
 def test_build502_removes_development_and_relative_wording_from_normative_text():
@@ -50,20 +48,15 @@ def test_build502_removes_development_and_relative_wording_from_normative_text()
     assert "16.4 Diagnostic Logging and Exception-Handling Policy" in text
 
 
-def test_build502_revision_index_is_navigational_and_bounded():
+def test_current_requirements_have_no_revision_index_or_change_log():
     paragraphs = _paragraphs()
-    heading = next(x for x in paragraphs if x.startswith("21. Revision Index (Build 398-"))
-    idx = paragraphs.index(heading)
-    appendix_idx = paragraphs.index("Appendix A - Requirements Traceability Matrix")
-    tail = paragraphs[idx:appendix_idx]
-    text = "\n".join(tail)
-    assert "This index is navigational rather than normative." in text
-    assert "Build 501:" in text
-    assert "Build 502:" in text
-    # The Build 500 review measured the old index at roughly 63k characters.
-    # Keep the consolidated pointer index materially smaller than that history dump.
-    assert len(text) < 20000
-    assert f"detailed historical build narratives are consolidated in the current {RA.CHANGES_FILENAME.lower()}" in text.lower()
+    text = "\n".join(paragraphs)
+    assert "21. Revision Index" not in text
+    assert "Appendix K - Historical Build Amendments" not in text
+    assert "Appendix A - Requirements Traceability Matrix" in text
+    assert "Appendix K - Supplemental Current Operational Requirements" in text
+    assert "TLO_Requirements_Catalog_v" in text
+    assert "release notes outside this specification" not in text
 
 
 def test_build502_current_package_names_and_version_are_aligned():

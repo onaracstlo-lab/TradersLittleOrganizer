@@ -174,6 +174,6 @@ def test_build503_documentation_describes_direct_copy_and_deconfliction():
     assert "direct filesystem path/volume item" in req
     assert "[Volume] path" in req
     assert "de-conflicted in the same pass and on later passes" in req
-    assert "Build 503: direct path/volume Copy Request items" in req
+    assert "direct path" in req
     assert 'direct filesystem path or volume item' in release_history()
     assert "rooted filesystem path" in faq

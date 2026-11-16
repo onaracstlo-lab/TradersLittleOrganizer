@@ -15,22 +15,19 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_normative_requirements_never_contain_historical_build_labels():
     doc = Document(ROOT / f"TLO_Inventory_Requirements_Working_{V.VERSION}.docx")
     paragraphs = [p.text for p in doc.paragraphs]
-    revision_index = next(i for i, text in enumerate(paragraphs)
-                          if text.startswith("21. Revision Index"))
-    assert any("20. Destructive Operations Safety" in p for p in paragraphs[:revision_index])
-    misplaced = [(i, p[:120]) for i, p in enumerate(paragraphs[:revision_index])
-                 if re.search(r"\bBuild\s+\d+", p)]
-    assert not misplaced, f"Historical build labels outside Revision Index: {misplaced}"
-    assert f"Build {V.BUNDLE_BUILD}" in "\n".join(paragraphs[revision_index:])
-    assert "license-agreement dialog SHALL display" in "\n".join(paragraphs[:revision_index])
-    assert "build-provenance.json" in "\n".join(paragraphs[:revision_index])
-    assert V.VERSION in paragraphs[4]
-    assert V.VERSION in paragraphs[6]
-    assert f"CHANGES_{V.VERSION}.txt" in paragraphs[7]
+    body = "\n".join(paragraphs)
+    assert "20. Destructive Operations Safety" in body
+    assert "Appendix A - Requirements Traceability Matrix" in body
+    assert "Appendix K - Supplemental Current Operational Requirements" in body
+    assert "21. Revision Index" not in body
+    assert "CHANGES_v" not in body
+    assert not re.search(r"\bBuild\s+\d+\b", body), "Historical build notice remains"
+    assert "license-agreement dialog SHALL display" in body
+    assert "build-provenance.json" in body
+    assert f"Current document version: {V.VERSION}" in body
     assert f"Build {V.BUNDLE_BUILD}" in doc.core_properties.title
     assert f"Build {V.BUNDLE_BUILD}" in doc.core_properties.subject
     assert doc.core_properties.revision == V.BUNDLE_BUILD
-    assert f"CHANGES_{V.VERSION}.txt" in "\n".join(paragraphs[revision_index:])
 
 
 def test_release_source_has_one_current_report_set_without_stale_versions():

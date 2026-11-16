@@ -24,12 +24,12 @@ def test_current_specification_is_complete_and_normative():
     body = '\n'.join(p.text for p in doc.paragraphs)
     assert len(body) > 400_000
     assert len(doc.tables) >= 10
-    assert 'Appendix K - Historical Build Amendments (Reference Only)' in body
+    assert 'Appendix K - Supplemental Current Operational Requirements' in body
     assert f'Current document version: {V.VERSION} (TLO v{V.PUBLIC_VERSION}).' in body
-    assert doc.core_properties.subject == f'Consolidated current specification for TLO {V.DISPLAY_VERSION}'
+    assert doc.core_properties.subject == f'Current testable technical and functional requirements, TLO {V.DISPLAY_VERSION}'
     assert doc.core_properties.revision == V.BUNDLE_BUILD
     assert 'consolidated Requirements Specification DOCX' in body
-    assert 'current CHANGES file' in body
+    assert '21. Revision Index' not in body
     assert 'old-change-logs.zip' not in body
 
 

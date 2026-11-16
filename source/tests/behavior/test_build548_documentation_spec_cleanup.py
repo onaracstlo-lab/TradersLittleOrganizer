@@ -46,21 +46,21 @@ def test_build548_requirements_corrects_cli_doc_and_revision_index_contracts():
     heading = next(p for p in doc.paragraphs if p.text.strip().startswith("13.1 Standalone Tagger CLI Requirements"))
     assert heading.style.name == "Heading 2"
     assert "--tag-copy-delete-original is a tlo-main GUI-launcher flag" in text
-    assert "Build 548: docs/spec cleanup" in text
-    assert "Build 536: update-package safety -> §2.12." in text
+    assert "13.1 Standalone Tagger CLI Requirements" in text
+    assert "2.12 Distribution Build and Packaging" in text
     assert "Legacy binary .doc filenames may be recognized for diagnostics" in text
     assert ".doc content is unsupported and is not decoded as readable setlist text" in text
 
 
 def test_build548_requirements_makes_ia05_traceable_without_claiming_schema2_runtime():
     text = _requirements_text()
-    assert "B1. Open audit findings" in text
+    assert "B1. Outstanding technical questions" in text
     assert "IA-05" in text
     assert "First-install/bootstrap authenticity and update-key rotation" in text
     assert "issued_utc" in text
     assert "expires_utc" in text
     assert "minimum_acceptable_build" in text
-    assert "it does not change the updater or schema-1 trust semantics" in text
+    assert "shall not alter established update-signing or schema-1 trust validation" in text
 
 
 def test_build548_manual_warns_about_corruption_defaults_and_fixes_stale_examples():

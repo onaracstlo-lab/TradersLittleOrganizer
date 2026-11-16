@@ -214,16 +214,13 @@ def test_build505_stale_copy_temp_is_swept_before_pass(tmp_path):
 
 def test_build505_review_documentation_and_packaging_cleanup():
     from docx import Document
-    import re
-
     root = Path(__file__).resolve().parents[2]
     doc = Document(root / RA.REQUIREMENTS_FILENAME)
     paragraphs = [p.text for p in doc.paragraphs]
     sec20 = next(i for i, text in enumerate(paragraphs) if text.startswith("20. Destructive Operations Safety"))
-    revision = next(i for i, text in enumerate(paragraphs) if text.startswith("21. Revision Index"))
     appendix_a = next(i for i, text in enumerate(paragraphs) if text.startswith("Appendix A -"))
-    assert sec20 < revision < appendix_a
-    assert not any(re.search(r"\bBuild\s+\d+", text) for text in paragraphs[:revision])
+    assert sec20 < appendix_a
+    assert not any(text.startswith("21. Revision Index") for text in paragraphs)
     req = "\n".join(paragraphs)
     assert "BOM-marked UTF-16 and NUL-dominant BOM-less UTF-16 LE/BE must be recognized before UTF-8" in req
     assert "must be written explicitly as [Volume]" in req

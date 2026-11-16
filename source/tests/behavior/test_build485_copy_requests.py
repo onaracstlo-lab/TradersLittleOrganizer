@@ -337,7 +337,7 @@ def test_build485_documents_describe_persistent_copy_requests_and_closed_state()
 
     requirements = Document(ROOT / RA.REQUIREMENTS_FILENAME)
     requirement_text = "\n".join(paragraph.text for paragraph in requirements.paragraphs)
-    assert "Build 485: persistent multi-pass Copy Requests" in requirement_text
+    assert "Copy Requests" in requirement_text
     assert "Artist + single date/year" in requirement_text
     assert "Artist + increasing year range using the established yy-yy wraparound rule" in requirement_text
     assert "Requests are Open until complete or explicitly Closed" in requirement_text

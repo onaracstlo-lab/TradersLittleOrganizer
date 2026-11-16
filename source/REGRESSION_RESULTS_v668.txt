@@ -1,0 +1,35 @@
+TLO v1.7 Build 668 — LOCAL REGRESSION RESULTS (NOT RELEASE-ATTESTED)
+Complete local Linux source regression using xvfb-run, CI=1, Python 3.13, and PYTHONDONTWRITEBYTECODE=1: 2,653 PASSED, 6 SKIPPED, 0 FAILED; 2,659 total; 1 expected duplicate-name ZIP warning. Run: python -m pytest -q -p no:cacheprovider --disable-warnings. 35 new Build 668 focused tests passed, including actual compliant identification of The Kinks from Disc 01 and Disc 02 without a setlist. Requirements DOCX OPC/XML verified and rendered to 99 pages; User Manual RTF rendered to 33 pages. Ruff was unavailable locally (one skip); native Windows-specific checks not executed here. The complete GitHub Actions run, MSI signing/installation, and macOS acceptance remain NOT ATTESTED.
+
+TLO v1.7 Build 667 — LOCAL REGRESSION RESULTS (NOT RELEASE-ATTESTED)
+Local Linux source tests in four nonoverlapping groups: 2,618 passed, 6 skipped, 0 failed (2,624 total).
+  Group 1: 319 passed; Group 2: 641 passed, 2 skipped;
+  Group 3: 1,046 passed, 4 skipped; Group 4: 612 passed.
+All 99 pages of Requirements rendered successfully. 1,279 paragraphs and 13 tables match Build 666 exactly except for current document/catalog version labels.
+DOCX OPC ZIP and every XML/relationship part are parseable; core-properties relationship is standards-compliant.
+Native Microsoft Word opening, hosted Ruff lint, Windows MSI signing, macOS and GitHub Actions acceptance remain unverified. A monolithic local suite stalled; every test was subsequently completed in nonoverlapping groups.
+
+Build 666 historical results follow (not a claim about Build 667):
+
+TLO v1.7 Build 666 — LOCAL REGRESSION RESULTS (NOT RELEASE-ATTESTED)
+============================================================================
+Scope: documentation overhaul, removal of embedded change histories, matrix-readiness catalog, and updated documentation contracts only. Source baseline: Build 665. Companion GitHub Build Process v135 is unchanged.
+
+Test runner: Linux Python 3.13.5, pytest 9.0.2, xvfb-run, CI=1 and PYTHONDONTWRITEBYTECODE=1, -p no:cacheprovider --disable-warnings.
+Collected source-suite tests: 2,621. Executed all tests in isolated subsets to avoid a local intermittent monolithic-suite stall.
+
+Aggregate (nonoverlapping selections): 2,615 PASSED; 6 SKIPPED; 0 FAILED.
+- tests/behavior/test_build3*.py: 15 passed.
+- tests/behavior/test_build4[0-4]*.py: 304 passed.
+- tests/behavior/test_build4[5-9]*.py: 345 passed.
+- tests/behavior/test_build5[0-4]*.py: 296 passed, 2 skipped, one expected duplicate-name ZIP warning.
+- tests/behavior/test_build5[5-9]*.py, test_build6*.py, tests/contracts, tests/unit, tests/integration: 1,042 passed, 4 skipped.
+- All other tests/behavior/test_*.py that do not start with test_build: 612 passed.
+- tests/test_build593_audit_pins.py: 1 passed.
+
+Skip reasons: Ruff not installed locally (1 test); native Windows system facilities unavailable (5 tests).
+Local full-suite single-process run attempted twice but did not complete inside the local execution window; earlier failures in stale documentary assertions were corrected and each affected test passed in independently completed subset runs. This local result is NOT a claim that the mandatory one-command GitHub Actions Linux test gate has passed.
+
+Verification scope: no changes to runtime Python modules, MSI generator, update authentication, inventory processing, database layout, or portable Linux/macOS distribution. New catalog TLO_Requirements_Catalog_v666.csv holds 1,022 candidate entries (729 requirement paragraphs and 293 table entries), not a complete test matrix.
+
+NOT ATTESTED: native Windows MSI build/ICE/signing, macOS and Linux hosted builds, Ruff mandatory lint, complete GitHub Actions packaging/signing/scan and acceptance, and cross-platform installation behavior.

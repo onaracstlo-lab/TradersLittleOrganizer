@@ -8,7 +8,6 @@ pytestmark = pytest.mark.behavior
 """Current documentation/history/metadata contracts (carried forward through Build 531)."""
 
 from pathlib import Path
-import re
 
 from docx import Document
 
@@ -25,7 +24,7 @@ def test_build523_current_version_and_document_metadata():
 
     doc = Document(ROOT / RA.REQUIREMENTS_FILENAME)
     assert doc.core_properties.title == f"TLO Inventory Requirements - {version.DISPLAY_VERSION}"
-    assert doc.core_properties.subject == f"Consolidated current specification for TLO {version.DISPLAY_VERSION}"
+    assert doc.core_properties.subject == f"Current testable technical and functional requirements, TLO {version.DISPLAY_VERSION}"
 
     rtf = _manual_text()
     assert rf"\title TLO Inventory User Manual {version.VERSION}" in rtf
@@ -47,18 +46,14 @@ def test_build523_manual_section_and_cli_contracts():
     assert "standalone tlo-tag defaults to never" in rtf
 
 
-def test_build523_requirements_revision_index_is_descending_and_clean():
+def test_current_requirements_replace_revision_log_with_test_catalog():
     doc = Document(ROOT / RA.REQUIREMENTS_FILENAME)
-    ps = [p.text.strip() for p in doc.paragraphs]
-    start = next(i for i, t in enumerate(ps) if t.startswith("21. Revision Index"))
-    end = next(i for i, t in enumerate(ps[start + 1 :], start + 1) if t.startswith("Appendix A"))
-    entries = [t for t in ps[start + 1 : end] if re.match(r"Build \d+:", t)]
-    nums = [int(re.match(r"Build (\d+):", t).group(1)) for t in entries]
-    assert nums == sorted(nums, reverse=True)
-    assert 535 in nums and 533 in nums and 532 in nums and 531 in nums and 530 in nums and 529 in nums and 528 in nums and 527 in nums and 526 in nums and 523 in nums and 517 in nums
-    assert not any(t.startswith("Build 469:") and "change summary ->" in t for t in entries)
-    assert ps[end - 1].startswith("This index is navigational rather than normative.")
-    assert not any(re.match(r"Build 51[5-7]:", t) for t in ps[end + 1 :])
+    text = "\n".join(p.text.strip() for p in doc.paragraphs)
+    assert "21. Revision Index" not in text
+    assert "CHANGES_v" not in text
+    assert "Appendix A - Requirements Traceability Matrix" in text
+    assert "Appendix K - Supplemental Current Operational Requirements" in text
+    assert (ROOT / f"TLO_Requirements_Catalog_v{__import__('tlo_version').BUNDLE_BUILD}.csv").is_file()
 
 
 def test_build523_current_terminology_faq_changes_and_carried_history():

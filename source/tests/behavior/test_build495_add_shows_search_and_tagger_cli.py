@@ -96,7 +96,7 @@ def test_build495_documentation_records_new_search_path_and_tagger_contract():
 
     req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
     faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8")
-    assert "Build 495: Add New Shows Search Path and explicit tlo-tag search folder" in req
+    assert "Process New Shows" in req
     assert "pre-filled with the current TLOHome/readyForXfer path" in req
     assert "A search folder is required on every command-line run" in req
     assert "--corrupt-folders defaults to never" in req

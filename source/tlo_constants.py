@@ -323,13 +323,31 @@ ARTIST_HEADER_LINE_LIMIT = 2
 VENUE_HEADER_LINE_LIMIT = 4
 
 MONTHS = {
+    # English, including existing abbreviations. Do not remove any aliases.
     "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
     "apr": 4, "april": 4, "may": 5, "jun": 6, "june": 6, "jul": 7, "july": 7,
     "aug": 8, "august": 8, "sep": 9, "sept": 9, "september": 9, "oct": 10,
     "october": 10, "nov": 11, "november": 11, "dec": 12, "december": 12,
+    # German. Accept common transliterations for umlauts.
+    "januar": 1, "februar": 2, "märz": 3, "maerz": 3, "marz": 3,
+    "mär": 3, "maer": 3, "mrz": 3, "mai": 5, "juni": 6, "juli": 7,
+    "okt": 10, "oktober": 10, "dez": 12, "dezember": 12,
+    # French. Unaccented variants are common in folder names.
+    "janvier": 1, "janv": 1, "février": 2, "fevrier": 2,
+    "févr": 2, "fevr": 2, "fév": 2, "fev": 2, "mars": 3,
+    "avril": 4, "avr": 4, "juin": 6, "juillet": 7, "juil": 7,
+    "août": 8, "aout": 8, "septembre": 9, "octobre": 10,
+    "novembre": 11, "décembre": 12, "decembre": 12, "déc": 12,
+    # Italian. Avoid abbreviated 'set' and 'ago' as they are common English words.
+    "gennaio": 1, "gen": 1, "febbraio": 2, "marzo": 3,
+    "aprile": 4, "maggio": 5, "mag": 5, "giugno": 6, "giu": 6,
+    "luglio": 7, "lug": 7, "agosto": 8, "settembre": 9,
+    "ottobre": 10, "ott": 10, "novembre": 11,
+    "dicembre": 12, "dic": 12,
 }
-MONTH_NAME_PATTERN = r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t)?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
 MONTH_NAME_WORDS = tuple(sorted(MONTHS.keys(), key=lambda value: (-len(value), value)))
+# Preserve this constant for date-pattern consumers; use longest aliases first.
+MONTH_NAME_PATTERN = "|".join(re.escape(word) for word in MONTH_NAME_WORDS)
 
 
 def _case_constrained_words_pattern(words):

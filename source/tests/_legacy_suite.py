@@ -8488,7 +8488,7 @@ def test_v342_current_documentation_contract():
     assert f"Version {__import__('tlo_version').DISPLAY_VERSION}" in manual_rtf
     assert "V1.3Build351" not in manual_rtf
     assert f"Version {__import__('tlo_version').DISPLAY_VERSION}" in manual_rtf
-    assert "eight assets" in manual_rtf
+    assert "update_downloads = msi" in manual_rtf and "update_downloads = zip" in manual_rtf
     assert "artists.sqlite" in manual_rtf and "venues.txt" in manual_rtf
     assert "Checking either box only selects the mode" in manual_rtf
     assert "Dry Run" in requirements and "Dry Run" in manual_rtf and "Dry Run" in faq
@@ -9567,7 +9567,8 @@ def test_v358_user_manual_is_complete_and_current():
 
     assert "tagT.log" not in manual
     assert "Environment variables and setup diagrams" not in manual
-    assert manual.count("\\pict") >= 3
+    assert manual.count("\\pict") == 0  # The original embedded screenshots were corrupt.
+    assert "Main window reference" in manual
 
 
 # --------------------------------------------------------------------------- #

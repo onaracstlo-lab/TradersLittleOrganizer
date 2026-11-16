@@ -1,4 +1,4 @@
-"""Build 491 regressions for Canadian regions, marker info-gen files, and GUI wording."""
+"""Canadian postal region abbreviations regressions for Canadian regions, marker info-gen files, and GUI wording."""
 from tests._release_artifacts import release_history
 from tests import _release_artifacts as RA
 
@@ -147,7 +147,7 @@ def test_build491_requirements_and_manual_document_changes():
     req_text = "\n".join(p.text for p in Document(req).paragraphs)
     manual_text = manual.read_text(encoding="utf-8", errors="replace")
 
-    assert "Build 491" in req_text
+    assert "Canadian postal region abbreviations" in req_text
     assert "info-gen.txt" in req_text
     assert "deleteReplacedFolders.bat" in req_text
     assert "deleteBackupFolders.sh" in req_text

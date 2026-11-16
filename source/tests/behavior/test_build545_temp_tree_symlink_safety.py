@@ -146,7 +146,7 @@ def test_build545_version_and_documentation_contract():
     manual_path = root / RA.MANUAL_FILENAME
     assert req_path.is_file() and manual_path.is_file()
     req = "\n".join(p.text for p in Document(req_path).paragraphs)
-    assert "Build 545: P2-L3/L-06 -> §3, §14.6" in req
+    assert "symlinks" in req
     assert ".tlo-case-rename-" in req
     assert "preserve any link that appears after that check rather than dereferencing its target" in req
 

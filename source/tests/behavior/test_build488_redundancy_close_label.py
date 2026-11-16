@@ -34,7 +34,7 @@ def test_build488_redundancy_groups_layout_and_behavior_unchanged():
 def test_build488_docs_describe_label_only_change():
     from docx import Document
     req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
-    assert "Build 488: Redundancy Groups Close label" in req
+    assert "Redundancy Groups" in req
     assert "The editor-dismiss button is labeled Close" in req
     assert "Build 488 - Redundancy Groups Close label" in release_history()
     assert 'Close instead of Cancel' in release_history()

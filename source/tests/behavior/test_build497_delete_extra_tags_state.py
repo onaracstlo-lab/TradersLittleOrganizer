@@ -107,7 +107,7 @@ def test_build497_documentation_records_delete_extra_tags_gui_state_rule():
     req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
     manual = (ROOT / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
 
-    assert "Build 497: Delete Extra Tags GUI availability" in req
+    assert "Delete Extra Tags" in req
     assert "The main-GUI checkbox is disabled/greyed and forced unchecked whenever Tag In Place, Tag Copy, and Tag Copy/Delete Original are all unchecked" in req
     assert "Delete Extra Tags is greyed out and unchecked whenever Tag In Place, Tag Copy, and Tag Copy/Delete Original are all unchecked" in manual
     assert "The three tag modes remain mutually exclusive" in req

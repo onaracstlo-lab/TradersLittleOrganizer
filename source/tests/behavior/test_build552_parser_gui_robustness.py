@@ -119,7 +119,7 @@ def test_build552_version_and_documentation_contract():
     req = "\n".join(p.text for p in req_doc.paragraphs)
 
     assert "Build 552 - " in release_history()
-    assert "Build 552: parser/GUI robustness" in req
+    assert "16.1 Bounded Reads and Malformed Input" in req
     assert "trailing 1,024 characters" in req
     assert "2,048 characters" in req
     assert "daemon-thread tracebacks" in req

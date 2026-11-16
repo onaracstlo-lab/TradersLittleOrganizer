@@ -59,9 +59,9 @@ DATE_PATTERNS = [
     r"(?<![0-9xX])[0-9xX]{1,2}\s*/\s*[0-9xX]{1,2}\s*/\s*(?:\d{2}|(?:19|20)\d{2})(?![0-9xX])",
     r"(?<![0-9xX])(?:(?:19|20)\d{6}|(?:19|20)[xX]{6}|[xX]{8})(?![0-9xX])",
     r"(?<![0-9xX])(?:19|20)\d{2}[ -]\d{4}(?![0-9xX])",
-    rf"(?<![A-Za-z0-9]){MONTH_NAME_CASED_PATTERN}[\s._,\-]*\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?[\s._,\-]*(?:\d{{2}}|(?:19|20)\d{{2}})(?![A-Za-z0-9])",
-    rf"(?<![A-Za-z0-9])\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?[\s._,\-]*{MONTH_NAME_CASED_PATTERN}[\s._,\-]*(?:\d{{2}}|(?:19|20)\d{{2}})(?![A-Za-z0-9])",
-    rf"(?<![A-Za-z0-9])(?:19|20)\d{{2}}[\s._,\-]*{MONTH_NAME_CASED_PATTERN}[\s._,\-]*\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?(?![A-Za-z0-9])",
+    rf"(?<![A-Za-z0-9]){MONTH_NAME_CASED_PATTERN}[\s._,\-]*\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH|er|ER|ère|ÈRE|º|°)?[\s._,\-]*(?:\d{{2}}|(?:19|20)\d{{2}})(?![A-Za-z0-9])",
+    rf"(?<![A-Za-z0-9])\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH|er|ER|ère|ÈRE|º|°)?[\s._,\-]*{MONTH_NAME_CASED_PATTERN}[\s._,\-]*(?:\d{{2}}|(?:19|20)\d{{2}})(?![A-Za-z0-9])",
+    rf"(?<![A-Za-z0-9])(?:19|20)\d{{2}}[\s._,\-]*{MONTH_NAME_CASED_PATTERN}[\s._,\-]*\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH|er|ER|ère|ÈRE|º|°)?(?![A-Za-z0-9])",
     rf"(?<![A-Za-z0-9]){MONTH_NAME_CASED_PATTERN}[\s._,\-]*(?:19|20)\d{{2}}(?![A-Za-z0-9])",
 ]
 _COMPILED_DATE_PATTERNS = [re.compile(pattern) for pattern in DATE_PATTERNS]

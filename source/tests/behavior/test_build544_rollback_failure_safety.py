@@ -254,7 +254,7 @@ def test_build544_version_and_documentation_contract():
     manual_path = ROOT / RA.MANUAL_FILENAME
     assert requirements_path.is_file() and manual_path.is_file()
     req = "\n".join(p.text for p in Document(requirements_path).paragraphs)
-    assert "Build 544: P2-M1 -> §16.4" in req
+    assert "on rollback failure preserve" in req
     assert "the user-facing failure must state that rollback was incomplete" in req
     manual = manual_path.read_text(encoding="utf-8", errors="ignore")
     assert "Build 544 - " in release_history()

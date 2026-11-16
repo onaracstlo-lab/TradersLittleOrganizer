@@ -121,7 +121,7 @@ def test_build498_documentation_records_proper_grammar_contract():
     manual = (ROOT / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
     changes = (ROOT / RA.CHANGES_FILENAME).read_text(encoding="utf-8")
 
-    assert "Build 498: Proper Grammar artist naming" in req
+    assert "As-Is Artist Name and Proper Grammar affect only" in req
     assert "As-Is Artist Name always overrides and suppresses Proper Grammar output conversion" in req
     assert "Kinks, The" in req and "Smith, John" in req
     assert "Proper Grammar is directly beneath As-Is Artist Name and defaults unchecked" in manual

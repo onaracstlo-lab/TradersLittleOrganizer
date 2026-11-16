@@ -1,5 +1,15 @@
-TLO v1.7 Build 665 — NOT RELEASE-ATTESTED
-Source baseline: Build 664 application ZIP; GitHub Build Process v135 is a separate package.
+TLO v1.7 Build 668 — NOT RELEASE-ATTESTED
+Build 668 includes multilingual date and guarded Compliant disc grouping changes. Full local Linux regression completed: 2,653 passed, 6 skipped, 0 failed. Requirements DOCX 99 pages; manual RTF 33 pages. Native GitHub Actions/release validation pending. Native Windows/macOS tests, signing and the full GitHub Actions run are NOT ATTESTED for Build 668.
+
+TLO v1.7 Build 667 — NOT RELEASE-ATTESTED
+Local source regression: 2,618 passed, 6 skipped, 0 failed across four completed groups.
+Requirements DOCX: 1,279 paragraphs, 13 tables, 99 rendered pages. Office XML metadata/relationship validation passed. User Manual RTF rebuilt.
+Native Microsoft Word opening has not been tested in this Linux environment. GitHub Actions acceptance and native sign/packaging gates remain pending.
+Native Windows/macOS tests, signing and the full GitHub Actions run are NOT ATTESTED for Build 667.
+
+TLO v1.7 Build 666 — NOT RELEASE-ATTESTED
+Build 666 local Linux source-suite tests executed in nonoverlapping subsets: 2,615 passed, 6 skipped, 0 failed (2,621 collected). See REGRESSION_RESULTS_v666.txt. The monolithic suite did not complete within the local execution window; hosted single-command acceptance is not attested.
+Source baseline: Build 665 application ZIP; GitHub Build Process v135 is a separate package.
 Build 665: Repair five Build 664 hosted Linux test failures (preferences enum-comment spacing, outdated v134 README assertion, Requirements revision-index upper bound and current CHANGES references). No updater or MSI behavior changes.
 Build 664 hosted Linux CI run 43780507949: 5 failed, 2,585 passed, 26 skipped. Windows/macOS jobs passed; final packaging skipped.
 Build 665 local full CI=1 Xvfb pytest suite: 2,613 passed, 6 skipped, 1 expected duplicate-ZIP warning in 74.55s (0 failed). See REGRESSION_RESULTS_v665.txt. Ruff was unavailable locally and its test was skipped; mandatory hosted lint remains required.
@@ -20,3 +30,7 @@ No earlier source, build-process package, or published release is altered by Bui
 Build 663 GitHub Actions run 43656434596: all platform builds succeeded; packaging failed due to missing .tlo-build-process/PROCESS_VERSION.txt (handled in companion process v135).
 
 Build 665 is a distinct source ZIP; previously issued releases are unchanged. Companion GitHub Build Process v135 remains unchanged.
+
+Native Windows/macOS tests, signing and the full GitHub Actions run are NOT ATTESTED for Build 666.
+
+Build 666 local test aggregate: 2,615 passed, 6 skipped, 0 failed across isolated subsets. Ruff lint not attested locally; full GitHub Actions run not attested for Build 666.

@@ -19,8 +19,9 @@ def test_build539_version_and_documents_are_current():
 def test_build539_requirements_and_changes_record_process_v107_action_pinning():
     req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
     changes = (ROOT / RA.CHANGES_FILENAME).read_text(encoding="utf-8")
-    for text in (req, changes):
-        assert "GitHub Build Process v107" in text
+    assert "External GitHub Actions in official release workflows SHALL be pinned" in req
+    assert "full 40-character commit SHAs" in req
+    assert "GitHub Build Process v107" in changes
     assert "Build 540" in release_history()
     assert "full 40-character commit SHA" in changes
     assert "Application runtime behavior is unchanged" in changes

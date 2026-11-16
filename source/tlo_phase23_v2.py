@@ -125,13 +125,13 @@ SLASH_END_FIRST_RE = re.compile(
     re.IGNORECASE,
 )
 MONTH_DAY_YEAR_RE = re.compile(
-    rf"(?<![A-Za-z0-9])(?P<month_name>{MONTH_NAME_CASED_PATTERN})\.?{TEXT_DATE_SEP_OPT}(?P<day>\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?){TEXT_DATE_SEP_OPT}(?P<year>{YEAR_TOKEN_RE_TEXT})(?![A-Za-z0-9])"
+    rf"(?<![A-Za-z0-9])(?P<month_name>{MONTH_NAME_CASED_PATTERN})\.?{TEXT_DATE_SEP_OPT}(?P<day>\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH|er|ER|ère|ÈRE|º|°)?){TEXT_DATE_SEP_OPT}(?P<year>{YEAR_TOKEN_RE_TEXT})(?![A-Za-z0-9])"
 )
 DAY_MONTH_YEAR_RE = re.compile(
-    rf"(?<![A-Za-z0-9])(?P<day>\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?){TEXT_DATE_SEP_OPT}(?P<month_name>{MONTH_NAME_CASED_PATTERN})\.?{TEXT_DATE_SEP_OPT}(?P<year>{YEAR_TOKEN_RE_TEXT})(?![A-Za-z0-9])"
+    rf"(?<![A-Za-z0-9])(?P<day>\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH|er|ER|ère|ÈRE|º|°)?){TEXT_DATE_SEP_OPT}(?P<month_name>{MONTH_NAME_CASED_PATTERN})\.?{TEXT_DATE_SEP_OPT}(?P<year>{YEAR_TOKEN_RE_TEXT})(?![A-Za-z0-9])"
 )
 YEAR_MONTHNAME_DAY_RE = re.compile(
-    rf"(?<![A-Za-z0-9])(?P<year>{YEAR4_TOKEN_RE_TEXT}){TEXT_DATE_SEP_OPT}(?P<month_name>{MONTH_NAME_CASED_PATTERN})\.?{TEXT_DATE_SEP_OPT}(?P<day>\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?)(?![A-Za-z0-9])"
+    rf"(?<![A-Za-z0-9])(?P<year>{YEAR4_TOKEN_RE_TEXT}){TEXT_DATE_SEP_OPT}(?P<month_name>{MONTH_NAME_CASED_PATTERN})\.?{TEXT_DATE_SEP_OPT}(?P<day>\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH|er|ER|ère|ÈRE|º|°)?)(?![A-Za-z0-9])"
 )
 MONTH_YEAR_RE = re.compile(
     rf"(?<![A-Za-z0-9])(?P<month_name>{MONTH_NAME_CASED_PATTERN})\.?{TEXT_DATE_SEP_OPT}(?P<year>{YEAR4_TOKEN_RE_TEXT})(?![A-Za-z0-9])"
@@ -149,8 +149,8 @@ MAX_YEAR_RANGE_SPAN = 5
 DATE_ANALYSIS_MAX_CHARS = 1024
 THE_PREFIX_RE = re.compile(r"^(?:the|a)\s+", re.IGNORECASE)
 THE_SUFFIX_RE = re.compile(r",\s*(?:the|a)$", re.IGNORECASE)
-ORDINAL_RE = re.compile(r"(?i)(\d{1,2})(?:st|nd|rd|th)$")
-DAY_TOKEN_RE_TEXT = r"\d{1,2}(?:st|nd|rd|th|ST|ND|RD|TH)?"
+ORDINAL_RE = re.compile(r"(?i)(\d{1,2})(?:st|nd|rd|th|er|ère|º|°)$")
+DAY_TOKEN_RE_TEXT = r"\d{1,2}(?:st|nd|rd|th|ST|ND|RD|TH|er|ER|ère|ÈRE|º|°)?"
 DAY_RANGE_SEP_RE_TEXT = r"(?:\s*[-,\u2013\u2014]\s*)"
 YEAR_FIRST_SAME_MONTH_DAY_RANGE_RE = re.compile(
     rf"(?<![0-9xX])(?P<year>{YEAR4_FULL_RE_TEXT})-(?P<month>\d{{1,2}})-"
@@ -1465,13 +1465,68 @@ def _dated_described_part_sibling_info(music_dir_entries: Sequence[dict]) -> Dic
 
 
 
+def _compliant_wrapper_sibling_info(music_dir_entries: Sequence[dict], start_path: str) -> Dict[str, Dict[str, str]]:
+    """Group a *complete* dated show's plain Disc/CD/Set siblings in Compliant mode.
+
+    Unlike broad non-compliant release aggregation, only immediate, media-bearing,
+    homogeneous, consecutive numbered wrappers (01..N) qualify, and the parent
+    must itself identify a performance. This avoids merging collection folders,
+    unrelated named parts, lone discs, and direct parent audio.
+    """
+    rows_by_parent: Dict[str, List[Tuple[str, str, str, int]]] = {}
+    all_music = {os.path.normcase(os.path.normpath(_entry_music_dir(item)))
+                 for item in music_dir_entries or [] if _entry_music_dir(item)}
+    exact_part = re.compile(
+        r"(?i)^(?P<kind>disc|disk|cd|set|part|tape|side)[\s._-]*"
+        r"(?P<number>\d{1,2}|i{1,3}|iv|one|two|three|four)$"
+    )
+    word_numbers = {"one": 1, "two": 2, "three": 3, "four": 4,
+                    "i": 1, "ii": 2, "iii": 3, "iv": 4}
+    for item in music_dir_entries or []:
+        path = os.path.normpath(_entry_music_dir(item))
+        if not path:
+            continue
+        parent = os.path.dirname(path)
+        match = exact_part.fullmatch(os.path.basename(path))
+        kind = (match.group("kind").lower() if match else "")
+        if kind in {"disc", "disk"}:
+            kind = "disc"
+        part = (match.group("number").lower() if match else "")
+        number = word_numbers.get(part, int(part) if part.isdecimal() else 0)
+        rows_by_parent.setdefault(os.path.normcase(parent), []).append((path, parent, kind, number))
+
+    promoted: Dict[str, Dict[str, str]] = {}
+    for parent_key, rows in rows_by_parent.items():
+        if len(rows) < 2 or parent_key in all_music:
+            continue
+        parent = rows[0][1]
+        if os.path.normcase(parent) == os.path.normcase(os.path.normpath(start_path)):
+            continue
+        kinds = {kind for _path, _parent, kind, _number in rows}
+        numbers = sorted(number for _path, _parent, _kind, number in rows)
+        if len(kinds) != 1 or not next(iter(kinds)) or numbers != list(range(1, len(rows) + 1)):
+            continue
+        parent_name = os.path.basename(parent)
+        if not (_complete_date_match(parent_name) or _compliant_text_has_folder_pattern(parent_name)):
+            continue
+        for path, _parent, _kind, _number in rows:
+            promoted[os.path.normcase(path)] = {
+                "aggregation_key": f"compliant_wrappers::{parent_key}",
+                "main_dir_path": parent,
+                "main_dir_name": parent_name,
+                "aggregation_reason": "compliant_disc_set_siblings",
+            }
+    return promoted
+
+
 def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
     logged_paths = load_complete_path_lines(config)
     music_dir_entries = _discover_music_dirs_from_logged_paths(config, logged_paths, start_path)
 
     # Non-compliant mode treats sibling release parts as one logical show when
     # the music directory is, or ends in, a wrapper-like disc/part suffix.
-    # Compliant mode remains one group per music directory.
+    # Compliant mode aggregates only verified, consecutive, homogeneous
+    # plain Disc/CD/Set siblings beneath a recognizable show parent.
     buckets: Dict[str, dict] = {}
     volume_parent_info = _volume_part_parent_info(music_dir_entries)
     wrapper_parent_info = _wrapper_part_parent_info(music_dir_entries)
@@ -1486,12 +1541,22 @@ def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
     dated_supplemental_info = _dated_supplemental_descendant_info(music_dir_entries, start_path)
     sequential_word_info = _sequential_word_part_aggregation_info(music_dir_entries, start_path)
     if getattr(config, "compliant", False):
+        sibling_info = _compliant_wrapper_sibling_info(music_dir_entries, start_path)
         for entry in music_dir_entries:
             music_dir = _entry_music_dir(entry)
-            key = f"single::{os.path.normcase(os.path.normpath(music_dir))}"
-            bucket = _new_group_bucket(music_dir, os.path.basename(os.path.normpath(music_dir)))
+            info = sibling_info.get(os.path.normcase(os.path.normpath(music_dir)))
+            if info:
+                key = info["aggregation_key"]
+                bucket = buckets.setdefault(key, _new_group_bucket(
+                    info["main_dir_path"], info["main_dir_name"],
+                    aggregation_reason=info["aggregation_reason"],
+                ))
+            else:
+                key = f"single::{os.path.normcase(os.path.normpath(music_dir))}"
+                bucket = buckets.setdefault(
+                    key, _new_group_bucket(music_dir, os.path.basename(os.path.normpath(music_dir)))
+                )
             _add_entry_to_bucket(bucket, entry)
-            buckets[key] = bucket
     else:
         for entry in sorted(music_dir_entries, key=lambda item: _entry_music_dir(item).lower()):
             throttle_point(config)
@@ -2106,7 +2171,7 @@ def _date_raw_has_mixed_component_separators(raw: str, allow_year_space_month_da
     text = str(raw or "").strip()
     if allow_year_space_month_day_exception and _is_year_space_month_punct_day_exception(text):
         return False
-    tokens = re.findall(r"[A-Za-z]+|[0-9xX]+(?:st|nd|rd|th|ST|ND|RD|TH)?|[^A-Za-z0-9xX]+", text)
+    tokens = re.findall(r"[A-Za-z]+|[0-9xX]+(?:st|nd|rd|th|ST|ND|RD|TH|er|ER|ère|ÈRE|º|°)?|[^A-Za-z0-9xX]+", text)
     separators = []
     for index in range(1, len(tokens) - 1):
         prev_token = tokens[index - 1]

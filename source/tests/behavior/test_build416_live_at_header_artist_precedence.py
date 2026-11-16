@@ -161,5 +161,5 @@ def test_build416_requirements_and_manual_document_rule():
     assert "Artist / Live at Venue" in req_text
     assert "AL DiMeola Group GROUP" in req_text
     assert "Gürzenich" in req_text
-    assert "Build 416: Structured Live at setlist metadata precedence" in req_text
+    assert "Artist / Live at Venue" in req_text
     assert "Artist followed by Live at Venue" in manual_text

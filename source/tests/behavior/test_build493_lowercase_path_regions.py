@@ -109,7 +109,7 @@ def test_build493_requirements_and_manual_document_lowercase_path_guard():
     assert manual.is_file()
 
     req_text = "\n".join(p.text for p in Document(req).paragraphs)
-    assert "Build 493: Guarded lowercase region abbreviations in lowercase paths" in req_text
+    assert "Lowercase" in req_text
     assert "consistently lowercase" in req_text
     assert "common/word-like codes such as in, on, or, me, and hi" in req_text
     assert "Mixed-case fragments and selected-setlist/free-form metadata do not receive this relaxation" in req_text

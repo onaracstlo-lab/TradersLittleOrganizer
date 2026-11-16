@@ -28,16 +28,12 @@ def test_current_readme_process_matches_verification_not_historical_literal():
     assert f"GitHub Build Process {match.group(1)}" in verification
 
 
-def test_requirements_index_and_current_change_references_track_version():
+def test_requirements_are_versioned_without_embedded_release_history():
     doc = Document(ROOT / f"TLO_Inventory_Requirements_Working_{V.VERSION}.docx")
-    paragraphs = [par.text for par in doc.paragraphs]
-    index_heading = f"21. Revision Index (Build 398-{V.BUNDLE_BUILD})"
-    assert index_heading in paragraphs
-    ix = paragraphs.index(index_heading)
-    appendix = next(i for i, par in enumerate(paragraphs) if par.startswith("Appendix A -"))
-    revision_text = "\n".join(paragraphs[ix:appendix])
-    assert f"Build {V.BUNDLE_BUILD}:" in revision_text
-    assert f"current CHANGES_{V.VERSION}.txt" in revision_text
-    assert f"CHANGES_v{V.BUNDLE_BUILD-1}.txt" not in revision_text
+    body = "\n".join(par.text for par in doc.paragraphs)
+    assert "21. Revision Index" not in body
+    assert "CHANGES_v" not in body
+    assert "Appendix A - Requirements Traceability Matrix" in body
+    assert "Appendix K - Supplemental Current Operational Requirements" in body
     assert doc.core_properties.revision == V.BUNDLE_BUILD
     assert f"Build {V.BUNDLE_BUILD}" in doc.core_properties.title

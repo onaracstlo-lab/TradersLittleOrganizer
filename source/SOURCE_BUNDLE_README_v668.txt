@@ -1,10 +1,16 @@
-Traders Little Organizer (TLO) - Source and Utilities Bundle v665
+Traders Little Organizer (TLO) - Source and Utilities Bundle v668
 ==================================================================
-Public application version: v1.7 Build 665
+Public application version: v1.7 Build 668
 Native GitHub Build Process: v135 (separate complete package)
 
 CURRENT RELEASE
 ---------------
+Build 668: Add German/French/Italian textual month support (including accents and common transliterations) and group verified consecutive Disc/CD/Set siblings under their show parent in Compliant mode. No setlist required. Preserve existing non-compliant grouping and unrelated-show protections. GitHub Build Process v135 unchanged.
+
+Build 667: Re-export the consolidated Requirements specification as a Word-compatible DOCX and independently rebuild the RTF User Manual. Verify XML/ZIP structure, full DOCX paragraph/table content preservation, and document rendering. No application or updater behavior changes. Original Build 666 ZIP is preserved. Build Process v135 remains separate. Hosted CI acceptance pending.
+
+Build 666: Documentation-only editorial consolidation. Requirements are organized around current operating rules, with historical change/revision narratives removed; the RTF manual has been reorganized and obsolete release notes and broken screenshots removed. Separate TLO_Requirements_Catalog_v666.csv captures 1,022 candidate rows for eventual test-matrix development. Application and updater behavior remain unchanged from the previous accepted source baseline. Native GitHub release gates are not yet attested. Companion GitHub Build Process v135 remains separate.
+
 Build 665: Repair all five Build 664 Linux CI failures: recognize the explicitly requested `update_downloads : msi | zip` comment spacing in the two enum-label tests; remove the hard-coded v134 process expectation; bring the Requirements revision index and current CHANGES references forward; and retain strict version/provenance preflight. The Build 664 updater selection and signed MSI handoff are unchanged. Build 664 failed Linux tests (5 failed, 2585 passed, 26 skipped); it is preserved, not replaced. Companion GitHub Build Process v135 remains separate and unchanged. Hosted acceptance pending.
 
 Build 664: Windows defaults to downloading the authenticated MSI regardless of installation origin. [general] update_downloads = zip selects portable ZIP updates explicitly. Missing/older preferences default to MSI. Portable MSI install leaves TLOHome/apps for optional manual removal. Build Process v135 accompanies this source bundle; the previous Build 663 archive was not modified. Native hosted validation pending.
@@ -35,7 +41,7 @@ while preserving the ZIP update path for portable installations.
 Build 654: Full Inventory and supporting tools accept Windows UNC share paths
 without drive mapping. Persist the network share as UNC:server/share and the
 folder path relative to it; Copy Requests reconstruct the share path and
-Manual Updates match share-scoped identities. See CHANGES_v665.txt.
+Manual Updates match share-scoped identities. See CHANGES_v667.txt.
 
 Build 653: Main and Search update checks enforce the GitHub production-release
 approval gate. Normal v126 builds produce public pre-releases, which are not

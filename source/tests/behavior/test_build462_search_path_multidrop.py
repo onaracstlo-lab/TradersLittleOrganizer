@@ -168,5 +168,5 @@ def test_build462_documentation_records_cumulative_multidrop_behavior():
     assert "complete file list supplied by File Explorer" in req
     assert "A;B;C;D" in req
     assert "processes the complete Windows drag payload" in manual
-    assert "Each drag appends its items to the existing Search Path value" in manual
+    assert "Each drag appends its items to the existing Path(s) value" in manual
     assert "The Windows TkDND handling ensures that every folder or .txt control file selected in one drag is retained" in faq

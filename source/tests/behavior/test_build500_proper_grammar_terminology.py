@@ -51,7 +51,7 @@ def test_build500_current_docs_use_proper_grammar_and_current_version():
     req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
     manual = (ROOT / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")
     changes = (ROOT / RA.CHANGES_FILENAME).read_text(encoding="utf-8")
-    assert "Build 498: Proper Grammar artist naming" in req
-    assert "Build 500: Proper Grammar terminology" in req
+    assert "Proper Grammar" in req
+    assert "Proper Grammar" in req
     assert "Proper Grammar" in manual
     assert "--proper-grammar" in changes

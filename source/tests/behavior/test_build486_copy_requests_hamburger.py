@@ -31,7 +31,7 @@ def test_build486_existing_main_action_button_positions_are_unchanged():
 def test_build486_docs_place_copy_requests_under_hamburger():
     requirements = Document(ROOT / RA.REQUIREMENTS_FILENAME)
     requirement_text = "\n".join(p.text for p in requirements.paragraphs)
-    assert "Build 486: Copy Requests moved to hamburger menu" in requirement_text
+    assert "Copy Requests and Redundancy Groups appear only" in requirement_text
     assert "Copy Requests is opened from the hamburger menu" in requirement_text
     assert "upper-right hamburger menu" in requirement_text
 

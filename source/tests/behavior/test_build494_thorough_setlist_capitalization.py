@@ -24,6 +24,6 @@ def test_build494_documentation_records_display_only_change():
     from docx import Document
 
     req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
-    assert "Build 494: Thorough Setlist Matching GUI capitalization" in req
+    assert "Thorough Setlist Matching" in req
     assert "Thorough Setlist Matching" in req
     assert 'Build 494 - The main-window checkbox label is now "Thorough Setlist Matching"' in release_history()

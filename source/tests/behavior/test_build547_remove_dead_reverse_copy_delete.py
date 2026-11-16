@@ -108,7 +108,7 @@ def test_build547_version_and_documentation_contract():
     manual_path = ROOT / RA.MANUAL_FILENAME
     assert req_path.is_file() and manual_path.is_file()
     req = "\n".join(p.text for p in Document(req_path).paragraphs)
-    assert "Build 547: M-03->§14.6." in req
+    assert "Folder reversal is a standalone CLI operation named tlo-reverse" in req
     assert "The obsolete tlo_reverse_copy_delete implementation is not shipped." in req
 
     assert "Build 547 - " in release_history()

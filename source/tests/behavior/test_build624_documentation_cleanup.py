@@ -46,7 +46,7 @@ def test_faq_is_version_neutral_and_manual_rtf_has_no_bad_apostrophe():
     assert 'TLO GitHub Build Process v122' not in faq
     manual = (ROOT / f'TLO_Inventory_User_Manual_v{version.BUNDLE_BUILD}.rtf').read_text(encoding='utf-8')
     assert r"O\'er" not in manual
-    assert "What's New" in manual
+    assert "What's New" not in manual
     assert f'Version {version.DISPLAY_VERSION}' in manual
     assert rf'\title TLO Inventory User Manual v{version.BUNDLE_BUILD}' in manual
     assert 'Edit Preferences' in manual
@@ -55,8 +55,8 @@ def test_faq_is_version_neutral_and_manual_rtf_has_no_bad_apostrophe():
 def test_requirements_archive_separated_from_current_sections():
     doc = Document(ROOT / f'TLO_Inventory_Requirements_Working_v{version.BUNDLE_BUILD}.docx')
     headings = [(p.style.name, p.text) for p in doc.paragraphs]
-    assert ('Heading 1', 'Appendix K - Historical Build Amendments (Reference Only)') in headings
-    assert ('Heading 2', '14.8 Persistent Preferences and Edit Preferences') in headings
+    assert ('Heading 1', 'Appendix K - Supplemental Current Operational Requirements') in headings
+    assert ('Heading 2', '14.12 Persistent Preferences and Edit Preferences') in headings
     assert ('Heading 2', '20.1 Verified SHN conversion and original retention') in headings
     for style, label in headings:
         if re.match(r'Build 55[7-9]:|Build 56[0-4]:', label):

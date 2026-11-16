@@ -174,5 +174,5 @@ def test_build458_current_documentation_describes_package_matrix():
     faq = (root / "TLO-FAQ.txt").read_text(encoding="utf-8")
     assert "exact matching complete ZIP" in req_text
     assert "databases_included" in req_text
-    assert "only the four complete ZIPs" in manual
+    assert "update_downloads = msi" in manual and "update_downloads = zip" in manual
     assert "Can an update ZIP include the TLO databases?" in faq

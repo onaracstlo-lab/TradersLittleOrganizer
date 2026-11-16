@@ -22,7 +22,7 @@ def test_city_and_shn_recovery_documentation_current():
     manual=(ROOT/f'TLO_Inventory_User_Manual_{VERSION}.rtf').read_text(encoding='utf-8')
     assert 'Defaults are Delete corrupt files and 100% corrupt only' not in manual
     assert 'the current clipboard/paste buffer' not in manual
-    assert 'Optional city reference' in manual
+    assert 'City identification uses physical' in manual
     assert f'Version {DISPLAY_VERSION}' in manual
 
 
@@ -33,7 +33,7 @@ def test_requirements_no_stale_current_default_or_document_revision():
     assert 'REQ-CORR-000  Full Inventory defaults are Corrupt files = Delete' not in alltext
     assert 'REQ-CORR-000  Full Inventory and standalone tlo-tag default to Corrupt files = Keep' in alltext
     assert 'earlier release live cosmetic-preference application' not in alltext
-    assert doc.core_properties.subject == f'Consolidated current specification for TLO {DISPLAY_VERSION}'
+    assert doc.core_properties.subject == f'Current testable technical and functional requirements, TLO {DISPLAY_VERSION}'
 
 
 def test_source_build_gate_runner_is_not_a_pass_claim():

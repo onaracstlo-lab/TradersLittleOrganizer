@@ -1,3 +1,20 @@
+TLO v1.7 Build 668 — International dates and Compliant disc grouping
+============================================================
+- Recognize German, French, and Italian month names, accents, and common transliterations in full/partial dates, with calendar validation and English parsing preserved.
+- Group a valid performance parent with direct, homogeneous and consecutive numbered disc/set children in Compliant mode. Keep audio from all parts without requiring a setlist; refuse unsafe/ambiguous grouping.
+- Retain current Linux/WSL/macOS archives and Windows MSI update preference. Build Process v135 unchanged.
+
+TLO v1.7 Build 667 — Document compatibility repair (runtime unchanged)
+
+Requirements DOCX rebuilt using an independent Office Open XML serializer to address reported Word corruption. RTF User Manual re-exported. The full requirements text and all tables are retained. Test-matrix catalog IDs remain stable. Signed release and native Word testing are not yet attested.
+
+TLO v1.7 Build 666 — documentation and test-matrix preparation only
+===================================================================
+- Reorganized current Requirements and User Manual; removed embedded revision and release-change histories, obsolete manual notes, and three corrupted embedded screenshots.
+- Consolidated current MSI-default/optional ZIP update guidance and Linux/WSL/macOS portable installation guidance.
+- Prepared the separate requirement locator/traceability catalog (1,022 candidate entries), with test placeholders and compound-statement flags. Detailed test matrix not yet created.
+- No changes to application behavior, installers, signed updates or storage policy. Companion Build Process v135 unchanged. Hosted verification remains mandatory.
+
 TLO v1.7 Build 665 — release regression checks repaired; MSI updater unchanged
 ===============================================================================
 - Repair Build 664 Linux CI run 43780507949, which failed five tests: both enum-comment validators, the legacy v134 build-process expectation, and two current Requirements version/reference contracts.

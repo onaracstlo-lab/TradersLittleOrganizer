@@ -1,4 +1,4 @@
-"""Build 553: low-risk maintenance closure for residual review items."""
+"""17.5 Build Process Compatibility for residual review items."""
 
 from __future__ import annotations
 from tests._release_artifacts import release_history
@@ -103,4 +103,4 @@ def test_build553_version_and_documentation_contract():
 
     assert "TLO v1.7 Build 553" in changes
     assert "Build 553 - " in release_history()
-    assert "Build 553: low-risk maintenance closure" in req
+    assert "17.5 Build Process Compatibility" in req

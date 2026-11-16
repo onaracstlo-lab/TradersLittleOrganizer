@@ -592,8 +592,8 @@ _TRAILING_NUMERIC_DATE_RE = re.compile(
 )
 _TRAILING_TEXT_DATE_RE = re.compile(
     rf"\s+(?:"
-    rf"{MONTH_NAME_CASED_PATTERN}\.?\s*,?\s*\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?(?:\s*,?\s*(?:(?:19|20)\d{{2}}|\d{{2}}))?|"
-    rf"\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?\s*{MONTH_NAME_CASED_PATTERN}\.?(?:\s*(?:(?:19|20)\d{{2}}|\d{{2}}))?"
+    rf"{MONTH_NAME_CASED_PATTERN}\.?\s*,?\s*\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH|er|ER|ère|ÈRE|º|°)?(?:\s*,?\s*(?:(?:19|20)\d{{2}}|\d{{2}}))?|"
+    rf"\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH|er|ER|ère|ÈRE|º|°)?\s*{MONTH_NAME_CASED_PATTERN}\.?(?:\s*(?:(?:19|20)\d{{2}}|\d{{2}}))?"
     rf")\s*$"
 )
 
@@ -1250,8 +1250,8 @@ _DATE_HEADER_RE = re.compile(
     rf"(?:19|20)\d{{2}}(?:\s*[-_.]\s*|\s+)\d{{1,2}}(?:\s*[-_.]\s*|\s+)\d{{1,2}}|"
     rf"\d{{1,2}}\s*/\s*\d{{1,2}}\s*/\s*(?:(?:19|20)\d{{2}}|\d{{2}})|"
     rf"(?:19|20)\d{{2}}[ -]\d{{4}}|"
-    rf"{MONTH_NAME_CASED_PATTERN}[\s._,\-]*\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?(?:[\s._,\-]*(?:(?:19|20)\d{{2}}|\d{{2}}))?|"
-    rf"\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?[\s._,\-]*{MONTH_NAME_CASED_PATTERN}(?:[\s._,\-]*(?:(?:19|20)\d{{2}}|\d{{2}}))?"
+    rf"{MONTH_NAME_CASED_PATTERN}[\s._,\-]*\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH|er|ER|ère|ÈRE|º|°)?(?:[\s._,\-]*(?:(?:19|20)\d{{2}}|\d{{2}}))?|"
+    rf"\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH|er|ER|ère|ÈRE|º|°)?[\s._,\-]*{MONTH_NAME_CASED_PATTERN}(?:[\s._,\-]*(?:(?:19|20)\d{{2}}|\d{{2}}))?"
     rf")\s*$"
 )
 
@@ -1330,8 +1330,8 @@ def _parse_unlabeled_location_header_line(line: str, support: _SupportData) -> T
 _INLINE_DATE_TOKEN_RE = re.compile(
     rf"(?P<date>(?:(?:19|20)\d{{2}}[-/.]\d{{1,2}}[-/.]\d{{1,2}}|"
     rf"\d{{1,2}}[-/.]\d{{1,2}}[-/.](?:(?:19|20)\d{{2}}|\d{{2}})|"
-    rf"{MONTH_NAME_CASED_PATTERN}\.?\s*,?\s*\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?(?:\s*,?\s*(?:(?:19|20)\d{{2}}|\d{{2}}))?|"
-    rf"\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH)?\s*{MONTH_NAME_CASED_PATTERN}\.?(?:\s*(?:(?:19|20)\d{{2}}|\d{{2}}))?))",
+    rf"{MONTH_NAME_CASED_PATTERN}\.?\s*,?\s*\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH|er|ER|ère|ÈRE|º|°)?(?:\s*,?\s*(?:(?:19|20)\d{{2}}|\d{{2}}))?|"
+    rf"\d{{1,2}}(?:st|nd|rd|th|ST|ND|RD|TH|er|ER|ère|ÈRE|º|°)?\s*{MONTH_NAME_CASED_PATTERN}\.?(?:\s*(?:(?:19|20)\d{{2}}|\d{{2}}))?))",
     re.IGNORECASE,
 )
 

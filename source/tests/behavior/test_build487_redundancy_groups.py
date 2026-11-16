@@ -128,7 +128,7 @@ def test_build487_documentation_covers_ordered_redundancy_and_unquoted_paths():
     from docx import Document
     req = "\n".join(p.text for p in Document(ROOT / RA.REQUIREMENTS_FILENAME).paragraphs)
     faq = (ROOT / "TLO-FAQ.txt").read_text(encoding="utf-8")
-    assert "Build 487: ordered redundancy groups for equivalent source volumes" in req
+    assert "Copy Requests and Redundancy Groups appear only" in req
     assert "Declaration order is source precedence" in req
     assert "Paths with spaces do not require quotes" in req
     assert 'Juke3 = Back-up3 = Back-up3a' in release_history()

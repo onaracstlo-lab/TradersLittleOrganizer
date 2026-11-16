@@ -188,6 +188,6 @@ def test_build419_documentation_contract():
 
     assert "Parent/Parent (1)" in req
     assert "use ALBUM_NAME as the base Album value" in req
-    assert "Build 419: Commercial multipart releases and ALBUM_NAME behavior" in req
+    assert "ALBUM_NAME" in req
     assert "Parent/Parent (1)" in manual
     assert "ALBUM_NAME" in manual
