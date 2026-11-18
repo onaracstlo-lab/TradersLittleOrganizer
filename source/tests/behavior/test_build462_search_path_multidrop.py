@@ -12,13 +12,14 @@ pytestmark = pytest.mark.behavior
 
 class _FakeTk:
     def __init__(self):
-        tk = pytest.importorskip(
-            "tkinter", reason="Tkinter is required for Tcl drag/drop payload parsing"
-        )
-        self._tcl = tk.Tcl()
+        # Pure fake Tcl-list parser: Win hosted Python sometimes lacks a
+        # working init.tcl, despite Tk being importable. This unit test must
+        # not instantiate a native Tcl interpreter.
+        pass
 
     def splitlist(self, value):
-        return self._tcl.splitlist(value)
+        import re
+        return tuple(braced or bare for braced, bare in re.findall(r"\{([^}]*)\}|(\S+)", value))
 
 
 class _Widget:

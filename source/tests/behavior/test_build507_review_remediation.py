@@ -50,13 +50,15 @@ def test_build507_delete_script_rejects_roots_and_parent_traversal(row):
 def test_build507_delete_script_accepts_paths_below_volume_root(row, expected):
     label, path = IU._delete_target_from_bootlist_volume_path(row)
     assert label == "Backup-1"
-    assert path == expected
+    assert path.replace("\\", "/") == expected.replace("\\", "/")
 
 
-def test_build507_delete_target_rejects_tlohome_and_ancestor(tmp_path):
-    home = tmp_path / "disk" / "tlo"; home.mkdir(parents=True)
-    assert IU._canonical_safe_delete_path(str(home), tlo_home=str(home)) == ""
-    assert IU._canonical_safe_delete_path(str(home.parent), tlo_home=str(home)) == ""
+def test_build507_delete_target_rejects_tlohome_and_ancestor():
+    home = "/mnt/e/disk/tlo"
+    assert IU._canonical_safe_delete_path(home, tlo_home=home) == ""
+    assert IU._canonical_safe_delete_path("/mnt/e/disk", tlo_home=home) == ""
+    assert IU._canonical_safe_delete_path("/mnt/e/disk/tlo/TLO_DBs", tlo_home=home) == ""
+    assert IU._canonical_safe_delete_path("/mnt/e/disk", tlo_home="/mnt/f/different") == "/mnt/e/disk"
 
 
 def test_build507_non_ascii_key_never_crashes_and_invisible_is_explained(monkeypatch):
@@ -136,7 +138,7 @@ def test_build507_existing_delete_script_is_archived_per_session(tmp_path):
     script.write_text("old", encoding="utf-8")
     assert IU.archive_updater_delete_script_for_new_session(str(home)) == str(script)
     assert not script.exists()
-    archived = list((home / "logs").glob("deleteBackupFolders-*"))
+    archived = list((home / "logs").glob(f"{script.stem}-*"))
     assert len(archived) == 1 and archived[0].read_text(encoding="utf-8") == "old"
 
 

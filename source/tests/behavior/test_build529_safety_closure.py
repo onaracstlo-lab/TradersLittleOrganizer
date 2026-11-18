@@ -108,6 +108,7 @@ def test_build529_copy_request_delete_faults_fail_closed(tmp_path):
         assert (outside / "keep.txt").is_file()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_build529_unlabeled_posix_cleanup_script_is_executable_but_non_destructive(tmp_path):
     target = tmp_path / "volume" / "Band 1999"
     target.mkdir(parents=True)

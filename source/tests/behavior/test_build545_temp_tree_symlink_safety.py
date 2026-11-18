@@ -116,9 +116,10 @@ def test_build545_copy_boundary_never_dereferences_raced_in_symlink(monkeypatch,
 
     copied = temp_target / "info.txt"
     assert copied.is_symlink()
-    assert os.readlink(copied) == str(secret)
+    assert os.path.samefile(copied, secret)  # Windows symlinks may expose an extended-length \\?\ target path
     # The link target itself was not copied into the temporary tree as a regular file.
-    assert copied.lstat().st_size == len(str(secret).encode())
+    if os.name != "nt":
+        assert copied.lstat().st_size == len(str(secret).encode())
 
 
 def test_build545_copy_boundary_still_copies_normal_tree(tmp_path):

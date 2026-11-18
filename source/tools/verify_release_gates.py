@@ -35,13 +35,19 @@ def main() -> int:
             print(f"BLOCKED: command exited {completed.returncode}", file=sys.stderr)
             return 1
     from docx import Document
+    # Invoked as `python tools/verify_release_gates.py` (and from a clean
+    # source ZIP); Python adds tools/, not the source root, to sys.path.
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
     from tlo_version import DISPLAY_VERSION, VERSION
     requirement = ROOT / f"TLO_Inventory_Requirements_Working_{VERSION}.docx"
     properties = Document(requirement).core_properties
-    if properties.title != f"TLO Inventory Requirements - {DISPLAY_VERSION}" or properties.subject != f"Consolidated current specification for TLO {DISPLAY_VERSION}":
+    if properties.title != f"TLO Inventory Requirements - {DISPLAY_VERSION}" or properties.subject != f"Current testable technical and functional requirements, TLO {DISPLAY_VERSION}":
         print("BLOCKED: requirements document title/subject metadata mismatch", file=sys.stderr)
         return 1
-    print("RELEASE SOURCE CHECKS PASSED", flush=True)
+    # These are local SOURCE gates only. Native Windows signing and hosted
+    # packaging must still pass independently before any promotion.
+    print("RELEASE SOURCE CHECKS PASSED (native signing NOT ATTESTED)", flush=True)
     return 0
 
 if __name__ == '__main__':

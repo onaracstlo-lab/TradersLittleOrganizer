@@ -1,0 +1,22 @@
+TLO v1.7 Build 681 — macOS/Windows hosted test compatibility and current documentation
+Companion GitHub Build Process v140 (unchanged)
+
+- Windows: corrected a historical test to require preservation of /mnt/drive and
+  /Volumes/... bootlist path spellings, not os.path.normpath output from the host OS.
+  Production destructive-path safeguards and their Windows/WSL checks are unchanged.
+- macOS: corrected the Trash argv safety test to allow /tmp vs /private/tmp
+  symlink aliases while requiring that the input path remains an argv item,
+  never embedded in executable AppleScript source.
+- macOS: changed deep-tree tests to use 360 levels with a deliberately lowered
+  recursion limit (280); the traversal still exceeds Python's recursion limit
+  but no longer exceeds macOS's filesystem maximum path length.
+- Synchronized current Requirements, User Manual, README, licenses/source pointers,
+  build records, and ZIP manifest. Historical build packages remain untouched.
+- GitHub Actions Build 680 run 44192839133 had Linux success, macOS 3 test
+  failures, Windows 1 test failure; Process v140 infrastructure itself did not
+  fail. Hosted acceptance of Build 681 is still required.
+
+Additional Build 680 lineage/date and safety corrections remain in effect.
+
+Local source tests are not a substitute for hosted Windows/macOS builds,
+Windows signing, or MSI installation. Those gates remain NOT ATTESTED.

@@ -1,4 +1,4 @@
-"""Build 633: CLI aliases and opt-in clipboard behavior."""
+"""Build 633: CLI aliases and explicit clipboard preference compatibility."""
 from pathlib import Path
 import importlib.util
 import sys
@@ -15,10 +15,12 @@ def load_gui(name, filename):
     return mod
 
 
-def test_search_clipboard_default_disabled(tmp_path):
-    assert P.load(tmp_path)['search']['clipboard_prefill'] is False
-    text = P.default_text().replace('clipboard_prefill = false', 'clipboard_prefill = true')
-    assert P.parse_text(text)['search']['clipboard_prefill'] is True
+def test_search_clipboard_and_search_path_are_not_preferences(tmp_path):
+    loaded = P.load(tmp_path)
+    assert 'clipboard_prefill' not in loaded['search']
+    assert 'search_query' not in loaded['search']
+    assert 'search_path' not in loaded['main']
+    assert all(key not in P.default_text() for key in ('clipboard_prefill', 'search_query', 'search_path ='))
 
 
 def test_main_cli_aliases_equivalent(tmp_path):

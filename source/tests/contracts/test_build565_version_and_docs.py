@@ -51,7 +51,7 @@ def test_canonical_current_artifacts_and_manual_version():
     assert "What's New" not in manual
     assert 'Release history' not in manual
     assert 'Build history (selected changes)' not in manual
-    assert (ROOT / A.CHANGES_FILENAME).read_text().startswith(f'TLO {V.DISPLAY_VERSION}')
+    assert (ROOT / A.CHANGES_FILENAME).read_text(encoding="utf-8").startswith(f'TLO {V.DISPLAY_VERSION}')
 
 
 def test_current_bundle_has_no_orphaned_loose_graphics():

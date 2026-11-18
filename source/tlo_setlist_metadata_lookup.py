@@ -17,7 +17,7 @@ from tlo_cities import catalog_for_tlo
 from tlo_constants import (
     AMBIGUOUS_CANADIAN_REGION_CODES, CANADIAN_REGION_ALIASES, CANADIAN_REGION_CODES,
     COUNTRY_ALIASES, COUNTRY_SEARCH_TERMS, LOCATION_CONNECTIVE_WORDS,
-    LOWERCASE_COMMON_STATE_CODES, MONTH_NAME_CASED_PATTERN, US_STATE_ALIASES, US_STATE_CODES,
+    LOWERCASE_COMMON_STATE_CODES, MONTH_NAME_CASED_PATTERN, AMBIGUOUS_SHORT_FOREIGN_MONTHS, US_STATE_ALIASES, US_STATE_CODES,
 )
 from tlo_text_utils import (
     MAX_TEXT_FULL_BYTES,
@@ -628,6 +628,16 @@ def _trim_explicit_metadata_value_tail(value: str) -> str:
     return _clean_spaces(cleaned.strip(" ,;.-"))
 
 
+def _unsafe_short_foreign_date_token(token: str) -> bool:
+    """A short foreign month cannot consume trader ordinal/bit-rate lineage."""
+    words = set(re.findall(r"[A-Za-zÀ-ÿ]+", str(token).casefold()))
+    if not words.intersection(AMBIGUOUS_SHORT_FOREIGN_MONTHS):
+        return False
+    return not bool(re.search(r"(?<!\d)(?:19|20)\d{2}(?!\d)", token)) or bool(
+        re.search(r"(?i)\b\d{1,2}(?:st|nd|rd|th|er|ère|º|°)\b", token)
+    )
+
+
 def _strip_trailing_performance_date_from_metadata_value(value: str) -> str:
     """Remove a trailing date token after extracting it as date evidence elsewhere."""
     cleaned = _trim_explicit_metadata_value_tail(value)
@@ -636,7 +646,9 @@ def _strip_trailing_performance_date_from_metadata_value(value: str) -> str:
     for _ in range(3):
         before = cleaned
         cleaned = _TRAILING_SLASH_DATE_RE.sub("", cleaned)
-        cleaned = _TRAILING_TEXT_DATE_RE.sub("", cleaned)
+        cleaned = _TRAILING_TEXT_DATE_RE.sub(
+            lambda match: match.group() if _unsafe_short_foreign_date_token(match.group()) else "", cleaned
+        )
         cleaned = _TRAILING_NUMERIC_DATE_RE.sub("", cleaned)
         cleaned = _clean_spaces(cleaned.strip(" ,;.-"))
         if cleaned == before:
@@ -1342,7 +1354,7 @@ def _extract_inline_artist_date_header(lines: List[str], support: _SupportData) 
         if not raw or _looks_like_tracklist_start(raw) or _looks_like_sentence_prose_line(raw):
             continue
         match = _INLINE_DATE_TOKEN_RE.search(raw)
-        if not match:
+        if not match or _unsafe_short_foreign_date_token(match.group("date")):
             continue
         before = _clean_spaces(raw[:match.start()].strip(" ,;-"))
         after = _clean_spaces(raw[match.end():].strip(" ,;-"))

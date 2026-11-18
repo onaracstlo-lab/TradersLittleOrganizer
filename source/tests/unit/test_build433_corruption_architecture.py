@@ -100,9 +100,9 @@ def test_apply_whole_show_trash_returns_structured_outcome(monkeypatch):
     outcome = C.apply_corruption_assessment(config, _group(), record, assessment)
 
     assert outcome.show_removed
-    assert moved == ["/shows/show"]
+    assert [p.replace("\\", "/") for p in moved] == ["/shows/show"]
     assert config.current_search_corruption_groups_removed == 1
-    assert config.current_search_corruption_removed_paths == ["/shows/show"]
+    assert [p.replace("\\", "/") for p in config.current_search_corruption_removed_paths] == ["/shows/show"]
     assert any("REMOVED_CORRUPTION" in line for line in config.logs.conflict_lines)
 
 

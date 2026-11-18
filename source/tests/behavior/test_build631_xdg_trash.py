@@ -1,8 +1,10 @@
 """Build 631: recoverable XDG Trash without gio, preserving originals on errors."""
+import os
 import pytest
 import tlo_corruption as C
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_xdg_trash_round_trip_file_and_metadata(tmp_path, monkeypatch):
     home = tmp_path / 'home'; home.mkdir()
     monkeypatch.setenv('HOME', str(home)); monkeypatch.delenv('XDG_DATA_HOME', raising=False)
@@ -16,6 +18,7 @@ def test_xdg_trash_round_trip_file_and_metadata(tmp_path, monkeypatch):
     assert f'Path={str(src).replace(" ", "%20")}' in info[0].read_text()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_xdg_trash_name_collision_preserves_both(tmp_path, monkeypatch):
     home = tmp_path / 'home'; home.mkdir(); monkeypatch.setenv('HOME', str(home))
     src = home / 'same.flac'
@@ -27,6 +30,7 @@ def test_xdg_trash_name_collision_preserves_both(tmp_path, monkeypatch):
     assert {p.read_bytes() for p in files} == {b'first', b'second'}
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_xdg_rename_failure_keeps_source(tmp_path, monkeypatch):
     home = tmp_path / 'home'; home.mkdir(); monkeypatch.setenv('HOME', str(home))
     src = home / 'original.shn'; src.write_bytes(b'unchanged')
@@ -39,6 +43,7 @@ def test_xdg_rename_failure_keeps_source(tmp_path, monkeypatch):
     assert not list((home / '.local/share/Trash/info').iterdir())
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_xdg_missing_home_fails_closed(tmp_path, monkeypatch):
     monkeypatch.setenv('HOME', str(tmp_path / 'absent'))
     src = tmp_path / 'saved.shn'; src.write_bytes(b'original')

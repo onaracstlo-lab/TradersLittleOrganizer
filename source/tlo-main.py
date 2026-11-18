@@ -1099,7 +1099,7 @@ class App:
         defaults = {
             "search_path_override": (
                 (getattr(self.cli_args, 'search_path_override', '') or '')
-                if 'search_path_override' in explicit else pref['search_path']).strip(),
+                if 'search_path_override' in explicit else '').strip(),
             "search_path_slam_override": (getattr(self.cli_args, "search_path_slam_override", "") or "").strip(),
             "performance_mode": performance_mode_default,
             "max_workers": str(initial_max_workers),

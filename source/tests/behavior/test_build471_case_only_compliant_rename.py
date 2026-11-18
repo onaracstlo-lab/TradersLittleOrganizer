@@ -40,7 +40,8 @@ def test_exact_case_rename_uses_temporary_hop_when_two_spellings_are_same_entry(
 
     assert result == os.path.normpath(str(destination))
     assert destination.is_dir()
-    assert not source.exists()
+    assert source.name not in [entry.name for entry in source.parent.iterdir()]
+    assert destination.name in [entry.name for entry in destination.parent.iterdir()]
     assert len(calls) == 2
     assert ".tlo-case-rename-" in os.path.basename(calls[0][1])
     assert calls[1][1] == os.path.normpath(str(destination))
@@ -81,7 +82,8 @@ def test_inventory_tag_rename_applies_canonical_artist_capitalization(tmp_path):
     expected = tmp_path / "Dave Van Ronk 1978-02-17 Main Point Bryn Mawr, PA"
 
     assert expected.is_dir()
-    assert not source.exists()
+    assert source.name not in [entry.name for entry in source.parent.iterdir()]
+    assert expected.name in [entry.name for entry in expected.parent.iterdir()]
     assert new_group["main_dir_path"] == os.path.normpath(str(expected))
     assert new_record.main_dir_path == os.path.normpath(str(expected))
     assert any(message.startswith("RENAME_COMPLIANTLY:") for message in messages)
@@ -109,5 +111,6 @@ def test_add_shows_rename_applies_canonical_artist_capitalization(tmp_path):
 
     assert result == os.path.normpath(str(expected))
     assert expected.is_dir()
-    assert not source.exists()
+    assert source.name not in [entry.name for entry in source.parent.iterdir()]
+    assert expected.name in [entry.name for entry in expected.parent.iterdir()]
     assert record["main_dir_path"] == os.path.normpath(str(expected))

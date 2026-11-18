@@ -1,10 +1,12 @@
-Traders Little Organizer (TLO) - Source and Utilities Bundle v668
+Traders Little Organizer (TLO) - Source and Utilities Bundle v672
 ==================================================================
 Public application version: v1.7 Build 668
 Native GitHub Build Process: v135 (separate complete package)
 
 CURRENT RELEASE
 ---------------
+Build 672: Search always initializes from the clipboard unless --find is supplied. Remove obsolete INI search_path, search_query and clipboard_prefill controls; silently ignore legacy entries. Existing INI files are preserved.
+
 Build 668: Add German/French/Italian textual month support (including accents and common transliterations) and group verified consecutive Disc/CD/Set siblings under their show parent in Compliant mode. No setlist required. Preserve existing non-compliant grouping and unrelated-show protections. GitHub Build Process v135 unchanged.
 
 Build 667: Re-export the consolidated Requirements specification as a Word-compatible DOCX and independently rebuild the RTF User Manual. Verify XML/ZIP structure, full DOCX paragraph/table content preservation, and document rendering. No application or updater behavior changes. Original Build 666 ZIP is preserved. Build Process v135 remains separate. Hosted CI acceptance pending.
@@ -131,7 +133,7 @@ Build 634: Apply safe cosmetic preferences live.
 Validated edits can update cosmetic fonts in Main and Search without resetting operational controls. Restart remains required for structural, search and destructive-mode changes; invalid values are rejected.
 
 Build 633: CLI compatibility aliases and opt-in clipboard.
-Main, Search and Tag accept --tlo-home alongside --TLOHome; --tag-move-to aliases the existing destination-taking copy/delete argument. Search clipboard prefill is opt-in for new installations.
+Main, Search and Tag accept --tlo-home alongside --TLOHome; --tag-move-to aliases the existing destination-taking copy/delete argument. Search clipboard prefill is unconditional unless --find supplies the initial query.
 
 Build 632: Trusted process checks and cross-process settings.
 Copy Requests uses an absolute trusted ps path. Run-settings entries use an operating-system advisory lock across processes. etreeDB User-Agent reflects the current version. No log rotation is introduced.
@@ -185,8 +187,8 @@ BUILD CONTENTS
 - tlo-research.py : inventory research
 - tlo-deleteDupes.py : duplicate cleanup
 - Additional scripts, source modules, tests and build recipes in the ZIP root.
-- TLO_Inventory_User_Manual_v653.rtf : end-user instructions
-- TLO_Inventory_Requirements_Working_v653.docx : current specification
+- TLO_Inventory_User_Manual_v669.rtf : end-user instructions
+- TLO_Inventory_Requirements_Working_v669.docx : current specification
 - TLO-FAQ.txt : support answers
 - tlo-preferences.ini : default startup configuration (never overwrite
   an existing TLOHome configuration)

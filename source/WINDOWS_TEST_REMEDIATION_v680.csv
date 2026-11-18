@@ -1,0 +1,13 @@
+Failed test,Build 679 root cause,Build 680 correction,Native acceptance
+tests/behavior/test_build462_search_path_multidrop.py,Tcl init.tcl unavailable in hosted test fixture,Pure fake Tcl splitlist; real drag/drop integration remains covered,pending hosted Windows CI
+tests/behavior/test_build474_manual_updates_and_paths.py,Windows drive stripped from volume-scoped bootlist path,Compare canonical volume-relative stored paths,pending hosted Windows CI
+tests/behavior/test_build507_review_remediation.py [WSL],POSIX mount paths were normalized with ntpath,Use posixpath for POSIX storage targets,pending hosted Windows CI
+tests/behavior/test_build507_review_remediation.py [macOS],POSIX /Volumes paths were normalized with ntpath,Use posixpath for POSIX storage targets,pending hosted Windows CI
+tests/behavior/test_build532_verification_integrity.py,Workflow compileall generated .pyc inside checkout,Build Process v140 isolates compiled cache outside checkout,pending hosted Windows CI
+tests/behavior/test_build545_temp_tree_symlink_safety.py,Windows symbolic-link lstat st_size differs,"Check target identity and non-dereferencing, POSIX-only link byte size",pending hosted Windows CI
+tests/behavior/test_build641_remediation.py,Windows default cp1252 source decoding failed,Read UTF-8 source explicitly,pending hosted Windows CI
+tests/behavior/test_build676_windows_security.py,POSIX path representation differed under Windows,Pure POSIX path handling and normalized safety assertion,pending hosted Windows CI
+tests/contracts/test_build565_version_and_docs.py,Windows default cp1252 decoding of CHANGES failed,Read UTF-8 documentation explicitly,pending hosted Windows CI
+tests/contracts/test_build678_documentation_cleanup.py,Windows default cp1252 decoding of CHANGES failed,Read UTF-8 documentation explicitly,pending hosted Windows CI
+tests/unit/test_build415_copy_delete_scope.py,POSIX storage path slash expected on Windows,Compare preserved POSIX spelling,pending hosted Windows CI
+tests/unit/test_build433_corruption_architecture.py,Synthetic POSIX path represented with Windows separators,Normalize synthetic path assertion,pending hosted Windows CI

@@ -26,7 +26,6 @@ DEFAULTS = {
         'corrupt_files': 'keep',
         'corrupt_folders': 'never',
         'corrupt_folder_threshold': 100,
-        'search_path': '',
         'font_family': 'system',
         'font_size': 0,
         'heading_font_size': 0,
@@ -34,8 +33,6 @@ DEFAULTS = {
     },
     'search': {
         'deep': False,
-        'clipboard_prefill': False,
-        'search_query': '',
         'font_family': 'system',
         'font_size': 0,
         'heading_font_size': 0,
@@ -46,7 +43,7 @@ DEFAULTS = {
 }
 
 BOOL_KEYS = {('main', field) for field in _BOOLEAN_DEFAULTS} | {
-    ('general', 'auto_update'), ('main', 'dry_run'), ('search', 'deep'), ('search', 'clipboard_prefill'),
+    ('general', 'auto_update'), ('main', 'dry_run'), ('search', 'deep'),
     ('manual_updates', 'update_tags'), ('add_new_shows', 'check_for_duplicates'),
 }
 FONT_SIZES = {('main', field) for field in ('font_size', 'heading_font_size', 'fixed_font_size')} | {
@@ -61,6 +58,14 @@ CHOICES = {
     ('main', 'corrupt_files'): ('keep', 'delete'),
     ('main', 'corrupt_folders'): ('never', 'all', 'threshold'),
 }
+# Obsolete INI entries are accepted without validation and have no effect.
+# The user's existing file is never silently rewritten or migrated.
+LEGACY_IGNORED_KEYS = {
+    ('main', 'search_path'),
+    ('search', 'search_query'),
+    ('search', 'clipboard_prefill'),
+}
+
 BOOLEAN_WORDS = {
     'true': True, 'yes': True, 'on': True, '1': True,
     'false': False, 'no': False, 'off': False, '0': False,
@@ -86,10 +91,6 @@ def allowed_description(section, key):
         return '0-100 (%)'
     if key == 'font_family':
         return 'system (default) or an installed font family (case-insensitive)'
-    if key == 'search_path':
-        return 'a path or semicolon-separated paths; leave blank for default (case preserved)'
-    if key == 'search_query':
-        return 'any query up to 4096 characters; blank runs an empty search (case preserved)'
     raise KeyError((section, key))
 
 
@@ -98,7 +99,6 @@ def allowed_description(section, key):
 _DEFAULT_TEMPLATE = """# Traders Little Organizer startup preferences
 # Edit through hamburger > Edit Preferences. Restart TLO after saving.
 # All section names, keys, choice values, and true/false words ignore case.
-# Paths and free-text search queries retain their exact capitalization.
 # Unavailable font families fall back to the desktop default.
 # Do not change the file while a TLO preferences editor is open.
 
@@ -138,8 +138,6 @@ corrupt_files = keep
 corrupt_folders = never
 # corrupt_folder_threshold: 0-100 (%)
 corrupt_folder_threshold = 100
-# search_path: a path or semicolon-separated paths; leave blank for default (case preserved)
-search_path = 
 # font_family: system (default) or an installed font family (case-insensitive)
 font_family = system
 # font_size: 0 (platform default) or 7-40 points
@@ -149,13 +147,9 @@ heading_font_size = 0
 # fixed_font_size: 0 (platform default) or 7-40 points
 fixed_font_size = 0
 
-# Search window; clipboard prefill defaults off for privacy.
+# Search window; startup text is taken from --find or the clipboard.
 [search]
 deep = false
-# Clipboard prefill is opt-in; --find and search_query take precedence.
-clipboard_prefill = false
-# search_query: any query up to 4096 characters; blank stays empty unless clipboard_prefill=true (case preserved)
-search_query = 
 font_family = system
 font_size = 0
 heading_font_size = 0
@@ -217,13 +211,15 @@ def _read_entries(text):
             continue
         key, value = match.group(1).casefold(), match.group(2).strip()
         # Inline comments are accepted only after horizontal whitespace.  An
-        # embedded '#' in a path or a search query is left untouched.
+        # embedded '#' in a value is left untouched.
         value = re.split(r'[ \t]+[;#]', value, maxsplit=1)[0].rstrip()
         if current is None:
             errors.append(f'Line {number}: [{"no section"}] {key}: key is not inside a valid section')
             continue
         if current not in DEFAULTS:
             continue  # Unknown section was already reported with its line number.
+        if (current, key) in LEGACY_IGNORED_KEYS:
+            continue
         if key not in DEFAULTS[current]:
             errors.append(f'Line {number}: Unknown preference [{current}] {key}; allowed keys: {", ".join(DEFAULTS[current])}')
             continue
@@ -237,7 +233,7 @@ def _read_entries(text):
 
 
 def _parse_value(section, key, raw):
-    """Validate/normalize enum and boolean values, leaving path/query case intact."""
+    """Validate/normalize configurable enum, numeric, and boolean values."""
     value = raw.strip()
     if (section, key) in BOOL_KEYS:
         try:
@@ -267,10 +263,6 @@ def _parse_value(section, key, raw):
         if not value or len(value) > 100 or any(ord(char) < 32 for char in value):
             raise ValueError(f'expected {allowed_description(section, key)}')
         return 'system' if value.casefold() == 'system' else value
-    if key in ('search_path', 'search_query'):
-        if len(value) > 4096 or any(ord(char) < 32 for char in value):
-            raise ValueError(f'expected {allowed_description(section, key)}')
-        return value
     raise ValueError('unsupported preference')
 
 

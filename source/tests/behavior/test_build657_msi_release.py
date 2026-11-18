@@ -134,7 +134,7 @@ def test_wix_preparation_seeds_docs_but_not_source_tree(tmp_path):
     original = tmp_path / "source"; original.mkdir()
     (original / "tlo-main.exe").write_bytes(b"signed exe placeholder")
     docs = tmp_path / "documents"; docs.mkdir()
-    for name in ("TLO-FAQ.txt", "tlo-preferences.ini",
+    for name in ("TLO-FAQ.txt", "tlo-preferences.ini", "LICENSE", "SOURCE.txt", "THIRD_PARTY_NOTICES.txt",
                  RA.MANUAL_FILENAME, RA.REQUIREMENTS_FILENAME):
         (docs / name).write_bytes(b"documentation")
     stage = tmp_path / "prepared"

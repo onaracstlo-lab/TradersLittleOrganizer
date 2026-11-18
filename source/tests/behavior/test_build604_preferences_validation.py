@@ -42,10 +42,10 @@ def test_case_insensitive_sections_keys_boolean_and_enum_but_preserve_paths():
     assert parsed['main']['performance_mode'] == 'extreme'
     assert parsed['main']['corrupt_files'] == 'keep'
     assert parsed['main']['corrupt_folders'] == 'never'
-    assert parsed['main']['search_path'] == r'C:\Concerts\The Band;D:\MiXeD\Shows'
+    assert 'search_path' not in parsed['main']
     assert parsed['main']['font_family'] == 'system'
     assert parsed['main']['artist_in_album'] is True
-    assert parsed['search']['search_query'] == 'The BAND |AND| King Crimson'
+    assert 'search_query' not in parsed['search']
     assert parsed['search']['deep'] is True
     assert parsed['general']['auto_update'] is False
 

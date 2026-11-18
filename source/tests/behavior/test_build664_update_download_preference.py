@@ -121,9 +121,10 @@ def test_verified_msi_portable_handoff_checks_digest_and_launches_interactive_se
     digest = hashlib.sha256(file.read_bytes()).hexdigest()
     launched = []
     monkeypatch.setattr(Mode.sys, 'platform', 'win32')
+    monkeypatch.setattr('tlo_security.windows_directory_from_api', lambda: r'C:\Windows')
     monkeypatch.setattr('subprocess.Popen', lambda args, **kwargs: launched.append((args,kwargs)))
     assert Mode.launch_verified_portable_msi_install(file, digest)
-    assert launched[0][0] == ['msiexec.exe', '/i', str(file)]
+    assert launched[0][0] == [r'C:\Windows\System32\msiexec.exe', '/i', str(file)]
     with pytest.raises(ValueError, match='no longer matches'):
         Mode.launch_verified_portable_msi_install(file, '0'*64)
     assert len(launched) == 1

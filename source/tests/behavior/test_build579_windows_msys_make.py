@@ -25,6 +25,7 @@ def test_windows_make_uses_msys_posix_binary_and_preserves_source_layout():
     assert 'ffmpeg-9.0.2' not in text  # source folder is a parameter, not a hardcoded mount
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_makefile_guard_stops_missing_source_before_compiler(tmp_path):
     source = tmp_path / 'source'
     source.mkdir()
@@ -36,6 +37,7 @@ def test_makefile_guard_stops_missing_source_before_compiler(tmp_path):
     assert 'source Makefile not found' in result.stderr
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_recipe_runs_out_of_tree_with_actual_posix_make(tmp_path):
     source = tmp_path / 'source with spaces'
     source.mkdir()

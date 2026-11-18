@@ -26,6 +26,7 @@ def _write_windows_journal(container: Path, original_parent: str, names):
     return payload
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Requires POSIX WSL-mount filesystem semantics; native Windows form is tested separately")
 def test_build465_windows_journal_paths_translate_to_wsl_mount(tmp_path, monkeypatch):
     mount_root = tmp_path / "mnt"
     monkeypatch.setattr(SC, "_WSL_MOUNT_ROOT", str(mount_root))
@@ -40,6 +41,7 @@ def test_build465_wsl_journal_paths_translate_to_native_windows_form():
     ) == r"E:\boots\Pink Floyd - Early Flights"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Requires POSIX WSL-mount filesystem semantics; native Windows form is tested separately")
 def test_build465_recovers_windows_written_collision_journal_under_wsl(tmp_path, monkeypatch):
     # Reproduce the user's interrupted state, except the WSL mount root is
     # redirected into pytest's temporary directory so the test is portable.
@@ -79,6 +81,7 @@ def test_build465_recovers_windows_written_collision_journal_under_wsl(tmp_path,
         assert not (restored / SC.JOURNAL_NAME).exists()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Requires POSIX WSL-mount filesystem semantics; native Windows form is tested separately")
 def test_build465_cross_platform_diagnostic_shows_runtime_and_journal_forms(tmp_path, monkeypatch):
     mount_root = tmp_path / "mnt"
     monkeypatch.setattr(SC, "_WSL_MOUNT_ROOT", str(mount_root))

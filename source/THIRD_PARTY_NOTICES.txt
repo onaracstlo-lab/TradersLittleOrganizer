@@ -1,0 +1,15 @@
+Third-party dependency notices — Traders Little Organizer Build 681
+
+This notice is informational and does not replace license texts. Distributors must verify the license versions for the exact locked dependencies built in CI. Original upstream license files should be included with the corresponding-source distribution.
+
+- Mutagen: GPL-2.0-or-later. https://github.com/quodlibet/mutagen/blob/main/COPYING
+- CPython: Python Software Foundation License, https://docs.python.org/3/license.html
+- OpenSSL: Apache License 2.0, https://www.openssl.org/source/license.html
+- Tcl/Tk: Tcl/Tk License, https://www.tcl-lang.org/software/tcltk/license.html
+- tkinterdnd2: MIT, https://github.com/pmgagne/tkinterdnd2
+- tkdnd: BSD-style, https://github.com/petasis/tkdnd
+- PyInstaller bootloader: GPL with special exception, https://pyinstaller.org/en/stable/license.html
+- zlib, expat, libffi, xz, bzip2 and SQLite: see their respective licenses in the corresponding Python distribution.
+- FFmpeg: LGPL corresponding source and notices distributed alongside the native application.
+
+The complete GNU GPL v3 license for TLO is in LICENSE. Source for this TLO release: SOURCE.txt.

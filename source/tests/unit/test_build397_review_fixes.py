@@ -1,6 +1,7 @@
 """Focused unit regressions for the Build 397 technical-review remediations."""
 
 import importlib
+import os
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -145,5 +146,8 @@ def test_macos_trash_passes_path_as_argv_not_applescript(monkeypatch):
     monkeypatch.setattr(C.subprocess, "run", fake_run)
     path = '/tmp/name"\nbeep'
     C.move_to_trash(path)
-    assert seen["args"][-1] == str(Path(path).resolve())
+    # On macOS /tmp is a symlink to /private/tmp. Preserve the supplied
+    # absolute path as an argv item; the source path must not be interpolated
+    # into the AppleScript, and a realpath conversion is not required.
+    assert seen["args"][-1] == os.path.abspath(path)
     assert path not in seen["args"][2]

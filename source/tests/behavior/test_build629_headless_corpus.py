@@ -23,7 +23,7 @@ def test_frozen_folder_name_expectations(case, tmp_path):
     names = {
         'Jethro Tull': ['Jethro Tull'], 'The Kinks': ['The Kinks', 'Kinks', 'Kinks, The'],
         'The Who': ['The Who', 'Who', 'Who, The'], 'Twiddle': ['Twiddle'],
-        'Grateful Dead': ['Grateful Dead'], 'Lucinda Williams': ['Lucinda Williams'],
+        'Grateful Dead': ['Grateful Dead'], 'Allman Brothers Band': ['Allman Brothers Band'], 'Lucinda Williams': ['Lucinda Williams'],
     }
     matcher = ArtistMatcher(db_path='')
     matcher.master_aliases = names

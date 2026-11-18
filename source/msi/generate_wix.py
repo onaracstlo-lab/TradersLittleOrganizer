@@ -89,7 +89,7 @@ def prepare_stage(src, dest, worker, db_source=None, document_source=None):
                 raise ValueError(f"Missing required MSI database seed: {source}")
             shutil.copy2(source, seed_folder / name)
     if document_source is not None:
-        for name in ("TLO-FAQ.txt", "tlo-preferences.ini"):
+        for name in ("TLO-FAQ.txt", "tlo-preferences.ini", "LICENSE", "SOURCE.txt", "THIRD_PARTY_NOTICES.txt"):
             document = document_source / name
             if not document.is_file() or document.stat().st_size == 0:
                 raise ValueError(f"Missing required MSI support file: {document}")

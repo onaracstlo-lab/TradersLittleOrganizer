@@ -22,7 +22,7 @@ def test_inline_comments_validate_and_preserve_user_text(tmp_path):
     (tmp_path / pref.FILENAME).write_text(pref.default_text(), encoding='utf-8')
     parsed = pref.save_text(tmp_path, text)
     assert parsed['main']['max_workers'] == 4
-    assert parsed['search']['search_query'] == 'Jazz'
+    assert 'search_query' not in parsed['search']  # accepted but ignored for old files
     assert (tmp_path / pref.FILENAME).read_text(encoding='utf-8') == text
 
 

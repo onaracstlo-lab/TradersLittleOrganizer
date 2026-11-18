@@ -3097,7 +3097,7 @@ def test_v238_prepare_audio_files_converts_shn_and_deletes_original(monkeypatch,
 
     monkeypatch.setattr(T, "_bundled_ffmpeg_executable", lambda: "/usr/bin/ffmpeg")
 
-    def fake_run(command, stdout=None, stderr=None, text=None, timeout=None):
+    def fake_run(command, stdout=None, stderr=None, text=None, timeout=None, **kwargs):
         if command[-1] != "pipe:1":
             out = Path(command[-1])
             out.write_bytes(b"fake flac")
@@ -3168,7 +3168,7 @@ def test_v238_tag_group_converts_shn_then_tags_flac(monkeypatch, tmp_path):
 
     monkeypatch.setattr(T, "_bundled_ffmpeg_executable", lambda: "/usr/bin/ffmpeg")
 
-    def fake_run(command, stdout=None, stderr=None, text=None, timeout=None):
+    def fake_run(command, stdout=None, stderr=None, text=None, timeout=None, **kwargs):
         if command[-1] != "pipe:1":
             Path(command[-1]).write_bytes(b"fake flac")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -3205,7 +3205,7 @@ def test_v239_shn_conversion_uses_only_bundled_converter(monkeypatch, tmp_path):
     monkeypatch.setenv("TLO_FFMPEG", "/user/path/ffmpeg")
     monkeypatch.setattr(T, "_bundled_ffmpeg_executable", lambda: "/app/bundled/ffmpeg")
 
-    def fake_run(command, stdout=None, stderr=None, text=None, timeout=None):
+    def fake_run(command, stdout=None, stderr=None, text=None, timeout=None, **kwargs):
         called.append(command)
         if command[-1] != "pipe:1":
             Path(command[-1]).write_bytes(b"fake flac")
@@ -3267,7 +3267,7 @@ def test_v240_tag_group_logs_convert_shn_enabled_when_shn_detected(monkeypatch, 
 
     monkeypatch.setattr(T, "_bundled_ffmpeg_executable", lambda: "/usr/bin/ffmpeg")
 
-    def fake_run(command, stdout=None, stderr=None, text=None, timeout=None):
+    def fake_run(command, stdout=None, stderr=None, text=None, timeout=None, **kwargs):
         if command[-1] != "pipe:1":
             Path(command[-1]).write_bytes(b"fake flac")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -7176,7 +7176,7 @@ def test_v319_shn_conversion_uses_timeout_and_reports_timeout(monkeypatch, tmp_p
     monkeypatch.setattr(taglib, "_bundled_ffmpeg_executable", lambda: "/app/bundled/ffmpeg")
 
     calls = []
-    def fake_run(command, stdout=None, stderr=None, text=None, timeout=None):
+    def fake_run(command, stdout=None, stderr=None, text=None, timeout=None, **kwargs):
         calls.append((command, timeout))
         raise subprocess.TimeoutExpired(command, timeout)
 
@@ -7601,8 +7601,10 @@ def test_v330_delete_backup_bat_has_no_echo_off_and_uses_bootlist_rooted_path(tm
 
 def test_v330_delete_backup_path_requires_drive_or_root_from_bootlist_row():
     assert U._delete_path_from_bootlist_volume_path("[Backup-1] E:\\Artist 2001-02-03 Venue") == os.path.normpath("E:\\Artist 2001-02-03 Venue")
-    assert U._delete_path_from_bootlist_volume_path("[Backup-1] /mnt/e/Artist 2001-02-03 Venue") == os.path.normpath("/mnt/e/Artist 2001-02-03 Venue")
-    assert U._delete_path_from_bootlist_volume_path("[Backup-1] /Volumes/Backup-1/Artist 2001-02-03 Venue") == os.path.normpath("/Volumes/Backup-1/Artist 2001-02-03 Venue")
+    # Recorded POSIX mount paths must remain POSIX even on Windows: using
+    # os.path.normpath here silently turns /mnt/e into \mnt\e on Windows.
+    assert U._delete_path_from_bootlist_volume_path("[Backup-1] /mnt/e/Artist 2001-02-03 Venue") == "/mnt/e/Artist 2001-02-03 Venue"
+    assert U._delete_path_from_bootlist_volume_path("[Backup-1] /Volumes/Backup-1/Artist 2001-02-03 Venue") == "/Volumes/Backup-1/Artist 2001-02-03 Venue"
     assert U._delete_path_from_bootlist_volume_path("[Backup-1] /Artist 2001-02-03 Venue") == ""
     assert U._delete_path_from_bootlist_volume_path("[Backup-1] Artist 2001-02-03 Venue") == ""
 

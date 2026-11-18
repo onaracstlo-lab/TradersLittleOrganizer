@@ -31,6 +31,7 @@ def test_windows_configure_is_in_source_to_avoid_absolute_makefile_include():
     assert '[[ -f Makefile ]]' in content
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_non_windows_out_of_tree_build_preserves_source(tmp_path):
     source = tmp_path / 'src space'
     source.mkdir()
@@ -52,6 +53,7 @@ def test_non_windows_out_of_tree_build_preserves_source(tmp_path):
     assert (source / 'Makefile').read_text() == '# source\n'
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX Bash mock exercises MSYS branch; native Windows FFmpeg is verified by actual packaging job")
 def test_synthetic_ucrt64_in_tree_configure_avoids_absolute_source_include(tmp_path):
     # Execute the actual Windows branch on a POSIX test host: the system's
     # /usr/bin/make is the trusted-path analogue to MSYS2 /usr/bin/make.exe.

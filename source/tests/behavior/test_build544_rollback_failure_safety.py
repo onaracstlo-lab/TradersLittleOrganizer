@@ -144,13 +144,14 @@ def test_build544_unidentified_update_reports_state_restore_failure(monkeypatch,
     home = tmp_path / "home"
     home.mkdir()
     unidentified = home / "unidentifiedShows.txt"
-    unidentified.write_text("/old/Unknown Show\n", encoding="utf-8")
+    original = str(tmp_path / "old" / "Unknown Show")
+    unidentified.write_text(original + "\n", encoding="utf-8")
     destination = tmp_path / "destination"
     final = destination / "Known Show"
     final.mkdir(parents=True)
     diagnostics = _diag_spy(monkeypatch, MU)
 
-    monkeypatch.setattr(MU, "find_unidentified_show_path", lambda _home, _original: "/old/Unknown Show")
+    monkeypatch.setattr(MU, "find_unidentified_show_path", lambda _home, _original: original)
     monkeypatch.setattr(MU, "read_bootlist", lambda _home: [])
     monkeypatch.setattr(MU, "identify_folder_dict", lambda _config, folder: {"show_name": "x", "main_dir_path": folder})
     monkeypatch.setattr(MU, "create_or_replace_generated_setlist", lambda _home, _record: "")
@@ -161,7 +162,7 @@ def test_build544_unidentified_update_reports_state_restore_failure(monkeypatch,
     with pytest.raises(MU.ManualUpdateError) as caught:
         MU.apply_unidentified_manual_update(
             SimpleNamespace(TLOHome=str(home)),
-            "/old/Unknown Show",
+            original,
             "Known Show",
             str(destination),
         )

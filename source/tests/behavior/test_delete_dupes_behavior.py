@@ -2,6 +2,7 @@
 
 
 import importlib.util
+import os
 from pathlib import Path
 
 import pytest
@@ -730,6 +731,7 @@ def test_copy_suffix_attached_to_unsuffixed_duplicate_uses_surviving_alphabetica
     assert trashed == [str(beta_copy.resolve()), str(beta.resolve())]
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Simulated POSIX mount-root fixture requires POSIX host; native-drive path behavior verified separately")
 def test_partition_root_resolution_supports_windows_drive_and_posix_mount():
     module = _load_module()
     assert module._partition_root_for_path(
@@ -1035,3 +1037,8 @@ def test_identical_content_cluster_prefers_unsuffixed_folder_over_lower_numbered
     assert count == 2
     assert unsuffixed.exists()
     assert {Path(path).name for path in moved} == {copy1.name, copy2.name}
+
+
+def test_windows_drive_partition_root_is_pure_path_and_never_current_disk():
+    module = _load_module()
+    assert module._partition_root_for_path(r"E:\Music\Shows", platform_name="nt") == "E:\\"

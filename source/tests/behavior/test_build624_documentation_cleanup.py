@@ -20,9 +20,10 @@ def test_only_one_current_checksum_manifest_and_report():
 
 def test_readme_names_the_correct_current_changes_and_separate_build_process():
     text = (ROOT / f'SOURCE_BUNDLE_README_v{version.BUNDLE_BUILD}.txt').read_text(encoding='utf-8')
-    assert 'Build 622: Artist, City Date parsing requires positive city-reference evidence' in text
-    assert 'Build 623: SHN conversion' in text
-    assert 'Build 624 is a documentation-only consolidation' in text
+    history = (ROOT / 'SOURCE_BUNDLE_HISTORY.txt').read_text(encoding='utf-8')
+    assert 'Build 622: Artist, City Date parsing requires positive city-reference evidence' in history
+    assert 'Build 623: SHN conversion' in history
+    assert 'Build 624 is a documentation-only consolidation' in history
     # The build-process version is independent of the TLO application build.
     # Validate against the current verification report rather than a stale
     # historical v134 literal.

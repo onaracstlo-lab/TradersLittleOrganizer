@@ -91,23 +91,55 @@ def _duplicates_root_for_search(search_root: str) -> str:
 
 
 def _prepare_duplicates_root(search_root: str, duplicates_root: Optional[str] = None) -> str:
-    """Create and validate the partition-root duplicates holding directory."""
-    destination = os.path.abspath(os.path.normpath(duplicates_root or _duplicates_root_for_search(search_root)))
-    search_key = _normalized_path_key(search_root)
-    destination_key = _normalized_path_key(destination)
-    if search_key == destination_key or _is_same_or_descendant(search_root, destination):
-        raise DeleteDupesError(
-            f"Input Path may not be the duplicates holding folder or one of its descendants: {destination}"
-        )
-    if os.path.lexists(destination) and os.path.islink(destination):
-        raise DeleteDupesError(f"Duplicates holding path must not be a symbolic link: {destination}")
-    try:
-        os.makedirs(destination, exist_ok=True)
-    except OSError as exc:
-        raise DeleteDupesError(f"Unable to create duplicates holding folder: {destination}: {exc}") from exc
-    if not os.path.isdir(destination):
-        raise DeleteDupesError(f"Duplicates holding path is not a directory: {destination}")
-    return destination
+    """Prepare an atomic-move holding folder, with safe fallback off /duplicates.
+
+    An explicit --duplicates-dir never silently changes destination. A default
+    partition-root directory that is unwritable on Unix falls back to a sibling
+    of the search root on its *same filesystem*. No copy/delete fallback.
+    """
+    search_root = os.path.abspath(os.path.normpath(search_root))
+    source_dev = os.stat(search_root).st_dev
+    is_explicit = bool(duplicates_root)
+    primary = os.path.abspath(os.path.normpath(duplicates_root or _duplicates_root_for_search(search_root)))
+    alternatives = [primary]
+    if not is_explicit and os.name != 'nt':
+        alternative = os.path.join(os.path.dirname(search_root), 'duplicates')
+        if os.path.normcase(os.path.normpath(alternative)) != os.path.normcase(primary):
+            alternatives.append(alternative)
+    failures = []
+    for destination in alternatives:
+        if (_normalized_path_key(search_root) == _normalized_path_key(destination)
+                or _is_same_or_descendant(search_root, destination)):
+            failures.append(f'Destination overlaps searched tree: {destination}')
+            if is_explicit:
+                raise DeleteDupesError(f'Input Path may not be the duplicates holding folder or one of its descendants: {destination}')
+            continue
+        if os.path.lexists(destination) and os.path.islink(destination):
+            raise DeleteDupesError(f'Duplicates holding path must not be a symbolic link: {destination}')
+        try:
+            # Never create the requested directory on another filesystem: the
+            # move must remain a same-volume atomic rename.
+            nearest = destination
+            while not os.path.exists(nearest):
+                parent = os.path.dirname(nearest)
+                if nearest == parent:
+                    raise DeleteDupesError(f'Cannot find existing parent of {destination}')
+                nearest = parent
+            if os.stat(nearest).st_dev != source_dev:
+                raise DeleteDupesError(f'Destination must be on same filesystem as search path: {destination}')
+            os.makedirs(destination, exist_ok=True)
+            if not os.path.isdir(destination) or os.path.islink(destination):
+                raise DeleteDupesError(f'Duplicates holding destination is unsafe: {destination}')
+            if os.stat(destination).st_dev != source_dev:
+                raise DeleteDupesError(f'Destination is not on same filesystem: {destination}')
+            if destination != primary:
+                console_emit(f'Partition-root duplicates unavailable; using same-filesystem holding folder: {destination}')
+            return destination
+        except (OSError, DeleteDupesError) as exc:
+            failures.append(str(exc))
+            if is_explicit:
+                raise DeleteDupesError(f'Cannot use requested duplicates holding folder: {destination}: {exc}') from exc
+    raise DeleteDupesError('No writable same-filesystem duplicates folder: ' + '; '.join(failures))
 
 
 def _prune_excluded_dir_names(current_dir: str, dir_names: List[str], excluded_paths: Iterable[str]) -> None:
@@ -1090,7 +1122,8 @@ def _parse_args(argv=None):
             "structure, relative file names and exact byte sizes must match before relocation; no content hash is used. Before moving matching "
             "duplicates, fully decode-check FLAC files in the kept folder and repair corrupt files from the "
             "other qualifying cluster members. Each duplicate directory is moved as a whole into a folder "
-            "named duplicates at the root of the partition containing the Input Path."
+            "named duplicates at the root of the partition containing the Input Path (or a safe "
+            "same-filesystem sibling fallback when the root is not writable)."
         ),
     )
     parser.add_argument(
@@ -1099,6 +1132,10 @@ def _parse_args(argv=None):
         default="",
         metavar="DIR",
         help="TLOHome directory. Defaults from the TLOHome environment variable when present.",
+    )
+    parser.add_argument(
+        "--duplicates-dir", dest="duplicates_dir", default=None, metavar="DIR",
+        help="Optional same-filesystem destination for relocated duplicate folders.",
     )
     parser.add_argument("--myTLO", dest="myTLO", default="", metavar="DIR", help=argparse.SUPPRESS)
     parser.add_argument("path", metavar="PATH", help="Fully qualified directory path to search recursively.")
@@ -1110,7 +1147,7 @@ def main(argv=None) -> int:
         args = _parse_args(argv)
         tlo_home = resolve_tlo_home(args.TLOHome, args.myTLO, error_type=DeleteDupesError, app_name="tlo-deleteDupes")
         search_root = validate_input_path(args.path)
-        moved_count = delete_duplicate_copy_directories(search_root, tlo_home)
+        moved_count = delete_duplicate_copy_directories(search_root, tlo_home, duplicates_root=args.duplicates_dir)
         console_emit(f"Complete: duplicate_folders_moved={moved_count}")
         return 0
     except KeyboardInterrupt:

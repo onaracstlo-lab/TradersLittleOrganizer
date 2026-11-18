@@ -37,6 +37,7 @@ def _fixture(tmp_path, *, windows: bool, valid_binary: bool = True):
     return result, source, output
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX Bash mock exercises MSYS branch; native Windows FFmpeg is verified by actual packaging job")
 def test_windows_ffmpeg_exe_target_builds_even_without_plain_ffmpeg_target(tmp_path):
     result, source, output = _fixture(tmp_path, windows=True)
     # Synthetic source proves the .exe target is produced, but the non-PE
@@ -51,6 +52,7 @@ def test_windows_ffmpeg_exe_target_builds_even_without_plain_ffmpeg_target(tmp_p
     assert not (Path(str(output) + '.build-recipe.txt')).exists()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX Bash mock exercises MSYS branch; native Windows FFmpeg is verified by actual packaging job")
 def test_windows_fails_closed_if_output_executable_is_missing(tmp_path):
     result, source, output = _fixture(tmp_path, windows=True, valid_binary=False)
     assert result.returncode != 0
@@ -58,6 +60,7 @@ def test_windows_fails_closed_if_output_executable_is_missing(tmp_path):
     assert not output.exists()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_linux_out_of_tree_compilation_remains_supported(tmp_path):
     result, source, output = _fixture(tmp_path, windows=False)
     assert result.returncode == 0, result.stderr + result.stdout

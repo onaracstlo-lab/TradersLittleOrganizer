@@ -6,8 +6,8 @@ pytestmark = pytest.mark.behavior
 
 def test_two_ruff_f401_imports_absent():
     root = Path(__file__).resolve().parents[2]
-    assert 'import csv\n' not in (root/'tlo_phase23_v2.py').read_text().split('import json')[0]
-    assert 'import catalog_path_for_tlo' not in (root/'tlo_setlist_metadata_lookup.py').read_text()
+    assert 'import csv\n' not in (root/'tlo_phase23_v2.py').read_text(encoding='utf-8').split('import json')[0]
+    assert 'import catalog_path_for_tlo' not in (root/'tlo_setlist_metadata_lookup.py').read_text(encoding='utf-8')
 
 def test_setlist_city_conflict_logs_source_and_nonoverride(monkeypatch):
     import tlo_phase23_v2 as p

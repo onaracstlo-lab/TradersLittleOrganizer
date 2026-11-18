@@ -248,7 +248,7 @@ def test_build501_setlist_collision_requires_content_identity_not_same_size(tmp_
     setlists = tmp_path / "setlists"
     setlists.mkdir()
     exact = setlists / "Artist 2000-01-01.txt"
-    exact.write_text("AAAA\n", encoding="utf-8")
+    exact.write_bytes(b"AAAA\n")
     used = {exact.name}
     name, should_write = PP._resolve_setlist_filename_for_text("Artist 2000-01-01", str(setlists), "BBBB", used)
     assert name == "Artist 2000-01-01(alt1).txt"

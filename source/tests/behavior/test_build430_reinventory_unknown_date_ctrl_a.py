@@ -1,5 +1,6 @@
 """Build 430 regressions for re-inventory detail, unknown-date sibling safety, and Ctrl+A."""
 
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -211,7 +212,7 @@ def test_record_path_rewrite_preserves_first_original_main_dir_path():
     once = tlo_tag_lib._rewrite_record_paths(record, "/boots/Old", "/boots/New", mutate=False)
     twice = tlo_tag_lib._rewrite_record_paths(once, "/boots/New", "/archive/New", mutate=False)
 
-    assert once.main_dir_path == "/boots/New"
-    assert once.original_main_dir_path == "/boots/Old"
-    assert twice.main_dir_path == "/archive/New"
-    assert twice.original_main_dir_path == "/boots/Old"
+    assert once.main_dir_path == os.path.normpath("/boots/New")
+    assert once.original_main_dir_path == os.path.normpath("/boots/Old")
+    assert twice.main_dir_path == os.path.normpath("/archive/New")
+    assert twice.original_main_dir_path == os.path.normpath("/boots/Old")

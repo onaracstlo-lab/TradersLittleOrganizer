@@ -60,7 +60,8 @@ def test_build479_gui_tag_completion_calls_state_reset_without_nameerror(monkeyp
     assert events == ["consume", "progress", "states", "dialog"]
 
 
-def test_build479_manual_update_matches_real_canonical_bootlist_path(tmp_path):
+def test_build479_manual_update_matches_real_canonical_bootlist_path(tmp_path, monkeypatch):
+    monkeypatch.setattr(MU, "os_volume_label_for_path", lambda _path: "Music1")
     home = tmp_path / "TLOHome"
     home.mkdir()
     target = "/mnt/e/boots/Old Show"

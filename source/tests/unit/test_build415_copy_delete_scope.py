@@ -33,7 +33,7 @@ def test_copy_delete_destination_container_is_append_not_reinventory(monkeypatch
     )
 
     assert actions[0]["copy_mode"] == "copy-delete"
-    assert actions[0]["path"] == "/mnt/d/boots"
+    assert actions[0]["path"].replace("\\", "/") == "/mnt/d/boots"
     assert actions[0]["action"] == "new"
 
 

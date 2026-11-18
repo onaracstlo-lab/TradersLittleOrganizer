@@ -36,6 +36,7 @@ def test_build556_real_flac_tag_probe_restores_existing_probe_value_and_mtime(tm
     # Set both atime and mtime to a deterministic value after the fixture setup.
     import os
     os.utime(path, ns=(fixed_ns, fixed_ns))
+    effective_mtime_ns = path.stat().st_mtime_ns  # Windows NTFS resolves times to 100 ns
     before_tags = dict(FLAC(path))
 
     bad, unverifiable = corruption.classify_audio_paths([str(path)], check_tag_write=True)
@@ -43,7 +44,7 @@ def test_build556_real_flac_tag_probe_restores_existing_probe_value_and_mtime(tm
     assert bad == []
     assert unverifiable == []
     assert dict(FLAC(path)) == before_tags
-    assert path.stat().st_mtime_ns == fixed_ns
+    assert path.stat().st_mtime_ns == effective_mtime_ns
 
 
 def test_build556_real_flac_tag_probe_removes_temporary_key_when_originally_absent(tmp_path):

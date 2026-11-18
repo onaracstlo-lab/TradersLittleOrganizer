@@ -44,5 +44,23 @@
     "folder": "Who, The 1974-05-18",
     "artist": "The Who",
     "date": "1974-05-18"
+  },
+  {
+    "folder": "Grateful Dead 1977-05-08 Barton Hall SBD 1st Gen 24-96",
+    "artist": "Grateful Dead",
+    "date": "1977-05-08",
+    "not_date": "1996-01-24"
+  },
+  {
+    "folder": "Grateful Dead - Cornell 1977 2nd Gen 24-96",
+    "artist": "Grateful Dead",
+    "date": "",
+    "not_date": "2024-01-02"
+  },
+  {
+    "folder": "Allman Brothers Band 1971 Fillmore East Gen 24 96",
+    "artist": "Allman Brothers Band",
+    "date": "",
+    "not_date": "1996-01-24"
   }
 ]

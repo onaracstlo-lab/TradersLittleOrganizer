@@ -7,6 +7,7 @@ from tlo_inventory_update import _append_delete_command
 pytestmark=pytest.mark.behavior
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_mixed_volume_labels_skip_and_continue(tmp_path):
     script=tmp_path/'deleteBackupFolders.sh'
     wrong=tmp_path/'bad-volume'/'some folder'
@@ -30,6 +31,7 @@ def test_mixed_volume_labels_skip_and_continue(tmp_path):
     assert 'deleted=1' in result.stdout and 'skipped=1' in result.stdout
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_shell_escapes_names_and_never_deletes_unlabeled(tmp_path):
     script=tmp_path/'deleteBackupFolders.sh'
     target=tmp_path/'drive'/'show with dollar$and;quotes'

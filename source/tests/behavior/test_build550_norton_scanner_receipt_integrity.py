@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import os
 
 import pytest
 
@@ -47,6 +48,7 @@ def test_build550_resolves_actual_norton_executable_and_hash(tmp_path, monkeypat
     assert "Norton" in identity["authenticode_signer_subject"]
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX shell scanner fixture; Windows signer/scanner identity checks remain native")
 def test_build550_custom_scanner_executes_without_shell_and_receipt_binds_identity(tmp_path, monkeypatch):
     executable = tmp_path / "nscan.exe"
     _make_fake_norton(executable)

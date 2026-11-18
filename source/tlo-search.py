@@ -3,7 +3,7 @@
 tlo-search.py
 
 Tkinter GUI that:
-- Reads the clipboard on startup, unless --find was supplied
+- Uses clipboard text for the first search unless --find is supplied
 - Prefills the Search box
 - Automatically runs the first search on startup
 - In normal mode, searches TLOHome/bootlist.csv and shows matches in a multi-select results window
@@ -97,7 +97,7 @@ TLOHome:
 Startup behavior:
 - On startup, the app fills the Search box and automatically runs the first search.
 - If --find is supplied, that value is used for the first search instead of the clipboard.
-- The clipboard is read only if [search] clipboard_prefill=true and no --find/search_query exists.
+- When --find is absent, the clipboard is always read; no INI setting disables it.
 - The Search box stays focused in the main window.
 
 Search modes:
@@ -147,7 +147,7 @@ Font selector:
 Preferences:
 - TLOHome/tlo-preferences.ini stores shared startup settings for TLO Main and Search.
 - The hamburger > Edit Preferences command opens an editable text window; Save & Close validates and writes startup defaults; the current session is unchanged.
-- An explicit --find takes precedence over search_query; clipboard prefill requires an opt-in setting.
+- An explicit --find takes precedence over clipboard text at startup.
 """
 
 
@@ -648,9 +648,7 @@ class BootlistSearchApp:
 
         if self.initial_find is not None:
             initial_value = self.initial_find
-        elif self.preferences['search']['search_query']:
-            initial_value = self.preferences['search']['search_query']
-        elif self.preferences['search'].get('clipboard_prefill', False):
+        else:
             try:
                 initial_value = self.root.clipboard_get().strip()
             except tk.TclError:

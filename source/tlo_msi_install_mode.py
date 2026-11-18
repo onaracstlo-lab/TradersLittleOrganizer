@@ -9,10 +9,19 @@ __version__ = _TLO_CANONICAL_VERSION
 
 from pathlib import Path
 import json
+import ntpath
 import os
 import sys
 import shutil
 import tempfile
+
+
+def _trusted_system32_executable(name):
+    """Fail closed to Windows' API-reported System32, never PATH or CWD."""
+    if name not in {"powershell.exe", "msiexec.exe"}:
+        raise ValueError("Unsupported Windows helper")
+    from tlo_security import windows_directory_from_api
+    return ntpath.join(windows_directory_from_api(), "System32", name)
 
 
 def msi_install_root(executable=None):
@@ -77,7 +86,7 @@ def launch_verified_msi_upgrade(msi_file, trusted_expected_sha256, *,
     msi = Path(msi_file).resolve(strict=True)
     if msi.suffix.casefold() != ".msi":
         raise ValueError("MSI asset required")
-    args = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+    args = [_trusted_system32_executable("powershell.exe"), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
             "-File", str(worker), "-MsiPath", str(msi),
             "-ExpectedSha256", trusted_expected_sha256,
             "-WaitForPid", str(os.getpid()),
@@ -116,7 +125,7 @@ def launch_verified_portable_msi_install(msi_file, trusted_expected_sha256):
     digest = hasher.hexdigest()
     if digest.casefold() != trusted_expected_sha256.casefold():
         raise ValueError('Downloaded MSI no longer matches signed release metadata')
-    subprocess.Popen(['msiexec.exe', '/i', str(msi)], close_fds=True)
+    subprocess.Popen([_trusted_system32_executable('msiexec.exe'), '/i', str(msi)], close_fds=True)
     return True
 
 
@@ -225,16 +234,27 @@ def _validated_msi_home(value, program):
 
 
 def _remember_msi_home(home):
-    """Persist the selected folder without UAC and notify future processes."""
+    """Persist TLOHome only when changed; broadcast only for environment edits."""
     import winreg
+    home_text = str(home)
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, MSI_USER_SETTINGS_KEY) as key:
-        winreg.SetValueEx(key, "DataHome", 0, winreg.REG_SZ, str(home))
+        try:
+            existing, kind = winreg.QueryValueEx(key, "DataHome")
+        except OSError:
+            existing, kind = None, None
+        if existing != home_text or kind != winreg.REG_SZ:
+            winreg.SetValueEx(key, "DataHome", 0, winreg.REG_SZ, home_text)
+    changed_env = False
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Environment") as key:
-        winreg.SetValueEx(key, "TLOHome", 0, winreg.REG_SZ, str(home))
-    os.environ["TLOHome"] = str(home)
-    # Windows' user environment registry changes do not update processes that
-    # are already running. Broadcast to Explorer for newly launched processes.
-    if sys.platform == "win32":
+        try:
+            existing, kind = winreg.QueryValueEx(key, "TLOHome")
+        except OSError:
+            existing, kind = None, None
+        if existing != home_text or kind != winreg.REG_SZ:
+            winreg.SetValueEx(key, "TLOHome", 0, winreg.REG_SZ, home_text)
+            changed_env = True
+    os.environ["TLOHome"] = home_text
+    if changed_env and sys.platform == "win32":
         try:
             import ctypes
             result = ctypes.c_size_t()

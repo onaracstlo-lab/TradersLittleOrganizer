@@ -52,9 +52,16 @@ def create_tk_root(tk_module):
     not enable Search Path drag/drop.
     """
     if is_drag_drop_platform():
-        from tkinterdnd2 import TkinterDnD  # type: ignore
-
-        return TkinterDnD.Tk(), "tkinterdnd2"
+        try:
+            from tkinterdnd2 import TkinterDnD  # type: ignore
+            return TkinterDnD.Tk(), "tkinterdnd2"
+        except (ImportError, tk_module.TclError) as exc:
+            # A broken/missing native TkDND extension must not prevent using
+            # Main without drag/drop. Ordinary Tk inputs remain functional.
+            import logging
+            logging.getLogger(__name__).warning(
+                "TkDND is unavailable; running without drag-and-drop: %s", exc
+            )
     return tk_module.Tk(), ""
 
 
@@ -164,6 +171,28 @@ def append_search_path_values(existing: str, values: list[str]) -> str:
     return _append_search_path_drop_values(existing, values)
 
 
+def _register_drop_target(entry_widget, handle_drop) -> DragDropStatus:
+    """Plain Tk entries have no TkDND methods; never crash GUI startup.
+
+    A Windows release uses TkinterDnD.Tk, while many GUI test harnesses use
+    a conventional tkinter.Tk.  Neither condition changes whether drop
+    parsing and validation remain enforced when TkDND is present.
+    """
+    if not callable(getattr(entry_widget, "drop_target_register", None)) or not callable(
+        getattr(entry_widget, "dnd_bind", None)
+    ):
+        return DragDropStatus(False, "TkDND is unavailable on this window.")
+    try:
+        entry_widget.drop_target_register(DND_FILES)
+        entry_widget.dnd_bind("<<Drop:DND_Files>>", handle_drop)
+    except Exception as exc:  # noqa: BLE001 - optional TkDND integration boundary
+        # TclError and optional TkDND registration exceptions are recoverable:
+        # leave ordinary keyboard/paste interactions available.
+        debug_suppressed_exception(__name__, exc)
+        return DragDropStatus(False, "TkDND could not register this entry.")
+    return DragDropStatus(True, provider="tkinterdnd2")
+
+
 def enable_folder_path_drop(
     entry_widget,
     string_var,
@@ -197,9 +226,7 @@ def enable_folder_path_drop(
             debug_suppressed_exception(__name__, exc)
         return _accepted_drop_action(event)
 
-    entry_widget.drop_target_register(DND_FILES)
-    entry_widget.dnd_bind("<<Drop:DND_Files>>", handle_drop)
-    return DragDropStatus(True, provider="tkinterdnd2")
+    return _register_drop_target(entry_widget, handle_drop)
 
 
 def enable_search_path_folder_drop(
@@ -239,9 +266,7 @@ def enable_search_path_folder_drop(
         # None causes the target to report a refused drop after we update the field.
         return _accepted_drop_action(event)
 
-    entry_widget.drop_target_register(DND_FILES)
-    entry_widget.dnd_bind("<<Drop:DND_Files>>", handle_drop)
-    return DragDropStatus(True, provider="tkinterdnd2")
+    return _register_drop_target(entry_widget, handle_drop)
 
 
 def enable_tagging_path_folder_drop(
@@ -293,9 +318,7 @@ def enable_single_folder_or_txt_drop(
             debug_suppressed_exception(__name__, exc)
         return _accepted_drop_action(event)
 
-    entry_widget.drop_target_register(DND_FILES)
-    entry_widget.dnd_bind("<<Drop:DND_Files>>", handle_drop)
-    return DragDropStatus(True, provider="tkinterdnd2")
+    return _register_drop_target(entry_widget, handle_drop)
 
 
 def enable_leaf_folder_drop(
@@ -328,9 +351,7 @@ def enable_leaf_folder_drop(
             debug_suppressed_exception(__name__, exc)
         return _accepted_drop_action(event)
 
-    entry_widget.drop_target_register(DND_FILES)
-    entry_widget.dnd_bind("<<Drop:DND_Files>>", handle_drop)
-    return DragDropStatus(True, provider="tkinterdnd2")
+    return _register_drop_target(entry_widget, handle_drop)
 
 
 def enable_single_txt_file_drop(
@@ -358,6 +379,4 @@ def enable_single_txt_file_drop(
             debug_suppressed_exception(__name__, exc)
         return _accepted_drop_action(event)
 
-    entry_widget.drop_target_register(DND_FILES)
-    entry_widget.dnd_bind("<<Drop:DND_Files>>", handle_drop)
-    return DragDropStatus(True, provider="tkinterdnd2")
+    return _register_drop_target(entry_widget, handle_drop)

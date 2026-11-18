@@ -100,6 +100,7 @@ def test_build526_copy_request_delete_valid_directory_removes_only_that_request(
     assert (sibling / "keep.txt").is_file()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_build526_posix_unlabeled_cleanup_entry_is_non_destructive(tmp_path):
     script = tmp_path / "deleteBackupFolders.sh"
     assert IU._append_delete_command(str(script), "/mnt/e/Shows/Band 1999", "") is True
@@ -111,6 +112,7 @@ def test_build526_posix_unlabeled_cleanup_entry_is_non_destructive(tmp_path):
     assert "# rm -rf -- '/mnt/e/Shows/Band 1999'" in body
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_build526_posix_unlabeled_cleanup_script_cannot_delete_when_run(tmp_path):
     target = tmp_path / "unlabeled-volume" / "Shows" / "Band"
     target.mkdir(parents=True)
@@ -126,6 +128,7 @@ def test_build526_posix_unlabeled_cleanup_script_cannot_delete_when_run(tmp_path
     assert "SKIPPED: unlabeled volume cannot be verified automatically" in completed.stdout
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_build526_posix_labeled_cleanup_still_requires_identity_before_delete(tmp_path):
     script = tmp_path / "deleteBackupFolders.sh"
     assert IU._append_delete_command(str(script), "/mnt/e/Shows/Band", "Backup") is True

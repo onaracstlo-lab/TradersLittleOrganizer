@@ -198,9 +198,14 @@ def test_open_folder_uses_arg_list_not_shell(tmp_path, monkeypatch):
     import subprocess
     calls = []
     monkeypatch.setattr(subprocess, "Popen", lambda args, **kw: calls.append((args, kw)))
+    if mode.sys.platform == "win32":
+        monkeypatch.setattr(mode.os, "startfile", lambda path: calls.append(([path], {"win32_startfile": True})))
     mode.open_tlo_home_folder(tmp_path)
     assert len(calls) == 1
     args, opts = calls[0]
-    assert opts["close_fds"]
     assert args[-1] == str(tmp_path.resolve())
-    assert args[0] in {"open", "xdg-open"}
+    if mode.sys.platform == "win32":
+        assert opts == {"win32_startfile": True}
+    else:
+        assert opts["close_fds"]
+        assert args[0] in {"open", "xdg-open"}

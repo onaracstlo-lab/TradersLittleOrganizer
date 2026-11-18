@@ -118,7 +118,7 @@ def test_gui_startup_applies_main_and_search_preferences(tmp_path):
         text = text.replace('heading_font_size = 0', 'heading_font_size = 18')
         text = text.replace('\nfont_size = 0', '\nfont_size = 15')
         text = text.replace('deep = false', 'deep = true')
-        text = text.replace('search_query = ', 'search_query = Allman Brothers Band')
+        # Search reads the clipboard unless --find was explicitly supplied.
         pref.save_text(tmp_path, text)
         main = _load('tlo_main_gui_live_prefs_test', 'tlo-main.py')
         with mock.patch.object(main, 'is_auto_update_enabled', return_value=False):
@@ -156,7 +156,8 @@ def test_gui_startup_applies_main_and_search_preferences(tmp_path):
         assert menu_labels.count('Open TLO Folder') == 1
         with mock.patch.object(gui, 'execute_search'):
             gui._startup_first_search()
-        assert gui.search_var.get() == 'Allman Brothers Band'
+        # With an empty/unavailable clipboard no fabricated search text is used.
+        assert gui.deep_var.get() is True
     finally:
         root.destroy()
 

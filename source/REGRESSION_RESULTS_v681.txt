@@ -1,0 +1,9 @@
+TLO v1.7 Build 681 — LOCAL TEST EVIDENCE (NOT RELEASE-ATTESTED)
+Companion GitHub Build Process v140 (unchanged)
+Local complete Linux/Xvfb suite: 2,738 passed, 6 skipped, 0 failed, across 11 independent batches of 2,744 collected tests.
+MacOS and Windows hosted Build 681 reruns remain NOT ATTESTED.
+GitHub Build Process v140 locally retested unchanged: 143 passed, 13 skipped, 0 failed.
+Requirements DOCX rendered to 101 pages; User Manual RTF rendered to 34 pages.
+Native macOS and Windows test reruns, signing, MSI and final packaging gates NOT ATTESTED.
+Build 680 GitHub Actions run 44192839133 (historical): Linux success;
+macOS 3 failed, 261 passed; Windows 1 failed, 2,682 passed, 61 skipped.

@@ -80,7 +80,7 @@ def test_build546_audit_helper_self_audits_and_checks_all_platform_pins(monkeypa
     for package in ("macholib==1.16.4", "pefile==2024.8.26", "pywin32-ctypes==0.2.3", "colorama==0.4.6"):
         assert package in all_platforms
 
-    pip_commands = [command for command, _kwargs in commands if command[:3] == ["/fake/python", "-m", "pip"]]
+    pip_commands = [command for command, _kwargs in commands if command[:3] == [str(Path("/fake/python")), "-m", "pip"]]
     assert any(command[3:5] == ["--isolated", "install"] for command in pip_commands)
     assert any(command[3:5] == ["--isolated", "check"] for command in pip_commands)
 

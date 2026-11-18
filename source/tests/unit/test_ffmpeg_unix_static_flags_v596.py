@@ -17,6 +17,7 @@ def test_ffmpeg_recipe_uses_safe_optional_flags_under_nounset():
     assert '"$@" \\' in code
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_nonwindows_configure_and_make_run_under_strict_bash(tmp_path):
     source = tmp_path / "ffmpeg-src"
     build = tmp_path / "work"

@@ -27,6 +27,7 @@ def _mock_ffmpeg(tmp_path):
     return source
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_non_windows_make_compiles_out_of_tree(tmp_path):
     source = _mock_ffmpeg(tmp_path)
     target = tmp_path / "out space" / "ffmpeg"

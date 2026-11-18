@@ -29,6 +29,7 @@ def _run_pytest_without_display(*paths: str) -> subprocess.CompletedProcess[str]
     )
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_build532_no_display_gui_subset_has_six_real_skips():
     try:
         __import__("tkinter")

@@ -2,6 +2,7 @@
 
 import importlib.util
 import io
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -21,7 +22,7 @@ class _Logs:
     def dead_end(self, value, *args): self.dead.append(value % args if args else value)
 
 
-def _deep_tree(tmp_path, depth=1050):
+def _deep_tree(tmp_path, depth=360):
     cur=tmp_path
     for _ in range(depth):
         cur=cur/'d'
@@ -41,24 +42,37 @@ def _remove_deep_tree(leaf, root):
 
 
 def test_phase1_deep_tree_does_not_depend_on_python_recursion_limit(tmp_path):
-    leaf=_deep_tree(tmp_path)
+    # macOS enforces a shorter total path length than Linux. 360 one-character
+    # components remain safe in the hosted macOS temp directory. Lowering the
+    # recursion limit ensures this still detects accidental recursive walks.
+    depth = 360
+    leaf=_deep_tree(tmp_path, depth=depth)
+    previous_limit = sys.getrecursionlimit()
     try:
+        sys.setrecursionlimit(280)
+        assert depth > sys.getrecursionlimit()
         cfg=SimpleNamespace(logs=_Logs(), performance_mode='balanced', pause_event=None, cancel_requested=False)
         count=W.initial_dir_walk(cfg, str(tmp_path))
-        assert count == 1051
+        assert count == depth + 1
         assert cfg.logs.complete and cfg.logs.complete[-1].endswith('01.flac')
     finally:
+        sys.setrecursionlimit(previous_limit)
         _remove_deep_tree(leaf, tmp_path)
 
 
 def test_phase23_deep_tree_does_not_depend_on_python_recursion_limit(tmp_path):
-    leaf=_deep_tree(tmp_path)
+    depth = 360
+    leaf=_deep_tree(tmp_path, depth=depth)
+    previous_limit = sys.getrecursionlimit()
     try:
+        sys.setrecursionlimit(280)
+        assert depth > sys.getrecursionlimit()
         cfg=SimpleNamespace(logs=_Logs())
         found=P._discover_music_dirs(cfg, str(tmp_path))
         assert len(found)==1
         assert Path(found[0]['music_dir']) == leaf
     finally:
+        sys.setrecursionlimit(previous_limit)
         _remove_deep_tree(leaf, tmp_path)
 
 

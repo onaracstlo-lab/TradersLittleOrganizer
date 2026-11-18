@@ -81,7 +81,7 @@ def test_bootlist_persists_share_identity_and_relative_folder():
     assert BP.format_log_volume_path(VOLUME, SHOW) == expected
     assert BP.storage_path_without_drive(SHOW) == "/Grateful Dead/1977-05-08"
     assert BP.paths_related(SHOW, SHARE + r"\Grateful Dead")
-    assert BP.normalize_path_for_compare(SHOW) == "/Grateful Dead/1977-05-08"
+    assert BP.normalize_path_for_compare(SHOW) == ("/grateful dead/1977-05-08" if BP.os.name == "nt" else "/Grateful Dead/1977-05-08")
 
 
 def test_two_shares_same_relative_path_stay_distinct_in_inventory():

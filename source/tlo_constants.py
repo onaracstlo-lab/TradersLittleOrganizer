@@ -339,12 +339,15 @@ MONTHS = {
     "août": 8, "aout": 8, "septembre": 9, "octobre": 10,
     "novembre": 11, "décembre": 12, "decembre": 12, "déc": 12,
     # Italian. Avoid abbreviated 'set' and 'ago' as they are common English words.
-    "gennaio": 1, "gen": 1, "febbraio": 2, "marzo": 3,
+    "gennaio": 1, "febbraio": 2, "marzo": 3,
     "aprile": 4, "maggio": 5, "mag": 5, "giugno": 6, "giu": 6,
     "luglio": 7, "lug": 7, "agosto": 8, "settembre": 9,
-    "ottobre": 10, "ott": 10, "novembre": 11,
+    "ottobre": 10, "ott": 10,
     "dicembre": 12, "dic": 12,
 }
+# Short foreign month abbreviations collide with common lineage/audio tokens.
+# Require a four-digit year and a non-ordinal day for complete dates.
+AMBIGUOUS_SHORT_FOREIGN_MONTHS = frozenset({"mag", "dic", "ott", "lug", "giu", "fev", "mai", "dez", "okt"})
 MONTH_NAME_WORDS = tuple(sorted(MONTHS.keys(), key=lambda value: (-len(value), value)))
 # Preserve this constant for date-pattern consumers; use longest aliases first.
 MONTH_NAME_PATTERN = "|".join(re.escape(word) for word in MONTH_NAME_WORDS)

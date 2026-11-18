@@ -66,8 +66,8 @@ if ((Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash -ine $ExpectedSha256
 }
 $log = Join-Path ([IO.Path]::GetTempPath()) ('TLO-MSI-Update-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 $quoted = '"' + $msi + '"'
-$args = @('/i', $quoted, '/qn', '/norestart', '/L*v', ('"' + $log + '"'))
-$result = Start-Process -FilePath 'msiexec.exe' -ArgumentList $args -Wait -PassThru
+$msiArgs = @('/i', $quoted, '/qn', '/norestart', '/L*v', ('"' + $log + '"'))
+$result = Start-Process -FilePath (Join-Path ([Environment]::SystemDirectory) 'msiexec.exe') -ArgumentList $msiArgs -Wait -PassThru
 if ($result.ExitCode -notin @(0,3010)) {
     throw "MSI upgrade failed (Windows Installer code $($result.ExitCode)); see $log. Existing MSI retained at $msi."
 }

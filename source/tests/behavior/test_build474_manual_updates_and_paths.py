@@ -79,7 +79,10 @@ def test_build474_folder_save_renames_in_place_replaces_bootlist_and_setlist(tmp
     assert Path(result["new_path"]) == new_path
     assert new_path.is_dir() and not original.exists()
     rows = MU.read_bootlist(str(tlohome))
-    assert rows == [{"Show": "New Folder", "VolumePath": BP.format_volume_path("TestVolume", str(new_path))}]
+    assert len(rows) == 1 and rows[0]["Show"] == "New Folder"
+    label, physical = BP.parse_volume_path_value(rows[0]["VolumePath"])
+    assert label == "TestVolume"
+    assert physical.replace("\\", "/").casefold() == BP.storage_path_without_drive(str(new_path)).casefold()
     assert not old_setlist.exists()
     assert (setlists / "NewFolder.txt").is_file()
 
@@ -92,6 +95,7 @@ def test_build474_folder_save_accepts_already_renamed_target(tmp_path, monkeypat
     original = parent / "Old Folder"
     target = _music_dir(parent / "New Folder")
     MU.write_bootlist(str(tlohome), [{"Show": "Old Folder", "VolumePath": str(original)}])
+    monkeypatch.setattr(MU, "os_volume_label_for_path", lambda _path: "")
     monkeypatch.setattr(MU, "identify_folder_dict", lambda config, folder: {"show_name": "x", "main_dir_path": folder})
     monkeypatch.setattr(MU, "create_or_replace_generated_setlist", lambda home, record: "")
     result = MU.apply_folder_manual_update(SimpleNamespace(TLOHome=str(tlohome)), str(original), "New Folder")

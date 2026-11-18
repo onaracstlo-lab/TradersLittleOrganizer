@@ -53,8 +53,9 @@ def test_build522_macos_icons_are_required_and_pyinstaller7_is_rejected():
 
 def test_build522_checked_in_ruff_contract_covers_review_hygiene_findings():
     config = _text("ruff.toml")
+    # Full Pyflakes (F) covers the earlier individually enabled F rules.
     for code in ("F401", "F541", "F821", "F822", "F823", "F841"):
-        assert code in config
+        assert '"F"' in config or code in config
     phase = _text("tlo_phase23_v2.py")
     assert "tag_group_with_record, merge_tag_stats, emit_tag_fallback_summary" not in phase
 

@@ -7,6 +7,7 @@ import json
 import ntpath
 import os
 import platform
+import posixpath
 import re
 import shlex
 import shutil
@@ -795,17 +796,33 @@ def _canonical_safe_delete_path(path_text: str, *, tlo_home: str = "") -> str:
             if len(parts) < minimum_components:
                 return ""
             target = "/" + "/".join(parts)
-            target = os.path.normpath(target)
+            target = posixpath.normpath(target)
 
     if tlo_home:
-        home = os.path.normcase(os.path.abspath(os.path.normpath(tlo_home)))
-        candidate = os.path.normcase(os.path.abspath(os.path.normpath(target))) if not re.match(r"^[A-Za-z]:", target) else ""
-        if candidate:
-            try:
-                if os.path.commonpath([home, candidate]) == candidate:
-                    return ""  # target is TLOHome or one of its ancestors
-            except ValueError:
-                pass
+        # Compare paths using the syntax of the *recorded path*, not the OS
+        # running this code.  In particular, ntpath must also be used when
+        # verifying a Windows drive path from WSL or a Linux test fixture.
+        # A destructive target cannot be TLOHome, above it, or inside it.
+        def comparable(value: str) -> str:
+            """Use one syntax for X:\\dir and /mnt/x/dir, on every host OS."""
+            raw = str(value or "").strip()
+            drive = re.match(r"^([A-Za-z]):[\\/](.*)$", raw)
+            if drive:
+                # Windows drive labels are case-insensitive, as are their paths.
+                return posixpath.normpath("/mnt/" + drive.group(1).lower() + "/" + drive.group(2).replace("\\", "/")).casefold()
+            normalized = posixpath.normpath(raw.replace("\\", "/"))
+            if re.match(r"^/mnt/[A-Za-z](?:/|$)", normalized, re.I):
+                return normalized.casefold()
+            return normalized
+
+        home = comparable(tlo_home)
+        candidate = comparable(target)
+        if home.startswith("/") and candidate.startswith("/"):
+            common = posixpath.commonpath((home, candidate))
+            if common in {home, candidate}:
+                return ""
+        elif home == candidate:
+            return ""
     return target
 
 

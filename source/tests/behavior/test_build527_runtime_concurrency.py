@@ -5,6 +5,7 @@ import multiprocessing
 from pathlib import Path
 from types import SimpleNamespace
 
+import os
 import pytest
 
 import tlo_copy_requests as CR
@@ -56,6 +57,7 @@ def test_build527_windows_priority_transitions_restore_original(monkeypatch):
     assert calls == [0x40, 0x20, 0x4000, 0x20]
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_build527_posix_parent_priority_is_not_permanently_niced(monkeypatch):
     monkeypatch.setattr(RC.sys, "platform", "linux")
     monkeypatch.setattr(RC.os, "nice", lambda _value: pytest.fail("parent process must not be niced"))
@@ -65,6 +67,7 @@ def test_build527_posix_parent_priority_is_not_permanently_niced(monkeypatch):
     assert RC.apply_process_priority(SimpleNamespace(performance_mode="fast")) is False
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_build527_posix_worker_priority_applies_once(monkeypatch):
     calls = []
     monkeypatch.setattr(RC.sys, "platform", "linux")

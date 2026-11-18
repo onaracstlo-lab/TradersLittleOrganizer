@@ -1,3 +1,51 @@
+TLO v1.7 Build 681 — Hosted macOS and Windows test portability; requirements and metadata synchronized
+
+- Corrected macOS Trash argv test to distinguish /tmp and /private/tmp aliases.
+- Deep-tree tests prove recursion safety below macOS filesystem path-size limit.
+- Corrected Windows legacy test to preserve POSIX bootlist path spellings.
+- Updated current release documentation; Build Process v140 remains unchanged.
+
+TLO v1.7 Build 680 — correct lineage/date parsing, mixed Windows/WSL deletion safety, native CI portability, and current documents.
+
+Companion build process v140; all previously released ZIPs remain unchanged.
+
+TLO v1.7 Build 679 — Remove two Ruff F401 unused test imports, update versioned release evidence.
+
+TLO v1.7 Build 678 — Final documentation cleanup: concise current guide, requirements alignment, historical archive separation and release notes
+
+Companion build process v139; all previously released ZIPs remain unchanged.
+
+TLO v1.7 Build 677 — Native Windows regression portability, filesystem safety, and platform test ownership
+
+Companion build process v138; all previously released ZIPs remain unchanged.
+
+TLO v1.7 Build 676 — Windows delete-path protection, TkDND capability handling, and correct legal release notices
+
+Companion build process v138; all previously released ZIPs remain unchanged.
+
+TLO v1.7 Build 675 — Mandatory preflight lint repair and validation
+
+- Removed unused `types.SimpleNamespace` import from tests/behavior/test_build670_review_fixes.py (Ruff F401 under full F rule set).
+- Corrected current-build examples in the source README; existing application behavior remains unchanged.
+- Reissued source/document metadata and checksums under new build number, without modifying or overwriting Build 674.
+- Companion GitHub Build Process v137 is unchanged.
+
+TLO v1.7 Build 674 — Review phase 4: safe same-filesystem duplicate holding folder fallback
+
+TLO v1.7 Build 673 — Review phase 3: corrected current release README and condensed release package history
+
+TLO v1.7 Build 672 — Review phase 3: current-only release documentation and robust packaging checks
+
+TLO v1.7 Build 671 — Review phase 2: release integrity, legal notices, CI verification
+
+TLO v1.7 Build 670 — Review phase 1: artist/date collision guard and trusted MSI helpers
+
+TLO v1.7 Build 669 — Search always reads the clipboard at startup
+
+Search uses an explicit --find argument if provided; otherwise it always reads the clipboard and automatically runs the initial search. Empty or inaccessible clipboard contents follow existing empty-search handling. Obsolete [main] search_path, [search] search_query, and [search] clipboard_prefill entries are absent from the default template and have no effect in older INI files, regardless of their values. Existing preferences files are not automatically rewritten. The Main path field and --search-path command-line option remain usable.
+
+Historical notices remain in prior build archives.
+
 TLO v1.7 Build 668 — International dates and Compliant disc grouping
 ============================================================
 - Recognize German, French, and Italian month names, accents, and common transliterations in full/partial dates, with calendar validation and English parsing preserved.

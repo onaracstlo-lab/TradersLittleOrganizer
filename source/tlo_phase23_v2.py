@@ -40,6 +40,7 @@ from tlo_constants import (
     COUNTRY_SEARCH_TERMS,
     MONTH_NAME_CASED_PATTERN,
     MONTHS,
+    AMBIGUOUS_SHORT_FOREIGN_MONTHS,
     QUALIFIER_PATTERNS,
     AMBIGUOUS_CANADIAN_REGION_CODES,
     CANADIAN_REGION_ALIASES,
@@ -2217,7 +2218,7 @@ def _append_date_result(results: List[Dict[str, str]], seen: set, raw: str, norm
 
 
 
-def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_month_day_exception: bool = False) -> List[Dict[str, str]]:
+def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_month_day_exception: bool = False, *, artist_matcher: Optional[ArtistMatcher] = None) -> List[Dict[str, str]]:
     source_text = str(text or "")
     if not source_text:
         return []
@@ -2309,8 +2310,16 @@ def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_mo
             elif dmy:
                 _append_date_result(results, seen, match.group(0), dmy, match.start(), match.end(), date_order="slash_dmy")
 
+    def unsafe_short_foreign_month(match) -> bool:
+        month = match.group("month_name").lower()
+        if month not in AMBIGUOUS_SHORT_FOREIGN_MONTHS:
+            return False
+        year = match.group("year")
+        day = match.group("day")
+        return len(year) != 4 or not str(day).isdigit()
+
     for match in MONTH_DAY_YEAR_RE.finditer(text):
-        if overlaps_day_range(match):
+        if unsafe_short_foreign_month(match) or overlaps_day_range(match):
             continue
         # A compact month-year value such as November2020 or November 2020 is
         # partial, not November 20, 2020. Let MONTH_YEAR_RE handle it later.
@@ -2320,7 +2329,7 @@ def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_mo
         _append_date_result(results, seen, match.group(0), normalized, match.start(), match.end())
 
     for match in DAY_MONTH_YEAR_RE.finditer(text):
-        if overlaps_day_range(match):
+        if unsafe_short_foreign_month(match) or overlaps_day_range(match):
             continue
         normalized = _normalize_date(match.group("year"), _month_name_to_number(match.group("month_name")), _strip_ordinal(match.group("day")))
         _append_date_result(results, seen, match.group(0), normalized, match.start(), match.end())
@@ -2360,6 +2369,45 @@ def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_mo
         for item in results:
             item["start"] = int(item["start"]) + base_offset
             item["end"] = int(item["end"]) + base_offset
+    # Month/year dates are intrinsically ambiguous in band names. Protect the
+    # COMPLETE DB-matched alias, not just a short list of words such as Mars.
+    # Full numeric and named day/month/year dates are unaffected.
+    if artist_matcher is not None:
+        # A numeric-leading alias (e.g. 30 Seconds to Mars) is not always
+        # found by the word-token matcher, which strips its leading number.
+        # Check the exact alias prefix ending at the month word as well.
+        filtered = []
+        for item in results:
+            raw = str(item.get("raw", ""))
+            if (re.fullmatch(r"(?:19|20)\d{2}-\d{2}-xx", str(item.get("normalized", "")))
+                    and any(char.isalpha() for char in raw)):
+                partial = re.search(r"(?<!\d)(?:19|20)\d{2}$", raw.strip())
+                if partial:
+                    end_month = int(item["end"]) - len(raw) + partial.start()
+                    prefix = compact_ws(source_text[:end_month].strip(" -_.,"))
+                    if prefix:
+                        status, masters = lookup_artist_master_with_status(prefix, artist_matcher)
+                        if status in {"matched", "collision"} and masters:
+                            continue
+            filtered.append(item)
+        results = filtered
+    if artist_matcher is not None and any(
+        re.fullmatch(r"(?:19|20)\d{2}-\d{2}-xx", str(item.get("normalized", "")))
+        and any(ch.isalpha() for ch in str(item.get("raw", "")))
+        for item in results
+    ):
+        protected = []
+        for _master, phrase in match_line_to_artists(source_text, artist_matcher):
+            if not phrase:
+                continue
+            for alias_match in re.finditer(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", source_text, re.IGNORECASE):
+                protected.append(alias_match.span())
+        if protected:
+            results = [item for item in results if not (
+                re.fullmatch(r"(?:19|20)\d{2}-\d{2}-xx", str(item.get("normalized", "")))
+                and any(ch.isalpha() for ch in str(item.get("raw", "")))
+                and any(int(item["start"]) < end and int(item["end"]) > start for start, end in protected)
+            )]
     results.sort(key=lambda item: (item["start"], item["end"], item["normalized"]))
     return results
 
@@ -2380,9 +2428,9 @@ def _is_abbreviation_candidate(source_text: str, date_start: int, string1: str) 
 
 
 
-def _string_date_matches(text: str, allow_string2: bool, allow_year_space_month_day_exception: bool = False) -> List[Dict[str, str]]:
+def _string_date_matches(text: str, allow_string2: bool, allow_year_space_month_day_exception: bool = False, *, artist_matcher: Optional[ArtistMatcher] = None) -> List[Dict[str, str]]:
     matches: List[Dict[str, str]] = []
-    for date_match in _find_date_matches(text, allow_year_space_month_day_exception=allow_year_space_month_day_exception):
+    for date_match in _find_date_matches(text, allow_year_space_month_day_exception=allow_year_space_month_day_exception, artist_matcher=artist_matcher):
         left_raw = text[: date_match["start"]]
         right_raw = text[date_match["end"] :]
         string1 = _clean_piece(left_raw)
@@ -2479,7 +2527,7 @@ def _date_matches_to_string_date_matches(text: str, date_matches_in: Sequence[Di
     return matches
 
 
-def _compliant_string_date_matches(text: str, allow_string2: bool) -> List[Dict[str, str]]:
+def _compliant_string_date_matches(text: str, allow_string2: bool, *, artist_matcher: Optional[ArtistMatcher] = None) -> List[Dict[str, str]]:
     """Return compliant String1 Date [String2] matches, strict form first.
 
     The primary compliant date forms are yyyy-mm-dd and accepted year ranges.
@@ -2495,7 +2543,7 @@ def _compliant_string_date_matches(text: str, allow_string2: bool) -> List[Dict[
     range_matches = _date_matches_to_string_date_matches(text, range_primary, allow_string2)
     if range_matches:
         return range_matches
-    return _string_date_matches(text, allow_string2=allow_string2, allow_year_space_month_day_exception=True)
+    return _string_date_matches(text, allow_string2=allow_string2, allow_year_space_month_day_exception=True, artist_matcher=artist_matcher)
 
 
 
@@ -5499,11 +5547,11 @@ def _resolve_artist_from_tags(record: ShowMetadata, matcher: Optional[ArtistMatc
 
 
 
-def _collect_pattern_matches_from_parts(parts: Sequence[Tuple[str, str]]) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
+def _collect_pattern_matches_from_parts(parts: Sequence[Tuple[str, str]], artist_matcher: Optional[ArtistMatcher] = None) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
     required_matches: List[Dict[str, str]] = []
     optional_matches: List[Dict[str, str]] = []
     for part_text, part_path in parts:
-        required = _string_date_matches(part_text, allow_string2=False)
+        required = _string_date_matches(part_text, allow_string2=False, artist_matcher=artist_matcher)
         if required:
             for match in required:
                 item = dict(match)
@@ -5511,7 +5559,7 @@ def _collect_pattern_matches_from_parts(parts: Sequence[Tuple[str, str]]) -> Tup
                 item["part_path"] = part_path
                 required_matches.append(item)
         else:
-            optional = _string_date_matches(part_text, allow_string2=True)
+            optional = _string_date_matches(part_text, allow_string2=True, artist_matcher=artist_matcher)
             for match in optional:
                 item = dict(match)
                 item["part"] = part_text
@@ -5520,11 +5568,11 @@ def _collect_pattern_matches_from_parts(parts: Sequence[Tuple[str, str]]) -> Tup
     return required_matches, optional_matches
 
 
-def _collect_pattern_matches(main_dir_path: str) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
-    return _collect_pattern_matches_from_parts(_candidate_path_parts(main_dir_path))
+def _collect_pattern_matches(main_dir_path: str, artist_matcher: Optional[ArtistMatcher] = None) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
+    return _collect_pattern_matches_from_parts(_candidate_path_parts(main_dir_path), artist_matcher)
 
 
-def _collect_pattern_matches_for_group(group: dict) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
+def _collect_pattern_matches_for_group(group: dict, artist_matcher: Optional[ArtistMatcher] = None) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
     """Collect path pattern matches plus preserved aggregate-name hints.
 
     Volume-style aggregation can make the shared parent the logical group path.
@@ -5532,7 +5580,7 @@ def _collect_pattern_matches_for_group(group: dict) -> Tuple[List[Dict[str, str]
     a metadata hint so a name like "Artist Date Venue City ST (Volume 1)" can
     still provide Artist/Date/Venue/Location after the folders are grouped.
     """
-    required_matches, optional_matches = _collect_pattern_matches(group.get("main_dir_path", ""))
+    required_matches, optional_matches = _collect_pattern_matches(group.get("main_dir_path", ""), artist_matcher)
     hint = compact_ws(group.get("aggregate_release_base", ""))
     if not hint:
         return required_matches, optional_matches
@@ -5540,7 +5588,7 @@ def _collect_pattern_matches_for_group(group: dict) -> Tuple[List[Dict[str, str]
     if not cleaned or _is_wrapper(cleaned):
         return required_matches, optional_matches
     existing_keys = {(m.get("part", "").casefold(), m.get("date_norm", ""), m.get("string2", "").casefold()) for m in required_matches + optional_matches}
-    hint_required, hint_optional = _collect_pattern_matches_from_parts([(cleaned, f"{os.path.normpath(group.get('main_dir_path', ''))}::{cleaned}")])
+    hint_required, hint_optional = _collect_pattern_matches_from_parts([(cleaned, f"{os.path.normpath(group.get('main_dir_path', ''))}::{cleaned}")], artist_matcher)
     for match in hint_required:
         key = (match.get("part", "").casefold(), match.get("date_norm", ""), match.get("string2", "").casefold())
         if key not in existing_keys:
@@ -5953,10 +6001,10 @@ def _resolve_artist_from_subdirs(
 
 
 
-def _collect_path_date_matches(group: dict) -> List[Dict[str, str]]:
+def _collect_path_date_matches(group: dict, artist_matcher: Optional[ArtistMatcher] = None) -> List[Dict[str, str]]:
     matches: List[Dict[str, str]] = []
     for part, part_path in _all_clean_path_parts(group["main_dir_path"]):
-        for date_match in _find_date_matches(part):
+        for date_match in _find_date_matches(part, artist_matcher=artist_matcher):
             result = {
                 "raw": date_match["raw"],
                 "normalized": date_match["normalized"],
@@ -7214,7 +7262,7 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
     compliant_mp3_year_show_match = False
 
     compliant_text, compliant_source_path = _compliant_pattern_text_for_group(record, group, observations)
-    matches = _compliant_string_date_matches(compliant_text, allow_string2=False)
+    matches = _compliant_string_date_matches(compliant_text, allow_string2=False, artist_matcher=artist_matcher)
     if not matches:
         observations.append("unable to find String1 Date String2 in compliant path text")
         dash_date_match = _match_compliant_string_dash_string_date(compliant_text, artist_matcher)
@@ -7277,7 +7325,7 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
             _set_compliant_string2_raw(record, string2_for_show, parentheticals_for_show, evidence, f"compliant:string_dash_string:{dash_match.get('part_path', '')}")
             observations.append("compliant String1 - String2 matched: String2 stored as raw venue and album name; no date assigned")
         else:
-            string_date_matches = _compliant_string_date_matches(compliant_text, allow_string2=True)
+            string_date_matches = _compliant_string_date_matches(compliant_text, allow_string2=True, artist_matcher=artist_matcher)
             if string_date_matches:
                 chosen = dict(string_date_matches[0])
                 candidate_artist = (chosen.get("string1", "") or "").strip()
@@ -7530,7 +7578,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
     unresolved_reasons: List[str] = []
     date_matches: List[Dict[str, str]] = []
 
-    required_matches, optional_matches = _collect_pattern_matches_for_group(group)
+    required_matches, optional_matches = _collect_pattern_matches_for_group(group, artist_matcher)
     string_date_string_found = bool(required_matches)
     string_date_found = bool(optional_matches)
     pattern_matches = required_matches if required_matches else optional_matches
@@ -7810,7 +7858,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                         chosen_string2_match = match
                         break
         else:
-            path_date_only = _collect_path_date_matches(group)
+            path_date_only = _collect_path_date_matches(group, artist_matcher)
             if path_date_only:
                 record.date, date_matches = _resolve_date_with_structural_precedence(
                     group, path_date_only, tag_date_matches, evidence, conflicts, observations,
