@@ -108,7 +108,9 @@ def test_merged_recording_moves_once_with_all_files_and_no_copy_suffix(tmp_path)
         original_main_dir_path="",
     )
     updated_group, updated_record = tagging.prepare_inventory_copy_delete_target(config, group, record)
-    published = destination / name
+    # The source leaf contains RTF and flac16 lineage that the normalized Show
+    # does not retain. Copy/Delete still transfers exactly once, without a lossy rename.
+    published = destination / show.name
     assert published.is_dir() and not show.exists()
     assert updated_group["main_dir_path"] == str(published)
     assert updated_record.main_dir_path == str(published)

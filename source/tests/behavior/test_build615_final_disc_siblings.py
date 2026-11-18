@@ -64,7 +64,8 @@ def test_copy_delete_final_disc_pair_preserves_file_structure_and_transfers_once
     )
     config = SimpleNamespace(tag_copy_and_delete_path=str(destination), rename_compliantly=True)
     updated_group, updated_record = taglib.prepare_inventory_copy_delete_target(config, group, record)
-    published = destination / record.show_name
+    # Preserve the source's Previously Uncirculated / Country Music wording.
+    published = destination / show.name
     assert published.is_dir() and not show.exists()
     assert updated_record.main_dir_path == str(published)
     assert updated_group["main_dir_path"] == str(published)

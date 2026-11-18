@@ -1,0 +1,119 @@
+{
+  "build": 685,
+  "reviewed_baseline": 681,
+  "scope": "Build 685: remove two unused imports in Build 683 behavior tests to satisfy Windows Ruff F401; no runtime or user behavior changes. Companion GitHub Build Process v143 unchanged.",
+  "findings": {
+    "H1": {
+      "status": "fixed",
+      "summary": "Use native full-PCM FLAC fingerprint validation before cleanup; repair corrupt keeper from proven healthy copy.",
+      "test": "tests/behavior/test_build682_review_safety.py::test_real_flac_bitflip_is_not_healthy_and_healthy_copy_repairs"
+    },
+    "H2": {
+      "status": "fixed",
+      "summary": "Treat missing FLAC STREAMINFO MD5 as unverifiable; never trigger corruption removal solely for unset checksum.",
+      "test": "tests/behavior/test_build682_review_safety.py::test_unset_streaminfo_md5_is_unverifiable_not_corrupt"
+    },
+    "H3": {
+      "status": "fixed",
+      "summary": "Archive rename/copy operation mappings durably before token-log truncation/pruning; Reverse reads archival history.",
+      "test": "tests/behavior/test_build682_review_safety.py::test_reinventory_log_truncation_preserves_reverse_history"
+    },
+    "M1": {
+      "status": "fixed",
+      "summary": "Human-facing prompt has no 30-second wait limit; dialog close selects Skip.",
+      "test": "tests/behavior/test_build682_gui_and_pytest.py::test_gui_prompt_can_take_longer_than_old_timeout"
+    },
+    "M2": {
+      "status": "fixed",
+      "summary": "Lossless Rename Compliantly preflight blocks removal of date/year, location, venue, artist and source qualifiers; uncertain identification is skipped.",
+      "test": "tests/behavior/test_build683_rename_search_parallel.py::test_nonlossy_rename_preserves_date_city_source_and_artist"
+    },
+    "M3": {
+      "status": "fixed",
+      "summary": "Idempotent names remain unchanged across repeated runs; punctuation-only reductions are skipped.",
+      "test": "tests/behavior/test_build683_rename_search_parallel.py::test_rename_permitted_when_identity_preserved_and_idempotent"
+    },
+    "M4": {
+      "status": "fixed",
+      "summary": "Setlist index retains exact show and path mapping without changing the two-column bootlist format.",
+      "test": "tests/behavior/test_build683_rename_search_parallel.py::test_search_view_row_identity_and_explicit_expression_parser"
+    },
+    "M5": {
+      "status": "fixed",
+      "summary": "Apostrophes and qualifiers search literally; explicit boolean grammar is bounded.",
+      "test": "tests/behavior/test_build683_rename_search_parallel.py::test_search_view_row_identity_and_explicit_expression_parser"
+    },
+    "M6": {
+      "status": "fixed",
+      "summary": "Read bootlist.csv as strict UTF-8-SIG; malformed encoding blocks update instead of dropping bytes.",
+      "test": "tests/behavior/test_build682_review_safety.py::test_cp1252_bootlist_refused_without_lossy_rewrite"
+    },
+    "M7": {
+      "status": "fixed",
+      "summary": "Keep successful worker results; rerun unfinished read-only work only; fail closed on uncertain mutating paths.",
+      "test": "tests/behavior/test_build683_rename_search_parallel.py::test_process_pool_crash_retains_completed_groups"
+    },
+    "M8": {
+      "status": "deferred",
+      "rationale": "36 one-character volume log tokens remain; document the limit now, and expand token scheme only with migration tests."
+    },
+    "L1": {
+      "status": "deferred",
+      "rationale": "City extraction under alternate date spellings remains a parsing improvement, not part of safety fixes."
+    },
+    "L2": {
+      "status": "deferred",
+      "rationale": "Month aliases Mars/Juli and cross-range parsing need artist-aware tests before adjusting date grammar."
+    },
+    "L3": {
+      "status": "accepted-design",
+      "rationale": "The TLO requirement explicitly defines duplicates by exact file names, structure and sizes, not content hashes. This is an intentional user-selected behavior; the User Manual warns of distinct equal-size recordings."
+    },
+    "L4": {
+      "status": "deferred",
+      "rationale": "Deeply nested duplicate-tree recursion needs iterative traversal and end-to-end deep path tests."
+    },
+    "L5": {
+      "status": "deferred",
+      "rationale": "Cross-device Add Shows moves need verified publication; code-read finding still requires failure-injection tests."
+    },
+    "L6": {
+      "status": "deferred",
+      "rationale": "Crash recovery for orphaned staging directories needs a dedicated journaled recovery design."
+    },
+    "L7": {
+      "status": "deferred",
+      "rationale": "Search formula escaping and expression error text require UI-focused tests before changes."
+    },
+    "L8": {
+      "status": "accepted-design",
+      "rationale": "The source ZIP carries an empty artists.sqlite placeholder by design. The build process injects the authoritative master before release; source-only runs require a real master."
+    },
+    "L9": {
+      "status": "deferred",
+      "rationale": "Lock-owner detail failure needs Windows-native reproduction; no unsupported Windows assumptions in this build."
+    },
+    "L10": {
+      "status": "deferred",
+      "rationale": "Low-priority code hygiene and incidental messaging are deferred to avoid touching unrelated workflows."
+    },
+    "T1": {
+      "status": "fixed",
+      "summary": "Ordinary pytest disables bytecode creation at suite initialization.",
+      "test": "tests/behavior/test_build682_gui_and_pytest.py::test_pytest_collection_disables_source_bytecode_writes"
+    },
+    "T2": {
+      "status": "fixed",
+      "summary": "Add real media regressions instead of relying only on FFmpeg-return-code mocks.",
+      "test": "tests/behavior/test_build682_review_safety.py::test_real_flac_bitflip_is_not_healthy_and_healthy_copy_repairs"
+    },
+    "T3": {
+      "status": "deferred",
+      "rationale": "Aggregate and entry-point coverage gaps remain; add behavior coverage incrementally rather than enforce an arbitrary threshold."
+    },
+    "T4": {
+      "status": "deferred",
+      "rationale": "Retain existing source-text contracts for now; replace them with runtime tests as relevant areas change."
+    }
+  }
+}

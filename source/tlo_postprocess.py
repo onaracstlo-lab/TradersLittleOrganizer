@@ -1281,7 +1281,44 @@ def _format_bootlist_volume_path(volume_label: str, path_name: str) -> str:
     return format_volume_path(volume_label, path_name)
 
 
+def _write_setlist_identity_index(tlo_home: str, rows: List[Dict[str, str]]) -> str:
+    """Preserve exact row-to-setlist associations across inventory/Add Shows writes."""
+    index_path = os.path.join(tlo_home, "setlist-index.json")
+    previous = {}
+    try:
+        with open(index_path, "r", encoding="utf-8") as infile:
+            data = json.load(infile)
+        if isinstance(data, list):
+            previous = {
+                (entry["show"], entry["volume_path"]): entry["setlist"]
+                for entry in data if isinstance(entry, dict)
+                and all(isinstance(entry.get(key), str) for key in ("show", "volume_path", "setlist"))
+            }
+    except (FileNotFoundError, ValueError, OSError, TypeError, KeyError):
+        pass
+    identities = []
+    for row in rows:
+        show = row["Show"]
+        volume_path = row.get("VolumePath") or _format_bootlist_volume_path(row.get("Volume", ""), row.get("Path", ""))
+        filename = row.get("Setlist") or previous.get((show, volume_path), "")
+        if filename and os.path.basename(filename) == filename and filename.lower().endswith(".txt"):
+            identities.append({"show": show, "volume_path": volume_path, "setlist": filename})
+    temp = index_path + ".tmp"
+    try:
+        with open(temp, "w", encoding="utf-8", newline="\n") as outfile:
+            json.dump(identities, outfile, ensure_ascii=False, indent=2)
+            outfile.write("\n")
+            outfile.flush()
+            os.fsync(outfile.fileno())
+        os.replace(temp, index_path)
+    finally:
+        if os.path.isfile(temp):
+            os.remove(temp)
+    return index_path
+
+
 def _write_bootlist_csv(tlo_home: str, rows: List[Dict[str, str]]) -> str:
+    """Keep the two-column format, plus a stable setlist identity sidecar."""
     csv_path = os.path.join(tlo_home, "bootlist.csv")
     with open(csv_path, "w", encoding="utf-8", newline="") as outfile:
         outfile.write("sep=^\n")
@@ -1289,6 +1326,7 @@ def _write_bootlist_csv(tlo_home: str, rows: List[Dict[str, str]]) -> str:
         writer = csv.writer(outfile, delimiter="^", lineterminator="\n")
         for row in rows:
             writer.writerow([row["Show"], row.get("VolumePath") or _format_bootlist_volume_path(row.get("Volume", ""), row.get("Path", ""))])
+    _write_setlist_identity_index(tlo_home, rows)
     return csv_path
 
 

@@ -194,6 +194,40 @@ def delete_logs_for_tokens(tlo_home, tokens):
     return deleted
 
 
+
+_FOLDER_OPERATION_LINE = re.compile(
+    r"^(?:RENAME_COMPLIANTLY|TAG_COPY(?:_DELETE_(?:MOVE|COPY))?):\s+.+?\s+->\s+.+$",
+    re.IGNORECASE,
+)
+
+
+def archive_folder_operations(tlo_home, tokens):
+    """Persist reversibility before any token log is truncated or pruned.
+
+    The archive is outside the token-file naming scheme, so subsequent inventory
+    and cleanup cannot erase the history needed by tlo-reverse. If archiving
+    fails, abort the destructive log rewrite rather than silently lose undo data.
+    """
+    logs_dir = ensure_logs_dir(tlo_home)
+    preserved = []
+    for token in _validated_log_tokens(tokens):
+        for prefix in ('tags', 'tag'):
+            original = _log_path_for_prefix(logs_dir, prefix, token)
+            if not os.path.isfile(original):
+                continue
+            with _suspend_file_log_handlers(original):
+                with open(original, 'r', encoding='utf-8') as stream:
+                    preserved.extend(line for line in stream
+                                     if _FOLDER_OPERATION_LINE.match(line.strip()))
+    if preserved:
+        destination = os.path.join(logs_dir, 'folderOperations.log')
+        with open(destination, 'a', encoding='utf-8', newline='') as archive:
+            archive.writelines(preserved)
+            archive.flush()
+            os.fsync(archive.fileno())
+    return len(preserved)
+
+
 def truncate_logs_for_tokens(tlo_home, tokens):
     """Replace existing related log files for tokens without changing names.
 
@@ -201,9 +235,11 @@ def truncate_logs_for_tokens(tlo_home, tokens):
     conf/dead/comp/dups/groups/meta/tag log tied to the old volume token before
     the fresh inventory writes to the reused token.
     """
+    token_list = _validated_log_tokens(tokens)
+    archive_folder_operations(tlo_home, token_list)
     truncated = []
     logs_dir = ensure_logs_dir(tlo_home)
-    for token_text in _validated_log_tokens(tokens):
+    for token_text in token_list:
         for prefix in LOG_FILE_PREFIXES.values():
             log_file = _log_path_for_prefix(logs_dir, prefix, token_text)
             try:
@@ -399,8 +435,10 @@ def prune_logs_for_tokens_and_paths(tlo_home, tokens, root_paths):
     roots = [str(root or "").strip() for root in (root_paths or []) if str(root or "").strip()]
     if not roots:
         return pruned
+    token_list = _validated_log_tokens(tokens)
+    archive_folder_operations(tlo_home, token_list)
     logs_dir = ensure_logs_dir(tlo_home)
-    for token_text in _validated_log_tokens(tokens):
+    for token_text in token_list:
         group_path = os.path.join(logs_dir, f"groups{token_text}.log")
         if _prune_structured_log(group_path, roots, "END_GROUP"):
             pruned.append(group_path)
@@ -610,6 +648,8 @@ class LogManager:
 
     def _switch_to_scope(self, scope_label, token, search_path, log_mode="w"):
         self._close_scope_handlers()
+        if not str(log_mode or 'w').lower().startswith('a'):
+            archive_folder_operations(self.tlo_home, [str(token or '')])
         self.current_scope_label = sanitize_scope_label(scope_label)
         self.current_log_token = str(token or "")
         self.paths = LogPaths(

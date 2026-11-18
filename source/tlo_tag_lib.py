@@ -65,6 +65,7 @@ from tlo_wrapper_rules import (
 )
 from tlo_tree_compare import has_exact_tree_match_in_family
 from tlo_folder_rename import folder_name_write_needed, rename_folder_exact_case, same_existing_entry
+from tlo_rename_safety import safe_rename_target
 from tlo_ffmpeg import bundled_ffmpeg_executable as _bundled_ffmpeg_executable
 
 
@@ -3386,7 +3387,11 @@ def prepare_inventory_copy_delete_target(
     source_leaf = os.path.basename(source_root) or compact_ws(getattr(record, "main_dir_name", "")) or "TLO Show"
     show_name = _compliant_rename_show_name_from_record(record)
     use_compliant_name = bool(getattr(config, "rename_compliantly", False)) and bool(show_name)
-    destination_leaf = safe_compliant_folder_name(show_name if use_compliant_name else source_leaf, fallback=source_leaf)
+    proposed_leaf = safe_compliant_folder_name(show_name, fallback=source_leaf)
+    accepted_leaf, reason = safe_rename_target(source_leaf, proposed_leaf, artist=getattr(record, "artist", ""), date=getattr(record, "date", "")) if use_compliant_name else ("", "")
+    if use_compliant_name and not accepted_leaf:
+        _emit(emit, f"RENAME_COMPLIANTLY_SKIP: {source_root} | {reason}")
+    destination_leaf = accepted_leaf or source_leaf
     if _paths_on_same_filesystem(source_root, destination_parent):
         try:
             destination_root = _move_via_owned_stage(source_root, destination_parent, destination_leaf)
@@ -3439,6 +3444,12 @@ def prepare_inventory_tagging_target(
     original_name = os.path.basename(source_root) or compact_ws(getattr(record, "main_dir_name", "")) or "TLO Show"
     use_compliant_name = bool(getattr(config, "rename_compliantly", False)) and bool(show_name)
     target_name = safe_compliant_folder_name(show_name if use_compliant_name else original_name, fallback=original_name)
+    if use_compliant_name:
+        accepted, reason = safe_rename_target(original_name, target_name, artist=getattr(record, "artist", ""), date=getattr(record, "date", ""))
+        if not accepted:
+            _emit(emit, f"RENAME_COMPLIANTLY_SKIP: {source_root} | {reason}")
+            use_compliant_name = False
+            target_name = original_name
 
     if bool(getattr(config, "tag_copy_during_inventory", False)):
         destination_parent = os.path.normpath(str(getattr(config, "tag_copy_destination", "") or ""))
@@ -3460,7 +3471,7 @@ def prepare_inventory_tagging_target(
             _rewrite_record_paths(record, source_root, destination_root, mutate=False),
         )
 
-    if bool(getattr(config, "rename_compliantly", False)) and show_name:
+    if use_compliant_name:
         parent_dir = os.path.dirname(source_root)
         if not _folder_name_write_needed(source_root, target_name):
             _emit(emit, f"RENAME_COMPLIANTLY_UNCHANGED: {source_root}")

@@ -1,10 +1,16 @@
+HISTORICAL SOURCE BUNDLE NOTES — THROUGH BUILD 672
+These notes are preserved for historical provenance. They are NOT current
+release instructions. For Build 685, use SOURCE_BUNDLE_README_v685.txt,
+TLO_Inventory_User_Manual_v685.rtf, and CHANGES_v685.txt.
+
+Build 682 (2026-11-17): focused review safety remediation; see current CHANGES and TLO_RELEASE_REMEDIATION.json.
 Traders Little Organizer (TLO) - Source and Utilities Bundle v672
 ==================================================================
 Public application version: v1.7 Build 668
 Native GitHub Build Process: v135 (separate complete package)
 
-CURRENT RELEASE
----------------
+HISTORICAL RELEASE (BUILD 672)
+------------------------------
 Build 672: Search always initializes from the clipboard unless --find is supplied. Remove obsolete INI search_path, search_query and clipboard_prefill controls; silently ignore legacy entries. Existing INI files are preserved.
 
 Build 668: Add German/French/Italian textual month support (including accents and common transliterations) and group verified consecutive Disc/CD/Set siblings under their show parent in Compliant mode. No setlist required. Preserve existing non-compliant grouping and unrelated-show protections. GitHub Build Process v135 unchanged.

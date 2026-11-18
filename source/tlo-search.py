@@ -911,7 +911,7 @@ class CsvSearchResultsWindow:
                 continue
 
             row = self.rows[row_index]
-            file_path = resolve_setlist_path_from_show(self.paths, row.show)
+            file_path = resolve_setlist_path_for_row(self.paths, row)
             if not file_path.is_file():
                 missing_paths.append(str(file_path))
                 continue
@@ -1347,14 +1347,34 @@ def tokenize_search_expression(text: str) -> List[str]:
             continue
 
         if ch in ('"', "'"):
-            quote_char = ch
+            # Apostrophes inside names (Gilley's/O'Brien) are ordinary text.
+            # A leading quote is syntax only if a closing match exists.
+            if not "".join(term_buffer).strip() and text.find(ch, i + 1) >= 0:
+                quote_char = ch
             term_buffer.append(ch)
             i += 1
             continue
 
-        if ch in "()":
-            flush_term()
-            tokens.append(ch)
+        if ch == "(":
+            # Parentheses around literal show qualifiers are not grouping.
+            # Only parenthesized subexpressions containing a real operator are.
+            close = text.find(")", i + 1)
+            contains_operator = close >= 0 and (
+                "|and|" in text[i + 1:close].casefold() or "|or|" in text[i + 1:close].casefold()
+            )
+            if contains_operator and not "".join(term_buffer).strip():
+                flush_term()
+                tokens.append(ch)
+            else:
+                term_buffer.append(ch)
+            i += 1
+            continue
+        if ch == ")":
+            if tokens.count("(") > tokens.count(")"):
+                flush_term()
+                tokens.append(ch)
+            else:
+                term_buffer.append(ch)
             i += 1
             continue
 
@@ -1384,7 +1404,14 @@ def build_search_predicate(search_text: str) -> Callable[[str], bool]:
     if not search_text.strip():
         return lambda _haystack: True
 
+    # An ordinary pasted show name is a literal search, including apostrophes
+    # and (Early Show) qualifiers. Only explicit |AND| / |OR| selects grammar.
+    if "|and|" not in search_text.casefold() and "|or|" not in search_text.casefold():
+        literal = strip_outer_quotes(search_text.strip()).casefold()
+        return lambda haystack: literal in haystack.casefold()
     tokens = tokenize_search_expression(search_text)
+    if len(tokens) > 1024 or tokens.count("(") > 64:
+        raise SearchExpressionError("Search expression exceeds safe complexity limits.")
     tree = ExpressionParser(tokens).parse()
     return lambda haystack: tree.evaluate(haystack.casefold())
 
@@ -1514,6 +1541,37 @@ def make_setlist_filename_from_show(show_name: str) -> str:
 
 def resolve_setlist_path_from_show(paths: AppPaths, show_name: str) -> Path:
     return paths.setlist_dir / make_setlist_filename_from_show(show_name)
+
+
+def resolve_setlist_path_for_row(paths: AppPaths, row: CsvRow) -> Path:
+    """Resolve View from the exact bootlist row, not a non-unique show title.
+
+    If two rows share a Show and the index is missing, do not guess a setlist.
+    Older single-show inventories keep their legacy filename behavior.
+    """
+    index_path = paths.tlohome / "setlist-index.json"
+    try:
+        import json
+        if index_path.stat().st_size > 32 * 1024 * 1024:
+            raise ValueError("setlist index is too large")
+        with index_path.open("r", encoding="utf-8") as handle:
+            entries = json.load(handle)
+        matches = [entry["setlist"] for entry in entries if isinstance(entry, dict)
+                   and entry.get("show") == row.show and entry.get("volume_path") == row.volume_path
+                   and isinstance(entry.get("setlist"), str)]
+        if len(matches) == 1:
+            name = matches[0]
+            if name == Path(name).name and name.lower().endswith(".txt"):
+                return paths.setlist_dir / name
+    except (OSError, ValueError, TypeError, KeyError):
+        pass
+    try:
+        same_show_count = sum(r.show == row.show for r in load_bootlist_rows(paths.bootlist_csv))
+    except (OSError, UnicodeError, csv.Error):
+        same_show_count = 2  # fail closed on unreadable identity data
+    if same_show_count > 1:
+        return paths.setlist_dir / "__TLO_AMBIGUOUS_SETLIST_IDENTITY__.txt"
+    return resolve_setlist_path_from_show(paths, row.show)
 
 
 def resolve_setlist_paths_from_show(paths: AppPaths, show_name: str) -> List[Path]:

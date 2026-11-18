@@ -1,3 +1,43 @@
+TLO v1.7 Build 685 — Build 684 Windows Ruff F401 correction
+2026-11-18: Removed unused `json` and `tlo_rename_safety` imports from
+tests/behavior/test_build683_rename_search_parallel.py. No runtime changes;
+Build Process v143 remains unchanged. Build 684 archive is preserved.
+Complete current Requirements, Manual, catalog, source and tests included.
+Hosted native Windows/macOS/Linux signing and packaging remain release gates.
+
+BEGIN HISTORICAL CHANGE RECORD — preserved from previous builds
+TLO v1.7 Build 684 — rebuild with corrected GitHub Build Process v143
+2026-11-18: New complete source release snapshot. No functional code changes from Build 683. Updates current version, requirements, User Manual and release records; companion process v143 corrects the local readiness preflight numeric build scope. Previous ZIPs remain unchanged.
+
+TLO v1.7 Build 683 — safe Rename Compliantly, Search identity and resilient parallel scans
+Companion GitHub Build Process v142 (unchanged).
+Changes from Build 682:
+M2: Rename Compliantly skips any proposed name that would drop known artist, date/year, city, venue or source information.
+M3: Stable names are idempotent, including avoiding punctuation-only loss on re-inventory.
+M4: Search View resolves exact Show+VolumePath via setlist-index.json; ambiguous legacy rows are never guessed.
+M5: Literal apostrophes/parentheses and bounded explicit boolean searches are supported.
+M7: Completed worker results are preserved; only unfinished read-only paths may replay automatically; uncertain mutating work stops for review.
+New real-folder, setlist-index and real worker-crash regression cases are included.
+Original duplicate identification remains name+size; no unrelated feature changes.
+Native Windows/macOS, MSI, signing, malware scanning and hosted release gates are not locally attested.
+
+BEGIN HISTORICAL CHANGE RECORD — previous builds
+TLO v1.7 Build 682 — focused data-safety remediation and release documentation
+Companion GitHub Build Process v142
+This is a new, complete source build. Changes from Build 681:
+H1: Duplicate cleanup validates full FLAC decoded PCM against STREAMINFO; mismatching frames are not accepted.
+H2: An absent/all-zero FLAC stored MD5 is unverifiable, never proof of corruption or reason for deletion.
+H3: Reverse folder-operation history is preserved in folderOperations.log before re-inventory clears token logs.
+M1: GUI human Skip/Re-inventory prompts no longer time out after 30 seconds; closing selects Skip.
+M6: Existing bootlist.csv is read without lossy UTF-8 decoding; invalid encoding blocks rewrites.
+T1: Plain pytest prevents compiled Python bytecode from polluting the source tree.
+T2: Real-media regression tests validate damaged, healthy, and unset-MD5 FLAC behavior.
+M8: Current volume-token capacity is documented; format expansion is deferred.
+L3: Filename and exact-size duplicate identity remains the intended user-defined rule.
+All remaining findings: see TLO_RELEASE_REMEDIATION.json for explicit deferred/accepted dispositions.
+Tests: see REGRESSION_RESULTS_v682.txt. Native Windows/macOS builds, signed MSI and hosted release acceptance are NOT ATTESTED.
+
+BEGIN HISTORICAL CHANGE RECORD — preserved from previous builds
 TLO v1.7 Build 681 — Hosted macOS and Windows test portability; requirements and metadata synchronized
 
 - Corrected macOS Trash argv test to distinguish /tmp and /private/tmp aliases.

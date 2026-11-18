@@ -44,11 +44,13 @@ from tlo_postprocess import (
     _setlist_base_from_record,
     _unique_setlist_filename,
     _write_text_file,
+    _write_setlist_identity_index,
 )
 from tlo_setlist_file_selection import find_setlist_files_for_music_dir
 from tlo_text_utils import normalized_compare_value
 from tlo_version import versioned_title
 from tlo_folder_rename import folder_name_write_needed, rename_folder_exact_case, same_existing_entry
+from tlo_rename_safety import safe_rename_target
 from tlo_unc import unc_root, unc_label
 
 
@@ -265,7 +267,7 @@ def read_bootlist(tlo_home: str) -> List[Dict[str, str]]:
     if not os.path.isfile(path_name):
         return []
     rows: List[Dict[str, str]] = []
-    with open(path_name, "r", encoding="utf-8", errors="ignore", newline="") as infile:
+    with open(path_name, "r", encoding="utf-8-sig", newline="") as infile:
         first = infile.readline()
         if not first:
             return []
@@ -308,6 +310,7 @@ def write_bootlist(tlo_home: str, rows: List[Dict[str, str]]) -> str:
             outfile.flush()
             os.fsync(outfile.fileno())
         os.replace(temp_name, path_name)
+        _write_setlist_identity_index(tlo_home, rows_out)
     except (OSError, UnicodeError, csv.Error):
         try:
             os.remove(temp_name)
@@ -705,6 +708,11 @@ def _rename_add_shows_folder_compliantly(config, folder_path: str, record_dict: 
         return folder_path
     original_leaf = os.path.basename(source_root)
     target_leaf = _safe_compliant_folder_name(show_name, fallback=original_leaf)
+    target_leaf, _reason = safe_rename_target(
+        original_leaf, target_leaf, artist=record_dict.get("artist", ""), date=record_dict.get("date", "")
+    )
+    if not target_leaf:
+        return source_root
     parent_dir = os.path.dirname(source_root)
     direct_target = os.path.normpath(os.path.join(parent_dir, target_leaf))
     if not _folder_name_write_needed(source_root, target_leaf):
@@ -968,7 +976,7 @@ def _delete_path_from_bootlist_volume_path(volume_path: str, *, tlo_home: str = 
     _volume_label, safe_path = _delete_target_from_bootlist_volume_path(volume_path, tlo_home=tlo_home)
     return safe_path
 
-def _add_bootlist_row_for_record(tlo_home: str, record_dict: Dict[str, str], current_volume: str, folder_leaf: str) -> None:
+def _add_bootlist_row_for_record(tlo_home: str, record_dict: Dict[str, str], current_volume: str, folder_leaf: str, setlist_path: str = "") -> None:
     show = _adjust_show_name_for_output(dict(record_dict))
     if not show:
         raise InventoryUpdateError(f"Unable to create show name for {record_dict.get('main_dir_path') or folder_leaf}")
@@ -976,6 +984,7 @@ def _add_bootlist_row_for_record(tlo_home: str, record_dict: Dict[str, str], cur
     rows.append({
         "Show": show,
         "VolumePath": _format_add_shows_volume_path(current_volume, folder_leaf),
+        "Setlist": os.path.basename(setlist_path) if setlist_path else "",
     })
     write_bootlist(tlo_home, rows)
 
@@ -1519,7 +1528,7 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
                 # a same-named show. Never publish an entry for the source leaf.
                 folder_leaf = os.path.basename(os.path.normpath(staged_folder))
                 generated_setlist = create_or_replace_generated_setlist(config.TLOHome, record_dict)
-                _add_bootlist_row_for_record(config.TLOHome, record_dict, current_volume, folder_leaf)
+                _add_bootlist_row_for_record(config.TLOHome, record_dict, current_volume, folder_leaf, generated_setlist)
             except Exception:
                 # Undo newly-created output and return the accepted audio to its
                 # source, keeping the previous inventory bytes untouched.
@@ -1646,7 +1655,7 @@ def process_duplicate_folder(config, item: Dict[str, object], selected_rows: Seq
             _remove_bootlist_rows(config.TLOHome, scripted_rows)
         # Derive the name from the actual staged location, including collisions.
         _add_bootlist_row_for_record(
-            config.TLOHome, record, current_volume, os.path.basename(os.path.normpath(staged_folder))
+            config.TLOHome, record, current_volume, os.path.basename(os.path.normpath(staged_folder)), generated_setlist
         )
     except Exception:
         if generated_setlist and os.path.isfile(generated_setlist):

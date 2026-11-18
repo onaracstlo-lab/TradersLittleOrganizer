@@ -94,7 +94,7 @@ def _related(path_name: str, requested: str) -> bool:
 def _candidate_tag_logs(tlo_home: str) -> list[str]:
     logs_dir = os.path.join(tlo_home, "logs")
     found: list[str] = []
-    for pattern in ("tags*.txt", "tag*.log"):
+    for pattern in ("tags*.txt", "tag*.log", "folderOperations.log"):
         found.extend(scandir_matching_files(logs_dir, pattern))
     return sorted({os.path.normpath(p) for p in found if os.path.isfile(p)})
 

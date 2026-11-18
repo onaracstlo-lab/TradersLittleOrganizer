@@ -110,7 +110,7 @@ def read_bootlist_rows(tlo_home: str) -> List[Dict[str, str]]:
     if not os.path.isfile(path_name):
         return []
     rows: List[Dict[str, str]] = []
-    with open(path_name, "r", encoding="utf-8", errors="ignore", newline="") as infile:
+    with open(path_name, "r", encoding="utf-8-sig", newline="") as infile:
         first = infile.readline()
         if not first:
             return []

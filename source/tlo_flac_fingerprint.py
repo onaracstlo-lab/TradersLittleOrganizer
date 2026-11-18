@@ -52,7 +52,10 @@ def _streaminfo(path):
     if not (rate > 0 and 1 <= channels <= 8 and 4 <= depth <= 32):
         raise FingerprintCorrupt('invalid FLAC sample rate, channel count, or sample depth')
     if digest == bytes(16):
-        raise FingerprintCorrupt('FLAC STREAMINFO fingerprint is missing (all zeroes)')
+        # STREAMINFO explicitly permits an all-zero MD5 to mean "not computed".
+        # This stream cannot be authenticated using the stored fingerprint.
+        # Crucially, unverifiable files must never trigger corruption deletion.
+        raise FingerprintUnverifiable('FLAC STREAMINFO MD5 is unset; audio integrity cannot be proven')
     # Zero is permitted by the specification for streams of unknown length.
     # When zero, exact EOF plus the complete audio MD5 still validates the data.
     if total < 0:
@@ -127,7 +130,7 @@ def verify_flac_fingerprint(
     codec, fmt, container_bits = _pcm_format(depth)
     command = [
         executable, '-nostdin', '-hide_banner', '-loglevel', 'error', '-xerror',
-        '-protocol_whitelist', 'file', '-i', normalized,
+        '-f', 'flac', '-protocol_whitelist', 'file', '-i', normalized,
         '-map', '0:a:0', '-vn', '-sn', '-dn', '-c:a', codec,
         '-f', fmt, 'pipe:1',
     ]

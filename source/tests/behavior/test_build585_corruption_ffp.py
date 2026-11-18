@@ -63,12 +63,12 @@ def test_corruption_detected_by_md5_not_just_decoder_exit(tmp_path, ffmpeg, flac
     assert C._deep_audio_stream_status(path, ffmpeg_executable=ffmpeg, cancel_check=lambda: False) is False
 
 
-def test_missing_md5_fails_even_when_audio_decodes(tmp_path, ffmpeg, flac_tool):
+def test_missing_md5_is_unverifiable_even_when_audio_decodes(tmp_path, ffmpeg, flac_tool):
     path = _make_flac(tmp_path, 16, flac_tool)
     data = bytearray(path.read_bytes())
     data[26:42] = bytes(16)
     path.write_bytes(data)
-    with pytest.raises(FingerprintCorrupt, match='missing'):
+    with pytest.raises(FingerprintUnverifiable, match='unset'):
         verify_flac_fingerprint(path, ffmpeg_executable=ffmpeg, cancel_check=lambda: False, timeout_seconds=20)
 
 

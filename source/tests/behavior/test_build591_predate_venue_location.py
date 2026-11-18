@@ -144,6 +144,8 @@ def test_add_new_shows_rename_uses_exact_setlist_confirmed_metadata(tmp_path):
     config = _config(tmp_path)
     config.rename_compliantly = True
     destination = _rename_add_shows_folder_compliantly(config, group["main_dir_path"], row)
-    assert Path(destination).name == "NRBQ 1994-12-10 The Talkhouse Miami, FL"
+    # Build 683 safety policy: although the setlist resolves the Show metadata,
+    # the original city spelling and source/lineage tail must not be discarded.
+    assert Path(destination).name == NAME
     assert (Path(destination) / "info.txt").is_file()
     assert row["main_dir_path"] == destination

@@ -320,18 +320,37 @@ def _run_parallel_paths(config, volume_groups, worker_count):
                         run_search_path_group_job,
                         snapshot,
                         jobs,
-                    )] = volume_label
+                    )] = (volume_label, volume_group)
 
-                for future in as_completed(future_map):
-                    if is_cancel_requested() or getattr(config, "cancel_requested", False):
-                        raise KeyboardInterrupt
-                    results = future.result()
-                    for result in results:
-                        completed[result["search_index"]] = result
-                        console_print(
-                            config,
-                            f"Search path complete: {result['path_name']} | directories identified: {result['directory_count']} | show groups processed: {result['show_group_count']}",
-                        )
+                try:
+                    for future in as_completed(future_map):
+                        if is_cancel_requested() or getattr(config, "cancel_requested", False):
+                            raise KeyboardInterrupt
+                        results = future.result()
+                        for result in results:
+                            completed[result["search_index"]] = result
+                            console_print(
+                                config,
+                                f"Search path complete: {result['path_name']} | directories identified: {result['directory_count']} | show groups processed: {result['show_group_count']}",
+                            )
+                except BrokenProcessPool as exc:
+                    # Futures that completed after the first broken future was
+                    # yielded must be harvested too; never blindly replay them.
+                    successful = set()
+                    for future, (_label, group) in future_map.items():
+                        if not future.done() or future.cancelled():
+                            continue
+                        try:
+                            results = future.result()
+                        except Exception:
+                            continue
+                        successful.add(future)
+                        for result in results:
+                            completed[result["search_index"]] = result
+                    exc.completed_results = dict(completed)
+                    exc.pending_groups = [group for future, (_label, group) in future_map.items() if future not in successful]
+                    raise
+                # All results have been collected above.
             finally:
                 unregister_active_executor(executor)
     finally:
@@ -343,6 +362,10 @@ def _run_parallel_paths(config, volume_groups, worker_count):
             except Exception as exc:  # noqa: BLE001 - best-effort boundary
                 debug_suppressed_exception(__name__, exc)
 
+    return _aggregate_completed_parallel_results(config, completed)
+
+
+def _aggregate_completed_parallel_results(config, completed):
     all_metadata_records = []
     total_directories_identified = 0
     total_show_groups_processed = 0
@@ -456,15 +479,32 @@ def walk_trees(config):
                     named_worker_count,
                 )
             except BrokenProcessPool as exc:
-                console_print(
-                    config,
-                    f"Parallel worker pool failed; retrying labeled search paths serially: {exc}",
-                    error=True,
+                completed = getattr(exc, "completed_results", {})
+                pending_groups = getattr(exc, "pending_groups", named_volume_groups)
+                done_records, done_dirs, done_groups, done_prepared, done_corrupt = _aggregate_completed_parallel_results(
+                    config, completed,
                 )
-                work_records, work_dirs, work_groups, work_prepared, work_corrupt_removed = _run_serial(
-                    config,
-                    ordered_named_items,
-                )
+                pending_items = [item for group in pending_groups for item in group]
+                # A failed worker may have changed source files before dying.
+                # Never replay ambiguous partially completed mutations.
+                mutation_requested = any(bool(getattr(config, name, False)) for name in (
+                    "rename_compliantly", "tag_during_inventory", "tag_copy_during_inventory",
+                    "tag_copy_and_delete_path", "convert_shn", "deep_audio_check",
+                )) or any(item[6] for item in pending_items if len(item) > 6)
+                if mutation_requested and pending_items:
+                    raise RuntimeError(
+                        "Parallel worker stopped during a potentially mutating inventory. "
+                        "Completed volumes were retained; unfinished volume status is uncertain. "
+                        "No automatic replay was attempted. Inspect logs and folders before re-inventory."
+                    ) from exc
+                console_print(config, f"Parallel pool failed; keeping {len(completed)} completed path(s), "
+                              f"retrying only {len(pending_items)} unfinished path(s) serially: {exc}", error=True)
+                retry_records, retry_dirs, retry_groups, retry_prepared, retry_corrupt = _run_serial(config, pending_items)
+                work_records = done_records + retry_records
+                work_dirs = done_dirs + retry_dirs
+                work_groups = done_groups + retry_groups
+                work_prepared = done_prepared + retry_prepared
+                work_corrupt_removed = done_corrupt + retry_corrupt
         else:
             work_records, work_dirs, work_groups, work_prepared, work_corrupt_removed = _run_serial(
                 config,

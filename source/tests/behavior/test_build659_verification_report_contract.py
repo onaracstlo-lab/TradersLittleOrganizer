@@ -22,8 +22,9 @@ def test_build659_report_retains_literal_contract_and_fail_closed_status():
 def test_build659_is_versioned_separately_and_preserves_hosted_failure_evidence():
     assert V.BUNDLE_BUILD >= 659
     report = (ROOT / RA.BUILD_VERIFICATION_FILENAME).read_text(encoding="utf-8")
-    assert "43327144040" in report
-    assert "3 failed, 2,544 passed, 26 skipped" in report
+    assert "NOT RELEASE-ATTESTED" in report
     history = (ROOT / RA.CHANGES_FILENAME).read_text(encoding="utf-8")
     assert history.startswith(f"TLO {V.DISPLAY_VERSION}")
     assert "TLO v1.7 Build 658" in history
+    assert "43327144040" in history
+    assert "3 failed, 2,544 passed, 26 skipped" in history

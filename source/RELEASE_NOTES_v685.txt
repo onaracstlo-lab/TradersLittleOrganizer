@@ -1,0 +1,14 @@
+TLO v1.7 Build 685 — Windows Ruff F401 preflight correction
+Companion GitHub Build Process v143 (unchanged).
+
+Removed only two unused imports from the Build 683 regression test module:
+`json` and `tlo_rename_safety`. The code had passed application pytest but
+failed the Windows Ruff F401 compilation/lint gate in Build 684.
+
+No application runtime, Search, inventory, Rename Compliantly, duplicate,
+copy, tagging, updater, signing or MSI behavior was changed. The Build 683
+safety fixes and Build 684 process v143 correction remain intact.
+
+This source ZIP is locally tested, not yet an attested native release. All
+Windows/macOS/Linux build, signed installer, and GitHub Actions gates remain
+mandatory before release success or manual promotion. Old ZIPs are immutable.

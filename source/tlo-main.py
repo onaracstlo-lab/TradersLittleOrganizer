@@ -72,7 +72,7 @@ from tlo_github_updates import (
     should_auto_check,
 )
 
-GUI_THREAD_CALLBACK_TIMEOUT_SECONDS = 30.0
+GUI_THREAD_CALLBACK_TIMEOUT_SECONDS = 30.0  # scheduling only; human dialogs have no timeout
 
 CORRUPT_FILE_GUI_VALUES = {
     "keep": "Keep and report",
@@ -2703,9 +2703,12 @@ class App:
             return func(*args, **kwargs)
 
         done = threading.Event()
+        entered_gui = threading.Event()
         result = {}
 
         def invoke():
+            # Once the Tk callback begins, a human may deliberate indefinitely.
+            entered_gui.set()
             try:
                 result["value"] = func(*args, **kwargs)
             except BaseException as exc:  # propagate back to worker thread
@@ -2718,8 +2721,12 @@ class App:
         except (tk.TclError, RuntimeError) as exc:
             raise RuntimeError("GUI closed before the inventory prompt could be shown.") from exc
 
-        if not done.wait(timeout=GUI_THREAD_CALLBACK_TIMEOUT_SECONDS):
+        # Only scheduling a GUI callback is bounded. If Tk never dispatches
+        # it (e.g., a destroyed event loop), fail rather than hang the worker.
+        # Once invoked, modal human decisions have no 30-second time limit.
+        if not entered_gui.wait(timeout=GUI_THREAD_CALLBACK_TIMEOUT_SECONDS):
             raise RuntimeError("GUI closed before the inventory prompt could be shown.")
+        done.wait()
         if "error" in result:
             raise result["error"]
         return result.get("value")
@@ -3234,7 +3241,8 @@ class App:
 
         ttk.Button(dialog, text="Skip", command=lambda: choose("skip")).grid(row=1, column=0, padx=8, pady=(0, 12))
         ttk.Button(dialog, text="Re-inventory", command=lambda: choose("re-inventory")).grid(row=1, column=1, padx=8, pady=(0, 12))
-        dialog.protocol("WM_DELETE_WINDOW", lambda: choose("re-inventory"))
+        # Closing the prompt must not initiate a destructive re-inventory.
+        dialog.protocol("WM_DELETE_WINDOW", lambda: choose("skip"))
         dialog.wait_visibility()
         dialog.focus_force()
         dialog.wait_window()

@@ -685,7 +685,7 @@ def flac_file_is_healthy(
     path_name: str,
     *,
     ffmpeg_executable: Optional[str] = None,
-    run_func=subprocess.run,
+    run_func=None,
     timeout_seconds: float = FLAC_VALIDATION_TIMEOUT_SECONDS,
 ) -> Optional[bool]:
     """Return True/False for healthy/corrupt, or None when unverifiable."""
@@ -704,6 +704,31 @@ def flac_file_is_healthy(
     except (OSError, MemoryError):
         return None
     executable = ffmpeg_executable or _bundled_ffmpeg_executable()
+    if run_func is None:
+        # Production path: an FFmpeg null decode is not a FLAC integrity test;
+        # FFmpeg can silently discard damaged frames yet report exit code zero.
+        # Use the same full-stream PCM/STREAMINFO validation as Deep Audio Check.
+        from tlo_flac_fingerprint import (
+            FingerprintCorrupt, FingerprintUnverifiable, verify_flac_fingerprint,
+        )
+        try:
+            return verify_flac_fingerprint(
+                normalized, ffmpeg_executable=executable,
+                timeout_seconds=timeout_seconds, cancel_check=lambda: False,
+                hidden_subprocess_kwargs=_subprocess_no_window_kwargs(),
+            )
+        except FingerprintCorrupt:
+            return False
+        except FingerprintUnverifiable:
+            return None
+        except KeyboardInterrupt:
+            raise
+        except Exception as exc:  # noqa: BLE001 - destructive operation fail-closed
+            debug_suppressed_exception('flac_file_is_healthy fingerprint', exc)
+            return None
+
+    # Legacy injected subprocess runner retained only for historical tests.
+    # Normal production calls never pass run_func and cannot take this path.
     command = [
         executable,
         "-nostdin",
