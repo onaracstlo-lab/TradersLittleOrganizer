@@ -54,6 +54,17 @@ def main() -> int:
             operation="Full Inventory",
             dry_run=False,
         )
+        if bool(getattr(config, 'dry_run', False)):
+            # Reuse the GUI's read-only show/track resolver rather than stopping
+            # at a settings-only preview. Its discovery logs live in a temporary
+            # directory; no TLOHome catalogs, media or tag files are written.
+            from tlo_ux import format_preview, preview_operation
+            print('DRY RUN: preview only; no inventory, tags, files or catalog will be changed.')
+            for line in review_lines:
+                print(line)
+            preview = preview_operation(config, operation="Full Inventory")
+            print(format_preview(preview), end='')
+            return 2 if any(issue.severity == 'error' for issue in preview.issues) else 0
         append_run_settings(config.TLOHome, "Full Inventory", review_lines)
         return run_inventory(config)
     except KeyboardInterrupt:

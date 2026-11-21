@@ -246,9 +246,13 @@ def test_tokens_unique_within_36():
 
 
 def test_more_than_36_tokens_is_error():
+    # Historic test name retained for compatibility with the legacy wrapper.
     home = tempfile.mkdtemp()
-    with pytest.raises(Exception):
-        logging_lib.allocate_log_tokens(home, 37)
+    tokens = logging_lib.allocate_log_tokens(home, 37)
+    assert tokens[:36] == list(logging_lib.LOG_TOKEN_CHARS)
+    assert tokens[36] == '10'
+    with pytest.raises(ValueError, match='Too many simultaneous'):
+        logging_lib.allocate_log_tokens(home, logging_lib.MAX_LOG_TOKENS + 1)
 
 
 # --------------------------------------------------------------------------- #
@@ -414,7 +418,7 @@ def test_tagger_no_setlist_uses_filename_titles_and_unknown(tmp_path, monkeypatc
     stats = T.process_tagging_group(config, group, artist_matcher=None, emit=messages.append)
 
     assert {key: stats[key] for key in ["groups", "tagged", "skipped", "errors"]} == {"groups": 1, "tagged": 2, "skipped": 0, "errors": 0}
-    assert [(item[3], item[4]) for item in written] == [("01", "Highway Star"), ("02", "unknown")]
+    assert [(item[3], item[4]) for item in written] == [("01", "Highway Star"), ("02", "Unknown")]
     assert all(item[2] == "Deep Purple 1972-08-16 Budokan Tokyo Japan" for item in written)
 
 
@@ -9659,6 +9663,9 @@ def test_v385_setlistfm_upgrade_checkbox_is_under_setlistfm():
 
 
 def test_v385_upgrade_limits_apply_only_with_setlistfm_enabled(monkeypatch, tmp_path):
+    # Rate-limit behavior requires a synthetic key; do not depend on user credentials.
+    monkeypatch.setenv("SETLISTFM_API_KEY", "test-setlistfm-key")
+    monkeypatch.setenv("SETLISTFMUPGRADE_API_KEY", "test-setlistfm-key")
     import inventory_parser_lib as I
     monkeypatch.setattr(I, "parse_command_line", lambda: {
         "debug": False, "silent": False, "TLOHome": str(tmp_path),

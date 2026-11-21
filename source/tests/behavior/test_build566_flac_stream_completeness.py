@@ -60,18 +60,22 @@ def test_build566_real_frame_aligned_truncation_in_classification(tmp_path, monk
     assert intact.exists() and partial.exists()  # classification never removes anything
 
 
-def test_build585_missing_stored_md5_is_unverifiable(monkeypatch, tmp_path):
+def test_build688_missing_stored_md5_is_decode_only_if_tag_test_succeeds(monkeypatch, tmp_path):
     intact, executable = _make_flac(tmp_path, 8)
     data = bytearray(intact.read_bytes())
     data[26:42] = bytes(16)
     intact.write_bytes(data)
+    from tlo_flac_fingerprint import DECODE_ONLY_UNSET_MD5
     assert corruption._deep_audio_stream_status(
         str(intact), ffmpeg_executable=executable, cancel_check=lambda: False
-    ) is None
+    ) == DECODE_ONLY_UNSET_MD5
     monkeypatch.setattr(corruption, "bundled_ffmpeg_executable", lambda: executable)
     monkeypatch.setattr(corruption, "_validate_tag_write_round_trip", lambda path: None)
-    bad, unknown = corruption.classify_audio_paths([str(intact)], deep_audio_check=True)
-    assert bad == [] and len(unknown) == 1 and unknown[0][0] == str(intact)
+    decode_only = []
+    bad, unknown = corruption.classify_audio_paths(
+        [str(intact)], deep_audio_check=True, decode_only_details=decode_only)
+    assert bad == [] and unknown == [] and len(decode_only) == 1
+    assert 'MD5 unset' in decode_only[0][1]
 
 
 def test_build566_failed_decoder_is_not_misclassified_as_corruption(tmp_path):

@@ -17,6 +17,7 @@ from tlo_sibling_collections import (
 
 
 def run_search_path(config, path_name, slam_value, search_index, volume_label="", volume_key="", log_token="", log_mode="w", copy_mode="", copy_destination="", inventory_path="", artist_matcher=None, venue_matcher=None):
+    # venue_matcher is a compatibility argument for existing inventory callers.
     apply_process_priority(config)
     wait_if_paused(config)
     config.current_search_path = path_name

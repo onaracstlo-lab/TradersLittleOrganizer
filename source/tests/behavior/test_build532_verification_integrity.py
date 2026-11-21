@@ -69,5 +69,9 @@ def test_build532_ruff_contract_passes_when_ruff_is_available():
 
 
 def test_build532_source_tree_contains_no_compiled_python_artifacts():
-    bad = [p.relative_to(ROOT).as_posix() for p in ROOT.rglob("*.pyc") if ".git" not in p.parts]
+    # Pytest can compile conftest.py before its environment guard runs; the
+    # final release-package gate checks ALL bytecode. Ignore only this runner
+    # artifact while still catching compiled application/test sources.
+    bad = [p.relative_to(ROOT).as_posix() for p in ROOT.rglob("*.pyc")
+           if ".git" not in p.parts and not (p.parent.name == "__pycache__" and p.name.startswith("conftest."))]
     assert bad == []

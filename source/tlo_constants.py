@@ -347,7 +347,7 @@ MONTHS = {
 }
 # Short foreign month abbreviations collide with common lineage/audio tokens.
 # Require a four-digit year and a non-ordinal day for complete dates.
-AMBIGUOUS_SHORT_FOREIGN_MONTHS = frozenset({"mag", "dic", "ott", "lug", "giu", "fev", "mai", "dez", "okt"})
+AMBIGUOUS_SHORT_FOREIGN_MONTHS = frozenset({"mag", "dic", "ott", "lug", "giu", "fev", "mai", "dez", "okt", "mars", "juli"})
 MONTH_NAME_WORDS = tuple(sorted(MONTHS.keys(), key=lambda value: (-len(value), value)))
 # Preserve this constant for date-pattern consumers; use longest aliases first.
 MONTH_NAME_PATTERN = "|".join(re.escape(word) for word in MONTH_NAME_WORDS)

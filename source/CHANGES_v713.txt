@@ -1,4 +1,133 @@
-TLO v1.7 Build 685 — Build 684 Windows Ruff F401 correction
+TLO v1.7 Build 713 — Linked undo and multi-root preflight (GitHub Build Process v155)
+2026-11-20 | SOURCE CANDIDATE, NOT RELEASE-ATTESTED
+- Use the GUI's resolved show/track read-only preview in the inventory CLI --dry-run.
+- Preflight ALL mutating roots before any folder tag/copy/delete/rename when multiple search paths are supplied; refuse collisions or incomplete previews.
+- Surface album identity conflicts in preview results for user disambiguation.
+- Reverse linked Manual Tweaks operations in chronological reverse order with --manual-updates --batch N; refuse ambiguous histories or intervening catalog changes.
+- Protect Windows per-user undo key with explicit current-user/SYSTEM ACL when created/migrated; refuse ACL failure.
+- MSI automatic update requires installed signed EXE and new MSI signer certificate thumbprint equality; manual re-bootstrap required for certificate rotation.
+- Add read-only standard-user/UNC/mapped-drive/Authenticode native acceptance diagnostics; no native release attestation implied.
+- Preserve original recording payloads without media-copy undo backups.
+- Preserve prior release ZIPs unchanged; see REMEDIATION_PLAN_v713.md for unverified native gates and deferred scope.
+
+HISTORICAL CHANGE RECORDS (retained):
+
+TLO v1.7 Build 711: systemic per-search-path duplicate Show/ALBUM mutation preflight; retryable Manual Tweaks metadata-only undo; broader tag container roundtrips; independent per-user undo key migration; mapped-drive reparse check; MSI updater publisher comparison; CLI non-mutating preview.
+Historical notes follow.
+
+TLO v1.7 Build 710 — Review remediation, GUI safety and preserved identity
+2026-11-20 | GitHub Build Process v152 (separately versioned)
+- Validate exclusive tag modes in both CLI entry points; refuse Manual Updates
+  while main-window Dry Run is enabled.
+- Add Manual Tweaks journal --list and reverse-order guidance; rename Save to
+  Apply Changes and child-window Quit to Close.
+- Prompt before manual update download. Correct --convert-shn CLI help.
+- Preserve non-Latin composite Show identity; protect explicit numbered Show
+  suffixes and exact venue/city combinations where known venue data confirms.
+- Update primary requirements and FAQ, source README and review disposition;
+  keep earlier Check donation menu behavior pending explicit privacy decision.
+- No audio-file copies for metadata undo; no release gate or signing relaxation.
+
+TLO v1.7 Build 709 — Metadata-only Manual Tweaks undo safety
+2026-11-20 | GitHub Build Process v151 (separately versioned)
+- Preserve Build 708 and earlier functionality; restore APEv2 items by kind.
+- Store post-update tag digests instead of redundant tag snapshots; cap journals
+  when writing; skip unreadable neighboring journals without global lockout.
+- Constrain restore targets, rename before metadata rollback, acquire inventory
+  lock for reverse and recovery; preserve ID3v2.3 and FLAC tag representation.
+- Correct reverse import F401 and fail-closed source verification reports.
+
+BEGIN HISTORICAL CHANGE RECORDS (unchanged)
+
+TLO v1.7 Build 707 — Correct reverse CLI exception binding / Ruff F401
+2026-11-20 | GitHub Build Process v150 (separately versioned)
+- Remove duplicate inner ManualUndoError import from tlo-reverse.py. Preserve
+  module-level exception class in all reverse-mode exception handlers.
+- Add subprocess regression coverage for ordinary, Manual Tweaks and
+  staging-recovery failures; confirm no traceback or unbound local.
+- Preserve metadata-only Manual Tweaks journal with no media copies.
+- Local source candidate only; native signing/MSI/GitHub Actions remain open.
+
+BEGIN HISTORICAL CHANGE RECORDS (unchanged)
+
+TLO v1.7 Build 706 — Metadata-only Manual Tweaks undo and clearer log diagnostics
+2026-11-20 | GitHub Build Process v149 (separately versioned)
+- Add original-tag-value journaling and guarded reverse for Manual Tweaks, without any audio/media backups.
+- Include complete before/after bootlist and setlist state, tag metadata, file identity and HMAC tamper checks; refuse later changes, preserve prepared journals after interruption.
+- Show recoverable non-UTF-8 filename text and stage-1 count; identify actual standalone tagger search path in log headers.
+- New real-audio FLAC and MP3 reversal tests, tamper and post-change refusal tests, and rollback tests.
+- Existing V5 regionless venue/city ambiguity remains conservative and is documented as a deliberate non-guessing policy.
+- Native signing, MSI, hosted platform CI and promotion remain unverified here; this is a source candidate.
+
+BEGIN HISTORICAL CHANGE RECORDS (unchanged)
+
+TLO v1.7 Build 705 (2026-11-19) — Verified rename-date and fallback title normalization
+F4: Permit only independently equivalent explicit source dates to become YYYY-MM-DD in Rename Compliantly, while retaining shnid and 24-96 rejection. Extend source-identity fold to ø/æ/œ/ß. S3: write Unknown rather than unknown as a fallback audio title.
+
+HISTORICAL CHANGE RECORDS (not current instructions):
+TLO v1.7 Build 704 (2026-11-19) — Conservative residual diagnostics
+V5: Recognize terminal trading/encoding qualifiers with risk-limited city-catalog fallback. S6: Avoid false provisional Dry Run labeling for a single-member collection. S7: Redact raw Add Shows copy errors and retain originals. Complete review and native acceptance limitations in REMEDIATION_PLAN_v704.md.
+
+HISTORICAL CHANGE RECORDS (archival, not current instructions):
+TLO v1.7 Build 703 (2026-11-19) — Portability, PID reuse, copy-lock privacy and non-Latin Search
+Current changes: see RELEASE_NOTES_v705.txt; following entries are preserved historical records.
+TLO v1.7 Build 701 (2026-11-18) — Cross-platform CI fixture correction
+The Build 700 four-pass real-FLAC idempotency test now uses the actual OS volume label on labeled Linux and Windows runners and a stable test label only on truly unlabeled filesystems. A separate test proves an explicitly wrong label is still rejected. No application logic or validation weakened.
+
+HISTORICAL CHANGE RECORDS:
+TLO v1.7 Build 700 (2026-11-18) — Stable venue punctuation and ALBUM tags
+N3: A parsing step retains punctuation *inside* the venue rather than removing commas from a TLO-generated folder name. Repeated Rename Compliantly, tag-only and plain inventory now consistently derive the same Show and audio ALBUM value. Real FLAC four-run test included. No relaxation of data-loss rename safeguards.
+
+HISTORICAL CHANGE RECORDS:
+TLO v1.7 Build 699 (2026-11-18) — Current-run summaries and user-visible diagnostics
+F6: summary.log counts only the tokens processed in the active inventory run. S2: unmatched Boolean closing parentheses cause a clear Search error; literal pasted Show parentheses stay searchable. S5: staged-recovery dry-run summary reports how many folders would be restored. No changes to audio, renaming policy or duplicates.
+
+HISTORICAL CHANGE RECORDS:
+TLO v1.7 Build 698 (2026-11-18) — City/qualifier identity and accent-neutral Search
+Known artist/date city identification now ignores only terminal set/source qualifiers when checking the external city catalog, retaining valid city identity. Search normalizes Latin accents and TLO's special transliterations in both query and stored text while retaining non-Latin scripts. No change to audio integrity or duplicate discovery.
+
+HISTORICAL CHANGE RECORDS:
+TLO v1.7 Build 697 (2026-11-18) — Unset-MD5 audio verification safety
+Deep Audio Check no longer treats a zero-MD5 FLAC with no declared sample count as positively complete merely because the decoder returns zero. This protects taggable, possibly truncated or bit-flipped audio without deleting it solely for missing checksums. Tests exercise genuine piped FLACs and damaged copies. Native release validation remains pending.
+
+TLO v1.7 Build 696 (2026-11-18) — Native Windows staging recovery and CI regression diagnostics
+Use non-destructive Windows process-liveness queries for staged recovery; GitHub Build Process v144 prints a failing Windows pytest traceback and suppresses unrelated signing diagnostics before signing is initialized.
+
+HISTORICAL CHANGE RECORDS (retained for provenance):
+TLO v1.7 Build 695 (2026-11-18) — Remove unused imports revealed by Windows Ruff preflight; enforce a complete-tree unused-import audit, including tests. No application behavior changes. Build Process v143 retained.
+
+TLO v1.7 Build 694 (2026-11-18) — L10 date-range future-day validation; T3/T4 executable parser and city catalog regression evidence. No transfer, duplicate or FLAC rule changes.
+
+TLO v1.7 Build 693 (2026-11-18) — L7 Search error presentation with actionable UTF-8 guidance and Excel-escaped Show identity regressions; L10 narrowly scoped dead-import/return and catalog terminology corrections. No data-identity or transfer algorithm changes.
+
+TLO v1.7 Build 692 (2026-11-18) — L6: write durable same-volume staged-move journals before renaming; tlo-reverse --recover-staging offers explicit preview and collision-safe restoration after worker failure. No unjournaled or partial copy tree is recovered by guessing.
+
+TLO v1.7 Build 691 (2026-11-18) — L5: Add Shows cross-device transfers use hidden staging, SHA-256 verification and atomic non-overwriting publish before source deletion. Same-volume moves remain atomic renames. No changes to duplicate identity or audio integrity rules.
+
+TLO v1.7 Build 690 (2026-11-18) — L1: last-resort city lookup honors the independently parsed date span in alternate spellings. L2: avoid artist-name/month ambiguity (Mars, Juli) and cross-boundary hybrid dates. No changes to duplicate identity or audio integrity rules.
+
+TLO v1.7 Build 689 (2026-11-18) — Expanded per-volume log tokens while preserving existing logs; replaced recursive deleteDupes tree scan with iterative traversal. No change to duplicate identification or audio integrity criteria.
+
+TLO v1.7 Build 688 (2026-11-18) — Unset FLAC MD5 is not a tag-write failure. Successful reversible tagging + full decode permit tagging while still reporting missing audio authentication; duplicate cleanup preserves unverifiable keepers with specific guidance. Dry Run previews collection consolidation, POSIX non-UTF8 paths are explicitly reported without silent loss, and tests cover these cases.
+
+TLO v1.7 Build 688 — conservative remediation
+
+- Keep Show/Album names aligned with unchanged punctuation-preserved folders (N3).
+- Normalize Latin diacritics and protect non-Latin name identity (N8).
+- Improve message for failed parallel mutations (N10).
+- Tell Search users to re-inventory ambiguous old setlist identities (N11).
+- Handle quoted, nested, and whitespace-variant searches (N12).
+- Report renamed/skipped counts while retaining reasons in tag errors (N13).
+
+TLO v1.7 Build 686 - review remediation
+
+- Child-scoped, deduplicated folder-operation archive for safe Reverse.
+- Preserve numeric source and full-date identity in Rename Compliantly.
+- Check bootlist encoding before mutation and write atomically with CSV formula escaping.
+- Windows MSI Start Menu shortcut for search-artist-db.exe.
+- Safer multi-path re-inventory defaults, and plain-pytest child bytecode prevention.
+
+Earlier release v1.7 Build 685 — Build 684 Windows Ruff F401 correction
 2026-11-18: Removed unused `json` and `tlo_rename_safety` imports from
 tests/behavior/test_build683_rename_search_parallel.py. No runtime changes;
 Build Process v143 remains unchanged. Build 684 archive is preserved.
@@ -2153,8 +2282,8 @@ v144
 - Updates requirements and user manual for combined venue/location header handling.
 
 
-===== Historical record: CHANGES_v145.txt =====
-TLO Inventory v145
+===== Historical record: CHANGES_v146.txt =====
+TLO Inventory v146
 
 - Updates tlo-ggi.py so the GUI no longer displays explanatory helper comments next to the Performance Mode selector or Max Workers field.
 - Pre-populates the GUI Max Workers field with the parsed --max-workers launcher value, or 0 when --max-workers is not supplied.
@@ -10603,3 +10732,8 @@ Build 471 - exact-case Rename Compliantly. Canonical capitalization is applied e
 Build 470 - unidentifiedShows.txt status cleanup. Normal housekeeping messages, including a completion result of zero unidentified shows, are informational rather than GUI warnings.
 Build 469 - Main-window Tag and control cleanup: GUI Tag moved onto the Main GUI using Path(s) and current options; corruption-control dependencies, setlist.fm credential gating, Max Workers ceiling behavior, issue scrolling, and informational parser-selection reporting were aligned with the active GUI.
 Build 468 - historical Tag-window cancellation and main-window recovery. After cooperative cancellation, the main window recalculates action states when the old Tag worker exits so controls return to normal idle operation.
+
+Build 713 GitHub Actions failure remediation (run 44808377418):
+- Preserve eight real-media metadata-undo tests as mandatory on Linux and Windows by shipping checksum-pinned, synthetic, subsecond test media fixtures. Tests do not invoke system FFmpeg and do not skip because PATH is missing FFmpeg.
+- Update copy destination lock test for Windows first-byte OS byte-range lock: verify lock ownership while locked; read cleared JSON only after unlock. The lock implementation is unchanged.
+- Re-tested both affected failure paths without weakening lock/undo production security behavior.

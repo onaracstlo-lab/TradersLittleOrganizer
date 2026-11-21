@@ -1,7 +1,7 @@
 {
-  "build": 685,
-  "reviewed_baseline": 681,
-  "scope": "Build 685: remove two unused imports in Build 683 behavior tests to satisfy Windows Ruff F401; no runtime or user behavior changes. Companion GitHub Build Process v143 unchanged.",
+  "build": 713,
+  "reviewed_baseline": 685,
+  "scope": "Build 713 source candidate. CI fixture portability and Windows locked-file test remediation; remaining acceptance in REMEDIATION_PLAN_v713.md.",
   "findings": {
     "H1": {
       "status": "fixed",
@@ -54,36 +54,43 @@
       "test": "tests/behavior/test_build683_rename_search_parallel.py::test_process_pool_crash_retains_completed_groups"
     },
     "M8": {
-      "status": "deferred",
-      "rationale": "36 one-character volume log tokens remain; document the limit now, and expand token scheme only with migration tests."
+      "status": "fixed",
+      "summary": "Preserve 36 existing single-character log names; issue unique multi-character tokens thereafter without overwriting existing logs.",
+      "test": "tests/behavior/test_build689_tokens_and_deep_scan.py::test_existing_logs_survive_token_extension_and_new_logs_remain_distinct"
     },
     "L1": {
-      "status": "deferred",
-      "rationale": "City extraction under alternate date spellings remains a parsing improvement, not part of safety fixes."
+      "status": "fixed",
+      "summary": "Last-resort city lookup accepts the independently parsed date raw span, including alternate spellings, without guessing date or overriding metadata.",
+      "test": "tests/behavior/test_build690_date_city_safety.py::test_inventory_city_fallback_receives_parser_confirmed_date"
     },
     "L2": {
-      "status": "deferred",
-      "rationale": "Month aliases Mars/Juli and cross-range parsing need artist-aware tests before adjusting date grammar."
+      "status": "fixed",
+      "summary": "Avoid ambiguous Mars/Juli month-year and prefix month-first assumptions and invalid date-hybrid crosses; retain clear foreign day-first/year-first dates.",
+      "test": "tests/behavior/test_build690_date_city_safety.py::test_two_complete_date_range_has_no_cross_boundary_hybrid"
     },
     "L3": {
       "status": "accepted-design",
       "rationale": "The TLO requirement explicitly defines duplicates by exact file names, structure and sizes, not content hashes. This is an intentional user-selected behavior; the User Manual warns of distinct equal-size recordings."
     },
     "L4": {
-      "status": "deferred",
-      "rationale": "Deeply nested duplicate-tree recursion needs iterative traversal and end-to-end deep path tests."
+      "status": "fixed",
+      "summary": "Use iterative scandir traversal for duplicate-tree manifests, retaining name and size identity and fail-closed symlink checking.",
+      "test": "tests/behavior/test_build689_tokens_and_deep_scan.py::test_comparison_of_deep_directory_trees_is_iterative"
     },
     "L5": {
-      "status": "deferred",
-      "rationale": "Cross-device Add Shows moves need verified publication; code-read finding still requires failure-injection tests."
+      "status": "fixed",
+      "summary": "Add Shows cross-device staging verifies complete structure, size and SHA-256 before atomic publication and source deletion, with preserved destination on cleanup failure.",
+      "test": "tests/behavior/test_build691_add_shows_verified_moves.py::test_copy_fails_verification_before_source_delete_or_visible_publication"
     },
     "L6": {
-      "status": "deferred",
-      "rationale": "Crash recovery for orphaned staging directories needs a dedicated journaled recovery design."
+      "status": "fixed",
+      "summary": "Before same-volume staging rename, persist the original path and worker identity in a journal. tlo-reverse --recover-staging restores only orphaned recorded moves, rejects active/ambiguous records, never overwrites.",
+      "test": "tests/behavior/test_build692_stage_recovery.py::test_abrupt_crash_after_first_rename_can_be_recovered_with_reverse_cli"
     },
     "L7": {
-      "status": "deferred",
-      "rationale": "Search formula escaping and expression error text require UI-focused tests before changes."
+      "status": "fixed",
+      "summary": "Search unescapes protected values; errors distinguish expressions, invalid UTF-8 and malformed CSV with an actionable remedy.",
+      "test": "tests/behavior/test_build693_search_hygiene.py::test_csv_search_gui_presents_encoding_specific_message"
     },
     "L8": {
       "status": "accepted-design",
@@ -95,7 +102,8 @@
     },
     "L10": {
       "status": "deferred",
-      "rationale": "Low-priority code hygiene and incidental messaging are deferred to avoid touching unrelated workflows."
+      "rationale": "Low-priority code hygiene and incidental messaging are deferred to avoid touching unrelated workflows.",
+      "summary": "Partially addressed: Build 693 safe hygiene and Build 694 rejection of any future day inside a multi-day date range. Remaining dormant paths/compatibility parameters deferred."
     },
     "T1": {
       "status": "fixed",
@@ -109,11 +117,238 @@
     },
     "T3": {
       "status": "deferred",
-      "rationale": "Aggregate and entry-point coverage gaps remain; add behavior coverage incrementally rather than enforce an arbitrary threshold."
+      "rationale": "Aggregate and entry-point coverage gaps remain; add behavior coverage incrementally rather than enforce an arbitrary threshold.",
+      "summary": "Coverage improvement in Build 694 adds executable date-range path-parser tests, including deterministic current-date boundaries. Other risk modules still need more behavioral coverage."
     },
     "T4": {
       "status": "deferred",
-      "rationale": "Retain existing source-text contracts for now; replace them with runtime tests as relevant areas change."
+      "rationale": "Retain existing source-text contracts for now; replace them with runtime tests as relevant areas change.",
+      "summary": "Build 694 replaces the Build 693 city warning source-inspection assertion with a physical CSV catalog behavior test; further retirement of source-only assertions is deferred."
+    }
+  },
+  "review_685_findings": {
+    "N1": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build686_review_integrity.py",
+      "rationale": "Conservative change with focused regression, subject to native CI."
+    },
+    "N2": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build686_review_integrity.py",
+      "rationale": "Conservative change with focused regression, subject to native CI."
+    },
+    "N3": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build687_rename_search_reporting.py::test_run_two_keeps_show_and_album_identity_when_punctuation_only_rename_skipped",
+      "rationale": "Narrow remediation with executable fixture; subject to native CI."
+    },
+    "N4": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build686_review_integrity.py",
+      "rationale": "Conservative change with focused regression, subject to native CI."
+    },
+    "N5": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build686_review_integrity.py",
+      "rationale": "Conservative change with focused regression, subject to native CI."
+    },
+    "N6": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build688_audio_preview_paths.py::test_unset_md5_is_taggable_decode_only_not_corrupt",
+      "rationale": "Conservative Build 688 fix with executable end-to-end scenario; requires native platform validation where applicable."
+    },
+    "N7": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build688_audio_preview_paths.py::test_preview_sibling_collection_is_read_only_and_named",
+      "rationale": "Conservative Build 688 fix with executable end-to-end scenario; requires native platform validation where applicable."
+    },
+    "N8": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build687_rename_search_reporting.py::test_unicode_and_month_rename_guard_preserves_identity",
+      "rationale": "Narrow remediation with executable fixture; subject to native CI."
+    },
+    "N9": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build686_review_integrity.py",
+      "rationale": "Conservative change with focused regression, subject to native CI."
+    },
+    "N10": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build687_rename_search_reporting.py::test_parallel_mutation_abort_message_does_not_claim_bootlist_is_finalized",
+      "rationale": "Narrow remediation with executable fixture; subject to native CI."
+    },
+    "N11": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build687_rename_search_reporting.py::test_ambiguous_search_view_avoids_internal_placeholder_name",
+      "rationale": "Narrow remediation with executable fixture; subject to native CI."
+    },
+    "N12": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build687_rename_search_reporting.py::test_search_explicit_expressions_preserve_qualifiers_and_typographic_text",
+      "rationale": "Narrow remediation with executable fixture; subject to native CI."
+    },
+    "N13": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build687_rename_search_reporting.py::test_rename_summary_counts_on_actual_group_processing",
+      "rationale": "Count emitted rename/skip operations with log and console summary."
+    },
+    "N14": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build688_audio_preview_paths.py::test_invalid_utf8_folder_is_explicitly_unidentified",
+      "rationale": "Conservative Build 688 fix with executable end-to-end scenario; requires native platform validation where applicable."
+    },
+    "N15": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build686_review_integrity.py",
+      "rationale": "Conservative change with focused regression, subject to native CI."
+    },
+    "N16": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build688_audio_preview_paths.py::test_missing_md5_dupes_skips_with_file_specific_reason",
+      "rationale": "Conservative Build 688 fix with executable end-to-end scenario; requires native platform validation where applicable."
+    },
+    "T1": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build532_verification_integrity.py",
+      "rationale": "Propagate no-bytecode to subprocesses; avoid collecting-stage conftest pyc false positive."
+    }
+  },
+  "review_694_findings": {
+    "F2": {
+      "status": "fixed",
+      "summary": "Non-destructive Win32 PID query, unknown owner fails closed; test on actual Windows pending.",
+      "test": "tests/behavior/test_build696_windows_stage_recovery.py::test_native_windows_completed_pid_is_not_considered_active"
+    },
+    "F1": {
+      "status": "fixed",
+      "summary": "No positive decode-only verdict when both MD5 and sample count unset; FFmpeg warning becomes unverifiable; all mutations blocked.",
+      "test": "tests/behavior/test_build697_unset_md5_safety.py::test_deep_check_blocks_tagging_on_unauthenticated_zero_zero_flac"
+    },
+    "F3": {
+      "status": "fixed",
+      "summary": "Catalog city checked after conservatively removing only trailing source/part qualifiers.",
+      "test": "tests/behavior/test_build698_city_and_accent_search.py::test_known_artist_date_city_retained_before_recording_qualifier"
+    },
+    "F5": {
+      "status": "fixed",
+      "summary": "Search applies equivalent Latin accent/transliteration folding to query and indexed text.",
+      "test": "tests/behavior/test_build698_city_and_accent_search.py::test_search_matches_ascii_show_from_accented_query"
+    },
+    "F6": {
+      "status": "fixed",
+      "summary": "Postprocess filters rename counts to current-run log tokens; no stale other-volume totals.",
+      "test": "tests/behavior/test_build699_run_scoping_search_recovery.py::test_run_scoped_rename_summary_ignores_other_volume"
+    },
+    "S2": {
+      "status": "fixed",
+      "summary": "Boolean search rejects unmatched closing parens",
+      "test": "tests/behavior/test_build699_run_scoping_search_recovery.py::test_boolean_search_unexpected_closing_parenthesis_has_clear_error"
+    },
+    "S5": {
+      "status": "fixed",
+      "summary": "Recovery dry-run displays would_restore count",
+      "test": "tests/behavior/test_build699_run_scoping_search_recovery.py::test_staging_recovery_dry_run_summary_includes_would_restore"
+    },
+    "N3": {
+      "status": "fixed",
+      "summary": "Preserve internal venue punctuation during structured String2 parsing; four actual repeated inventories and FLAC ALBUM checks stable.",
+      "test": "tests/behavior/test_build700_venue_punctuation_idempotency.py::test_four_inventory_passes_keep_folder_album_and_bootlist_identical"
+    }
+  },
+  "ci_regression_701": {
+    "status": "fixed_locally_native_ci_pending",
+    "failed_run": 44451601211,
+    "symptom": "Both Windows and Linux tests incorrectly used [Disk] for CI temp volume",
+    "regression_tests": [
+      "tests/behavior/test_build700_venue_punctuation_idempotency.py::test_four_inventory_passes_keep_folder_album_and_bootlist_identical",
+      "tests/behavior/test_build700_venue_punctuation_idempotency.py::test_unlabeled_search_path_uses_os_identity_and_wrong_explicit_label_rejected"
+    ]
+  },
+  "review_700_closure": {
+    "S1": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build706_metadata_undo.py::test_build706_non_utf8_directory_has_readable_path_warning"
+    },
+    "S4": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build706_metadata_undo.py::test_build706_standalone_search_header_shows_actual_path"
+    },
+    "ManualTweaksUndo": {
+      "status": "fixed",
+      "test": "tests/behavior/test_build706_metadata_undo.py::test_build706_flac_restores_original_tags_inventory_setlist_without_audio_copies",
+      "note": "Metadata-only undo; not byte-exact media restore; fail-closed on later changes."
+    },
+    "V5-UnqualifiedVenueCity": {
+      "status": "accepted-design",
+      "rationale": "Regionless venue/city must not be guessed without independent evidence; preserve raw folder rather than invent geography."
+    },
+    "NativeWindows": {
+      "status": "deferred",
+      "rationale": "Windows MSI/UNC/Authenticode and hosted Actions cannot be attested from this Linux environment."
+    }
+  },
+  "review_707_f401": {
+    "status": "fixed",
+    "source": "tlo-reverse.py",
+    "test": "tests/behavior/test_build707_reverse_exception_binding.py",
+    "native_ruff": "not attested in this environment"
+  },
+  "review_708_report_contract": {
+    "status": "fixed",
+    "test": "tests/behavior/test_build708_verification_report.py",
+    "reason": "Preserve exact NOT RELEASE-ATTESTED header and lint not attested field; never claim pinned Ruff passed when unavailable."
+  },
+  "review_709_undo_security": {
+    "status": "fixed-locally-source-only",
+    "test": "tests/behavior/test_build709_undo_security.py",
+    "limitations": "full native release gates are not attested; partial post-rename recovery requires manual reconciliation"
+  },
+  "review_710_mode_unicode_ux": {
+    "status": "fixed-local-source-only",
+    "test": "tests/behavior/test_build711_review_safety.py",
+    "limitations": "full native release gates and several parser/security findings remain open"
+  },
+  "review_710_explicit_tag_modes_and_identity": {
+    "status": "partly-fixed-source-only",
+    "test": "tests/behavior/test_build711_review_safety.py",
+    "limitations": "systemic Show/ALBUM collision detection, all venue/city patterns and native Windows behavior remain open"
+  },
+  "review_711_followup": {
+    "B4": {
+      "status": "partial",
+      "source": "Cross-root mutating preview refuses collisions; historic inventory scopes remain open."
+    },
+    "U3": {
+      "status": "partial",
+      "source": "Signed reverse-order batch chains supported; unrelated later-inventory rebase remains open."
+    },
+    "U6": {
+      "status": "partial",
+      "source": "CLI uses resolved show/track dry-run; read-only preview differs from mutation in some cases."
+    },
+    "S2": {
+      "status": "partial",
+      "source": "Windows per-user/SYSTEM ACL enforced during new key creation/migration; native acceptance pending."
+    },
+    "S4": {
+      "status": "partial",
+      "source": "Exact valid signer certificate thumbprint required for automatic MSI; live Windows test pending."
+    },
+    "S1": {
+      "status": "deferred-native",
+      "source": "Default C:\\.tlo still needs ordinary-user MSI verification."
+    },
+    "S5": {
+      "status": "deferred-native",
+      "source": "No native UNC/mapped-drive fixture executed."
+    },
+    "R5": {
+      "status": "deferred",
+      "source": "Current operational requirements appended; historical addenda not structurally merged."
+    },
+    "T1": {
+      "status": "deferred-native",
+      "source": "Pinned Ruff unavailable offline; native lint mandatory."
     }
   }
 }

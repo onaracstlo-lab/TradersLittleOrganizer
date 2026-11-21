@@ -1,3 +1,17 @@
+Build 712 source candidate with GitHub Process v154; native release gates NOT ATTESTED.
+Build 711 source candidate with GitHub Process v153; native release gates NOT ATTESTED.
+Build 710 source candidate: review remediation, CLI tag-mode safety, unicode identity, process v152; native gates not attested.
+Build 710 source candidate: tag-mode safety, Manual Updates Dry Run, Unicode Show identity; process v152. Native gates NOT ATTESTED.
+Build 709 source candidate: metadata-only undo safety, independent review remediation, process v151; native gates not attested.
+Build 701: repair portable test fixture for strict volume-label validation across Linux and Windows.
+Build 700: preserve venue punctuation across repeated inventory and audio tag-write paths.
+Build 699: scoped rename reporting, Boolean closing-parenthesis error and staging recovery preview counts.
+Build 698: retain catalog city before trailing technical qualifier; accent-folded Search.
+Build 697: unset-MD5 unknown-sample-count deep-check safety; Build 696 Windows process fix retained.
+Build 696: native Windows staging recovery safety and CI failure diagnostics; see current documents.
+Build 695: remove F401 imports; add full-tree offline import audit with detection fixtures, retaining Ruff as mandatory native gate.
+Build 694: reject any future date in a multi-day range; replace one source-only assertion with actual city catalog behavior.
+Build 693: Search error guidance and conservative hygiene cleanup; all Build 692 safety fixes retained.
 HISTORICAL SOURCE BUNDLE NOTES — THROUGH BUILD 672
 These notes are preserved for historical provenance. They are NOT current
 release instructions. For Build 685, use SOURCE_BUNDLE_README_v685.txt,
@@ -225,5 +239,27 @@ Trash functionality. If either is unavailable, conversion fails without
 permanently deleting the SHN original.
 
 Release artifacts include only the current Manual, Requirements Specification,
-and CHANGES_v653.txt; historical notes are consolidated in that file. Do not rely on old verification reports to attest
+and the current versioned CHANGES_vN.txt; older notes remain historical records. Do not rely on earlier verification reports to attest
 current-build results.
+
+TLO v1.7 Build 686 (2026-11-18) — New independent complete source snapshot.
+- Address v685 review findings N1, N2, N4, N5, N9, N15, T1 conservatively.
+- Add Windows MSI TLO Artist Database Search Start Menu shortcut.
+- Update current requirements, manual, catalog and evidence; retain explicit deferrals.
+- Do not overwrite or repurpose any previous source ZIP; companion Build Process v143 remains unchanged.
+
+TLO v1.7 Build 687 (2026-11-18) — Independent complete source snapshot.
+- Follow-on review findings N3, N8, N10, N11, N12, and N13; preserve established renaming safeguards.
+- Updated normative requirements, User Manual, catalog, regression tests, and remediation evidence.
+- Companion GitHub Build Process v143 unchanged; native release validation required.
+TLO v1.7 Build 688 (2026-11-18) — Separate decode-only FLAC from tag failure; preview collections and identify unrepresentable POSIX filenames.
+
+TLO v1.7 Build 689 (2026-11-18) — independent complete source snapshot, backward-compatible log tokens and iterative duplicate-tree comparison; new regressions and current documentation.
+
+TLO v1.7 Build 690 (2026-11-18) — complete follow-on source snapshot, conservative date parsing and city recognition regressions, updated requirements and manual.
+
+TLO v1.7 Build 691 (2026-11-18) — complete verified cross-device Add Shows transfer source candidate, updated requirements and manual.
+
+TLO v1.7 Build 692 (2026-11-18) — complete source including journaled, explicit staged-move recovery and updated user documentation.
+
+Build 713: New immutable source ZIP. Addresses CI 44808377418 Linux missing FFmpeg fixture dependency and Windows exclusive byte-lock test assumption; companion build process v155.

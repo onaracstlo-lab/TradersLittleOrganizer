@@ -57,6 +57,47 @@ def _startup_banner(config) -> str:
     return f"Starting tlo-gi {DISPLAY_VERSION}"
 
 
+def _preflight_cross_root_show_identities(config) -> None:
+    """Never modify the first root before finding a collision in a later root.
+
+    The existing GUI preview uses isolated temporary discovery logs and resolves
+    album identities without committing media changes. Only run this additional
+    (potentially expensive) pass when multiple roots can mutate files. A
+    failed/incomplete preflight is a safe refusal, not permission to proceed.
+    """
+    from tlo_ux import _inventory_roots, preview_operation
+
+    roots = _inventory_roots(config)
+    if len(roots) < 2:
+        return
+    mutating = any(bool(getattr(config, field, False)) for field in (
+        'tag_during_inventory', 'tag_copy_during_inventory',
+        'rename_compliantly', 'convert_shn',
+    )) or bool(str(getattr(config, 'tag_copy_and_delete_path', '') or '').strip()) or any(
+        mode in ('copy', 'copy-delete') for _root, mode, _destination in roots
+    )
+    if not mutating:
+        return
+    preview = preview_operation(config, operation='Full Inventory', sample_limit=None)
+    errors = [issue for issue in preview.issues if issue.severity == 'error']
+    if errors or preview.truncated:
+        detail = errors[0].message if errors else 'preview results were truncated'
+        raise RuntimeError('Multi-root mutation preflight incomplete: ' + detail)
+    identities = {}
+    for item in preview.samples:
+        show = ' '.join((item.show_name or '').split()).casefold()
+        if not show:
+            continue  # Unresolved names are already refused by the normal mutation guard.
+        path = __import__('os').path.normcase(__import__('os').path.abspath(item.path))
+        previous = identities.setdefault(show, path)
+        if previous != path:
+            raise RuntimeError(
+                'SHOW_IDENTITY_COLLISION across search paths: %s | %s and %s. '
+                'No folder was tagged, renamed, transferred or converted; disambiguate first.'
+                % (item.show_name, previous, path)
+            )
+
+
 def run_inventory(config) -> int:
     start_time = time.monotonic()
     exit_code = 0
@@ -68,6 +109,9 @@ def run_inventory(config) -> int:
         config.cancel_requested = False
     try:
         inventory_lock = acquire_inventory_lock(getattr(config, "TLOHome", ""))
+        # Fail before scanning, folder renames, or tag writes.
+        from tlo_bootlist_volume_policy import validate_bootlist_utf8
+        validate_bootlist_utf8(getattr(config, "TLOHome", ""))
         apply_process_priority(config)
         console_print(config, _startup_banner(config))
         _check_online_lookup_startup(config)
@@ -81,6 +125,7 @@ def run_inventory(config) -> int:
 
             ensure_corrupt_flacs_log(config)
         validate_required_databases(config)
+        _preflight_cross_root_show_identities(config)
         walk_trees(config)
         config.inventory_scanning_complete = True
         console_print(config, "Inventory phase complete; cleanup, aggregation, and output generation still need to run.")

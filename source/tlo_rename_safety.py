@@ -11,19 +11,89 @@ __version__ = _TLO_CANONICAL_VERSION
 import re
 import unicodedata
 
-_WORD = re.compile(r"[A-Za-z\u00c0-\u024f]+")
+from tlo_constants import MONTHS
+
+_WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
+_NUMBER = re.compile(r"(?<!\d)\d+(?!\d)")
+_FULL_DATE = re.compile(r"(?<!\d)(?:18|19|20)\d{2}-\d{2}-\d{2}(?!\d)")
 _YEAR = re.compile(r"(?<!\d)(?:18|19|20)\d{2}(?!\d)")
 _UNCERTAIN_DATE = re.compile(r"\b(?:xxxx|xx)(?:[-/.](?:xx|\d{2})){0,2}\b", re.I)
 # Date words are allowed to disappear when a date is normalized to YYYY-MM-DD.
-_GENERIC = frozenset("bad folder name original ready show music directory unknown incoming new temp staged raw source".split())
-_MONTHS = frozenset("jan january feb february mar march apr april may jun june jul july aug august sep sept september oct october nov november dec december janvier fevrier février mars avril mai juin juillet aout août septembre octobre novembre decembre décembre januar februar maerz märz april juni juli august september oktober dezember".split())
+_GENERIC = frozenset("bad folder name original ready music directory unknown incoming temp staged raw source".split())
+_DATE_MONTH_WORDS = frozenset(MONTHS)
+# Only month words that truly participate in a recognised spelled-out date may
+# disappear. In particular, never remove May from Brian May or New from New Riders.
+_MONTH_WORD = "|".join(sorted((re.escape(m) for m in MONTHS), key=len, reverse=True))
+_SPELLED_DATE = re.compile(
+    rf"(?<!\w)(?:\d{{1,2}}(?:st|nd|rd|th)?\s+(?P<month_after>{_MONTH_WORD})\s*,?\s*\d{{4}}|"
+    rf"(?P<month_before>{_MONTH_WORD})\s+\d{{1,2}}(?:st|nd|rd|th)?\s*,?\s*\d{{4}})(?!\w)", re.I)
+
+
+def _fold_text(value: str) -> str:
+    # This applies the *same* accent folding to both names without dropping
+    # Cyrillic and other non-Latin identifiers that lack ASCII equivalents.
+    value = value.translate(str.maketrans({
+        "ø": "o", "Ø": "O", "æ": "ae", "Æ": "AE", "œ": "oe", "Œ": "OE",
+        "ß": "ss", "ð": "d", "Ð": "D", "ł": "l", "Ł": "L",
+    }))
+    decomposed = unicodedata.normalize("NFKD", value)
+    return "".join(c for c in decomposed if not unicodedata.combining(c))
+
+
+def _date_months(source: str) -> set[str]:
+    found: set[str] = set()
+    for match in _SPELLED_DATE.finditer(source):
+        word = match.group("month_after") or match.group("month_before")
+        found.add(_fold_text(word).casefold())
+    return found
+
 
 
 def _words(value: str) -> set[str]:
-    normalized = unicodedata.normalize("NFKC", value)
+    normalized = _fold_text(value)
     # Regional abbreviations W.V. / N.Y. retain identity as WV / NY.
     normalized = re.sub(r"\b(?:[A-Za-z]\.){2,}", lambda match: match.group().replace(".", ""), normalized)
     return {word.casefold() for word in _WORD.findall(normalized)}
+
+
+def _normalize_verifiable_source_date(source: str, target: str) -> str:
+    """Replace only a source date proven equivalent to the exact proposed ISO date.
+
+    This allows explicit language/ordinal or two-digit-year date normalization,
+    not arbitrary deletion of numeric trading IDs or non-date descriptors.
+    """
+    target_hit = _FULL_DATE.search(target)
+    if not target_hit:
+        return source
+    iso = target_hit.group()
+    year, month, day = (int(part) for part in iso.split("-"))
+
+    # A complete source date is never rewritten by this helper: the existing
+    # independent guard checks that it cannot change.
+    if _FULL_DATE.search(source):
+        return source
+
+    # YY-MM-DD encodes an explicit calendar date only when the entire date
+    # matches the normalized candidate, including its century.
+    short_pattern = re.compile(r"(?<!\d)(\d{2})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)")
+    for match in short_pattern.finditer(source):
+        if (int(match.group(1)) == year % 100 and
+                int(match.group(2)) == month and int(match.group(3)) == day):
+            return source[:match.start()] + iso + source[match.end():]
+
+    month_pattern = "|".join(sorted((re.escape(m) for m in MONTHS), key=len, reverse=True))
+    # The source's accented month spelling is matched directly; only a date
+    # with the same year/month/day as target may be normalized.
+    spelled = re.compile(
+        rf"(?<!\w)(?P<day>\d{{1,2}})(?:st|nd|rd|th|er)?\.?\s+"
+        rf"(?P<month>{month_pattern})\s*,?\s*(?P<year>\d{{4}})(?!\w)", re.I,
+    )
+    for match in spelled.finditer(source):
+        if (int(match.group('day')) == day and
+                int(match.group('year')) == year and
+                MONTHS.get(match.group('month').casefold()) == month):
+            return source[:match.start()] + iso + source[match.end():]
+    return source
 
 
 def safe_rename_target(source_leaf: str, candidate_leaf: str, *, artist: str = "", date: str = "") -> tuple[str, str]:
@@ -49,14 +119,29 @@ def safe_rename_target(source_leaf: str, candidate_leaf: str, *, artist: str = "
         return "", "show identity or date is uncertain"
     if artist.strip() and not _words(artist).issubset(_words(target)):
         return "", "resolved artist missing from proposed name"
+    # Recognize a *proved equivalent* human-readable source date.  The rest
+    # of the source identity remains protected from deletion.
+    comparable_source = _normalize_verifiable_source_date(source, target)
     # A year cannot disappear, and yyyy-xx-xx never replaces a known full date.
-    source_years = set(_YEAR.findall(source))
+    source_years = set(_YEAR.findall(comparable_source))
     target_years = set(_YEAR.findall(target))
     if not source_years.issubset(target_years):
         return "", "known year would be lost"
     if _UNCERTAIN_DATE.search(target) and not _UNCERTAIN_DATE.search(source):
         return "", "proposed date is less specific"
-    missing = (_words(source) - _MONTHS - _GENERIC) - _words(target)
+    source_full_dates = set(_FULL_DATE.findall(comparable_source))
+    target_full_dates = set(_FULL_DATE.findall(target))
+    if source_full_dates and not source_full_dates.issubset(target_full_dates):
+        return "", "known full date would change"
+    # Preserve source identifiers (etree shnid, 24-96, recording numbers).
+    # Permit 8 May -> 08 in a normalized date, but never simply discard a
+    # numeric run or change a known yyyy-mm-dd date.
+    from collections import Counter
+    source_numbers = Counter(int(value) for value in _NUMBER.findall(comparable_source))
+    target_numbers = Counter(int(value) for value in _NUMBER.findall(target))
+    if source_numbers - target_numbers:
+        return "", "numeric show or source identifier would be lost"
+    missing = (_words(comparable_source) - _date_months(comparable_source) - _GENERIC) - _words(target)
     if missing:
         return "", "source identifying text would be lost: " + ", ".join(sorted(missing))
     # Case changes remain permitted. Prevent losing commas/other punctuation

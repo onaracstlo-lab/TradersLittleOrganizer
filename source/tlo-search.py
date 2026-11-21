@@ -21,6 +21,8 @@ import csv
 import os
 import sys
 import threading
+import re
+import unicodedata
 import tkinter as tk
 import tkinter.font as tkfont
 from dataclasses import dataclass
@@ -40,7 +42,7 @@ import tlo_preferences
 from tlo_gui_shortcuts import install_global_ctrl_a
 from tlo_gui_shortcuts import configure_centered_ttk_button_text, schedule_tk_after
 from tlo_postprocess import setlist_filename_from_show_name
-from tlo_text_utils import read_text_file_full
+from tlo_text_utils import ASCII_TEXT_TRANSLATION, read_text_file_full
 
 try:
     from tlo_github_updates import (
@@ -116,7 +118,7 @@ Results windows:
 - You can select multiple rows/files with normal Shift and Control selection.
 - View is the default action in the results windows.
 - If no files are selected, the app says so.
-- View directly generates each setlist filename from the Show value and opens TLOHome/setlists/THAT_FILE.txt.
+- View uses the Show and Volume/Path row identity to open the correct setlist; older ambiguous inventories require re-inventory.
 - View does not scan the setlists directory while opening normal search results.
 - If you try to open more than {MAX_FILES_TO_OPEN_WITHOUT_PROMPT} files at once, the app asks:
   \"You're trying to open x files!  Are you sure?\"
@@ -130,7 +132,7 @@ CSV handling:
 - It treats the data positionally as 2 columns:
     Show, Volume/Path
 - Setlist filenames are derived from the Show value with the same filename normalization used by inventory: spaces and ordinary punctuation are removed, parentheses and ampersands are retained, and hyphens are retained only when they are part of recognized date/date-range tokens.
-- When opening setlists from normal results, the app opens only the directly generated .txt filename.
+- When opening normal results, Search uses setlist-index.json for exact identities; it never guesses when two shows share a name.
 
 Search box shortcuts:
 - Control-A select all
@@ -174,6 +176,25 @@ class SearchExpressionError(ValueError):
     pass
 
 
+def normalize_search_text(value: str) -> str:
+    # Normalize pasted web text and the inventoried haystack identically.
+    # Use the same Latin transliterations as TLO-written ASCII show names,
+    # but preserve non-Latin scripts instead of dropping their characters.
+    normalized = unicodedata.normalize("NFKD", str(value or "").translate(ASCII_TEXT_TRANSLATION))
+    cleaned = []
+    last_base_is_latin = False
+    for ch in normalized:
+        if unicodedata.category(ch).startswith("M"):
+            if not last_base_is_latin:
+                cleaned.append(ch)
+            continue
+        last_base_is_latin = "LATIN" in unicodedata.name(ch, "")
+        cleaned.append(ch)
+    normalized = "".join(cleaned)
+    normalized = normalized.translate(str.maketrans({"\u2018": "'", "\u2019": "'", "\u02bc": "'"}))
+    return re.sub(r"\s+", " ", normalized).strip().casefold()
+
+
 class ExprNode:
     def evaluate(self, haystack_casefolded: str) -> bool:
         raise NotImplementedError
@@ -184,7 +205,7 @@ class TermNode(ExprNode):
     term: str
 
     def evaluate(self, haystack_casefolded: str) -> bool:
-        return self.term.casefold() in haystack_casefolded
+        return normalize_search_text(self.term) in haystack_casefolded
 
 
 @dataclass(frozen=True)
@@ -551,7 +572,7 @@ class BootlistSearchApp:
             return
 
         def worker() -> None:
-            result = check_for_updates(self.paths.tlohome, manual=manual, download=manual)
+            result = check_for_updates(self.paths.tlohome, manual=manual, download=False)
             schedule_tk_after(self.root, 0, lambda: self._finish_update_check(result, manual))
 
         self._update_check_thread = threading.Thread(target=worker, daemon=True)
@@ -616,7 +637,7 @@ class BootlistSearchApp:
             messagebox.showinfo(result.title, result.message)
 
     def _finish_update_check(self, result, manual: bool) -> None:
-        if not manual and result.status == "available":
+        if result.status == "available":
             if self._ask_auto_update_download(result):
                 self._start_auto_update_download(result)
             return
@@ -713,10 +734,17 @@ class BootlistSearchApp:
         except SearchExpressionError as exc:
             messagebox.showerror("Search error", str(exc), parent=self.root)
             return
+        except (UnicodeError, csv.Error, OSError) as exc:
+            messagebox.showerror(
+                "CSV search error",
+                format_bootlist_search_error(self.paths.bootlist_csv, exc),
+                parent=self.root,
+            )
+            return
         except Exception as exc:
             messagebox.showerror(
-                "Error",
-                f"Failed to read CSV:\n{self.paths.bootlist_csv}\n\n{exc}",
+                "CSV search error",
+                format_bootlist_search_error(self.paths.bootlist_csv, exc),
                 parent=self.root,
             )
             return
@@ -904,6 +932,7 @@ class CsvSearchResultsWindow:
 
         file_paths: List[Path] = []
         missing_paths: List[str] = []
+        ambiguous_rows: List[str] = []
         seen_paths: set[str] = set()
 
         for row_index in selected_indices:
@@ -912,6 +941,9 @@ class CsvSearchResultsWindow:
 
             row = self.rows[row_index]
             file_path = resolve_setlist_path_for_row(self.paths, row)
+            if file_path.name == "__TLO_AMBIGUOUS_SETLIST_IDENTITY__.txt":
+                ambiguous_rows.append(f"{row.show} ({row.volume_path})")
+                continue
             if not file_path.is_file():
                 missing_paths.append(str(file_path))
                 continue
@@ -921,6 +953,13 @@ class CsvSearchResultsWindow:
                 seen_paths.add(normalized_path)
                 file_paths.append(file_path)
 
+        if ambiguous_rows:
+            show_nonblocking_notice(
+                self.window, "Setlist identity not available",
+                "Multiple shows share the same name, but this inventory has no exact "
+                "setlist mapping. Re-inventory the affected volume to rebuild "
+                "setlist-index.json. No setlist was guessed.\n\n" + "\n".join(ambiguous_rows[:10]),
+            )
         if missing_paths:
             show_missing_setlists_notice(self.window, missing_paths)
 
@@ -1290,6 +1329,21 @@ def build_paths(tlohome: Path) -> AppPaths:
     )
 
 
+from tlo_security import csv_formula_unescape
+
+
+def format_bootlist_search_error(path: Path, error: Exception) -> str:
+    """Name the damaged input and a useful remedy, not an unrelated CSV failure."""
+    if isinstance(error, UnicodeError):
+        return (f"Cannot read bootlist.csv as UTF-8:\n{path}\n\n"
+                "Re-save the file as CSV UTF-8, then retry Search. No changes were made.")
+    if isinstance(error, csv.Error):
+        return f"Invalid bootlist.csv structure:\n{path}\n\n{error}"
+    if isinstance(error, OSError):
+        return f"Cannot open bootlist.csv:\n{path}\n\n{error}"
+    return f"Unable to search bootlist.csv:\n{path}\n\n{error}"
+
+
 def load_bootlist_rows(csv_path: Path) -> List[CsvRow]:
     rows: List[CsvRow] = []
 
@@ -1317,17 +1371,20 @@ def load_bootlist_rows(csv_path: Path) -> List[CsvRow]:
 
             rows.append(
                 CsvRow(
-                    show=(padded[0] or "").strip(),
-                    volume_path=(padded[1] or "").strip(),
+                    show=csv_formula_unescape((padded[0] or "").strip()),
+                    volume_path=csv_formula_unescape((padded[1] or "").strip()),
                 )
             )
 
     return rows
 
 def tokenize_search_expression(text: str) -> List[str]:
+    """Tokenize explicit boolean syntax while preserving literal show qualifiers."""
+    text = text.translate(str.maketrans({"\u2018": "'", "\u2019": "'", "\u02bc": "'"}))
     tokens: List[str] = []
     term_buffer: List[str] = []
     quote_char: str | None = None
+    parenthesis_types: List[bool] = []
     i = 0
 
     def flush_term() -> None:
@@ -1336,33 +1393,48 @@ def tokenize_search_expression(text: str) -> List[str]:
         if term:
             tokens.append(term)
 
+    def is_actual_quote(index: int, char: str) -> bool:
+        # A real closing quote must be a term boundary; the apostrophe in
+        # Gilley's is not a close for the leading apostrophe in 'Til Tuesday.
+        for j in range(index + 1, len(text)):
+            if text[j] != char:
+                continue
+            if j + 1 == len(text) or text[j + 1].isspace() or text[j + 1] in ")|":
+                return True
+        return False
+
+    def group_ending(open_at: int) -> int:
+        depth = 0
+        for j in range(open_at, len(text)):
+            if text[j] == "(":
+                depth += 1
+            elif text[j] == ")":
+                depth -= 1
+                if depth == 0:
+                    return j
+        return -1
+
     while i < len(text):
         ch = text[i]
-
         if quote_char is not None:
             term_buffer.append(ch)
-            if ch == quote_char:
+            if ch == quote_char and (i + 1 == len(text) or text[i + 1].isspace() or text[i + 1] in ")|"):
                 quote_char = None
             i += 1
             continue
-
         if ch in ('"', "'"):
-            # Apostrophes inside names (Gilley's/O'Brien) are ordinary text.
-            # A leading quote is syntax only if a closing match exists.
-            if not "".join(term_buffer).strip() and text.find(ch, i + 1) >= 0:
+            if not "".join(term_buffer).strip() and is_actual_quote(i, ch):
                 quote_char = ch
             term_buffer.append(ch)
             i += 1
             continue
-
         if ch == "(":
-            # Parentheses around literal show qualifiers are not grouping.
-            # Only parenthesized subexpressions containing a real operator are.
-            close = text.find(")", i + 1)
-            contains_operator = close >= 0 and (
-                "|and|" in text[i + 1:close].casefold() or "|or|" in text[i + 1:close].casefold()
-            )
-            if contains_operator and not "".join(term_buffer).strip():
+            close = group_ending(i)
+            expression = text[i + 1:close].casefold() if close >= 0 else ""
+            is_group = bool(close >= 0 and ("|and|" in expression or "|or|" in expression)
+                            and not "".join(term_buffer).strip())
+            parenthesis_types.append(is_group)
+            if is_group:
                 flush_term()
                 tokens.append(ch)
             else:
@@ -1370,32 +1442,30 @@ def tokenize_search_expression(text: str) -> List[str]:
             i += 1
             continue
         if ch == ")":
-            if tokens.count("(") > tokens.count(")"):
+            if not parenthesis_types:
+                raise SearchExpressionError("Unexpected closing parenthesis in search expression.")
+            is_group = parenthesis_types.pop()
+            if is_group:
                 flush_term()
                 tokens.append(ch)
             else:
                 term_buffer.append(ch)
             i += 1
             continue
-
-        remaining = text[i:]
-        if remaining[:5].casefold() == "|and|":
+        if text[i:i + 5].casefold() == "|and|":
             flush_term()
             tokens.append("|AND|")
             i += 5
             continue
-        if remaining[:4].casefold() == "|or|":
+        if text[i:i + 4].casefold() == "|or|":
             flush_term()
             tokens.append("|OR|")
             i += 4
             continue
-
         term_buffer.append(ch)
         i += 1
-
     if quote_char is not None:
         raise SearchExpressionError("Missing closing quote in search expression.")
-
     flush_term()
     return tokens
 
@@ -1407,13 +1477,13 @@ def build_search_predicate(search_text: str) -> Callable[[str], bool]:
     # An ordinary pasted show name is a literal search, including apostrophes
     # and (Early Show) qualifiers. Only explicit |AND| / |OR| selects grammar.
     if "|and|" not in search_text.casefold() and "|or|" not in search_text.casefold():
-        literal = strip_outer_quotes(search_text.strip()).casefold()
-        return lambda haystack: literal in haystack.casefold()
+        literal = normalize_search_text(strip_outer_quotes(search_text.strip()))
+        return lambda haystack: literal in normalize_search_text(haystack)
     tokens = tokenize_search_expression(search_text)
     if len(tokens) > 1024 or tokens.count("(") > 64:
         raise SearchExpressionError("Search expression exceeds safe complexity limits.")
     tree = ExpressionParser(tokens).parse()
-    return lambda haystack: tree.evaluate(haystack.casefold())
+    return lambda haystack: tree.evaluate(normalize_search_text(haystack))
 
 
 def search_rows(rows: Sequence[CsvRow], search_text: str) -> List[CsvRow]:

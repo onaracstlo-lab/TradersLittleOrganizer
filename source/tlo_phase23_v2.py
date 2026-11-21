@@ -8,6 +8,7 @@ from tlo_text_utils import read_text_file_full
 import json
 import os
 import re
+import unicodedata
 from datetime import date, datetime
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -2053,8 +2054,12 @@ def _normalize_same_month_day_range(year: str, month: str, day_sequence: str) ->
         return ""
     for day in day_numbers:
         try:
-            datetime(int(year_norm), int(month_norm), day)
+            candidate_date = date(int(year_norm), int(month_norm), day)
         except ValueError:
+            return ""
+        # A range is one performance identity. No date in it may lie in the
+        # future, even when its first (canonical) day is today or earlier.
+        if candidate_date > date.today():
             return ""
     return f"{year_norm}-{month_norm}-{day_numbers[0]:02d}"
 
@@ -2321,6 +2326,12 @@ def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_mo
     for match in MONTH_DAY_YEAR_RE.finditer(text):
         if unsafe_short_foreign_month(match) or overlaps_day_range(match):
             continue
+        # Mars (French) and Juli (German) are also ordinary artist names.
+        # A leading artist token before either ambiguous month word prevents
+        # a trustworthy month-day-year interpretation.  Day-first and
+        # year-first forms remain available for genuine foreign dates.
+        if match.group('month_name').casefold() in {'mars', 'juli'} and text[:match.start()].strip(' ,-/'):
+            continue
         # A compact month-year value such as November2020 or November 2020 is
         # partial, not November 20, 2020. Let MONTH_YEAR_RE handle it later.
         if re.fullmatch(rf"(?:{MONTH_NAME_CASED_PATTERN})\.?(?:{TEXT_DATE_SEP_OPT})(?:{YEAR4_TOKEN_RE_TEXT})", match.group(0)):
@@ -2339,6 +2350,10 @@ def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_mo
     for match in YEAR_MONTHNAME_DAY_RE.finditer(text):
         if overlaps_day_range(match):
             continue
+        # Do not combine the first date's year with the next date's month/day
+        # across a spaced dash range separator (Dec 31 1999 - Jan 1 2000).
+        if re.match(r'^(?:19|20)\d{2}\s+[-–—]\s+', match.group(0)):
+            continue
         normalized = _normalize_date(match.group("year"), _month_name_to_number(match.group("month_name")), _strip_ordinal(match.group("day")))
         _append_date_result(results, seen, match.group(0), normalized, match.start(), match.end())
         if normalized:
@@ -2346,6 +2361,10 @@ def _find_date_matches(text: str, allow_slash: bool = False, allow_year_space_mo
 
     for match in MONTH_YEAR_RE.finditer(text):
         if overlaps_day_range(match):
+            continue
+        # Without a day, Mars/Juli can be artist-name fragments and are not
+        # sufficient evidence of a performance month.
+        if match.group('month_name').casefold() in {'mars', 'juli'}:
             continue
         # Month-year forms such as November2020 or November 2020 are less
         # specific than complete dates. Do not add a month-year match when its
@@ -3978,8 +3997,15 @@ def _split_left_for_city_and_venue(left_text: str, *, allow_city_only: bool = Fa
     city_tokens = [tokens[-1]]
     venue_tokens = tokens[:-1]
     venue_tokens, city_tokens = _adjust_city_prefix(venue_tokens, city_tokens)
-    venue = compact_ws(" ".join(token for token in venue_tokens if token)).strip(" ,")
-    city = compact_ws(" ".join(token for token in city_tokens if token)).strip(" ,")
+    # Use the original words for punctuation *inside* the venue. The parsed
+    # metadata for a TLO-generated folder must not silently drop a comma on
+    # a second inventory (e.g. "Barton Hall, Cornell University Ithaca").
+    # Only punctuation at the venue/city boundary is stripped.
+    # Align punctuation-only tokens with the parsed tokens so a spaced comma
+    # cannot shift the boundary ("Hall , Cornell University Ithaca").
+    raw_tokens = [word for word in left.split() if word.strip(",")]
+    venue = compact_ws(" ".join(raw_tokens[:len(venue_tokens)])).strip(" ,")
+    city = compact_ws(" ".join(raw_tokens[len(venue_tokens):])).strip(" ,")
     # Do not convert connective/preposition tails into a one-word city.  This
     # protects title-like text such as ``Two Gentlemen In, NY`` from becoming
     # venue=Two Gentlemen / city=In on a later re-inventory.
@@ -5076,8 +5102,35 @@ def _apply_city_catalog_last_resort(config, record, matcher, evidence, observati
     catalog = _city_catalog(config)
     if catalog is None:
         return
+    matching_dates = [item for item in _find_date_matches(record.main_dir_name, allow_slash=True, artist_matcher=matcher)
+                      if item.get('normalized') == record.date]
+    unique_spans = {(int(item['start']), int(item['end'])) for item in matching_dates}
+    if len(unique_spans) > 1:
+        # Two indistinguishable dates in one folder provide no trustworthy
+        # boundary for location extraction.  Leave geography unidentified.
+        return
+    raw_date = matching_dates[0]['raw'] if len(unique_spans) == 1 else ''
+    # The date and leading artist have already been independently confirmed.
+    # Discard *only* terminal source/part qualifiers for city recognition;
+    # otherwise they become the final token and mask a valid trailing city.
+    city_lookup_name = _strip_trailing_parenthetical_items(record.main_dir_name)
+    # A trading/encoding suffix is not part of a city name.  Only remove
+    # recognized TERMINAL annotations; never strip arbitrary user text.
+    # Repeat to support stacked annotations such as "Berlin [FLAC16] (SBD)".
+    annotation = re.compile(
+        r"(?:\s*\[(?:\d{2}[-/]\d{2,3}|SBD|AUD|matrix|set\s*\d+|disc\s*\d+|FLAC\s*\d{2}|\d{2}[-/]\d{2,3})\]"
+        r"|\s+[-–—]\s*(?:SBD|AUD|matrix|FLAC\s*\d{2}|\d{2}[-/]\d{2,3})"
+        r"|\.(?:SBD|AUD)"
+        r"|\s+\d{2}[-/]\d{2,3})$", re.IGNORECASE,
+    )
+    while True:
+        trimmed = annotation.sub("", city_lookup_name).strip()
+        if trimmed == city_lookup_name:
+            break
+        city_lookup_name = trimmed
     fields = refine_parsed_fields(
-        folder_name=record.main_dir_name, artist=record.artist, date=record.date,
+        folder_name=city_lookup_name, artist=record.artist, date=record.date,
+        raw_date=raw_date,
         city='', region='', country='', venue='', csv_path='cities.csv', catalog=catalog,
         artist_is_known=lambda name: lookup_artist_master_with_status(name, matcher)[0] != 'no_match',
     )
@@ -5100,6 +5153,75 @@ def _build_show_name(record: ShowMetadata) -> str:
     return _append_parentheticals_to_show_name(show_name, record.parentheticals)
 
 
+def _protect_numbered_show_identity(record: ShowMetadata) -> None:
+    """Retain an explicit Show N suffix when venue extraction was incomplete."""
+    leaf = compact_ws(getattr(record, 'main_dir_name', '') or '')
+    match = re.search(r'(?i)\bshow\s+(\d{1,3})\s*$', leaf)
+    current = compact_ws(getattr(record, 'show_name', '') or '')
+    if not match or not current or not record.artist or not record.date:
+        return
+    token = f'Show {int(match.group(1))}'
+    if not re.search(rf'(?i)\b{re.escape(token)}\b', current):
+        record.show_name = f'{current} ({token})'
+
+
+def _protect_explicit_regionless_place(config, record: ShowMetadata) -> None:
+    """Preserve clearly comma-separated venue/city/region in the folder text.
+
+    Require independent catalog or venue evidence; do not invent locations
+    from arbitrary prose and never replace contradictory confirmed metadata.
+    """
+    if not record.artist or not record.date:
+        return
+    leaf = compact_ws(getattr(record, 'main_dir_name', '') or '')
+    prefix = re.match(rf'(?i)^\s*{re.escape(record.artist)}\s+{re.escape(record.date)}\s+(.*)$', leaf)
+    if not prefix:
+        return
+    tail = re.sub(r'(?i)\s*[-–—]?\s*show\s+\d{1,3}\s*$', '', prefix.group(1)).strip()
+    fields = [compact_ws(part) for part in tail.split(',')]
+    if len(fields) not in (2, 3) or any(not item for item in fields):
+        return
+    raw_venue, raw_city = fields[0], fields[1]
+    raw_region = fields[2] if len(fields) == 3 else ''
+    if not re.fullmatch(r"[^,\\/:*?<>|]{2,90}", raw_city):
+        return
+    if raw_region and raw_region.upper() not in REGION_CODES:
+        # Explicit country suffixes are preserved only when independently
+        # recognized; never convert arbitrary venue text into a country.
+        country = COUNTRY_ALIASES.get(raw_region.casefold())
+        if not country:
+            return
+    else:
+        country = ''
+    venue = _known_venue_exact(config, raw_venue)
+    catalog = catalog_for_tlo(getattr(config, 'tlo_dbs_dir', ''),
+                              getattr(config, 'TLOHome', ''))
+    known_city = catalog.lookup_exact(raw_city) if catalog else None
+    if not venue and known_city is None:
+        return
+    current_city = compact_ws(getattr(record, 'city', '') or '')
+    if current_city and normalized_compare_value(current_city) not in {
+        normalized_compare_value(raw_city), normalized_compare_value(raw_region)
+    }:
+        return
+    current_venue = compact_ws(getattr(record, 'venue', '') or '')
+    if current_venue and normalized_compare_value(current_venue) != normalized_compare_value(raw_venue):
+        return
+    current_region = compact_ws(getattr(record, 'region', '') or '')
+    if current_region and raw_region and current_region.casefold() != raw_region.casefold():
+        return
+    current_country = compact_ws(getattr(record, 'country', '') or '')
+    if current_country and country and current_country.casefold() != country.casefold():
+        return
+    record.venue = venue or raw_venue
+    record.city = raw_city
+    if raw_region.upper() in REGION_CODES:
+        record.region = raw_region.upper()
+    elif country:
+        record.country = country
+    record.location = _join_location(record.city, record.region, record.country)
+
+
 def _normalize_record_ascii_for_output(record: ShowMetadata) -> ShowMetadata:
     """Normalize user-facing metadata fields before logs, bootlist, folders and tags use them."""
     for attr in (
@@ -5109,7 +5231,15 @@ def _normalize_record_ascii_for_output(record: ShowMetadata) -> ShowMetadata:
         try:
             value = getattr(record, attr, "")
             if value:
-                setattr(record, attr, standard_ascii_text(value))
+                contains_non_latin = any(
+                    char.isalpha() and ord(char) > 127 and
+                    not unicodedata.name(char, '').startswith('LATIN')
+                    for char in value
+                )
+                # Preserve all of a composite field when it includes a
+                # non-Latin script, not just when transliteration is empty.
+                folded = value if contains_non_latin else standard_ascii_text(value)
+                setattr(record, attr, folded if folded else value)
         except Exception as exc:  # noqa: BLE001 - best-effort boundary
             debug_suppressed_exception(__name__, exc)
     return record
@@ -8119,6 +8249,13 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
     record.conflicts = _unique_preserve(conflicts)
     record.observations = _unique_preserve(observations)
     record.show_in_conflict = bool(record.conflicts)
+    previous_place = (record.venue, record.city, record.region, record.country, record.location)
+    _protect_explicit_regionless_place(config, record)
+    if previous_place != (record.venue, record.city, record.region, record.country, record.location) and record.artist and record.date:
+        # Recompose only when explicit, independently known venue evidence was
+        # recovered. Never rewrite a previously valid show name gratuitously.
+        record.show_name = _build_show_name(record)
+    _protect_numbered_show_identity(record)
     _normalize_record_ascii_for_output(record)
     return record, date_matches, _unique_preserve(unresolved_reasons + record.conflicts)
 
@@ -8236,6 +8373,21 @@ def _corruption_tag_write_check_enabled(config, tag_during_inventory: bool) -> b
     return bool(tag_during_inventory and not getattr(config, "dry_run", False))
 
 
+def _show_identity_collisions(extracted: Sequence[tuple]) -> set[int]:
+    """Indices of separate groups with an identical final Show / ALBUM identity.
+
+    Never let a previous group's tag/rename commit make a later collision
+    irreversible. Index every planned identity before the first mutation.
+    """
+    by_identity: dict[str, list[int]] = {}
+    for index, (record, _dates, _issues) in enumerate(extracted):
+        name = compact_ws(getattr(record, "show_name", "") or "")
+        if name:
+            by_identity.setdefault(name.casefold(), []).append(index)
+    return {index for positions in by_identity.values() if len(positions) > 1
+            for index in positions}
+
+
 def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMatcher]) -> List[ShowMetadata]:
     groups = _build_groups_from_search_path(config, config.current_search_path)
     config.current_search_groups_prepared = len(groups)
@@ -8282,6 +8434,7 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
     shn_conversion_totals = {"groups": 0, "converted": 0, "errors": 0}
     copy_delete_inventory_groups: List[dict] = []
     renamed_inventory_groups: List[dict] = []
+    rename_totals = {"renamed": 0, "skipped": 0}
     if bool(getattr(config, "deep_audio_check", False)):
         config.logs.tag("DEEP_AUDIO_CHECK: Reading and hashing/decoding every audio file can be very slow. Dry Run does not probe or decode files.")
     if tag_during_inventory:
@@ -8303,10 +8456,42 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
     if tag_copy_and_delete_enabled:
         config.logs.tag("TAG_COPY_AND_DELETE: enabled | destination=%s", tag_copy_and_delete_path)
 
+    # Metadata preflight is read-only. A first-come-first-tagged strategy is
+    # unsafe: subsequent groups might resolve to the same Show/ALBUM. Resolve
+    # all identities before any rename, transfer, SHN conversion, or tag write.
+    prepared = []
     for group_number, group in enumerate(groups, start=1):
         throttle_point(config)
         group["group_number"] = group_number
-        record, date_matches, unresolved_reasons = _extract_metadata_for_group(config, group, artist_matcher)
+        prepared.append(_extract_metadata_for_group(config, group, artist_matcher))
+    conflicts = _show_identity_collisions(prepared)
+
+    for group_number, (group, extracted) in enumerate(zip(groups, prepared), start=1):
+        throttle_point(config)
+        record, date_matches, unresolved_reasons = extracted
+        if group_number - 1 in conflicts:
+            unresolved_reasons.append(
+                'unable to create show name uniquely: multiple folders resolved to the same Show/ALBUM; '
+                'no destructive operation permitted until identity is disambiguated'
+            )
+            config.logs.conflicts(
+                'SHOW_IDENTITY_COLLISION: %s | %s | tag/copy/delete/rename skipped',
+                record.show_name, record.main_dir_path,
+            )
+        if group_number - 1 in conflicts:
+            # A collision has no safe mutation path. Do not run corruption
+            # probes, SHN conversion, rename, copying, or tagging at all.
+            # Still publish an unresolved inventory record for user review.
+            _log_group(config, group, group_number)
+            unresolved_paths.append((record.main_dir_path, "; ".join(unresolved_reasons)))
+            config.logs.conflicts("UNRESOLVED_MAIN_DIR_PATH: %s | %s", record.main_dir_path, "; ".join(unresolved_reasons))
+            records.append(record)
+            if bool(getattr(config, "rename_compliantly", False)):
+                rename_totals["skipped"] += 1
+            if tag_during_inventory:
+                tag_totals["groups"] += 1
+                tag_totals["skipped"] += 1
+            continue
         if not record.show_name and "unable to create show name" not in unresolved_reasons:
             unresolved_reasons.append("unable to create show name")
         if not record.artist and "unable to identify artist" not in unresolved_reasons:
@@ -8331,7 +8516,15 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
         if corruption_outcome.show_removed:
             continue
         unidentified_for_mutation = _record_is_unidentified_for_mutation(record, unresolved_reasons)
+        # No destructive tag/rename operation when a Unicode artist cannot be
+        # safely represented by the legacy ASCII tag and folder pipeline.
+        if record.artist and not standard_ascii_text(record.artist):
+            unidentified_for_mutation = True
+            config.logs.tag("UNICODE_ARTIST_MUTATION_SKIP: %s | preserving original tags and folder", record.main_dir_path)
         if corruption_unverifiable:
+            console_print(config, f"Deep Audio Check: unverifiable audio in {record.main_dir_path}; tagging and renaming skipped. Re-encode with complete FLAC STREAMINFO or review without Deep Audio Check.")
+            if bool(getattr(config, "rename_compliantly", False)):
+                rename_totals["skipped"] += 1
             if tag_during_inventory:
                 tag_totals["groups"] += 1
                 tag_totals["skipped"] += 1
@@ -8354,6 +8547,7 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
                     "RENAME_COMPLIANTLY_SKIP: %s | show unidentified; leaving original folder untouched",
                     record.main_dir_path,
                 )
+                rename_totals["skipped"] += 1
             tag_group_ready = False
         elif tag_during_inventory or tag_copy_and_delete_enabled or rename_in_place_only:
             try:
@@ -8362,6 +8556,10 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
                 def _tag_prepare_emit(text: str) -> None:
                     line = str(text or "").rstrip("\r\n")
                     if line:
+                        if line.startswith("RENAME_COMPLIANTLY: "):
+                            rename_totals["renamed"] += 1
+                        elif line.startswith("RENAME_COMPLIANTLY_SKIP: "):
+                            rename_totals["skipped"] += 1
                         config.logs.tag("%s", line)
 
                 if tag_copy_and_delete_enabled:
@@ -8382,7 +8580,7 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
                     config.logs.conflicts("COPY_DELETE_FAILED_NOT_INVENTORIED: %s | %s", record.main_dir_path, exc)
                     continue
 
-        if convert_shn_without_tagging and tag_group_ready:
+        if convert_shn_without_tagging and tag_group_ready and group_number - 1 not in conflicts:
             try:
                 from tlo_tag_lib import convert_group_shn_files_only, merge_shn_conversion_stats
 
@@ -8438,7 +8636,7 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
                 tag_totals["groups"] += 1
                 tag_totals["errors"] += 1
                 config.logs.tag("ERROR_TAGGING: %s | inventory-time tagging failed: %s", record.main_dir_path, exc)
-        elif tag_during_inventory and not tag_group_ready and not unidentified_for_mutation:
+        elif tag_during_inventory and not tag_group_ready and not unidentified_for_mutation and not corruption_unverifiable:
             tag_totals["groups"] += 1
             tag_totals["errors"] += 1
         if unresolved_reasons:
@@ -8476,6 +8674,13 @@ def process_groups_for_search_path_v2(config, artist_matcher: Optional[ArtistMat
             shn_conversion_totals["converted"],
             shn_conversion_totals["errors"],
         )
+
+    if bool(getattr(config, "rename_compliantly", False)):
+        config.logs.tag("RENAME_COMPLIANTLY_SUMMARY: renamed=%s skipped=%s",
+                        rename_totals["renamed"], rename_totals["skipped"])
+        console_print(config, "Rename Compliantly: "
+                      f"{rename_totals['renamed']} renamed, {rename_totals['skipped']} skipped "
+                      "(see tag error log for reasons)")
 
     if unresolved_paths:
         config.logs.conflicts("UNRESOLVED_PATH_COUNT: %s", len(unresolved_paths))

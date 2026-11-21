@@ -187,6 +187,15 @@ def prepare_reverse_plan(
     # If more than one run is still active for the same broad path, never guess.
     active_best = [item for item in best if any(_operation_is_current(op) for op in item[1])]
     if len(active_best) > 1:
+        # A historical archive and a still-active token log may contain the
+        # same operation.  Treat exact duplicate identities as one record.
+        def identities(item):
+            return {(op.code.upper(), _key(op.source), _key(op.destination)) for op in item[1]
+                    if _operation_is_current(op)}
+        if all(identities(item) == identities(active_best[0]) for item in active_best):
+            active_best = [max(active_best, key=lambda item: (
+                os.path.basename(item[0]) != 'folderOperations.log', item[3]))]
+    if len(active_best) > 1:
         names = ", ".join(os.path.basename(item[0]) for item in sorted(active_best, key=lambda x: x[3], reverse=True))
         raise ReverseFoldersError(
             "More than one logged run matches the requested path and current folder state: " + names + ". Use a narrower path or --log."

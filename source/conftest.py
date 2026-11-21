@@ -10,6 +10,7 @@ import subprocess
 import sys
 # Keep ordinary pytest runs from creating bytecode in the release source tree.
 sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"  # propagate to subprocesses
 import time
 
 import pytest

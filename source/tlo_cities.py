@@ -114,6 +114,7 @@ class CityCatalog:
         self, folder_name: str, *, artist: str, date: str,
         artist_names: tuple[str,...] | list[str] | set[str] = (),
         artist_is_known: Callable[[str],bool] | None = None,
+        raw_date: str = '',
         existing_city: str = '', existing_region: str = '',
         existing_country: str = '',
     ) -> CityCandidate | None:
@@ -137,8 +138,12 @@ class CityCatalog:
         if not artist_hit:
             return None
         remainder = folder_name[artist_hit.end():]
-        # Take only one exact caller-provided date; no guessing from years alone.
-        date_hit = re.search(r'(?<!\d)'+re.escape(date)+r'(?!\d)',remainder,re.I)
+        # The caller has already independently parsed the complete date.  Its
+        # source spelling may be dotted, slash-separated or textual, while
+        # the normalized date is always YYYY-MM-DD.  Match that exact trusted
+        # source span rather than guessing a new date from city text.
+        date_text = raw_date or date
+        date_hit = re.search(r'(?<!\d)'+re.escape(date_text)+r'(?!\d)',remainder,re.I)
         if date_hit is None or not _DATE.fullmatch(date):
             return None
         before = remainder[:date_hit.start()]
@@ -201,6 +206,7 @@ def refine_parsed_fields(
     region: str = '', country: str = '', venue: str = '',
     artist_names: tuple[str,...] | list[str] | set[str] = (),
     artist_is_known: Callable[[str],bool] | None = None,
+    raw_date: str = '',
     csv_path: str | Path,
     on_warning=None, catalog: CityCatalog | None = None,
 ) -> dict[str,str]:
@@ -223,7 +229,7 @@ def refine_parsed_fields(
         return fields
     candidate = catalog.suggest_for_known_artist(
         folder_name,artist=artist,date=date,artist_names=artist_names,
-        artist_is_known=artist_is_known,
+        artist_is_known=artist_is_known, raw_date=raw_date,
         existing_city=city,existing_region=region,existing_country=country)
     if candidate is None:
         return fields
@@ -409,5 +415,5 @@ def _cached_layered(b_sig: tuple, l_sig: tuple) -> CityCatalog | None:
     if not rows:
         return None
     if l_sig[0]:
-        warnings.insert(0, f"cities: {len(rows)-added} bundled + {added} local; {max(0,len(warnings))} warning(s)")
+        warnings.insert(0, f"cities: {len(rows)-added} catalog + {added} local; {max(0,len(warnings))} warning(s)")
     return CityCatalog(rows, tuple(warnings), frozenset(local_names))

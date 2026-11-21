@@ -748,7 +748,8 @@ def _groups_from_inventory_discovery(config: Config, tagging_path: str) -> List[
     config.current_volume_key = ""
     config.current_log_token = "T"
     if getattr(getattr(config, "logs", None), "current_log_token", "") != "T":
-        config.logs.start_search_path(config.current_search_path, config.current_search_index, log_token=config.current_log_token)
+        config.logs.start_search_path(config.current_search_path, config.current_search_index,
+                                  log_token=config.current_log_token, display_full_path=True)
     initial_dir_walk(config, config.current_search_path)
     return _build_groups_from_search_path(config, config.current_search_path)
 
@@ -3343,19 +3344,32 @@ def _move_via_owned_stage(source: str, parent: str, name: str) -> str:
     """
     if _tree_contains_symlink(source):
         raise TaggerError(f"Copy/Delete refuses a source tree containing symbolic links: {source}")
+    from tlo_staging_recovery import clear_move_journal, record_same_volume_move
+
     stage = _owned_partial_copy_path(os.path.join(parent, name))
-    _publish_staged_directory_noreplace(source, stage)
+    # fsync the record before the first rename, when the original path exists.
+    # A crash before publication can then be restored explicitly by Reverse.
+    journal = record_same_volume_move(source, stage, os.path.join(parent, name))
     try:
-        return _publish_verified_transfer(stage, parent, name, stage)
+        _publish_staged_directory_noreplace(source, stage)
+    except BaseException:
+        clear_move_journal(journal)
+        raise
+    try:
+        result = _publish_verified_transfer(stage, parent, name, stage)
+        clear_move_journal(journal)
+        return result
     except BaseException as error:
         try:
             _publish_staged_directory_noreplace(stage, source)
         except Exception as rollback_error:
             raise TaggerError(
                 f"Copy/Delete publication failed and source rollback failed: {error}; "
-                f"show retained in excluded staging folder {stage}; restore manually; "
+                f"show retained in excluded staging folder {stage}; "
+                f"recover with tlo-reverse --recover-staging {parent}; "
                 f"rollback error: {rollback_error}"
             ) from error
+        clear_move_journal(journal)
         raise
 
 
@@ -3448,6 +3462,12 @@ def prepare_inventory_tagging_target(
         accepted, reason = safe_rename_target(original_name, target_name, artist=getattr(record, "artist", ""), date=getattr(record, "date", ""))
         if not accepted:
             _emit(emit, f"RENAME_COMPLIANTLY_SKIP: {source_root} | {reason}")
+            # When the only rejected change is punctuation, the original
+            # *already is* the full canonical show. Keep tag ALBUM and bootlist
+            # Show in step with that stable folder rather than churning on run 2.
+            if reason == "punctuation-only reduction" and getattr(record, "show_name", ""):
+                if re.sub(r"[,;]", "", str(record.show_name)) == re.sub(r"[,;]", "", original_name):
+                    record.show_name = original_name
             use_compliant_name = False
             target_name = original_name
 
@@ -5488,6 +5508,8 @@ def tag_group_with_record(
         normalized_number = int(track["normalized_number"])
         tag_track_number = format_tag_track_number(normalized_number, len(tracks))
         title = _clean_track_title(str(track.get("title") or "unknown")) or "unknown"
+        if title.casefold() == "unknown":
+            title = "Unknown"
         if _is_shn_audio_file(audio_path):
             stats["errors"] += 1
             if bool(getattr(config, "convert_shn", False)):
@@ -5765,6 +5787,8 @@ def build_dry_run_group_plan(
         normalized_number = int(track.get("normalized_number", 0) or 0)
         tag_track_number = format_tag_track_number(normalized_number, len(tracks))
         title = _clean_track_title(str(track.get("title") or "unknown")) or "unknown"
+        if title.casefold() == "unknown":
+            title = "Unknown"
         target_path = target_paths.get(audio_path, audio_path)
         action = "would tag"
         reason = ""
@@ -6093,7 +6117,8 @@ def run_tagger(
     config.current_volume_label = ""
     config.current_volume_key = ""
     config.current_log_token = "T"
-    config.logs.start_search_path(config.current_search_path, config.current_search_index, log_token=config.current_log_token)
+    config.logs.start_search_path(config.current_search_path, config.current_search_index,
+                                  log_token=config.current_log_token, display_full_path=True)
     tag_emit = _build_tag_log_emit(config, emit)
     artist_matcher = load_artist_matcher(config)
 

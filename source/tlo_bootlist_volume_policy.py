@@ -105,6 +105,23 @@ def format_log_volume_path(volume_label: str, path_name: str) -> str:
     return format_volume_path(volume, storage_path_without_drive(path_name))
 
 
+def validate_bootlist_utf8(tlo_home: str) -> None:
+    """Fail before any inventory mutation if an existing bootlist is non-UTF-8."""
+    path_name = bootlist_path(tlo_home)
+    if not os.path.isfile(path_name):
+        return
+    with open(path_name, 'rb') as source:
+        contents = source.read()
+    try:
+        contents.decode('utf-8-sig', errors='strict')
+    except UnicodeDecodeError as exc:
+        line_number = contents[:exc.start].count(b'\n') + 1
+        raise ValueError(
+            f'bootlist.csv is not UTF-8 (near line {line_number}): {path_name}. '
+            'Re-save it as CSV UTF-8 (not ANSI) and rerun; no inventory changes were made.'
+        ) from exc
+
+
 def read_bootlist_rows(tlo_home: str) -> List[Dict[str, str]]:
     path_name = bootlist_path(tlo_home)
     if not os.path.isfile(path_name):

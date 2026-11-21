@@ -35,6 +35,7 @@ from tlo_locking import acquire_owned_lock, release_owned_lock, lock_is_held, cl
 from inventory_list_lib import split_search_path_entries
 from tlo_volume_label import resolve_volume_label
 from tlo_unc import root_from_unc_label, compose_unc_path, unc_label, is_unc_path
+from tlo_text_utils import standard_ascii_text
 from tlo_redundancy import (
     RedundancyGroup,
     group_display_for_volume,
@@ -629,12 +630,12 @@ def _artist_key(text: str, matcher: Optional[ArtistMatcher]) -> Tuple[str, str]:
     if matcher is not None:
         status, masters = lookup_artist_master_with_status(cleaned, matcher)
         if status == "matched" and len(masters) == 1:
-            return masters[0].casefold(), ""
+            return standard_ascii_text(masters[0]).casefold() or masters[0].casefold(), ""
         if status == "collision" and masters:
             return "", "Ambiguous Artist DB alias: " + ", ".join(masters)
     # An artist absent from the database may still match an exact artist string
     # already present in bootlist.csv.
-    return cleaned.casefold(), ""
+    return standard_ascii_text(cleaned).casefold() or cleaned.casefold(), ""
 
 
 def _resolve_two_digit_start(two_digit: int, *, current_year: Optional[int] = None) -> int:
@@ -924,13 +925,32 @@ def _physical_paths_for_volume_stored(
     candidates: List[str] = []
     volume_connected = bool(roots.get(vkey))
 
-    if allow_native_absolute and os.name != "nt" and not _running_on_wsl() and stored and os.path.isabs(stored):
+    # Permit the legacy native-absolute row mode only for the exact source
+    # volume. It is not an exemption for drive/UNC or traversal syntax.
+    native_absolute = (allow_native_absolute and os.name != "nt" and
+                       not _running_on_wsl() and stored and os.path.isabs(stored))
+    if native_absolute and not roots.get(vkey):
+        # Native absolute paths are a legacy fallback only when there is no
+        # mapped volume root to constrain this row.
         candidates.append(os.path.normpath(stored))
-
-    for root in roots.get(vkey, []):
-        relative = stored.replace("\\", "/").lstrip("/")
-        candidate = os.path.normpath(os.path.join(root, *([part for part in relative.split("/") if part] or [""])))
-        candidates.append(candidate)
+    if stored is not None:
+        relative = stored.replace("\\", "/")
+        pieces = relative.split("/")
+        if (".." in pieces or "\x00" in stored or
+                ntpath.splitdrive(stored)[0] or relative.startswith("//")):
+            return [], volume_connected
+        for root in roots.get(vkey, []):
+            candidate = os.path.normpath(os.path.join(root, *([part for part in pieces if part] or [""])))
+            # A lexical root check is insufficient: an ancestor may be a
+            # symlink/junction to a different tree.
+            try:
+                approved = os.path.realpath(root)
+                actual = os.path.realpath(candidate)
+                if os.path.commonpath((approved, actual)) != approved:
+                    continue
+            except (ValueError, OSError):
+                continue
+            candidates.append(candidate)
 
     unique: List[str] = []
     seen = set()
@@ -1610,7 +1630,10 @@ def _acquire_exclusive_lock(path_name: str, request_id: str) -> str:
 
 
 def _release_exclusive_lock(path_name: str) -> None:
-    release_owned_lock(path_name)
+    if release_owned_lock(path_name):
+        # Advisory lock inode remains so other processes can synchronize; the
+        # last request's hostname/PID need not travel on destination media.
+        clear_unheld_lock_payload(path_name)
 
 
 def _destination_lock_path(destination: str, request_id: str) -> str:

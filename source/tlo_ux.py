@@ -423,6 +423,7 @@ def _preview_config_for_root(config, root: str, complete_path_file: str, result:
 
     preview_config = copy.copy(config)
     preview_config.current_search_path = os.path.normpath(root)
+    preview_config.dry_run = True
     preview_config.current_search_index = 1
     preview_config.current_slam = ""
     preview_config.current_volume_label = ""
@@ -537,6 +538,24 @@ def preview_operation(
                             preview_config.tag_copy_and_delete_path = _copy_destination
                 initial_dir_walk(preview_config, root)
                 groups = _build_groups_from_search_path(preview_config, root)
+                collection_plans = []
+                if not tagger:
+                    from tlo_sibling_collections import discover_collection_plans, _logged_media_paths
+                    collection_plans = discover_collection_plans(root, _logged_media_paths(complete_path_file))
+                for collection in collection_plans:
+                    result.samples.append(PreviewItem(
+                        path=collection.final_path, media_files=0, shn_files=0,
+                        actions=(f"WOULD CONSOLIDATE {len(collection.members)} sibling folders (no changes in Dry Run)",),
+                        show_name=collection.base_name, artist='', album=collection.base_name,
+                        track_source='', notes=(
+                            'Actual run groups these sibling collections into this container; the operation is not currently reversible through TLO Reverse',
+                        ),
+                    ))
+                    result.issues.append(RunIssue(
+                        'Sibling collection consolidation',
+                        f"Would consolidate {len(collection.members)} folders into {collection.final_path}; TLO Reverse does not undo this consolidation",
+                        collection.final_path, 'warning', 'preview',
+                    ))
                 try:
                     artist_matcher = load_artist_matcher(preview_config)
                 except Exception as exc:
@@ -581,6 +600,15 @@ def preview_operation(
                             "CORRUPTION_NOT_ASSESSED (Dry Run cannot perform tag-write validation; no deletion performed)",
                         )
                     tags = [PreviewTag(**entry) for entry in (plan.get("tags", []) or [])]
+                    provisional = any(
+                        len(collection.members) > 1 and any(os.path.commonpath([os.path.abspath(m.path), os.path.abspath(d)]) == os.path.abspath(d)
+                            or os.path.commonpath([os.path.abspath(d), os.path.abspath(m.path)]) == os.path.abspath(m.path)
+                            for m in collection.members)
+                        for d in (group.get('music_dirs') or [group.get('main_dir_path') or root])
+                        for collection in collection_plans
+                    )
+                    if provisional:
+                        actions = tuple(actions) + ('PROVISIONAL: sibling consolidation changes the final show grouping',)
                     item = PreviewItem(
                         path=os.path.normpath(str(plan.get("folder") or group.get("main_dir_path") or root)),
                         media_files=len(audio_files),
@@ -603,6 +631,23 @@ def preview_operation(
         except Exception as exc:
             result.issues.append(RunIssue("Dry-run analysis failed", str(exc), root, "error", "preview"))
 
+    # Report the same kind of ambiguous album identity that the mutation
+    # preflight refuses. This warning helps users fix multiple-root conflicts
+    # before they press Apply, rather than discovering them during a long run.
+    if not result.truncated:
+        by_show = {}
+        for item in result.samples:
+            key = ' '.join((item.show_name or '').split()).casefold()
+            if not key:
+                continue
+            previous = by_show.setdefault(key, item.path)
+            if os.path.normcase(os.path.abspath(previous)) != os.path.normcase(os.path.abspath(item.path)):
+                result.issues.append(RunIssue(
+                    'Show/ALBUM identity collision',
+                    f"Two folders resolve to {item.show_name!r}: {previous} and {item.path}; "
+                    'rename/tag/copy mutations require distinct identities',
+                    item.path, 'warning', 'preview',
+                ))
     result.elapsed_seconds = time.monotonic() - started
     return result
 

@@ -156,7 +156,7 @@ OPTIONS = [
     Option(
         "convert_shn", "--convert-shn", "flag",
         gui="checkbox", gui_label="Convert shn", gui_row=1, gui_col=3,
-        help="Convert .shn/.shnf files to .flac during Tag, Full Inventory, or Add Shows; delete originals only after successful conversion.",
+        help="Convert .shn/.shnf files to .flac during Tag, Full Inventory, or Add Shows; place originals in Trash or same-volume recoverable holding after verified conversion; never hard-delete them.",
     ),
     Option(
         "artist_in_album", "--no-artist-in-album", "store_false",

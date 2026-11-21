@@ -30,7 +30,7 @@ LOG_FILE_PREFIXES = {
     "tag_legacy": "tag",
 }
 LOG_TOKEN_CHARS = string.digits + string.ascii_uppercase
-LOG_TOKEN_PATTERN = re.compile(r"^(?:conf|dead|comp|dups|groups|meta|tag|tags|tage)([A-Za-z0-9]+)\.(?:log|txt)$")
+LOG_TOKEN_PATTERN = re.compile(r"^(?:groups|tags|tage|conf|dead|comp|dups|meta|tag)([A-Za-z0-9]+)\.(?:log|txt)$")
 
 
 def sanitize_scope_label(label):
@@ -138,21 +138,34 @@ def existing_short_log_tokens(tlo_home):
     return used
 
 
+# Preserve all legacy one-character filenames exactly.  Multi-character tokens
+# begin at 10 after the 36 one-character tokens; the existing log-name parser
+# already permits alphanumerics of arbitrary length.
+MAX_LOG_TOKENS = len(LOG_TOKEN_CHARS) ** 2
+
+
 def allocate_log_tokens(tlo_home, count):
     requested = max(0, int(count or 0))
-    max_tokens = len(LOG_TOKEN_CHARS)
-    if requested > max_tokens:
+    if requested > MAX_LOG_TOKENS:
         raise ValueError(
             f"Too many simultaneous log tokens requested: {requested}. "
-            f"The short log-token range supports at most {max_tokens} active search paths or group files."
+            f"The current log-token range supports at most {MAX_LOG_TOKENS} active paths or groups."
         )
 
+    if requested == 0:
+        return []
     used = existing_short_log_tokens(tlo_home)
-    available = [token for token in LOG_TOKEN_CHARS if token not in used]
+    available = []
+    for index in range(MAX_LOG_TOKENS):
+        token = _token_to_string(index)
+        if token not in used:
+            available.append(token)
+            if len(available) == requested:
+                break
     if requested > len(available):
         raise ValueError(
-            f"Not enough short log tokens available: requested {requested}, available {len(available)}. "
-            "Archive or remove old tokenized logs under TLOHome/logs before starting another run."
+            f"Not enough log tokens available: requested {requested}, available {len(available)}. "
+            "Preserve existing log files for Reverse history; use a different TLOHome if necessary."
         )
     return available[:requested]
 
@@ -201,7 +214,7 @@ _FOLDER_OPERATION_LINE = re.compile(
 )
 
 
-def archive_folder_operations(tlo_home, tokens):
+def archive_folder_operations(tlo_home, tokens, operation_lines=None):
     """Persist reversibility before any token log is truncated or pruned.
 
     The archive is outside the token-file naming scheme, so subsequent inventory
@@ -210,22 +223,37 @@ def archive_folder_operations(tlo_home, tokens):
     """
     logs_dir = ensure_logs_dir(tlo_home)
     preserved = []
-    for token in _validated_log_tokens(tokens):
-        for prefix in ('tags', 'tag'):
-            original = _log_path_for_prefix(logs_dir, prefix, token)
-            if not os.path.isfile(original):
-                continue
-            with _suspend_file_log_handlers(original):
-                with open(original, 'r', encoding='utf-8') as stream:
-                    preserved.extend(line for line in stream
-                                     if _FOLDER_OPERATION_LINE.match(line.strip()))
-    if preserved:
-        destination = os.path.join(logs_dir, 'folderOperations.log')
-        with open(destination, 'a', encoding='utf-8', newline='') as archive:
-            archive.writelines(preserved)
+    if operation_lines is not None:
+        preserved = [line for line in operation_lines if _FOLDER_OPERATION_LINE.match(line.strip())]
+    else:
+        for token in _validated_log_tokens(tokens):
+            for prefix in ('tags', 'tag'):
+                original = _log_path_for_prefix(logs_dir, prefix, token)
+                if not os.path.isfile(original):
+                    continue
+                with _suspend_file_log_handlers(original):
+                    with open(original, 'r', encoding='utf-8', errors='surrogateescape') as stream:
+                        preserved.extend(line for line in stream
+                                         if _FOLDER_OPERATION_LINE.match(line.strip()))
+    if not preserved:
+        return 0
+    destination = os.path.join(logs_dir, 'folderOperations.log')
+    try:
+        with open(destination, 'r', encoding='utf-8', errors='surrogateescape') as stream:
+            existing = set(stream.readlines())
+    except FileNotFoundError:
+        existing = set()
+    new_lines = []
+    for line in preserved:
+        if line not in existing:
+            existing.add(line)
+            new_lines.append(line)
+    if new_lines:
+        with open(destination, 'a', encoding='utf-8', errors='surrogateescape', newline='') as archive:
+            archive.writelines(new_lines)
             archive.flush()
             os.fsync(archive.fileno())
-    return len(preserved)
+    return len(new_lines)
 
 
 def truncate_logs_for_tokens(tlo_home, tokens):
@@ -410,15 +438,20 @@ def _line_mentions_pruned_path(line, root_paths):
     return any(_path_under_any_scope(candidate, root_paths) for candidate in candidates)
 
 
-def _prune_line_log(path_name, root_paths):
+def _prune_line_log(path_name, root_paths, *, archive_home=None):
     with _suspend_file_log_handlers(path_name):
         try:
             with open(path_name, "r", encoding="utf-8", errors="surrogateescape") as infile:
                 lines = infile.readlines()
         except OSError:
             return False
-        out = [line for line in lines if not _line_mentions_pruned_path(line, root_paths)]
-        if len(out) != len(lines):
+        removed = [line for line in lines if _line_mentions_pruned_path(line, root_paths)]
+        if removed:
+            # Persist exactly the operations being removed, not the unrelated
+            # surviving operations in another branch of the same volume.
+            if archive_home is not None:
+                archive_folder_operations(archive_home, (), operation_lines=removed)
+            out = [line for line in lines if not _line_mentions_pruned_path(line, root_paths)]
             _atomic_rewrite_log(path_name, out)
             return True
         return False
@@ -436,7 +469,6 @@ def prune_logs_for_tokens_and_paths(tlo_home, tokens, root_paths):
     if not roots:
         return pruned
     token_list = _validated_log_tokens(tokens)
-    archive_folder_operations(tlo_home, token_list)
     logs_dir = ensure_logs_dir(tlo_home)
     for token_text in token_list:
         group_path = os.path.join(logs_dir, f"groups{token_text}.log")
@@ -447,7 +479,7 @@ def prune_logs_for_tokens_and_paths(tlo_home, tokens, root_paths):
             pruned.append(meta_path)
         for prefix in ("dead", "dups", "comp", "conf", "tag", "tags", "tage"):
             log_path = _log_path_for_prefix(logs_dir, prefix, token_text)
-            if _prune_line_log(log_path, roots):
+            if _prune_line_log(log_path, roots, archive_home=tlo_home if prefix in ('tag', 'tags') else None):
                 pruned.append(log_path)
     return pruned
 
@@ -628,7 +660,7 @@ class LogManager:
         logger.setLevel(logging.INFO)
         logger.propagate = False
         safe_mode = "a" if str(mode or "w").lower().startswith("a") else "w"
-        handler = logging.FileHandler(log_file, mode=safe_mode, encoding="utf-8")
+        handler = logging.FileHandler(log_file, mode=safe_mode, encoding="utf-8", errors="backslashreplace")
         handler.setLevel(logging.INFO)
         handler.setFormatter(logging.Formatter("%(message)s"))
         logger.addHandler(handler)
@@ -697,11 +729,11 @@ class LogManager:
             self._tag_success_logger.info(_descriptive_header("tagSuccessLog", search_path))
             self._tag_error_logger.info(_descriptive_header("tagErrorLog", search_path))
 
-    def start_search_path(self, search_path, index=None, log_token=None, volume_label="", log_mode="w"):
+    def start_search_path(self, search_path, index=None, log_token=None, volume_label="", log_mode="w", display_full_path=False):
         self.search_counter = index or 0
         scope_label = sanitize_scope_label(search_path)
         token = str(log_token or self.search_counter or "0")
-        display_search_path = format_log_volume_path(volume_label, search_path)
+        display_search_path = str(search_path) if display_full_path else format_log_volume_path(volume_label, search_path)
         append_mode = str(log_mode or "w").lower().startswith("a")
         self._switch_to_scope(scope_label, token, display_search_path, log_mode=log_mode)
         if not append_mode:

@@ -72,7 +72,17 @@ def compose_unc_path(label: str, stored: str) -> str:
     source_subpath = str(stored or "")
     if any(part == ".." for part in re.split(r"[\\/]+", source_subpath)) or "\x00" in source_subpath:
         return ""
-    subpath = source_subpath.replace("/", "\\").lstrip("\\")
+    # Older bootlists may contain the whole share path, not a relative tail.
+    # Never silently reinterpret a different share as a path beneath this one.
+    full_unc = unc_parts(source_subpath)
+    if full_unc:
+        if unc_root(source_subpath).casefold() != root.casefold():
+            return ""
+        subpath = full_unc[2].lstrip("\\")
+    elif source_subpath.replace("/", "\\").startswith("\\\\"):
+        return ""  # Malformed/device UNC syntax
+    else:
+        subpath = source_subpath.replace("/", "\\").lstrip("\\")
     candidate = ntpath.normpath(ntpath.join(root, subpath)) if subpath else root
     if unc_root(candidate).casefold() != root.casefold():
         return ""

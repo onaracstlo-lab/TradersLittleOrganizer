@@ -22,6 +22,9 @@ from tlo_ffmpeg import bundled_ffmpeg_executable
 from tlo_runtime_control import is_cancel_requested
 
 DECODE_TIMEOUT_SECONDS = 1800.0
+# Successful full decode and sample count for a FLAC whose optional MD5 was
+# never computed. This is not authenticated integrity or a claim of playability.
+DECODE_ONLY_UNSET_MD5 = 'decode-only-unset-md5' 
 _CHUNK = 256 * 1024
 _MAX_DIAGNOSTIC = 128 * 1024
 
@@ -34,7 +37,7 @@ class FingerprintUnverifiable(RuntimeError):
     """Infrastructure failure, cancellation, or unresolved decoder result."""
 
 
-def _streaminfo(path):
+def _streaminfo(path, *, allow_unset_md5=False):
     """Return (sample rate, channels, depth, total samples, MD5) from STREAMINFO.
 
     Parsing STREAMINFO is not sufficient to establish validity.  Every FLAC
@@ -51,7 +54,7 @@ def _streaminfo(path):
         raise FingerprintCorrupt(f'invalid FLAC STREAMINFO: {exc}') from exc
     if not (rate > 0 and 1 <= channels <= 8 and 4 <= depth <= 32):
         raise FingerprintCorrupt('invalid FLAC sample rate, channel count, or sample depth')
-    if digest == bytes(16):
+    if digest == bytes(16) and not allow_unset_md5:
         # STREAMINFO explicitly permits an all-zero MD5 to mean "not computed".
         # This stream cannot be authenticated using the stored fingerprint.
         # Crucially, unverifiable files must never trigger corruption deletion.
@@ -110,7 +113,7 @@ def _fingerprint_from_pcm(source, depth, container_bits, channels):
 def verify_flac_fingerprint(
     path, *, ffmpeg_executable=None, popen_factory=subprocess.Popen,
     timeout_seconds=DECODE_TIMEOUT_SECONDS, cancel_check=is_cancel_requested,
-    hidden_subprocess_kwargs=None,
+    hidden_subprocess_kwargs=None, allow_unset_md5=False,
 ):
     """True only when the complete FFmpeg decode agrees with STREAMINFO MD5.
 
@@ -124,7 +127,7 @@ def verify_flac_fingerprint(
         raise FingerprintUnverifiable('bundled FFmpeg missing')
     try:
         before = os.stat(normalized)
-        rate, channels, depth, total, expected_md5 = _streaminfo(normalized)
+        rate, channels, depth, total, expected_md5 = _streaminfo(normalized, allow_unset_md5=allow_unset_md5)
     except (OSError, MemoryError) as exc:
         raise FingerprintUnverifiable(f'cannot read file: {exc}') from exc
     codec, fmt, container_bits = _pcm_format(depth)
@@ -183,6 +186,29 @@ def verify_flac_fingerprint(
                 raise FingerprintUnverifiable('FLAC changed during fingerprint verification')
             if total and decoded_samples != total:
                 raise FingerprintCorrupt(f'FLAC sample count mismatch: STREAMINFO={total}, decoded={decoded_samples}')
+            if expected_md5 == bytes(16):
+                # A decode exit code of zero does not prove all FLAC frames were
+                # recovered: FFmpeg can omit damaged frames without failing.
+                # Treat decoder diagnostics as suspect, NEVER as authority to
+                # delete an otherwise taggable file.
+                suspected = ('invalid residual', 'decode_frame() failed',
+                             'invalid data found', 'crc mismatch',
+                             'error while decoding', 'corrupt input')
+                if any(marker in details for marker in suspected):
+                    raise FingerprintUnverifiable(
+                        'FLAC STREAMINFO MD5 unset; decoder reported damaged/omitted frames; '
+                        'audio integrity not established')
+                if not total:
+                    # Pipe-encoded FLAC commonly leaves both fields unknown.
+                    # A truncated/bit-flipped stream can yield a shorter, clean
+                    # PCM stream with exit 0; no authenticating baseline exists.
+                    raise FingerprintUnverifiable(
+                        'FLAC STREAMINFO MD5 and total_samples are both unset; '
+                        'cannot establish audio completeness, even if tagging succeeds')
+                # With known total_samples and a matching decode count, tagging
+                # may continue under the documented decode-only policy, but this
+                # is not authenticated integrity and never permits deduplication.
+                return DECODE_ONLY_UNSET_MD5
             if actual_md5 != expected_md5:
                 raise FingerprintCorrupt(f'FLAC audio fingerprint mismatch: expected={expected_md5.hex()}, decoded={actual_md5.hex()}')
             return True

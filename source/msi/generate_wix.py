@@ -252,6 +252,11 @@ def generate(stage, wxs, version, main_exe=None):
         search_rel = search_candidates[0].relative_to(stage).as_posix().replace("/", "\\")
         elt(shortcut, "Shortcut", Id="TLOSearchStartMenuShortcut", Name="TLO Search",
             Target="[INSTALLFOLDER]" + search_rel, WorkingDirectory="INSTALLFOLDER", Advertise="no")
+    artist_search_candidates = [p for p in files if p.name.lower() == "search-artist-db.exe"]
+    if len(artist_search_candidates) == 1:
+        artist_rel = artist_search_candidates[0].relative_to(stage).as_posix().replace("/", "\\")
+        elt(shortcut, "Shortcut", Id="TLOArtistDatabaseSearchShortcut", Name="TLO Artist Database Search",
+            Target="[INSTALLFOLDER]" + artist_rel, WorkingDirectory="INSTALLFOLDER", Advertise="no")
     elt(shortcut, "RemoveFolder", Id="RemoveStartMenu", On="uninstall")
     elt(shortcut, "RegistryValue", Root="HKCU", Key=PER_USER_INSTALL_KEY,
         Name="StartMenuShortcut", Type="integer", Value="1", KeyPath="yes")

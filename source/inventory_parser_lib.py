@@ -32,6 +32,7 @@ class Config:
     debug: bool
     silent: bool
     TLOHome: str
+    dry_run: bool = False
     logs: object = None
     tlo_dbs_dir: str = ""
     artist_sqlite_db_file: str = ""
@@ -145,6 +146,16 @@ def _validate_tag_copy_values(values: dict, parser=None) -> None:
         raise ValueError(message)
 
     copy_delete_destination = str(values.get("tag_copy_and_delete_path") or "").strip()
+    enabled = [name for name, active in (
+        ('--tag-during-inventory', bool(values.get('tag_during_inventory'))),
+        ('--tag-copy-during-inventory', bool(values.get('tag_copy_during_inventory'))),
+        ('--tag-copy-and-delete', bool(copy_delete_destination)),
+    ) if active]
+    if len(enabled) > 1:
+        message = 'Tagging modes are mutually exclusive; conflicting arguments: ' + ', '.join(enabled)
+        if parser is not None:
+            parser.error(message)
+        raise ValueError(message)
     if bool(values.get("tag_copy_during_inventory", False)):
         destination = str(values.get("tag_copy_destination") or "").strip()
         if not destination:
@@ -189,6 +200,8 @@ def build_inventory_parser() -> argparse.ArgumentParser:
         description="Inventory, identify, organize, and optionally tag live-music show folders.",
         formatter_class=TLOArgumentDefaultsHelpFormatter,
     )
+    parser.add_argument("--dry-run", action="store_true", default=False,
+                        help="Preview search path and enabled operations without scanning, tagging, renaming or modifying files. No catalog is written.")
     parser.add_argument("--debug", nargs="?", const=True, type=parse_bool, default=False, metavar="BOOL", help="Enable debug output. With no value, enables debug output; also accepts true/false, yes/no, y/n, 1/0. This is the only toggle that accepts an optional BOOL for backwards compatibility.")
     parser.add_argument("--TLOHome", metavar="DIR", help="Fully qualified existing writable directory path for TLOHome. Defaults from the TLOHome environment variable when present.")
     parser.add_argument("--myTLO", metavar="STRING", help=argparse.SUPPRESS)
@@ -288,6 +301,7 @@ def build_config():
     config = Config(
         debug=bool(cli_config.get("debug", False)),
         silent=bool(values.get("silent", False)),
+        dry_run=bool(cli_config.get("dry_run", False)),
         TLOHome=cli_config["TLOHome"],
         search_path_override=(values.get("search_path_override") or ""),
         search_path_slam_override=(cli_config.get("search_path_slam_override") or ""),

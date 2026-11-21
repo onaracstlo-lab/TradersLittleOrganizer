@@ -103,6 +103,6 @@ def test_gui_auto_update_contract_uses_yes_skip_and_discovery_only():
         text = (root / name).read_text(encoding="utf-8")
         assert 'text="Yes"' in text
         assert 'text="Skip"' in text
-        assert "download=manual" in text
+        assert "download=False" in text
         assert "download_update(" in text
         assert "ask before downloading the preferred signed update to Downloads" in text

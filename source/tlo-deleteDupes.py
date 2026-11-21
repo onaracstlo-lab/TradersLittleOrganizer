@@ -187,9 +187,14 @@ def _scan_tree(root: str) -> TreeManifest:
     directories: Set[str] = set()
     files: Dict[str, int] = {}
 
-    def visit(current: str) -> None:
+    # Explicit work stack: arbitrarily nested collections must not exhaust the
+    # Python recursion limit.  Never follow symlinks, even inside a candidate.
+    pending = [root]
+    while pending:
+        current = pending.pop()
         try:
-            entries = list(os.scandir(current))
+            with os.scandir(current) as iterator:
+                entries = list(iterator)
         except OSError as exc:
             raise DeleteDupesError(f"Unable to read directory during comparison: {current}: {exc}") from exc
         for entry in entries:
@@ -202,7 +207,7 @@ def _scan_tree(root: str) -> TreeManifest:
                     if is_phase1_pruned_directory(entry.name):
                         continue
                     directories.add(relative)
-                    visit(full_path)
+                    pending.append(full_path)
                 elif entry.is_file(follow_symlinks=False):
                     files[relative] = entry.stat(follow_symlinks=False).st_size
                 else:
@@ -210,7 +215,6 @@ def _scan_tree(root: str) -> TreeManifest:
             except OSError as exc:
                 raise DeleteDupesError(f"Unable to inspect path during comparison: {full_path}: {exc}") from exc
 
-    visit(root)
     return TreeManifest(
         directories=frozenset(directories),
         files=tuple(sorted(files.items())),
@@ -947,7 +951,20 @@ def repair_corrupt_flacs_from_copies(
         if original_health is True:
             continue
         if original_health is None:
-            emit(f"FLAC validation timed out; keeper cluster is unverifiable: {original_flac}", error=True)
+            from tlo_flac_fingerprint import FingerprintUnverifiable, _streaminfo
+            try:
+                _streaminfo(original_flac)
+            except FingerprintUnverifiable as exc:
+                reason = str(exc)
+            except Exception:
+                reason = 'validator unavailable, cancelled, timed out, or file access failure'
+            else:
+                reason = 'validator unavailable, cancelled, timed out, or file access failure'
+            emit(
+                f"Keeper FLAC cannot be verified: {original_flac} | {reason}. "
+                "No duplicate moved; an unset MD5 alone does not imply corruption. "
+                "Consider making a separately backed-up, checksum-bearing re-encode for comparison.", error=True,
+            )
             return repaired_count, unrepaired_count, True
 
         emit(f"Corrupt FLAC detected in kept folder: {original_flac}", error=True)
@@ -959,7 +976,7 @@ def repair_corrupt_flacs_from_copies(
             candidate_health = health_check(candidate_flac, ffmpeg_executable=ffmpeg_executable)
             if candidate_health is not True:
                 if candidate_health is None:
-                    emit(f"FLAC validation timed out for repair candidate; skipping: {candidate_flac}", error=True)
+                    emit(f"FLAC integrity unverifiable for repair candidate (no copy used): {candidate_flac}", error=True)
                 continue
             try:
                 replace_func(candidate_flac, original_flac)
@@ -981,7 +998,7 @@ def repair_corrupt_flacs_from_copies(
                 repaired = True
                 break
             if replacement_health is None:
-                emit(f"Replacement validation timed out; keeper cluster is unverifiable: {original_flac}", error=True)
+                emit(f"Replacement integrity unverifiable; kept folder and duplicate candidates preserved: {original_flac}", error=True)
                 return repaired_count, unrepaired_count, True
 
             emit(
@@ -1094,7 +1111,7 @@ def delete_duplicate_copy_directories(
             )
             if keeper_unverifiable:
                 emit(
-                    f"Skipping duplicate cluster because kept folder has an unverifiable FLAC: {original_path}",
+                    f"Skipping duplicate cluster; keeper has unverifiable FLAC (see file-specific reason above): {original_path}",
                     error=True,
                 )
                 continue

@@ -5,6 +5,7 @@ import re
 
 from tlo_runtime_control import throttle_point, normalize_performance_mode
 from tlo_path_policy import OS_MANAGED_DIR_NAMES, is_phase1_pruned_directory
+from console_output_lib import console_emit
 
 SYSTEM_DIR_NAMES_TO_PRUNE = OS_MANAGED_DIR_NAMES
 
@@ -120,6 +121,33 @@ def _walk_and_log_recursive(config, current_path, dir_counter):
 
         sample_media_file = _phase1_first_real_music_file(path_now, sorted_entries)
         if sample_media_file:
+            if any(0xDC80 <= ord(char) <= 0xDCFF for char in sample_media_file):
+                # POSIX filenames may contain raw bytes which are not UTF-8.
+                # They cannot be safely put into UTF-8 inventory/setlist paths.
+                # Use an ASCII-hex identifier so the path is not silently lost
+                # and the user can rename the folder without byte ambiguity.
+                offending_path = (sample_media_file if any(0xDC80 <= ord(c) <= 0xDCFF for c in sample_media_file)
+                                  else path_now)
+                bytes_hex = os.fsencode(offending_path).hex()
+                path_escaped = os.fsencode(offending_path).decode('utf-8', errors='backslashreplace')
+                notice = (f"UNIDENTIFIED_NON_UTF8_PATH: path_escaped={path_escaped} | "
+                          f"bytes_hex={bytes_hex} | invalid UTF-8 filename; "
+                          "rename the offending file or directory using a UTF-8 name before inventory")
+                config.current_non_utf8_path_count = int(getattr(config, 'current_non_utf8_path_count', 0)) + 1
+                config.logs.dead_end(notice)
+                console_emit('WARNING: ' + notice)
+                home = str(getattr(config, 'TLOHome', '') or '')
+                if home and os.path.isdir(home) and not bool(getattr(config, 'dry_run', False)):
+                    target = os.path.join(home, 'unidentifiedShows.txt')
+                    already_reported = set()
+                    if os.path.isfile(target):
+                        with open(target, 'r', encoding='utf-8') as infile:
+                            already_reported = set(infile.read().splitlines())
+                    if notice not in already_reported:
+                        with open(target, 'a', encoding='utf-8') as outfile:
+                            outfile.write(notice + '\n')
+                # Do not descend into a path we cannot represent in UTF-8.
+                continue
             config.logs.complete_paths(sample_media_file)
 
         child_dirs = []
@@ -163,7 +191,12 @@ def initial_dir_walk(config, start_path):
     if _phase1_should_prune_dir(os.path.basename(os.path.normpath(normalized_start))):
         return 0
 
+    starting_non_utf8_count = int(getattr(config, 'current_non_utf8_path_count', 0))
     dir_counter = 1
     dir_counter = _walk_and_log_recursive(config, normalized_start, dir_counter)
+    excluded = int(getattr(config, 'current_non_utf8_path_count', 0)) - starting_non_utf8_count
+    if excluded:
+        config.logs.dead_end("PHASE1_NON_UTF8_UNIDENTIFIED_COUNT: %s", excluded)
+        console_emit(f"Phase 1: {excluded} non-UTF-8 media paths excluded and listed in unidentifiedShows.txt")
 
     return dir_counter

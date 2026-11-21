@@ -795,6 +795,13 @@ def _parse_gui_command_line(argv=None):
         args.as_is_artist_name = legacy_artist_mode in {"as-is", "asis", "as is", "raw"}
     if str(getattr(args, "tag_copy_and_delete_path", "") or "").strip():
         args.tag_copy_and_delete_enabled = True
+    cli_modes = [mode for mode in (
+        'tag_during_inventory', 'tag_copy_during_inventory', 'tag_copy_and_delete_enabled'
+    ) if mode in args._explicit_preferences_fields and bool(getattr(args, mode, False))]
+    if args.tag_copy_and_delete_enabled and 'tag_copy_and_delete_enabled' not in cli_modes:
+        cli_modes.append('tag_copy_and_delete_enabled')
+    if len(cli_modes) > 1:
+        parser.error('Tagging modes are mutually exclusive; conflicting command-line options: ' + ', '.join(cli_modes))
     return args
 
 def _backup_alert_message(script_path: str) -> str:
@@ -1753,7 +1760,8 @@ class App:
             tlo_home = ""
 
         def worker():
-            result = check_for_updates(tlo_home, manual=manual, download=manual)
+            # Both manual and automatic checks request consent before downloading.
+            result = check_for_updates(tlo_home, manual=manual, download=False)
             schedule_tk_after(self.root, 0, lambda: self._finish_update_check(result, manual))
 
         if manual:
@@ -1824,7 +1832,7 @@ class App:
             debug_suppressed_exception(__name__, exc)
 
     def _finish_update_check(self, result, manual):
-        if not manual and result.status == "available":
+        if result.status == "available":
             if self._ask_auto_update_download(result):
                 self._start_auto_update_download(result)
             return
@@ -3249,7 +3257,7 @@ class App:
         return result["action"]
 
     def _ask_multiple_existing_path_actions(self, collisions):
-        result = {item.get("item_index", idx): "reinventory" for idx, item in enumerate(collisions)}
+        result = {item.get("item_index", idx): "skip" for idx, item in enumerate(collisions)}
         variables = {}
         dialog = tk.Toplevel(self.root)
         dialog.title(versioned_title("Existing TLO Inventory"))
@@ -3265,7 +3273,7 @@ class App:
 
         for row, item in enumerate(collisions, start=1):
             key = item.get("item_index", row - 1)
-            var = tk.StringVar(value="reinventory")
+            var = tk.StringVar(value="skip")
             variables[key] = var
             volume_label = item.get("volume", "")
             path_name = item.get("path", "")
@@ -4084,9 +4092,9 @@ class ManualUpdatesWindow:
 
         buttons = ttk.Frame(frm)
         buttons.grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 4))
-        self.save_button = ttk.Button(buttons, text="Save", command=self._save)
+        self.save_button = ttk.Button(buttons, text="Apply Changes", command=self._save)
         self.save_button.grid(row=0, column=0, padx=(0, 6))
-        self.quit_button = ttk.Button(buttons, text="Quit", command=self._quit)
+        self.quit_button = ttk.Button(buttons, text="Close", command=self._quit)
         self.quit_button.grid(row=0, column=1, padx=6)
         ttk.Label(frm, textvariable=self.status_var, justify="left", wraplength=900).grid(
             row=5, column=0, columnspan=2, sticky="w", pady=(6, 0)
@@ -4228,6 +4236,12 @@ class ManualUpdatesWindow:
 
     def _save(self):
         if self._processing:
+            return
+        dry_var = getattr(self.parent_app, 'dry_run_var', None)
+        if dry_var is not None and bool(dry_var.get()):
+            messagebox.showwarning(_dialog_title("Manual Updates"),
+                                   "Dry Run is selected in the main window. Manual Updates will not rename folders, write tags, or alter catalog files. Clear Dry Run before applying changes.",
+                                   parent=self.window)
             return
         original = self.original_var.get().strip()
         if not original:

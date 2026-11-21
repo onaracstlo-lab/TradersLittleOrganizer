@@ -277,6 +277,16 @@ def load_artist_matcher(config) -> ArtistMatcher:
         if norm:
             master_norms.setdefault(master, set()).add(norm)
 
+    # Write/read symmetry: TLO's compliant folder names are ASCII folded.
+    # Index every master and alias under that same spelling; preserve collision
+    # reporting instead of guessing when two masters fold to one spelling.
+    from tlo_text_utils import standard_ascii_text
+    for master, aliases in master_aliases.items():
+        for alias in aliases:
+            folded = standard_ascii_text(alias).casefold()
+            if folded:
+                exact_map.setdefault(folded, set()).add(master)
+
     matcher.exact_map = exact_map
     matcher.compressed_map = compressed_map
     matcher.master_aliases = master_aliases

@@ -763,6 +763,7 @@ def _inspect_downloaded_package(
 
 
 def _package_message(package_kind: str, databases_included: bool, package_build: int | None = None) -> tuple[str, str]:
+    # package_build is retained for old callers; message wording is build-independent.
     if package_kind == "update":
         kind_text = "update"
         if databases_included:

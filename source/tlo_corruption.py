@@ -24,18 +24,10 @@ from mutagen.mp4 import MP4FreeForm, MP4Tags
 
 from tlo_diagnostics import debug_suppressed_exception
 from tlo_ffmpeg import bundled_ffmpeg_executable
-from tlo_flac_fingerprint import verify_flac_fingerprint, FingerprintCorrupt, FingerprintUnverifiable
+from tlo_flac_fingerprint import (
+    DECODE_ONLY_UNSET_MD5, verify_flac_fingerprint, FingerprintCorrupt, FingerprintUnverifiable,
+)
 from tlo_runtime_control import is_cancel_requested
-
-try:
-    from mutagen.flac import FLAC
-except Exception:
-    FLAC = None
-
-try:
-    from mutagen.mp3 import MP3
-except Exception:
-    MP3 = None
 
 TRASH_SUBPROCESS_TIMEOUT_SECONDS = 60.0
 DEEP_AUDIO_CHECK_TIMEOUT_SECONDS = 1800.0
@@ -346,6 +338,7 @@ def _deep_audio_stream_status(
                 normalized, ffmpeg_executable=executable,
                 popen_factory=popen_factory, timeout_seconds=timeout_seconds,
                 cancel_check=cancel_check, hidden_subprocess_kwargs=_hidden_windows_subprocess_kwargs(),
+                allow_unset_md5=True,
             )
         except FingerprintCorrupt:
             return False
@@ -392,7 +385,7 @@ def _deep_audio_stream_status(
         return None
 
 
-def classify_audio_paths(paths, *, check_tag_write=False, deep_audio_check=False):
+def classify_audio_paths(paths, *, check_tag_write=False, deep_audio_check=False, decode_only_details=None):
     """Find proven corruption only when tagging or Deep Audio Check is active.
 
     Try the reversible tag round trip first.  A non-access tagging failure
@@ -416,10 +409,27 @@ def classify_audio_paths(paths, *, check_tag_write=False, deep_audio_check=False
             # a mutagen-compatible metadata container.
             if deep_audio_check:
                 stream_status = _deep_audio_stream_status(path)
+                if stream_status == DECODE_ONLY_UNSET_MD5:
+                    # The temporary tag was saved, read, and restored. Full
+                    # audio decoded, but no MD5 was supplied by the FLAC. This
+                    # is not corruption and must not silently suppress tagging.
+                    if decode_only_details is not None:
+                        decode_only_details.append((path, "STREAMINFO MD5 unset; tag-write probe and full decode passed; audio fingerprint not authenticated"))
                 if stream_status is None:
-                    raise _DeepAudioCheckUnverifiable(
-                        "full-stream checker unavailable, cancelled, timed out, or access failed"
-                    )
+                    reason = "full-stream checker unavailable, cancelled, timed out, or access failed"
+                    if Path(path).suffix.lower() == '.flac':
+                        try:
+                            from mutagen.flac import FLAC
+                            header = FLAC(path).info
+                            if int(header.md5_signature) == 0 and int(header.total_samples) == 0:
+                                reason = ("FLAC STREAMINFO MD5 and total_samples unset; "
+                                          "audio completeness cannot be authenticated; "
+                                          "no corruption deletion or further tagging")
+                        except Exception as exc:
+                            # Keep the conservative unverifiable verdict and
+                            # record why optional header inspection failed.
+                            debug_suppressed_exception("FLAC STREAMINFO detail inspection", exc)
+                    raise _DeepAudioCheckUnverifiable(reason)
                 if stream_status is False:
                     raise _DeepAudioDecodeError("audio decode/fingerprint validation failed")
         except (_TagWriteRestoreError, _DeepAudioCheckUnverifiable) as exc:
@@ -963,6 +973,7 @@ class CorruptionAssessment:
     audio_files: list[str] = field(default_factory=list)
     corrupt_files: list[str] = field(default_factory=list)
     unverifiable_details: list[tuple[str, str]] = field(default_factory=list)
+    decode_only_details: list[tuple[str, str]] = field(default_factory=list)
     action: str = "none"
     corruption_percent: float = 0.0
     corrupt_files_policy: str = "delete"
@@ -1006,8 +1017,10 @@ def assess_group_corruption(group, corrupt_files="delete", corrupt_folders="all"
                                     corrupt_folders_policy=corrupt_folders,
                                     folder_threshold=folder_threshold)
     audio_files, snapshot_errors = group_audio_snapshot(group)
+    decode_only_details = []
     corrupt_paths, validator_errors = classify_audio_paths(
-        audio_files, check_tag_write=bool(check_tag_write), deep_audio_check=bool(deep_audio_check)
+        audio_files, check_tag_write=bool(check_tag_write), deep_audio_check=bool(deep_audio_check),
+        decode_only_details=decode_only_details,
     )
     unverifiable_details = list(snapshot_errors) + list(validator_errors)
     action = "none"
@@ -1025,6 +1038,7 @@ def assess_group_corruption(group, corrupt_files="delete", corrupt_folders="all"
         audio_files=list(audio_files),
         corrupt_files=list(corrupt_paths),
         unverifiable_details=list(unverifiable_details),
+        decode_only_details=list(decode_only_details),
         action=action,
         corruption_percent=percent,
         corrupt_files_policy=corrupt_files,
@@ -1083,6 +1097,20 @@ def apply_corruption_assessment(config, group, record, assessment):
     folder_policy = assessment.corrupt_folders_policy
     threshold = assessment.folder_threshold
 
+    if assessment.decode_only_details:
+        config.logs.conflicts(
+            "DEEP_AUDIO_CHECK_MD5_UNSET: %s | files=%s | temporary tag write and full decode passed; no stored MD5 for audio authentication; tagging permitted",
+            record.main_dir_path, len(assessment.decode_only_details),
+        )
+        config.logs.tag(
+            "DEEP_AUDIO_CHECK_MD5_UNSET: %s | %s FLAC file(s); NOT MD5-authenticated; tagging permitted",
+            record.main_dir_path, len(assessment.decode_only_details),
+        )
+        from console_output_lib import console_emit
+        console_emit(
+            f"Deep Audio Check: {len(assessment.decode_only_details)} FLAC(s) have unset MD5 in {record.main_dir_path}; "
+            "tag write and full decode passed (audio fingerprint not authenticated)."
+        )
     if assessment.unverifiable:
         detail_text = "; ".join(f"{path}: {detail}" for path, detail in assessment.unverifiable_details[:8])
         if len(assessment.unverifiable_details) > 8:

@@ -3,6 +3,7 @@ __version__ = _TLO_CANONICAL_VERSION
 
 import base64
 import csv
+import errno
 import json
 import ntpath
 import os
@@ -634,10 +635,97 @@ def _unique_destination_path(dest_dir: str, leaf_name: str) -> str:
         index += 1
 
 
+def _move_source_and_target_share_device(source: str, destination_dir: str) -> bool:
+    """Best-effort topology check; EXDEV from rename is authoritative."""
+    try:
+        return os.stat(source).st_dev == os.stat(destination_dir).st_dev
+    except OSError as exc:
+        raise InventoryUpdateError(f"Cannot verify Add Shows transfer filesystem: {exc}") from exc
+
+
+def _verified_cross_device_folder_move(source: str, destination_dir: str, leaf: str) -> str:
+    """Copy every entry to hidden staging, verify full SHA-256 tree, then publish.
+
+    Unlike shutil.move's cross-device fallback, the source cannot be deleted
+    until the entire source tree has been compared against the published copy.
+    A failed copy/verification leaves the source untouched and no visible show.
+    """
+    from tlo_tag_lib import (  # Existing copy/delete verification and no-replace publish primitives.
+        _cleanup_owned_partial,
+        _create_owned_partial_copy,
+        _publish_verified_transfer,
+        _tree_contains_symlink,
+        _verify_copy_by_file_size,
+        _verify_copy_exact,
+    )
+
+    if _tree_contains_symlink(source):
+        raise InventoryUpdateError(f"Add Shows cross-device move refuses symbolic links: {source}")
+    stage = _create_owned_partial_copy(destination_dir)
+    try:
+        # Include all files, including recovery material, when moving ownership.
+        try:
+            shutil.copytree(source, stage, dirs_exist_ok=True, symlinks=True)
+        except shutil.Error as exc:
+            # shutil.Error carries raw tuple lists, often with absolute source
+            # paths. Surface a useful failure and retain the original tree.
+            failures = exc.args[0] if exc.args else []
+            count = len(failures) if isinstance(failures, list) else 1
+            raise InventoryUpdateError(
+                f"Add Shows could not copy {count} file(s) to the verified staging area. "
+                "The original folder was not deleted; inspect file permissions, "
+                "open handles and available space before retrying."
+            ) from exc
+        if _tree_contains_symlink(stage):
+            raise InventoryUpdateError(f"Add Shows staged copy contains symbolic links: {stage}")
+        _verify_copy_by_file_size(source, stage)
+        _verify_copy_exact(source, stage)
+        published = _publish_verified_transfer(stage, destination_dir, leaf, source)
+    finally:
+        _cleanup_owned_partial(stage)
+    try:
+        shutil.rmtree(source)
+    except OSError as exc:
+        raise InventoryUpdateError(
+            "Add Shows destination was fully verified and published, but cleanup of "
+            f"the source failed: {source}; destination={published}. "
+            "Both locations may contain files; reconcile manually before retrying. "
+            f"Details: {exc}"
+        ) from exc
+    return published
+
+
 def move_folder_to(folder_path: str, dest_dir: str) -> str:
-    destination = _unique_destination_path(dest_dir, os.path.basename(os.path.normpath(folder_path)))
-    shutil.move(folder_path, destination)
-    return destination
+    """Move an Add Shows folder without unverified cross-device source deletion."""
+    from tlo_tag_lib import _publish_staged_directory_noreplace
+
+    source = os.path.normpath(folder_path)
+    target_dir = os.path.normpath(dest_dir)
+    if not os.path.isdir(source) or os.path.islink(source):
+        raise InventoryUpdateError(f"Add Shows source must be a real directory: {source}")
+    os.makedirs(target_dir, exist_ok=True)
+    try:
+        nested_destination = os.path.commonpath((os.path.realpath(source), os.path.realpath(target_dir))) == os.path.realpath(source)
+    except ValueError:  # Different Windows drive letters are not comparable.
+        nested_destination = False
+    if nested_destination:
+        raise InventoryUpdateError("Add Shows destination cannot be the source or inside its tree")
+    leaf = os.path.basename(source)
+    if _move_source_and_target_share_device(source, target_dir):
+        for _ in range(100):
+            destination = _unique_destination_path(target_dir, leaf)
+            try:
+                _publish_staged_directory_noreplace(source, destination)
+                return destination
+            except OSError as exc:
+                if exc.errno == errno.EXDEV:
+                    break
+                if exc.errno in (errno.EEXIST, errno.ENOTEMPTY):
+                    continue
+                raise
+        else:
+            raise InventoryUpdateError(f"No free destination for Add Shows move: {target_dir}")
+    return _verified_cross_device_folder_move(source, target_dir, leaf)
 
 
 def _safe_compliant_folder_name(show_name: str, fallback: str = "TLO Show") -> str:

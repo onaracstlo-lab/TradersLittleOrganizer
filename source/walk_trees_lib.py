@@ -494,7 +494,7 @@ def walk_trees(config):
                 if mutation_requested and pending_items:
                     raise RuntimeError(
                         "Parallel worker stopped during a potentially mutating inventory. "
-                        "Completed volumes were retained; unfinished volume status is uncertain. "
+                        "Changes already made on completed volumes remain on disk; bootlist and setlist outputs were not finalized. Unfinished volume status is uncertain. "
                         "No automatic replay was attempted. Inspect logs and folders before re-inventory."
                     ) from exc
                 console_print(config, f"Parallel pool failed; keeping {len(completed)} completed path(s), "

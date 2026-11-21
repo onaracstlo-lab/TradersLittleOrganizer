@@ -30,6 +30,9 @@ from tlo_bootlist_volume_policy import (
     volume_key,
 )
 from tlo_phase23_v2 import _find_date_matches
+from tlo_manual_undo import (
+    begin_manual_undo, finish_manual_undo, rollback_manual_tags,
+)
 
 
 class ManualUpdateError(RuntimeError):
@@ -50,13 +53,22 @@ def _is_comment_line(text: str) -> bool:
 
 
 def _validate_new_leaf(value: str) -> str:
-    leaf = strip_optional_quotes(str(value or "").strip())
+    raw_leaf = str(value or "")
+    if raw_leaf.rstrip(" ") != raw_leaf:
+        raise ManualUpdateError("New Name cannot end in spaces on Windows")
+    leaf = strip_optional_quotes(raw_leaf.strip())
     if not leaf:
         raise ManualUpdateError("New Name is required.")
     if leaf in {".", ".."} or "/" in leaf or "\\" in leaf:
         raise ManualUpdateError(f"New Name must contain only a folder name, not a path: {value}")
-    if os.name == "nt" and any(ch in leaf for ch in '<>:"|?*'):
-        raise ManualUpdateError(f"New Name contains characters Windows does not allow in a folder name: {leaf}")
+    # Collections routinely move between Windows, Linux and NAS shares. Reject
+    # cross-platform unsafe names on every host, not only native Windows.
+    if (any(ch in leaf for ch in '<>:"|?*') or
+            any(ord(ch) < 32 for ch in leaf) or leaf.endswith((".", " ")) or
+            leaf.split(".", 1)[0].casefold() in
+            {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10)),
+             *(f"lpt{i}" for i in range(1, 10))}):
+        raise ManualUpdateError(f"New Name is not portable to Windows: {leaf}")
     return leaf
 
 
@@ -411,6 +423,11 @@ def apply_folder_manual_update(
         if show not in surviving_old_shows:
             setlists_safe_to_delete.extend(family)
     snapshots = _snapshot_setlists(old_setlists)
+    # Log the original metadata before any folder/tag mutation. No audio copy.
+    undo_journal = begin_manual_undo(
+        config.TLOHome, original, target, mode='inventory', update_tags=update_tags,
+        setlist_paths=list(old_setlists) + infer_setlist_paths_for_show(config.TLOHome, new_leaf),
+    )
 
     renamed_by_tlo = False
     if os.path.isdir(original):
@@ -462,6 +479,7 @@ def apply_folder_manual_update(
                 "VolumePath": _replace_volume_path_leaf(old_row.get("VolumePath", ""), old_leaf, new_leaf),
             })
         write_bootlist(config.TLOHome, kept)
+        finish_manual_undo(config.TLOHome, undo_journal, generated=generated)
     except Exception as exc:
         rollback_failures: List[str] = []
         if generated and os.path.isfile(generated):
@@ -502,7 +520,12 @@ def apply_folder_manual_update(
         if rollback_failures:
             detail += " Automatic rollback was incomplete: " + "; ".join(rollback_failures) + "."
         if tags_attempted:
-            detail += " Tag writes may already have been applied; Manual Updates does not roll audio tags back."
+            try:
+                rollback_manual_tags(config.TLOHome, undo_journal, original if os.path.isdir(original) else target)
+            except Exception as tag_exc:
+                rollback_failures.append(f"original audio tags could not be fully restored from journal: {tag_exc}")
+            if rollback_failures:
+                detail += " Metadata rollback requires attention: " + "; ".join(rollback_failures) + "."
         if isinstance(exc, ManualUpdateError):
             raise ManualUpdateError(detail) from exc
         raise ManualUpdateError(detail) from exc
@@ -516,6 +539,7 @@ def apply_folder_manual_update(
         "update_tags": "yes" if update_tags else "no",
         "tag_stats": tag_stats,
         "tag_warnings": tag_warnings,
+        "undo_journal": undo_journal,
     }
 
 
@@ -560,6 +584,10 @@ def apply_unidentified_manual_update(
         with open(unidentified_file, "rb") as infile:
             unidentified_snapshot = infile.read()
 
+    undo_journal = begin_manual_undo(
+        config.TLOHome, original, final_path, mode='unidentified', update_tags=update_tags,
+        setlist_paths=infer_setlist_paths_for_show(config.TLOHome, new_leaf),
+    )
     generated = ""
     tag_stats: Dict[str, object] = {}
     tag_warnings: List[str] = []
@@ -583,6 +611,7 @@ def apply_unidentified_manual_update(
         })
         write_bootlist(config.TLOHome, rows)
         _remove_unidentified_show_path(config.TLOHome, matched_unidentified)
+        finish_manual_undo(config.TLOHome, undo_journal, generated=generated)
     except Exception as exc:
         rollback_failures: List[str] = []
         if generated and os.path.isfile(generated):
@@ -616,7 +645,12 @@ def apply_unidentified_manual_update(
         if rollback_failures:
             detail += " Automatic rollback was incomplete: " + "; ".join(rollback_failures) + "."
         if tags_attempted:
-            detail += " Tag writes may already have been applied; Manual Updates does not roll audio tags back."
+            try:
+                rollback_manual_tags(config.TLOHome, undo_journal, final_path)
+            except Exception as tag_exc:
+                rollback_failures.append(f"original audio tags could not be fully restored from journal: {tag_exc}")
+            if rollback_failures:
+                detail += " Metadata rollback requires attention: " + "; ".join(rollback_failures) + "."
         if isinstance(exc, ManualUpdateError):
             raise ManualUpdateError(detail) from exc
         raise ManualUpdateError(detail) from exc
@@ -632,6 +666,7 @@ def apply_unidentified_manual_update(
         "update_tags": "yes" if update_tags else "no",
         "tag_stats": tag_stats,
         "tag_warnings": tag_warnings,
+        "undo_journal": undo_journal,
     }
 
 

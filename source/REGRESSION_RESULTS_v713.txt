@@ -1,0 +1,8 @@
+TLO v1.7 Build 713 — local Linux source regression evidence (NOT production/release attested)
+GitHub Actions run 44808377418 (Build 712) was FAILED: Linux 8 x FileNotFoundError for ffmpeg in test_build711_remediation; Windows test_build703_remediation PermissionError reading an exclusive byte-locked file. The Build 713 fixes eliminate both test-harness assumptions without modifying production undo or lock behavior.
+
+Portable targeted regressions: all 8 real audio format tag-undo roundtrips + exclusive-lock test passed locally (9 passed, 0 skips). All fixture files have source-pinned SHA-256 values; FFmpeg is NOT invoked by these tests.
+App regression run split into 10 independent groups because a monolithic local pytest invocation stalled inside a nested historical subprocess test: 2,935 passed, 7 skipped, 0 failed in the completed independent groups, with known test warnings. Total collected: 2,942. The nested test also passed when run individually. The per-group results are valid independent executions; this is NOT an attestation that one monolithic process finished on this host.
+Companion GitHub Build Process v155: 161 passed, 13 skipped, 0 failed. Process v155 includes early Windows/Linux CI gates for the real-media and locking tests.
+Current source release-hygiene check PASS; Verify-TLOReleaseReadiness PASS; app DOCX 105 pages and process DOCX 27 pages rendered for visual inspection.
+Ruff 0.16.10 not locally installed; authoritative pinned Ruff gate NOT ATTESTED here. Native Windows/MSI/UNC, macOS, end-to-end FFmpeg pinned source-build, signing and hosted CI rerun remain NOT ATTESTED.

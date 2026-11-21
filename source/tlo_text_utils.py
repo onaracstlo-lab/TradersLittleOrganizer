@@ -457,8 +457,6 @@ def _read_text_content(
     ):
         return ""
 
-    return ""
-
 
 def read_text_file_sample(path_name: str, max_chars: int = 20000) -> str:
     text = _read_text_content(

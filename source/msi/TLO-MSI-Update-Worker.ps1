@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 trap {
     $message = "TLO MSI automatic update failed: $($_.Exception.Message)"
-    $failureLog = Join-Path ([IO.Path]::GetTempPath()) 'TLO-MSI-Update-LastError.txt'
+    $failureLog = Join-Path ([IO.Path]::GetTempPath()) ('TLO-MSI-Update-LastError-' + [guid]::NewGuid().ToString('N') + '.txt')
     $message | Out-File -LiteralPath $failureLog -Encoding UTF8
     try {
         Add-Type -AssemblyName System.Windows.Forms
@@ -40,7 +40,29 @@ if ([IO.Path]::GetExtension($msi) -ne '.msi') { throw 'A .msi package is require
 $actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash
 if ($actual -ine $ExpectedSha256) { throw 'Downloaded MSI hash mismatch; refusing to execute.' }
 $signature = Get-AuthenticodeSignature -LiteralPath $msi
-if ($signature.Status -ne 'Valid') { throw "MSI Authenticode signature not valid: $($signature.Status)" }
+if ($signature.Status -ne 'Valid' -or $null -eq $signature.SignerCertificate) {
+    throw "MSI Authenticode signature not valid: $($signature.Status)"
+}
+# The installed signed TLO executable establishes the expected publisher.
+# Match the actual signing certificate, not just its subject: unrelated valid
+# certificates can carry visually identical publisher names. Automatic
+# certificate rotation is intentionally NOT permitted. When signing changes,
+# install the independently verified new MSI interactively, then subsequent
+# automatic updates use that newly installed executable's certificate.
+$existingExe = Join-Path $root 'tlo-main.exe'
+if (-not (Test-Path -LiteralPath $existingExe -PathType Leaf)) {
+    throw 'Cannot establish installed TLO publisher: tlo-main.exe is missing.'
+}
+$installedSignature = Get-AuthenticodeSignature -LiteralPath $existingExe
+if ($installedSignature.Status -ne 'Valid' -or $null -eq $installedSignature.SignerCertificate) {
+    throw 'Cannot establish installed TLO publisher: installed executable is not signed and valid.'
+}
+if ($signature.SignerCertificate.Subject -ine $installedSignature.SignerCertificate.Subject) {
+    throw 'MSI publisher does not match the verified installed TLO publisher.'
+}
+if ($signature.SignerCertificate.Thumbprint -ine $installedSignature.SignerCertificate.Thumbprint) {
+    throw 'TLO MSI signer certificate has changed. Automatic rotation is blocked; install the new verified MSI manually.'
+}
 
 $deadline = (Get-Date).AddSeconds($ShutdownTimeoutSeconds)
 while (Get-Process -Id $WaitForPid -ErrorAction SilentlyContinue) {

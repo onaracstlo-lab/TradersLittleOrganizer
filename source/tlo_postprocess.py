@@ -2,7 +2,6 @@
 
 from tlo_version import VERSION as _TLO_CANONICAL_VERSION
 __version__ = _TLO_CANONICAL_VERSION
-import csv
 import hashlib
 import json
 import os
@@ -30,6 +29,7 @@ from tlo_bootlist_volume_policy import (
     path_is_same_or_under,
     normalize_path_for_compare,
     volume_key,
+    write_bootlist_rows,
 )
 
 PLACEHOLDER_SETLIST_TEXT = "*** No setlist found ***"
@@ -1319,13 +1319,9 @@ def _write_setlist_identity_index(tlo_home: str, rows: List[Dict[str, str]]) -> 
 
 def _write_bootlist_csv(tlo_home: str, rows: List[Dict[str, str]]) -> str:
     """Keep the two-column format, plus a stable setlist identity sidecar."""
-    csv_path = os.path.join(tlo_home, "bootlist.csv")
-    with open(csv_path, "w", encoding="utf-8", newline="") as outfile:
-        outfile.write("sep=^\n")
-        outfile.write("Show^VolumePath\n")
-        writer = csv.writer(outfile, delimiter="^", lineterminator="\n")
-        for row in rows:
-            writer.writerow([row["Show"], row.get("VolumePath") or _format_bootlist_volume_path(row.get("Volume", ""), row.get("Path", ""))])
+    # One shared, formula-safe, fsync + atomic-replace implementation across
+    # inventory, Add Shows and volume-reconciliation paths.
+    csv_path = write_bootlist_rows(tlo_home, rows)
     _write_setlist_identity_index(tlo_home, rows)
     return csv_path
 
@@ -1425,7 +1421,7 @@ def _conflict_log_paths(tlo_home: str) -> List[str]:
     return scandir_matching_files(logs_dir, "conf*.log")
 
 
-def _write_conflict_summary_log(tlo_home: str, records: List[Dict[str, str]] | None = None) -> str:
+def _write_conflict_summary_log(tlo_home: str, records: List[Dict[str, str]] | None = None, *, current_tokens: Sequence[str] | None = None) -> str:
     """Write summary.log with conflicts plus blank/unresolved metadata records."""
     logs_dir = logs_dir_for_home(tlo_home)
     os.makedirs(logs_dir, exist_ok=True)
@@ -1455,6 +1451,26 @@ def _write_conflict_summary_log(tlo_home: str, records: List[Dict[str, str]] | N
             main_dir_path = (record.get("main_dir_path") or "").strip()
             if main_dir_path:
                 entries.append(f"meta*.log | {main_dir_path} | BLANK_SHOW_RECORD: {_blank_show_reason(record)}")
+
+    # A summary of this run must not borrow counts from other volumes.  None
+    # retains the historical aggregation for legacy direct callers; an explicit
+    # empty sequence deliberately means no known current-run token.
+    renamed = skipped = 0
+    current_tag_names = None if current_tokens is None else {
+        f"tags{token}.txt" for token in current_tokens
+    }
+    for tag_log in scandir_matching_files(logs_dir, "tags*.txt"):
+        if current_tag_names is not None and os.path.basename(tag_log) not in current_tag_names:
+            continue
+        with open(tag_log, "r", encoding="utf-8", errors="backslashreplace") as infile:
+            for line in infile:
+                match = re.search(r"RENAME_COMPLIANTLY_SUMMARY:\s*renamed=(\d+)\s+skipped=(\d+)", line)
+                if match:
+                    renamed += int(match.group(1))
+                    skipped += int(match.group(2))
+    if renamed or skipped:
+        entries.append(f"Rename Compliantly: {renamed} renamed, {skipped} skipped "
+                       "(see tag error logs for skip reasons)")
 
     # Keep the summary log stable and readable if the same blank show is also
     # present in a conflict log.
@@ -2066,7 +2082,7 @@ def postprocess_metadata_outputs(config) -> Dict[str, int | str]:
 
     _postprocess_status(config, "writing summary.log...")
     stage_started = time.monotonic()
-    summary_log_path = _write_conflict_summary_log(config.TLOHome, records=records)
+    summary_log_path = _write_conflict_summary_log(config.TLOHome, records=records, current_tokens=current_tokens)
     _append_reinventory_reconciliation_to_summary(summary_log_path, reinventory_reconciliation)
     elapsed = _record_postprocess_timing(timing_entries, "write summary.log", stage_started)
     # Overall time includes the instrumentation overhead as well as all measured stages.
