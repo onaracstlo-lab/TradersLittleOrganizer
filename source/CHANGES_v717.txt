@@ -1,5 +1,18 @@
-TLO v1.7 Build 713 — Linked undo and multi-root preflight (GitHub Build Process v155)
-2026-11-20 | SOURCE CANDIDATE, NOT RELEASE-ATTESTED
+TLO v1.7 Build 717 — Restore fail-closed verification-report contracts (GitHub Build Process v159)
+2026-11-22 | SOURCE CANDIDATE, NOT RELEASE-ATTESTED
+- Fix hosted GitHub Actions run 45067649844 failure caused by loss of exact historical verification-report fields in Build 716; 8 Linux, 1 macOS, and Windows stop at first failure.
+- Restore explicitly non-attested report header, Ruff lint field, historical Xvfb and standalone no-display subset evidence, hosted full-run caveat, and build-specific NOT ATTESTED statement.
+- Do not alter production logic, tag undo, MSI handoff, source safety checks, dependency hash lock, signing or scan gates.
+- Process v159 validates the report contract before starting hosted builds, with new destructive-mutation tests for missing and falsified status fields.
+- No previous build ZIP is modified; native acceptance remains required.
+
+TLO v1.7 Build 716 — Prevented source preflight .pyc contamination (GitHub Build Process v158)
+2026-11-21 | SOURCE CANDIDATE, NOT RELEASE-ATTESTED
+- MSI download and installation now use the verified final (renamed) absolute path, never a temporary name or a newly guessed path.
+- The GUI refuses installation if the final file moved, disappeared, became a symlink or no longer matches the signed digest, with the exact path in the message.
+- The MSI worker resolves PowerShell provider paths to native filesystem paths before calling msiexec, with improved diagnostics for missing downloaded MSIs versus missing prior MSI source (Windows Installer 1612).
+- Added six regression tests for download-to-install path continuity, filenames with spaces/non-ASCII characters, missing/modified files and worker invocation.
+- Source-only remediation. The running Build 685 updater cannot be patched retroactively: users must obtain the latest signed MSI manually once. Hosted Windows native installation is still required.
 - Use the GUI's resolved show/track read-only preview in the inventory CLI --dry-run.
 - Preflight ALL mutating roots before any folder tag/copy/delete/rename when multiple search paths are supplied; refuse collisions or incomplete previews.
 - Surface album identity conflicts in preview results for user disambiguation.
@@ -8,8 +21,11 @@ TLO v1.7 Build 713 — Linked undo and multi-root preflight (GitHub Build Proces
 - MSI automatic update requires installed signed EXE and new MSI signer certificate thumbprint equality; manual re-bootstrap required for certificate rotation.
 - Add read-only standard-user/UNC/mapped-drive/Authenticode native acceptance diagnostics; no native release attestation implied.
 - Preserve original recording payloads without media-copy undo backups.
-- Preserve prior release ZIPs unchanged; see REMEDIATION_PLAN_v713.md for unverified native gates and deferred scope.
+- Preserve prior release ZIPs unchanged; see REMEDIATION_PLAN_v716.md for unverified native gates and deferred scope.
 
+- Corrected two one-character wheel SHA-256 errors (Pygments 2.21.0 universal wheel and Ruff 0.16.10 Linux x64 wheel) from failed GitHub Actions run 44971626768 (same error on Windows, Linux, macOS).
+- Add offline pre-install build-lock check before installing dependencies on all runners; retain pip --require-hashes and full native gates.
+- Build Process v158 contains CI early-gate checks; old Build 714 binaries are not modified.
 HISTORICAL CHANGE RECORDS (retained):
 
 TLO v1.7 Build 711: systemic per-search-path duplicate Show/ALBUM mutation preflight; retryable Manual Tweaks metadata-only undo; broader tag container roundtrips; independent per-user undo key migration; mapped-drive reparse check; MSI updater publisher comparison; CLI non-mutating preview.
@@ -2385,8 +2401,8 @@ v153
 - Updated requirements and user manual to describe the GUI layout/font behavior.
 
 
-===== Historical record: CHANGES_v155.txt =====
-v155
+===== Historical record: CHANGES_v156.txt =====
+v156
 
 Adds increasing date-range parsing for forms such as 1996-97-98, 96-98, 1996-1998, and compact increasing YYYYYYYY forms such as 19961998. Decreasing ranges such as 1998-1996, 1998-97, and 19981997 are rejected. Audio sample-rate/bit-depth references such as 44.1/16, 24/96, 16/48, 16-44, and 24-96 are ignored as date evidence. Numeric separated dates continue to require one separator style throughout the candidate. Requirements and user manual updated.
 
@@ -2396,12 +2412,12 @@ v156
 
 - Bounds selected setlist-file metadata scanning before the first true track-list line or checksum/hash/log section.
 - Applies the same boundary to setlist-date fallback, so dates found in song titles, lineage notes, verification logs, ffp/md5/st5/sfv/hash sections, or text after those sections are ignored as metadata.
-- Keeps the existing v155 date-range and audio-format protections.
+- Keeps the existing v156 date-range and audio-format protections.
 - Updates requirements and user manual to describe the bounded setlist metadata/date scan window.
 
 
-===== Historical record: CHANGES_v157.txt =====
-v157
+===== Historical record: CHANGES_v158.txt =====
+v158
 - Tightened date-related regexes so full 4-digit numeric years are limited to 19xx or 20xx.
 - Kept numeric-only date delimiters consistent except for the explicit yyyy mm-dd and yyyy mm.dd exceptions.
 - Enforced right-to-left x placeholders across normalized yyyymmdd date values.
@@ -10733,7 +10749,9 @@ Build 470 - unidentifiedShows.txt status cleanup. Normal housekeeping messages, 
 Build 469 - Main-window Tag and control cleanup: GUI Tag moved onto the Main GUI using Path(s) and current options; corruption-control dependencies, setlist.fm credential gating, Max Workers ceiling behavior, issue scrolling, and informational parser-selection reporting were aligned with the active GUI.
 Build 468 - historical Tag-window cancellation and main-window recovery. After cooperative cancellation, the main window recalculates action states when the old Tag worker exits so controls return to normal idle operation.
 
-Build 713 GitHub Actions failure remediation (run 44808377418):
+Build 714 GitHub Actions failure remediation (run 44808377418):
 - Preserve eight real-media metadata-undo tests as mandatory on Linux and Windows by shipping checksum-pinned, synthetic, subsecond test media fixtures. Tests do not invoke system FFmpeg and do not skip because PATH is missing FFmpeg.
 - Update copy destination lock test for Windows first-byte OS byte-range lock: verify lock ownership while locked; read cleared JSON only after unlock. The lock implementation is unchanged.
 - Re-tested both affected failure paths without weakening lock/undo production security behavior.
+
+Build 716 CI staging fix: the wheel-pin verifier suppresses source-local CPython bytecode before importing tlo_version. Companion Build Process v158 runs source Python entrypoints with -B, blocks source-input pyc and checks preflight output again before compile/upload. Fail-closed safeguards remain enabled.

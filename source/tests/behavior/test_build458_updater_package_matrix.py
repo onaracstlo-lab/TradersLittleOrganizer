@@ -158,6 +158,9 @@ def test_build458_check_for_updates_reports_database_refresh(monkeypatch, tmp_pa
         return True
 
     monkeypatch.setattr(U, "_download_asset", fake_download)
+    # The fake transfer is not cryptographically signed; real digest checking
+    # remains tested by the download-integrity suite.
+    monkeypatch.setattr(U, "_file_matches_asset", lambda path, asset: path.is_file())
     result = U.check_for_updates(tmp_path / "TLOHome")
     assert result.status == "downloaded"
     assert result.package_kind == "update"

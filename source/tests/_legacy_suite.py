@@ -7668,6 +7668,7 @@ def test_v330_update_destination_uses_sanitized_basename_and_warns_without_diges
         return True
 
     monkeypatch.setattr(G, "_download_asset", fake_download)
+    monkeypatch.setattr(G, "_file_matches_asset", lambda path, asset: path.is_file())
     result = G.check_for_updates(tmp_path / "TLOHome", manual=True)
 
     assert result.status == "downloaded"

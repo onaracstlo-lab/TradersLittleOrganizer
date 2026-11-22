@@ -1,8 +1,22 @@
-# TLO Build 713 — remediation disposition and release acceptance
+# TLO Build 717 — remediation disposition and release acceptance
 
-**Baseline:** Build 712 / process v154 (failed hosted CI run 44808377418). **New candidate:** Build 713 / process v155. All older release ZIPs remain immutable. No file payload is copied for Manual Tweaks undo.
+**Baseline:** Build 714 / process v156. **New candidate:** Build 717 / process v159. All older release ZIPs remain immutable. No file payload is copied for Manual Tweaks undo.
 
-## Addressed and locally testable in this iteration
+## Retained Build 715 — GitHub Actions dependency-lock remediation
+
+Run 44971626768 failed across all three native jobs at `pip install --require-hashes` because the Pygments wheel SHA-256 was mistyped in requirements-build.txt. Fixes: correct the published Pygments wheel hash and an additional corrupted Linux x64 Ruff wheel hash per PyPI metadata, add offline lock verifier before installation, and retain --require-hashes. Windows missing-package errors were downstream of the failed pip install. Only native CI can attest complete builds.
+
+## Retained Build 714 — MSI download-to-install handoff
+
+- MSI download and installation now use the verified final (renamed) absolute path, never a temporary name or a newly guessed path.
+- The GUI refuses installation if the final file moved, disappeared, became a symlink or no longer matches the signed digest, with the exact path in the message.
+- The MSI worker resolves PowerShell provider paths to native filesystem paths before calling msiexec, with improved diagnostics for missing downloaded MSIs versus missing prior MSI source (Windows Installer 1612).
+- Added six regression tests for download-to-install path continuity, filenames with spaces/non-ASCII characters, missing/modified files and worker invocation.
+- Source-only remediation. The running Build 685 updater cannot be patched retroactively: users must obtain the latest signed MSI manually once. Hosted Windows native installation is still required.
+
+The exact Build 685 error text and its MSI verbose log were not supplied, so native root cause remains unproven. This source change addresses a real worker path ambiguity and improves diagnostics, not a certified reproduction of the 685 installation.
+
+## Prior Build 713 source remediation (retained)
 
 - **B4 (multi-root):** when more than one search root can mutate files, run read-only all-root identity preview before `walk_trees`; refuse two different folders with the same final Show/ALBUM, and refuse incomplete preflights. Per-root preflight from Build 711 remains. Cross-root warnings also appear in the GUI/CLI preview. No claim of all historic inventory collisions.
 - **U3 (batch):** `tlo-reverse --manual-updates --batch N --TLOHome ... [--dry-run]` selects exactly N signed, linked journals with unique matching bootlist/unidentified state. It replays newest first under the existing inventory lock and validates tags and files before each reversal. Later, untracked inventory changes are deliberately not merged: refuse rather than rewrite unrelated rows.
@@ -29,11 +43,19 @@
 | T1 | Pinned Ruff and native build run | Install locked Ruff 0.16.10 and run `python -m ruff check .`; hosted Windows, Linux, macOS CI |
 | P1 | Donation contact street address | Intentionally unchanged as explicitly requested by user; separate authorized edit required |
 
-**Release gate:** A full GitHub Actions run, all nine verified native assets, Windows EXE/MSI Authenticode, independent signed update metadata, native UNC/MSI acceptance and explicit manual promotion are mandatory. Neither the source ZIP nor these local tests satisfies those gates. **Do not mark Build 713 production-ready or publish it as Latest.**
+**Release gate:** A full GitHub Actions run, all nine verified native assets, Windows EXE/MSI Authenticode, independent signed update metadata, native UNC/MSI acceptance and explicit manual promotion are mandatory. Neither the source ZIP nor these local tests satisfies those gates. **Do not mark Build 717 production-ready or publish it as Latest.**
 
-## Build 713 follow-up to failed GitHub Actions run 44808377418
+## Historical Build 713 follow-up to failed GitHub Actions run 44808377418
 
 - Linux: All eight Build 711 `test_tag_undo_roundtrip_per_container` cases crashed before reading media because `ffmpeg` was not on PATH. Replaced on-the-fly FFmpeg generation with eight synthetic 440-Hz encoded fixtures stored in `tests/fixtures/tag_undo` and checked against independent SHA-256 pins. The tests continue executing Mutagen tagging and actual metadata undo rather than being skipped on Linux/Windows CI.
 - Windows: `test_copy_destination_lock_leaves_no_host_identity` read a file while `msvcrt` had exclusively locked byte 0. Windows correctly rejected the read. The test now checks held-lock semantics and its release-time empty owner JSON only once it is unlocked, with `finally` ensuring release. Production lock semantics remain fail-closed.
-- Process v155 adds early targeted gates on Linux and Windows before the full suites. The suite still blocks packaging and signing on failures.
+- Process v157 adds early targeted gates on Linux and Windows before the full suites. The suite still blocks packaging and signing on failures.
 - Live GitHub hosted jobs, Windows signing/MSI, and hardware UNC remain unverified until the next run.
+
+## Build 717 — local preflight bytecode contamination (GitHub dispatch blocked)
+
+Build 715 failed at the final prepared-source .pyc gate after the offline wheel-pin verifier imported tlo_version. The source included no compiled artifacts on entry; a local Python interpreter wrote __pycache__/tlo_version.cpython-314.pyc during preflight. The retained Build 716 verifier suppresses bytecode before the import, process v158 calls local Python checks with -B, and a new intermediate gate rejects source-stage artifacts. The incoming-archive and post-compile gates are unchanged. Tests execute these source-level safeguards on an isolated source copy. Hosted Windows/Linux/macOS validation and Windows signing remain mandatory. No previously published ZIP is replaced.
+
+## Build 717 — hosted report-contract failure, run 45067649844
+
+All three platform tests failed because Build 716 changed the report literal heading and omitted Ruff/headless fields, not because an application behavior defect was demonstrated. Restore fail-closed format, label 50/6 and 26 skipped as historical tests only, require process v159 to validate contract before native launch. Windows stopped at the first failure under pytest -x; Linux observed all eight. No native release claimed.

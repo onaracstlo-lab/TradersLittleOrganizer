@@ -1,0 +1,11 @@
+TLO v1.7 Build 717 — LOCAL SOURCE REGRESSION EVIDENCE (NOT RELEASE-ATTESTED)
+2026-11-22. Fix supplied GitHub Actions run 45067649844: report content changed and no longer met retained literal fail-closed verification contracts. Windows failed the first test (-x), macOS one test, Linux all eight.
+Current app behavior suite (headless Xvfb, pytest plugin autoload disabled): 2,663 passed, 7 skipped, 4 warnings, 0 failed.
+Independent application contracts/unit/integration suite: 289 passed, 0 skipped, 0 failed.
+Combined independently executed app modules: 2,952 passed, 7 skipped, 4 warnings. No combined monolithic run is claimed because the local environment previously aborted inside an old preferences test when third-party pytest plugins were loaded.
+Retained eight report contract assertions plus three new Build 717 report assertions: 26 passed, 1 expected Ruff skip (included within current suite counts).
+Companion build process v159 complete suite: 182 passed, 13 skipped, 0 failures (includes missing-field/false-Ruff negative preflight tests).
+Current documents/source release-hygiene: PASS; release-readiness: PASS, all 25 disposition records.
+Application Requirements DOCX: 106 pages rendered; Process Requirements DOCX: 28 pages rendered. First and final pages inspected, no clipping on inspected pages.
+Ruff lint: lint not attested locally. Local Python is not the pinned native CI Python 3.13.16 and cannot attest host-only signing/scans. Build 717 full GitHub Actions run required.
+Audio recordings are not copied for manual undo. Previous ZIPs unchanged. No native Windows MSI update acceptance, macOS/Linux binary packaging, signed assets or release publication performed here.

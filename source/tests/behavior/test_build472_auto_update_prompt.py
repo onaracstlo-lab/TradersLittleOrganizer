@@ -72,6 +72,7 @@ def test_yes_path_downloads_pending_verified_asset(monkeypatch, tmp_path):
         return True
 
     monkeypatch.setattr(updates, "_download_asset", fake_download)
+    monkeypatch.setattr(updates, "_file_matches_asset", lambda path, asset: path.is_file())
     monkeypatch.setattr(
         updates,
         "_inspect_downloaded_package",

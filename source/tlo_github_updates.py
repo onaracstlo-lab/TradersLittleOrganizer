@@ -874,20 +874,50 @@ def _inspect_verified_release_asset(path: Path, *, package_kind: str, platform_k
         expected_platform_key=platform_key, expected_build=latest_build)
 
 
-def install_downloaded_msi(result: UpdateCheckResult) -> None:
-    """Hand off ONLY the verified, published MSI; caller must close the GUI."""
+def _verified_msi_handoff_path(result: UpdateCheckResult) -> Path:
+    """Verify the exact final download path; never guess another installer.
+
+    The path is produced by the rename/publish stage, NOT inferred from a
+    temporary filename, asset URL, current directory or remembered ZIP name.
+    Fail with the actual path if a sync agent, antivirus or user moved it.
+    """
     if result.status not in {"downloaded", "already_downloaded"} or result.package_kind != "msi":
         raise ValueError("Only a downloaded MSI may be installed")
     if not re.fullmatch(r"[0-9a-f]{64}", result.asset_digest):
         raise ValueError("Missing the signed MSI hash")
-    if not Path(result.path).is_file() or _sha256_file(Path(result.path)) != result.asset_digest:
-        raise ValueError("Downloaded MSI no longer matches the signed release metadata")
+    downloaded = Path(result.path).expanduser()
+    if not downloaded.is_absolute() or downloaded.is_symlink():
+        raise ValueError(f"Untrusted update download path: {downloaded}")
+    if result.asset_name and downloaded.name != _safe_asset_filename(result.asset_name):
+        raise ValueError(f"Downloaded installer filename does not match the selected release asset: {downloaded}")
+    try:
+        final_path = downloaded.resolve(strict=True)
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        raise FileNotFoundError(
+            f"The downloaded TLO MSI was not found at the recorded path:\n{downloaded}\n\n"
+            "It may have been moved, deleted, or quarantined after download. "
+            "Open Downloads and run the verified TLO MSI manually, or download it "
+            "again from the official TLO GitHub Releases page. No installer was launched."
+        ) from exc
+    if not final_path.is_file():
+        raise FileNotFoundError(f"Downloaded TLO MSI is not a regular file: {final_path}")
+    if _sha256_file(final_path).casefold() != result.asset_digest.casefold():
+        raise ValueError(
+            f"The downloaded TLO MSI no longer matches signed release metadata (changed after verification):\n{final_path}\n\n"
+            "No installer was launched. Download the official MSI again."
+        )
+    return final_path
+
+
+def install_downloaded_msi(result: UpdateCheckResult) -> None:
+    """Hand off ONLY the verified, published MSI; caller must close the GUI."""
+    installer = _verified_msi_handoff_path(result)
     if is_msi_install():
-        launch_verified_msi_upgrade(result.path, result.asset_digest)
+        launch_verified_msi_upgrade(str(installer), result.asset_digest)
     else:
         # A portable ZIP install cannot use the MSI-owned worker; start the
         # signed Windows Installer UI without touching the old apps directory.
-        launch_verified_portable_msi_install(result.path, result.asset_digest)
+        launch_verified_portable_msi_install(str(installer), result.asset_digest)
 
 
 def _download_and_report_verified_asset(
@@ -938,6 +968,14 @@ def _download_and_report_verified_asset(
                 debug_suppressed_exception(__name__, exc)
     databases_included = bool(package_info["databases_included"])
     packaging_mode = str(package_info["packaging_mode"] or "")
+    # Do not report a completed download if the published path has already
+    # disappeared (for example, antivirus quarantine between rename and UI).
+    # The installer will independently rehash immediately before its handoff.
+    if not destination.is_file() or not _file_matches_asset(destination, asset):
+        raise FileNotFoundError(
+            f"The verified update is not available at its final download path: {destination}. "
+            "No install was started. Check security software and retry the official download."
+        )
     settings_warning = _update_download_settings(
         tlo_home, latest_build, asset_name, destination, package_kind,
         platform_key=platform_key, packaging_mode=packaging_mode,

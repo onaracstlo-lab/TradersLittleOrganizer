@@ -1,3 +1,7 @@
+TLO Build 716 (GitHub Build Process v158): Fix local preflight bytecode contamination from verify_build_lock.py import of tlo_version before GitHub upload. Enforce -B on local source Python checks; fail closed on incoming/generated pyc, retain prior pin verification. New immutable package.
+TLO Build 715 (GitHub Build Process v157): Fixed incorrect SHA-256 for Pygments 2.21.0 universal and Ruff 0.16.10 Linux x64 wheels in hashed build/test lock, added offline pre-install guard; failed GitHub Actions run 44971626768 was dependency installation, not application test failure. No earlier source ZIP changed.
+
+Build 714 (2026-11-21): native MSI update handoff path validation, missing-file guidance and worker error-code diagnostics; companion Build Process v156.
 Build 712 source candidate with GitHub Process v154; native release gates NOT ATTESTED.
 Build 711 source candidate with GitHub Process v153; native release gates NOT ATTESTED.
 Build 710 source candidate: review remediation, CLI tag-mode safety, unicode identity, process v152; native gates not attested.

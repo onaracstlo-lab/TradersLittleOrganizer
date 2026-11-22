@@ -1,13 +1,13 @@
 """Central release-version constants for the TLO Inventory bundle."""
 
-VERSION = "v713"
+VERSION = "v717"
 __version__ = VERSION
 PUBLIC_VERSION = "1.7"
 OFFICIAL_GITHUB_OWNER = "onaracstlo-lab"
 OFFICIAL_GITHUB_REPO = "TradersLittleOrganizer"
-BUNDLE_BUILD = 713
-DISPLAY_VERSION = "v1.7 Build 713"
-VERSION_SUMMARY = 'Linked Manual Tweaks batch undo, cross-root identity and detailed CLI preview safety'
+BUNDLE_BUILD = 717
+DISPLAY_VERSION = "v1.7 Build 717"
+VERSION_SUMMARY = 'Restore verification report contracts before hosted CI'
 def versioned_title(base_title: str) -> str:
     """Return a GUI title containing the public version/build string."""
     base = str(base_title or "").strip()

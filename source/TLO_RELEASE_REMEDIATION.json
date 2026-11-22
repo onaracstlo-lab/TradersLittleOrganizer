@@ -1,7 +1,7 @@
 {
-  "build": 713,
+  "build": 717,
   "reviewed_baseline": 685,
-  "scope": "Build 713 source candidate. CI fixture portability and Windows locked-file test remediation; remaining acceptance in REMEDIATION_PLAN_v713.md.",
+  "scope": "Build 717 release-report literal contract restoration following hosted CI run 45067649844. Native CI acceptance pending; retains prior safety fixes.",
   "findings": {
     "H1": {
       "status": "fixed",

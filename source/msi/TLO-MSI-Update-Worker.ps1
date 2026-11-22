@@ -32,8 +32,15 @@ $root = ([IO.Path]::GetFullPath($InstallRoot)).TrimEnd([char]'\') + '\'
 if ($root -ine (([IO.Path]::GetFullPath($registeredRoot)).TrimEnd([char]'\') + '\')) {
     throw 'Installation root no longer matches MSI registry ownership; refusing update.'
 }
-$msi = (Resolve-Path -LiteralPath $MsiPath).Path
-if ([IO.Path]::GetExtension($msi) -ne '.msi') { throw 'A .msi package is required.' }
+# Resolve to the native filesystem path. PowerShell's generic .Path can be
+# provider-qualified (FileSystem::...), which msiexec does not understand.
+# Keep the exact path given by the application, never search for a similar MSI.
+if (-not (Test-Path -LiteralPath $MsiPath -PathType Leaf)) {
+    throw "Downloaded TLO MSI is missing at '$MsiPath'. Check Downloads or security-software quarantine, then install the official MSI manually."
+}
+$resolvedMsi = Resolve-Path -LiteralPath $MsiPath -ErrorAction Stop
+$msi = [IO.Path]::GetFullPath($resolvedMsi.ProviderPath)
+if ([IO.Path]::GetExtension($msi) -ine '.msi') { throw 'A .msi package is required.' }
 
 # Authentication is TWO gates: pinned-signature verified release manifest's hash
 # at the app level, plus Authenticode signature on this MSI and local rehash.
@@ -91,7 +98,13 @@ $quoted = '"' + $msi + '"'
 $msiArgs = @('/i', $quoted, '/qn', '/norestart', '/L*v', ('"' + $log + '"'))
 $result = Start-Process -FilePath (Join-Path ([Environment]::SystemDirectory) 'msiexec.exe') -ArgumentList $msiArgs -Wait -PassThru
 if ($result.ExitCode -notin @(0,3010)) {
-    throw "MSI upgrade failed (Windows Installer code $($result.ExitCode)); see $log. Existing MSI retained at $msi."
+    $sourceHint = switch ($result.ExitCode) {
+        1612 { 'Windows Installer could not locate a previous installation source (possibly the Build 685 MSI), not necessarily the newly downloaded MSI. Inspect the MSI log for SOURCEMGMT and ResolveSource messages.' }
+        1619 { 'Windows Installer could not open the downloaded MSI. Confirm its exact path and check access controls and security software.' }
+        1620 { 'Windows Installer rejected the MSI package. Confirm the package and signature before retrying.' }
+        default { 'Inspect the MSI verbose log for the actual failing operation.' }
+    }
+    throw "MSI upgrade failed (Windows Installer code $($result.ExitCode)); $sourceHint New MSI: $msi. Log: $log. The downloaded MSI was not removed."
 }
 if ($RestartExe -and $result.ExitCode -eq 0) {
     if ($RestartExe.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $RestartExe -PathType Leaf)) {

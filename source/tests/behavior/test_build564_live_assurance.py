@@ -20,6 +20,8 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_shared_updater_finalization_inspects_package_before_recording_success(tmp_path, monkeypatch, new_download):
     stages = []
     monkeypatch.setattr(updater, '_downloads_dir', lambda: tmp_path)
+    # This test verifies finalize ordering; synthetic package bytes have no signed digest.
+    monkeypatch.setattr(updater, '_file_matches_asset', lambda path, asset: path.is_file())
     if not new_download:
         (tmp_path / 'artifact.zip').write_bytes(b'prior verified package')
         monkeypatch.setattr(updater, '_file_matches_asset', lambda path, asset: True)
