@@ -5232,6 +5232,7 @@ def _normalize_record_ascii_for_output(record: ShowMetadata) -> ShowMetadata:
     """
     changes = []
     old_location = getattr(record, "location", "")
+    old_venue = getattr(record, "venue", "")
     old_city = getattr(record, "city", "")
     old_region = getattr(record, "region", "")
     old_country = getattr(record, "country", "")
@@ -5242,6 +5243,11 @@ def _normalize_record_ascii_for_output(record: ShowMetadata) -> ShowMetadata:
             setattr(record, field, new_value)
             if field in ("venue", "city"):
                 changes.append((old_value, new_value))
+    # Compliant String2 intentionally lives in both venue and album_name.
+    # Keep those output fields consistent without changing source evidence or
+    # interpreting String2 as structured venue/city/location metadata.
+    if getattr(record, "album_name", "") == old_venue and getattr(record, "venue", "") != old_venue:
+        record.album_name = record.venue
 
     # A generated location follows its components exactly. Preserve existing
     # punctuation and any extra manual metadata if it does not.

@@ -1,8 +1,7 @@
-"""Conservative display casing for *identified* venue/city/location metadata.
+"""Conservative display casing for identified venue/city/location text.
 
-This does not participate in lookup, artist identification, or evidence scoring.
-Only all-uppercase place labels are changed; mixed/lowercase source spelling is
-preserved, including intentional trademarks and non-Latin writing systems.
+Includes an uppercase place fragment inside an otherwise mixed-case raw
+compliant String2. Does not infer fields or modify original source text.
 """
 
 from __future__ import annotations
@@ -41,22 +40,26 @@ def _all_uppercase(value: str) -> bool:
 
 
 def display_place_case(value: str, *, kind: str = "venue") -> str:
-    """Titlecase an all-caps place label, without guessing at mixed-case text.
+    """Correct uppercase place words, including uppercase fragments in raw String2.
 
-    ``kind`` is ``venue``, ``city``, ``region``, ``country`` or ``location``.
-    A two-letter region code stays uppercase, as do known venue acronyms.
-    Returns the original exact string if the label is not entirely uppercase.
+    In compliant/path-only mode, String2 is deliberately *not* split into
+    venue and city. A name like ``Calvin Theatre NORTHAMPTON, MA`` is therefore
+    one venue field. Fix only its all-uppercase words; leave surrounding
+    mixed/lowercase source spelling, punctuation, and distinct acronyms alone.
     """
-    if not value or not _all_uppercase(value):
+    if not value:
         return value
-    # Non-Latin scripts need language-aware casing; never guess them here.
-    if any(c.isalpha() and (c.islower() or c.isupper()) and
-           not unicodedata.name(c, "").startswith("LATIN") for c in value):
-        return value
+    # Do not apply place display normalization to a region code itself.
     if kind == "region" and re.fullmatch(r"[A-Z]{2}", value.strip()):
         return value
     if kind == "city" and value.strip() in {"LA", "NYC", "DC"}:
         return value
+    # Non-Latin scripts require language-specific casing; conservatively
+    # preserve a combined field rather than changing only some of its words.
+    if any(c.isalpha() and not unicodedata.name(c, "").startswith("LATIN")
+           for c in value):
+        return value
+
     index = 0
 
     def replace(match: re.Match[str]) -> str:
@@ -65,6 +68,17 @@ def display_place_case(value: str, *, kind: str = "venue") -> str:
         upper = word.upper()
         is_first = index == 0
         index += 1
+        # Ordinary already-mixed or lower-case words are never rewritten.
+        if not _all_uppercase(word):
+            return word
+        # Preserve geographic state/province codes on the *end* of a raw
+        # venue/combined-location string, e.g. NORTHAMPTON, MA or CITY IN.
+        # Do not title-case these just because the overall field is a venue.
+        if (len(upper) == 2 and upper in REGION_CODES and
+                not value[match.end():].strip(" .,;:-")):
+            before = value[:match.start()]
+            if before and before[-1] in " ,":
+                return upper
         if upper == "LA" and kind == "city" and len(value.strip().split()) > 1:
             return "La"
         if upper in _SPECIAL_WORDS:
@@ -73,13 +87,14 @@ def display_place_case(value: str, *, kind: str = "venue") -> str:
             return upper
         if kind == "location" and upper in REGION_CODES and len(upper) == 2 and upper not in {"IN", "ON", "OR"}:
             return upper
-        # Preserve acronym punctuation without turning U.S. into U.s.
+        # Keep single-letter directional initials: W.HARTFORD -> W.Hartford.
+        if len(upper) == 1:
+            return word
         if word in {"AT", "T"} and kind == "venue" and "AT&T" in value:
             return upper
         if not is_first and upper.lower() in _CONNECTORS:
             return upper.lower()
-        # Python's .title() turns JOE'S into Joe'S. Apostrophe suffixes are
-        # grammatical contractions, whereas O'BRIEN must capitalize Brien.
+        # Python .title() turns JOE'S into Joe'S; O'BRIEN needs Brien.
         if "'" in word or "’" in word:
             chunks = re.split(r"(['’])", word)
             first = _SPECIAL_WORDS.get(chunks[0].upper(), chunks[0].capitalize())

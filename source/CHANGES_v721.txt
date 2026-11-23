@@ -1,4 +1,7 @@
-TLO v1.7 Build 718 — Conservative all-caps place-name display normalization (Build Process v160)
+TLO v1.7 Build 721 — public release Git permission remediation (Build Process v163)
+Build 721 / Process v163: Fix Git source publication failing with Permission denied while writing loose Git objects. Use temp-root packed shallow fetch; retain signed commit/tag and asset hash gates. Build 720 Ruff fix unchanged.
+TLO v1.7 Build 718–719 — Retained prior display normalization (historical, no Build 721 behavior change)
+Build 719 / Process v161 — Conservative uppercase-fragment display correction in compliant raw String2.
 - Recognized venue, city and generated location fields written in ALL CAPITALS from folder names, setlists or other metadata sources become readable proper capitalization. Original Artist, date, qualifiers, paths, raw setlist text and evidence remain untouched.
 - Common venue acronyms and state/region codes remain uppercase; intentional mixed-case brand spellings remain unchanged; cases that are not confidently all-uppercase are not rewritten.
 - One shared final metadata boundary updates output show names, bootlist records, generated setlist metadata and tags consistently. No online service or new database required.
@@ -2452,8 +2455,8 @@ Date handling and analysis updates:
 - Date audit workbook was pared to separate core date-assignment regex/function families from helper-only recognition patterns.
 
 
-===== Historical record: CHANGES_v160.txt =====
-TLO-GI v160 changes
+===== Historical record: CHANGES_v163.txt =====
+TLO-GI v163 changes
 ===================
 
 Date parsing updates:
@@ -2467,11 +2470,11 @@ Date parsing updates:
 
 Analysis/docs:
 - Rebuilt the date-identification workbook with restored textual cases and helper-recognition separation.
-- Updated the requirements document to describe the v160 date handling behavior.
+- Updated the requirements document to describe the v163 date handling behavior.
 
 
-===== Historical record: CHANGES_v161.txt =====
-TLO-GI v161 changes
+===== Historical record: CHANGES_v163.txt =====
+TLO-GI v163 changes
 ====================
 
 Date parsing updates:
@@ -2489,15 +2492,15 @@ Validation:
 - Ran targeted date parser checks for one-digit numeric components, two-digit years, text date forms, strict non-slash numeric separators, FOUR_PLUS_FOUR_RE, slash tag/setlist parsing, and European path-date setlist confirmation.
 
 
-===== Historical record: CHANGES_v162.txt =====
-TLO-GI v162 changes
+===== Historical record: CHANGES_v163.txt =====
+TLO-GI v163 changes
 ====================
 
 Postprocess fix:
 - Fixed the post-inventory cleanup/aggregation/output-generation failure that printed ERROR: no such group after Stage 3 completed.
-- The failure was caused by postprocess setlist filename date-token normalization still asking regex Match objects for a removed named group, ymd_exc, after the v161 date-token regex simplification.
+- The failure was caused by postprocess setlist filename date-token normalization still asking regex Match objects for a removed named group, ymd_exc, after the v163 date-token regex simplification.
 - Added a safe named-group helper so postprocess can look for optional/future regex group names without raising IndexError when a group is absent.
-- Kept v161 date parsing behavior unchanged; this is a postprocess robustness fix.
+- Kept v163 date parsing behavior unchanged; this is a postprocess robustness fix.
 
 Validation:
 - Ran py_compile across all Python files in the bundle.
@@ -2521,7 +2524,7 @@ v164 changes
 - Rank setlist date fallback evidence by context: explicit DATE/VENUE lines first, concise header-like lines next, and paragraph prose/range clues last.
 - Allow a complete date from the selected setlist to override a path/filename year-range clue when the date falls within the range.
 - Add exact New York/New York City location fallback for explicit metadata parsing when city support files are unavailable.
-- Preserve v163 ampersand filename behavior and v161-v163 date parsing rules.
+- Preserve v163 ampersand filename behavior and v163-v163 date parsing rules.
 
 
 ===== Historical record: CHANGES_v165.txt =====

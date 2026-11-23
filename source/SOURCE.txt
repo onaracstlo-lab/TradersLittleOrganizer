@@ -1,8 +1,8 @@
 Traders Little Organizer — corresponding source
 
 The GPL-covered TLO source corresponding to this binary release will be published at upon a successful signed release (not yet published):
-https://github.com/onaracstlo-lab/TradersLittleOrganizer/releases/tag/v1.7-build718
+https://github.com/onaracstlo-lab/TradersLittleOrganizer/releases/tag/v1.7-build721
 
-Use the source archive attached to this exact release tag (Build 718), including build scripts and dependency manifests. A similarly named current main-branch checkout is not necessarily the corresponding source.
+Use the source archive attached to this exact release tag (Build 721), including build scripts and dependency manifests. A similarly named current main-branch checkout is not necessarily the corresponding source.
 
 Third-party components have their own terms. See THIRD_PARTY_NOTICES.txt and the packaged FFmpeg corresponding source under apps/<platform>/THIRD_PARTY/FFmpeg.

@@ -1,4 +1,4 @@
-"""Build 718: cross-platform output normalization contract, included in macOS CI."""
+"""Build 720: cross-platform output normalization contract, included in macOS CI."""
 from __future__ import annotations
 
 import pytest

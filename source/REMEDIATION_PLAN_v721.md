@@ -1,8 +1,27 @@
-Build 718 (2026-11-22): Apply conservative proper capitalization only to detected all-uppercase venue/city/location output at the final inventory metadata boundary; retain exact source case and intentional mixed case. Tests cover setlist headers and no-setlist folders. Hosted native CI pending.
+# Build 721 public release Git publication remediation
 
-# TLO Build 718 — remediation disposition and release acceptance
+Build 721 / Process v163: The Build 720 native Windows/Linux/macOS pipeline assembled and hash-bound local release artifacts, but public source publication failed in three attempts when Windows Git could not write loose objects under C:\TLO-GitHub-Build. The release helper now uses packed shallow Git fetch and short per-user temporary working directories, with controlled fallback. Signed source commits, verified annotated tags, immutable production releases and SHA-256/asset signing remain mandatory. Application inventory/tagging functionality is unchanged. Native Windows publication acceptance is pending.
 
-**Baseline:** Build 714 / process v156. **New candidate:** Build 718 / process v160. All older release ZIPs remain immutable. No file payload is copied for Manual Tweaks undo.
+Acceptance: repeat native Windows release with Build 721 and process v163; confirm shallow source checkout, SSH-signed commit and annotated tag verified by GitHub, exact nine release artifacts and RELEASE_HASHES.json bound, pre-release default, no alteration of earlier release. If antivirus/Controlled Folder Access still denies Git objects, preserve artifacts, inspect its security log, and stop—do not disable integrity gates.
+
+---
+
+Build 721 / Process v163: Work around Windows Git loose-object Permission denied during public source publication using packed shallow fetch and short per-user temporary working copies. Require signed commit and verified annotated tag as before. Original files retained; native Windows verification required.
+
+## Retained Build 720 F841 remediation
+
+Removed assigned-but-unused local wholly_upper in tlo_place_display.py. Old behavior and state-code protections remain. Source regression and mandatory CI Ruff gate ensure future verification. Do not promote until native CI passes.
+
+## Retained Build 719 — embedded uppercase fragments in compliant String2
+User-reported examples showed raw String2 values such as Calvin Theatre NORTHAMPTON, MA and Lincoln Theater W.HARTFORD, CT. In compliant mode String2 is used as supplied and is not parsed into structured city/venue; the Build 718 all-uppercase-only display rule skipped these mixed-case fields. At the final display-only metadata boundary, uppercase Latin place words inside mixed-case raw String2 are now converted while terminal region abbreviations remain uppercase. Verified all five source examples through `_extract_metadata_for_group_compliant` with no setlist; original source evidence and punctuation, even a misspelling, remain unchanged. Existing inventories are not silently migrated. Application tests: 3,004 passed / 7 skipped, process: 186 passed / 13 skipped. Hosted native acceptance pending.
+
+Retained Build 719: Compliant/path-only String2 retains the full venue+city tail, even when its casing is mixed. Display normalization corrects embedded uppercase place words and terminal region codes only. No source file, artist, tag evidence, or lookup precedence is changed.
+
+Build 721 (2026-11-22): Apply conservative proper capitalization only to detected all-uppercase venue/city/location output at the final inventory metadata boundary; retain exact source case and intentional mixed case. Tests cover setlist headers and no-setlist folders. Hosted native CI pending.
+
+# TLO Build 721 — remediation disposition and release acceptance
+
+**Baseline:** Build 714 / process v156. **New candidate:** Build 721 / process v163. All older release ZIPs remain immutable. No file payload is copied for Manual Tweaks undo.
 
 ## Retained Build 715 — GitHub Actions dependency-lock remediation
 
@@ -45,7 +64,7 @@ The exact Build 685 error text and its MSI verbose log were not supplied, so nat
 | T1 | Pinned Ruff and native build run | Install locked Ruff 0.16.10 and run `python -m ruff check .`; hosted Windows, Linux, macOS CI |
 | P1 | Donation contact street address | Intentionally unchanged as explicitly requested by user; separate authorized edit required |
 
-**Release gate:** A full GitHub Actions run, all nine verified native assets, Windows EXE/MSI Authenticode, independent signed update metadata, native UNC/MSI acceptance and explicit manual promotion are mandatory. Neither the source ZIP nor these local tests satisfies those gates. **Do not mark Build 718 production-ready or publish it as Latest.**
+**Release gate:** A full GitHub Actions run, all nine verified native assets, Windows EXE/MSI Authenticode, independent signed update metadata, native UNC/MSI acceptance and explicit manual promotion are mandatory. Neither the source ZIP nor these local tests satisfies those gates. **Do not mark Build 721 production-ready or publish it as Latest.**
 
 ## Historical Build 713 follow-up to failed GitHub Actions run 44808377418
 
@@ -54,10 +73,10 @@ The exact Build 685 error text and its MSI verbose log were not supplied, so nat
 - Process v157 adds early targeted gates on Linux and Windows before the full suites. The suite still blocks packaging and signing on failures.
 - Live GitHub hosted jobs, Windows signing/MSI, and hardware UNC remain unverified until the next run.
 
-## Build 718 — local preflight bytecode contamination (GitHub dispatch blocked)
+## Build 721 — local preflight bytecode contamination (GitHub dispatch blocked)
 
 Build 715 failed at the final prepared-source .pyc gate after the offline wheel-pin verifier imported tlo_version. The source included no compiled artifacts on entry; a local Python interpreter wrote __pycache__/tlo_version.cpython-314.pyc during preflight. The retained Build 716 verifier suppresses bytecode before the import, process v158 calls local Python checks with -B, and a new intermediate gate rejects source-stage artifacts. The incoming-archive and post-compile gates are unchanged. Tests execute these source-level safeguards on an isolated source copy. Hosted Windows/Linux/macOS validation and Windows signing remain mandatory. No previously published ZIP is replaced.
 
 ## Retained Build 717 — hosted report-contract failure, run 45067649844
 
-All three platform tests failed because Build 716 changed the report literal heading and omitted Ruff/headless fields, not because an application behavior defect was demonstrated. Restore fail-closed format, label 50/6 and 26 skipped as historical tests only, require process v160 to validate contract before native launch. Windows stopped at the first failure under pytest -x; Linux observed all eight. No native release claimed.
+All three platform tests failed because Build 716 changed the report literal heading and omitted Ruff/headless fields, not because an application behavior defect was demonstrated. Restore fail-closed format, label 50/6 and 26 skipped as historical tests only, require process v163 to validate contract before native launch. Windows stopped at the first failure under pytest -x; Linux observed all eight. No native release claimed.

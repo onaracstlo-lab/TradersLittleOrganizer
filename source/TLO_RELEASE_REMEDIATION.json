@@ -1,7 +1,7 @@
 {
-  "build": 718,
+  "build": 721,
   "reviewed_baseline": 685,
-  "scope": "Build 718 display-only uppercase venue/city/location normalization; preserves Build 717 verification-contract CI fixes. Native CI acceptance pending.",
+  "scope": "Build 721: harden Windows public Git source publication against loose-object write Permission denied using packed shallow fetch in per-user temporary working directories. Application inventory/tagging behavior unchanged; native Windows publishing acceptance pending.",
   "findings": {
     "H1": {
       "status": "fixed",

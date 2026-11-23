@@ -1,9 +1,0 @@
-TLO v1.7 Build 718 — LOCAL SOURCE REGRESSION EVIDENCE (NOT RELEASE-ATTESTED)
-2026-11-22. Conservative final-output capitalization for recognized all-uppercase venue/city/location metadata; source folders, setlists, artist, dates and original matching evidence are not changed.
-Measured local Build 718 application behavior suite: 2,692 passed, 7 skipped, 4 warnings, 0 failed (96.04 seconds). Pytest third-party plugin autoload was disabled; all behavior test files were run.
-Separate application contracts/unit/integration suite: 291 passed, 0 skipped, 0 failed (14.27 seconds). Combined independent application groups: 2,983 passed, 7 skipped, 4 warnings. No combined monolithic test run or native CI success is claimed.
-New Build 718 place display cases: 29 behavior assertions (including 23 parameterized cases and setlist/no-setlist integration) plus 2 cross-platform contracts; mixed-case brand names, punctuation, abbreviations and artist protection tested.
-Build Process v160 complete local suite: 184 passed, 13 skipped, 0 failures.
-Current app source-hygiene tool: PASS. Build Process v160 readiness: PASS (25 review dispositions). DOCX documents: application 106 pages, process 28 pages; first/last/middle page contact-sheet visual QA complete.
-Ruff lint: lint not attested (pinned Ruff 0.16.10 unavailable locally). No Windows MSI update acceptance, Windows signing, FFmpeg native build, Linux/macOS packaging, ClamAV scan or GitHub Actions release attestation is claimed.
-Previous release ZIPs remain immutable. No media payload is copied for any undo operation. Compiled Python bytecode is excluded from source archives.

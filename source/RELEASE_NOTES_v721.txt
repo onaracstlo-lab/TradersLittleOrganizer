@@ -1,8 +1,12 @@
-Build 718 (2026-11-22): Apply conservative proper capitalization only to detected all-uppercase venue/city/location output at the final inventory metadata boundary; retain exact source case and intentional mixed case. Tests cover setlist headers and no-setlist folders. Hosted native CI pending.
+Build 721 / Process v163: Work around Windows Git loose-object Permission denied during public source publication using packed shallow fetch and short per-user temporary working copies. Require signed commit and verified annotated tag as before. Original files retained; native Windows verification required.
 
-TLO v1.7 Build 718 — normalize uppercase venue and city display (Build Process v160)
+Retained Build 720 correction: removed an unused local in tlo_place_display.py; Build 719 venue/city display behavior is unchanged.
+Retained from Build 719: Correct city/location words left in uppercase when a compliant venue string was mixed-case; retain all source evidence, artist names and state codes.
+Retained from Build 718 (2026-11-22): Apply conservative proper capitalization only to detected all-uppercase venue/city/location output at the final inventory metadata boundary; retain exact source case and intentional mixed case. Tests cover setlist headers and no-setlist folders. Hosted native CI pending.
+
+Retained prior-release safeguards — all-caps venue and city display and release verification
 - Restored required fail-closed NOT RELEASE-ATTESTED header, explicit unattested Ruff field, and separately labeled historical no-display/Xvfb regression counts. No new platform acceptance is asserted.
-- Build Process v160 preflights this report locally and in all three hosted jobs; negative tests reject missing and falsely claimed evidence.
+- Build Process v163 preflights this report locally and in all three hosted jobs; negative tests reject missing and falsely claimed evidence.
 - Retains prior Build 716 bytecode prevention, Build 715 pinned hash corrections, and Build 714 MSI handoff improvements.
 - Corrected Pygments 2.21.0 and Ruff 0.16.10 Linux x64 wheel SHA-256 pins using the official PyPI wheel metadata.
 - Added an offline pre-install lock validation to stop a mistyped wheel hash before package installation.
@@ -21,10 +25,10 @@ Retained Build 714 MSI handoff changes (unchanged behavior)
 - Existing signed Windows executable certificate must exactly match the new MSI signing certificate for automatic updates. Certificate changes require manual verified MSI installation.
 - Undo key creation/migration applies private user/SYSTEM ACLs on Windows; installation home must be writable by the current user.
 - Windows standard-user, MSI and UNC/mapped-drive acceptance remain NOT ATTESTED; use tools/Test-TLO-Windows-Acceptance.ps1 and native CI.
-- Other open items and scope limitations are listed in REMEDIATION_PLAN_v718.md. This is NOT a signed executable or production release.
+- Other open items and scope limitations are listed in REMEDIATION_PLAN_v721.md. This is NOT a signed executable or production release.
 
-Retained Build 713: CI cross-platform regression-fix release candidate. The eight synthetic real-audio fixture cases remain compulsory without ffmpeg on PATH; Windows lock metadata must not be read through an exclusively byte-locked handle. See CHANGES_v718.txt and REGRESSION_RESULTS_v718.txt.
+Retained Build 713: CI cross-platform regression-fix release candidate. The eight synthetic real-audio fixture cases remain compulsory without ffmpeg on PATH; Windows lock metadata must not be read through an exclusively byte-locked handle. See CHANGES_v721.txt and REGRESSION_RESULTS_v721.txt.
 
 Retained Build 716: Avoid local preflight creating __pycache__/tlo_version.cpython-*.pyc in the temporary prepared snapshot. Importer suppression plus process -B protect both standalone and orchestrated execution. No change to installed TLO behavior. Hosted native CI remains required.
 
-Retained from Build 717: non-attested verification header, required lint/headless evidence fields and process readiness preflight, addressing hosted run 45067649844. Build 718 adds conservative place-name display normalization; native acceptance still required.
+Retained from Build 717: non-attested verification header, required lint/headless evidence fields and process readiness preflight, addressing hosted run 45067649844. Build 721 adds conservative place-name display normalization; native acceptance still required.
