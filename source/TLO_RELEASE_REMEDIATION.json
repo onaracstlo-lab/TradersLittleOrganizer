@@ -1,7 +1,7 @@
 {
-  "build": 717,
+  "build": 718,
   "reviewed_baseline": 685,
-  "scope": "Build 717 release-report literal contract restoration following hosted CI run 45067649844. Native CI acceptance pending; retains prior safety fixes.",
+  "scope": "Build 718 display-only uppercase venue/city/location normalization; preserves Build 717 verification-contract CI fixes. Native CI acceptance pending.",
   "findings": {
     "H1": {
       "status": "fixed",

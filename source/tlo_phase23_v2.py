@@ -55,6 +55,7 @@ from tlo_constants import (
 from tlo_models import Candidate, ShowMetadata
 from tlo_show_descriptor import extract_fallback_descriptor
 from tlo_text_utils import compact_ws, normalized_compare_value, standard_ascii_text
+from tlo_place_display import display_place_case, replace_place_in_show_tail
 from tlo_security import escape_structured_log_text
 from tlo_etree_lookup import lookup_venue_and_location
 from tlo_setlistfm_lookup import collect_setlists_by_performance as collect_setlistfm_setlists_by_performance, is_us_country, lookup_venue_and_location as lookup_setlistfm_venue_and_location
@@ -5223,7 +5224,39 @@ def _protect_explicit_regionless_place(config, record: ShowMetadata) -> None:
 
 
 def _normalize_record_ascii_for_output(record: ShowMetadata) -> ShowMetadata:
-    """Normalize user-facing metadata fields before logs, bootlist, folders and tags use them."""
+    """Normalize user-facing metadata fields before logs, bootlist, folders and tags use them.
+
+    Place-name case is a display-only operation, done once *after* all
+    evidence has been resolved. Original source and candidate evidence stay
+    unchanged. Preserve artist, date, descriptor and compliant naming rules.
+    """
+    changes = []
+    old_location = getattr(record, "location", "")
+    old_city = getattr(record, "city", "")
+    old_region = getattr(record, "region", "")
+    old_country = getattr(record, "country", "")
+    for field in ("venue", "city", "region", "country"):
+        old_value = getattr(record, field, "")
+        new_value = display_place_case(old_value, kind=field)
+        if new_value != old_value:
+            setattr(record, field, new_value)
+            if field in ("venue", "city"):
+                changes.append((old_value, new_value))
+
+    # A generated location follows its components exactly. Preserve existing
+    # punctuation and any extra manual metadata if it does not.
+    original_components = _join_location(
+        old_city,
+        old_region,
+        old_country,
+    )
+    if old_location and original_components and old_location.casefold() == original_components.casefold():
+        record.location = _join_location(getattr(record, "city", ""), getattr(record, "region", ""), getattr(record, "country", ""))
+    else:
+        record.location = display_place_case(old_location, kind="location")
+    if old_location != record.location:
+        changes.append((old_location, record.location))
+    record.show_name = replace_place_in_show_tail(getattr(record, "show_name", ""), getattr(record, "artist", ""), tuple(changes))
     for attr in (
         "artist", "date", "venue", "city", "region", "country", "location",
         "parentheticals", "album_name", "descriptor", "descriptor_source", "qualifier", "show_name",

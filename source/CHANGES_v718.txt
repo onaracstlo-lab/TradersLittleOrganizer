@@ -1,3 +1,10 @@
+TLO v1.7 Build 718 — Conservative all-caps place-name display normalization (Build Process v160)
+- Recognized venue, city and generated location fields written in ALL CAPITALS from folder names, setlists or other metadata sources become readable proper capitalization. Original Artist, date, qualifiers, paths, raw setlist text and evidence remain untouched.
+- Common venue acronyms and state/region codes remain uppercase; intentional mixed-case brand spellings remain unchanged; cases that are not confidently all-uppercase are not rewritten.
+- One shared final metadata boundary updates output show names, bootlist records, generated setlist metadata and tags consistently. No online service or new database required.
+- New behavior and macOS-compatible contracts cover both no-setlist folders and all-caps setlist header cases. Native CI acceptance remains pending.
+
+HISTORICAL CHANGELOG — PRIOR BUILDS:
 TLO v1.7 Build 717 — Restore fail-closed verification-report contracts (GitHub Build Process v159)
 2026-11-22 | SOURCE CANDIDATE, NOT RELEASE-ATTESTED
 - Fix hosted GitHub Actions run 45067649844 failure caused by loss of exact historical verification-report fields in Build 716; 8 Linux, 1 macOS, and Windows stop at first failure.
