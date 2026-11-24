@@ -49,7 +49,7 @@ def _write_package(path: Path, *, kind: str, platform_key: str, build: int, data
             archive.writestr("TLO_DBs/artists.sqlite", b"db")
             archive.writestr("TLO_DBs/venues.txt", "venues")
             if build >= 646:
-                archive.writestr("TLO_DBs/cities.csv", (Path(__file__).resolve().parents[2] / 'TLO_DBs/cities.csv').read_bytes())
+                archive.writestr("TLO_DBs/cities.csv", b"historical city master fixture")
 
 
 def test_build458_update_only_release_is_selected(monkeypatch):

@@ -13,7 +13,8 @@ def _support_files(tmp_path):
     (dbs / "venues.txt").write_text("Van\nLone Star Cafe\n", encoding="utf-8")
     (dbs / "states_regions.csv").write_text("abbrev^name^country\nMB^Manitoba^Canada\n", encoding="utf-8")
     (dbs / "countries.csv").write_text("country^canonical\nCanada^Canada\n", encoding="utf-8")
-    (dbs / "cities.csv").write_text("city^region^country\nWinnipeg^MB^Canada\n", encoding="utf-8")
+    from tests._city_fixture import city_db
+    city_db(dbs / "cities.sqlite", [("Winnipeg", "MB", ())])
     return dbs
 
 

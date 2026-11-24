@@ -1,28 +1,30 @@
-TLO v1.7 Build 723 — NOT RELEASE-ATTESTED
-Companion TLO GitHub Build Process v165.
-Local source candidate. This document does NOT attest successful native release/CI jobs for Build 723.
+TLO v1.7 Build 725 — NOT RELEASE-ATTESTED
+Companion TLO GitHub Build Process v167.
+Local source candidate. This document does NOT attest successful native release/CI jobs for Build 725.
 Ruff lint: lint not attested (required pinned Ruff 0.16.10 must be executed by native hosted CI; an offline AST import audit is not Ruff).
 
-Historical Build 532 / Build 613 test evidence — PREVIOUS BUILDS ONLY, not a Build 723 CI claim:
+Historical Build 532 / Build 613 test evidence — PREVIOUS BUILDS ONLY, not a Build 725 CI claim:
   Xvfb display (CI=1): previous standalone GUI tests were run under a virtual display.
   No display (DISPLAY and CI unset): standalone Build 532 GUI subset: 50 passed, 6 skipped.
   Historic Build 613 full Linux CI job: 26 skipped (different population from the standalone no-display subset).
   These historic counts must not be confused with the current full GitHub Actions run.
 
-Current hosted acceptance: NOT ATTESTED for Build 723.
+Current hosted acceptance: NOT ATTESTED for Build 725.
 Build 720 native GitHub Actions finished sufficiently to produce locally hash-bound release artifacts, but public release source-repository publication then failed while Git wrote object files. The earlier FAILED Build 716 run 45067649844 remains historical evidence only.
-Required historical report assertions are retained; process v165 runs early Windows/Linux Add Shows batch and review-flow regression gates.
-Build 723 native Windows/Linux/macOS tests, pinned Ruff, signing and scan gates have NOT run successfully yet; full GitHub Actions run must pass before release promotion.
-Build 723 local application: 2,733 behavior passed / 7 skipped (13 independent shards; 3 warnings), 295 contracts/unit/integration passed; total 3,028 passed / 7 skipped. Process v165: 194 passed / 14 skipped. Ruff lint: lint not attested locally (pinned Ruff 0.16.10 unavailable); native CI required. Source-readiness and release hygiene passed. Native publication/signing not attested.
+Required historical report assertions are retained; process v167 runs early Windows/Linux Add Shows batch and review-flow regression gates.
+Build 725 native Windows/Linux/macOS tests, pinned Ruff, signing and scan gates have NOT run successfully yet; full GitHub Actions run must pass before release promotion.
+Build 724 local evidence (historical): 3,039 application tests and 194 process tests passed. See REGRESSION_RESULTS_v725.txt for new local test results.
 
 No bytecode-in-source, wheel hash, Authenticode, MSI installer or update-metadata verification gate has been relaxed.
 Source ZIP is not a runnable platform distribution and must not be promoted as production without native acceptance.
 
-Retained Build 718 behavior: conservative user-facing case normalization for identified all-uppercase venue/city/location. Full hosted GitHub Actions acceptance for Build 723 is NOT ATTESTED.
+Retained Build 718 behavior: conservative user-facing case normalization for identified all-uppercase venue/city/location. Full hosted GitHub Actions acceptance for Build 725 is NOT ATTESTED.
 
 Retained Build 719 correction: compliant String2 may store a mixed-case venue with an embedded uppercase city/region suffix. Output-only normalization corrects uppercase Latin place words and keeps terminal region codes uppercase without splitting, guessing, or changing raw paths or source evidence. Five supplied real examples reproduced and passed. Original typos remain verbatim; preexisting inventory requires reprocessing.
 
-Build 720 correction retained: unused wholly_upper was removed. Venue/city display behavior is unchanged in Build 723.
-Retained Build 721 correction: publication stage failed locally after the signed and hash-bound Build 720 artifacts were assembled. Three Git shallow fetch attempts reported Windows Permission denied while writing loose objects in C:\TLO-GitHub-Build. Process v165 now prefers packed Git fetch and short user-temp working roots with strict cleanup and preserved signed commit/annotated-tag verification. Actual Windows publication and GitHub release creation: NOT ATTESTED.
+Build 720 correction retained: unused wholly_upper was removed. Venue/city display behavior is unchanged in Build 725.
+Retained Build 721 correction: publication stage failed locally after the signed and hash-bound Build 720 artifacts were assembled. Three Git shallow fetch attempts reported Windows Permission denied while writing loose objects in C:\TLO-GitHub-Build. Process v167 now prefers packed Git fetch and short user-temp working roots with strict cleanup and preserved signed commit/annotated-tag verification. Actual Windows publication and GitHub release creation: NOT ATTESTED.
 
 Earlier Windows Recycle Bin defaults correction (retained for Delete New): missing HKCU per-volume BitBucket values are Windows defaults, not a reason to reject. An explicit NukeOnDelete policy, inaccessible settings, or configured insufficient quota still fails closed. The deferred old-show cleanup template now uses guarded rmdir /s /q, intentionally permanent when separately executed by the user. It does not record undo data. Native Windows COM/FileIO acceptance: NOT ATTESTED.
+
+Current local regression: 3,046 application passed / 7 skipped (13 groups and 7 new cases); 192 process passed / 14 skipped. Source hygiene and readiness passed; native gates NOT ATTESTED.

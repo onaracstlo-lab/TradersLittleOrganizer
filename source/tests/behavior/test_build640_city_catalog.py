@@ -6,6 +6,7 @@ import pytest
 
 import tlo_phase23_v2 as phase
 from tlo_artist_db import ArtistMatcher
+from tests._city_fixture import city_db
 from tlo_cities import CityCatalog, catalog_for_tlo, refine_parsed_fields
 from tlo_setlist_metadata_lookup import _SupportData, _parse_location_from_text
 
@@ -107,23 +108,20 @@ def test_existing_path_city_precedence_over_setlist_is_unchanged(tmp_path):
 
 def test_combined_index_name_alias_equivalence_and_full_text_guard():
     cat = catalog_for_tlo()
-    assert cat.lookup_exact('Cologne') == cat.lookup_exact('Köln')
+    assert cat.lookup_exact('Cologne').country == ''  # also a distinct Italian city
+    assert cat.lookup_exact('Köln').country == 'Germany'
     assert cat.lookup_exact('Cologne Germany') is None
     assert cat.lookup_exact('Nice') is None
     assert cat.lookup_exact('Bowie') is None
 
 
-def test_conventional_csv_and_caret_compatibility(tmp_path):
-    p = tmp_path / 'cities.csv'
-    p.write_text('city,region,country,aliases\nKöln,,Germany,Cologne|Koln\n', encoding='utf-8')
-    assert CityCatalog.from_csv(p).lookup_exact('Cologne').city == 'Köln'
-    p.write_text('city^region^country^aliases\nKöln^^Germany^Cologne|Koln\n', encoding='utf-8')
-    assert CityCatalog.from_csv(p).lookup_exact('Cologne').city == 'Köln'
-    p.write_text('city^region^country\nKöln^^Germany\n', encoding='utf-8')
-    assert CityCatalog.from_csv(p).lookup_exact('Köln').city == 'Köln'
+def test_sqlite_alias_compatibility(tmp_path):
+    p = city_db(tmp_path / 'cities.sqlite', [('Köln', 'Germany', ('Cologne', 'Koln'))])
+    assert CityCatalog.from_sqlite(p).lookup_exact('Cologne').city == 'Köln'
+    assert CityCatalog.from_sqlite(p).lookup_exact('Köln').city == 'Köln'
 
 
-def test_malformed_local_file_does_not_disable_packaged_catalog(tmp_path):
+def test_obsolete_local_csv_is_ignored(tmp_path):
     (tmp_path / 'cities.csv').write_text('city,region\nLondon,UK\n', encoding='utf-8')
     assert catalog_for_tlo(str(tmp_path)).lookup_exact('Cologne') is not None
     r = _parse(tmp_path, 'The Who, Cologne 1970-04-01')
@@ -140,27 +138,29 @@ def test_setlist_parser_keeps_explicit_alias_spelling(tmp_path):
 def test_packaged_city_data_on_all_platforms(tmp_path, monkeypatch):
     """External TLO_DBs data must be discoverable without a Python copy."""
     import sys
-    from tlo_cities import catalog_for_tlo, _cached_layered
+    from tlo_cities import catalog_for_tlo, _cached_catalog
     root = Path(__file__).resolve().parents[2]
-    assert (root / 'TLO_DBs/cities.csv').read_bytes() == (root / 'cities.csv').read_bytes()
+    assert (root / 'TLO_DBs/cities.sqlite').is_file()
+    assert not (root / 'cities.csv').exists()
+    assert not (root / 'TLO_DBs/cities.csv').exists()
     for name in ['createWindowsDist.ps1', 'createMacOSDist.sh', 'createLinuxDist.sh']:
         script = (root / name).read_text(encoding='utf-8')
         assert 'stage_city_database.py' in script
-        assert '--add-data' not in '\n'.join(x for x in script.splitlines() if 'cities.csv' in x)
+        assert '--add-data' not in '\n'.join(x for x in script.splitlines() if 'cities.sqlite' in x)
     with monkeypatch.context() as patch:
         patch.setattr(sys, 'frozen', True, raising=False)
         patch.setattr(sys, 'executable', str(tmp_path / 'apps' / 'Linux' / 'tlo-main'), raising=False)
-        _cached_layered.cache_clear()
+        _cached_catalog.cache_clear()
         assert catalog_for_tlo() is None
         db = tmp_path / 'TLO_DBs'
         db.mkdir()
-        (db / 'cities.csv').write_bytes((root / 'cities.csv').read_bytes())
+        (db / 'cities.sqlite').write_bytes((root / 'TLO_DBs/cities.sqlite').read_bytes())
         assert catalog_for_tlo().lookup_exact('London') is not None
-    _cached_layered.cache_clear()
+    _cached_catalog.cache_clear()
 
 
 def test_refiner_preserves_alias_and_does_not_invent_country(tmp_path):
     out = refine_parsed_fields(folder_name='The Who, Cologne 1970-04-01',
                               artist='The Who', date='1970-04-01',
-                              csv_path=Path(__file__).resolve().parents[2] / 'cities.csv')
+                              db_path=Path(__file__).resolve().parents[2] / 'TLO_DBs/cities.sqlite')
     assert out == {'city': 'Cologne', 'region': '', 'country': '', 'venue': ''}

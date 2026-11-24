@@ -16,6 +16,6 @@ $arguments = @($Script,'--source-root',$SourceRoot)
 if ($DistRoot) { $arguments += @('--dist-root',$DistRoot) }
 & $python.Source @arguments
 if ($LASTEXITCODE -ne 0) { throw "City database staging failed: exit $LASTEXITCODE" }
-$cityPath = Join-Path $SourceRoot 'TLO_DBs\cities.csv'
+$cityPath = Join-Path $SourceRoot 'TLO_DBs\cities.sqlite'
 if (-not (Test-Path -LiteralPath $cityPath -PathType Leaf)) { throw "Missing staged city DB $cityPath" }
 Write-Host "Staged physical city DB: $cityPath"

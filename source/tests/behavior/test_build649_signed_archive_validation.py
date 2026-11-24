@@ -27,7 +27,7 @@ def package(path: Path, *, build: int = 649, databases: bool = True,
         z.writestr('UPDATE_MANIFEST.json' if kind=='update' else 'manifest.json', json.dumps(manifest))
         for name in files:
             if databases:
-                data = (ROOT/'cities.csv').read_bytes() if name=='cities.csv' else b'fixture DB'
+                data = b'fixture DB'
                 z.writestr('TLO_DBs/'+name,data)
         for name in extra:z.writestr(name,b'fixture')
 

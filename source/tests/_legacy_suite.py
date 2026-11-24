@@ -315,8 +315,8 @@ def _support():
     base = tempfile.mkdtemp()
     with open(os.path.join(base, "venues.txt"), "w") as fh:
         fh.write("Parc des Expos\nStadthalle\nMadison Square Garden\n")
-    with open(os.path.join(base, "cities.csv"), "w") as fh:
-        fh.write("city^region^country\nReims^^France\nSt. Ingbert^^Germany\n")
+    from tests._city_fixture import city_db
+    city_db(os.path.join(base, "cities.sqlite"), [("Reims", "France", ()), ("St. Ingbert", "Germany", ())])
     with open(os.path.join(base, "countries.csv"), "w") as fh:
         fh.write("name^code\nFrance^FR\nGermany^DE\n")
     return M._SupportData(base)

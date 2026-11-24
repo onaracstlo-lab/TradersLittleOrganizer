@@ -16,7 +16,8 @@ def test_faq_corruption_and_duplicate_policy_current():
 
 def test_city_and_shn_recovery_documentation_current():
     faq=(ROOT/'TLO-FAQ.txt').read_text(encoding='utf-8')
-    assert 'adds valid non-conflicting city records' in faq
+    assert 'The sole city reference is TLOHome/TLO_DBs/cities.sqlite' in faq
+    assert 'Existing city CSV files are ignored' in faq
     assert '.tlo-shn-originals/<unique-id>/<original-filename>' in faq
     assert 'atomic no-overwrite rename' in faq
     manual=(ROOT/f'TLO_Inventory_User_Manual_{VERSION}.rtf').read_text(encoding='utf-8')

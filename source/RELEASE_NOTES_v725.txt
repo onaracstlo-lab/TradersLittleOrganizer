@@ -1,3 +1,9 @@
+Build 725 / Process v167: cities.sqlite is the only city reference. Folder and setlist parsers retain built-in, positional, region/country, venue and online rules; unknown cities remain supported. Retire the city CSV from native release, MSI and database-inclusive updates. Existing obsolete files in TLOHome are ignored, not deleted. Native signing/CI pending.
+
+HISTORICAL NOTES:
+Build 724 / Process v166: Integrated the supplied SQLite city matching prototype into folder-name and selected-setlist location parsing without replacing historical fallback rules. High-confidence location-qualified typos can be corrected and multiword city boundaries recognized, while unlisted/ambiguous locations and source aliases retain prior behavior. External TLO_DBs/cities.sqlite is packaged with other DB masters in MSI and database-inclusive ZIPs. Source-only candidate; native signing, CI builds and Windows acceptance not yet attested.
+
+RETAINED PRIOR BEHAVIOR:
 Build 723 / Process v165: Restored per-volume-guarded Windows rmdir /s /q in the reusable deferred duplicate cleanup batch template; there is no batch undo or recycle path. Add Shows shows per-folder progress and automatically scans/opens pending duplicates after Process New Shows; Quit leaves unresolved candidates in dups for the existing Process Duplicates button. Immediate Delete New still uses Windows Recycle Bin. Signed native CI and actual cmd.exe acceptance remain required.
 
 Retained Build 722 context:
@@ -11,7 +17,7 @@ Retained from Build 718 (2026-11-22): Apply conservative proper capitalization o
 
 Retained prior-release safeguards — all-caps venue and city display and release verification
 - Restored required fail-closed NOT RELEASE-ATTESTED header, explicit unattested Ruff field, and separately labeled historical no-display/Xvfb regression counts. No new platform acceptance is asserted.
-- Build Process v165 preflights this report locally and in all three hosted jobs; negative tests reject missing and falsely claimed evidence.
+- The retained Build Process v165 preflight checks this report locally and in all three hosted jobs; negative tests reject missing and falsely claimed evidence.
 - Retains prior Build 716 bytecode prevention, Build 715 pinned hash corrections, and Build 714 MSI handoff improvements.
 - Corrected Pygments 2.21.0 and Ruff 0.16.10 Linux x64 wheel SHA-256 pins using the official PyPI wheel metadata.
 - Added an offline pre-install lock validation to stop a mistyped wheel hash before package installation.
@@ -30,9 +36,9 @@ Retained Build 714 MSI handoff changes (unchanged behavior)
 - Existing signed Windows executable certificate must exactly match the new MSI signing certificate for automatic updates. Certificate changes require manual verified MSI installation.
 - Undo key creation/migration applies private user/SYSTEM ACLs on Windows; installation home must be writable by the current user.
 - Windows standard-user, MSI and UNC/mapped-drive acceptance remain NOT ATTESTED; use tools/Test-TLO-Windows-Acceptance.ps1 and native CI.
-- Other open items and scope limitations are listed in REMEDIATION_PLAN_v723.md. This is NOT a signed executable or production release.
+- Other open items and scope limitations are listed in REMEDIATION_PLAN_v724.md. This is NOT a signed executable or production release.
 
-Retained Build 713: CI cross-platform regression-fix release candidate. The eight synthetic real-audio fixture cases remain compulsory without ffmpeg on PATH; Windows lock metadata must not be read through an exclusively byte-locked handle. See CHANGES_v723.txt and REGRESSION_RESULTS_v723.txt.
+Retained Build 713: CI cross-platform regression-fix release candidate. The eight synthetic real-audio fixture cases remain compulsory without ffmpeg on PATH; Windows lock metadata must not be read through an exclusively byte-locked handle. See current CHANGES_v724.txt and REGRESSION_RESULTS_v724.txt for retained history.
 
 Retained Build 716: Avoid local preflight creating __pycache__/tlo_version.cpython-*.pyc in the temporary prepared snapshot. Importer suppression plus process -B protect both standalone and orchestrated execution. No change to installed TLO behavior. Hosted native CI remains required.
 

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from tlo_cities import catalog_for_tlo
+from tlo_city_sqlite import corrected_city
 from tlo_constants import (
     AMBIGUOUS_CANADIAN_REGION_CODES, CANADIAN_REGION_ALIASES, CANADIAN_REGION_CODES,
     COUNTRY_ALIASES, COUNTRY_SEARCH_TERMS, LOCATION_CONNECTIVE_WORDS,
@@ -745,7 +746,7 @@ def _should_skip_los_angeles_shorthand(text: str, city: str, alias: str, match: 
     """Avoid treating LA/L.A. as Los Angeles when it is likely Louisiana.
 
     LA is also the U.S. state abbreviation for Louisiana.  The setlist metadata
-    parser may load LA or L.A. as an alias for Los Angeles from cities.csv.  That
+    parser may load LA or L.A. as an alias for Los Angeles from cities.sqlite.  That
     shorthand is accepted only when California is explicitly present immediately
     after the alias; full "Los Angeles" text is still accepted normally.
     """
@@ -934,7 +935,7 @@ def _parse_region_country_location(line: str, support: _SupportData) -> Tuple[st
     return "", "", "", "", "", 0
 
 
-def _parse_location_from_text(raw: str, support: _SupportData) -> Tuple[str, str, str, str, str, int]:
+def _parse_location_from_text_legacy(raw: str, support: _SupportData) -> Tuple[str, str, str, str, str, int]:
     line = _clean_spaces(str(raw or "").strip(" .;"))
     if not line:
         return "", "", "", "", "", 0
@@ -1000,22 +1001,29 @@ def _parse_location_from_text(raw: str, support: _SupportData) -> Tuple[str, str
                 found_tail = True
             else:
                 for key, info in support.regions.items():
-                    if not key.isupper() and tail_norm.startswith(key):
+                    if not key.isupper() and (tail_norm == key or tail_norm.startswith(key + " ")):
                         region = info.get('region', region)
                         country = info.get('country', country)
                         found_tail = True
                         break
                 if not found_tail:
                     for key, canonical in support.countries.items():
-                        if len(key) >= 3 and tail_norm.startswith(key):
+                        if len(key) >= 3 and (tail_norm == key or tail_norm.startswith(key + " ")):
                             country = canonical
                             found_tail = True
                             break
             exactish = _norm_key(line) in {_norm_key(cityrow.city), _norm_key(spelling)}
             if not found_tail and exactish:
                 continue
-            if not found_tail and not _has_explicit_location_evidence(line):
-                continue
+            if not found_tail:
+                # A city anywhere inside a comma-separated performer list is
+                # not location evidence. Require a complete trailing component
+                # (or an explicit at/in anchor), not an arbitrary substring.
+                if tail or not _has_explicit_location_evidence(line):
+                    continue
+                prefix = line[:start]
+                if not (re.search(r'[,;:]\s*$', prefix) or re.search(r'(?i)\b(?:at|in)\s*$', prefix)):
+                    continue
             # Location recognition must not translate the supplied spelling
             # (e.g. Cologne => Köln).  Do not add a catalog-supplied country
             # to a line which has no corroborating country/region text.
@@ -1042,6 +1050,20 @@ def _parse_location_from_text(raw: str, support: _SupportData) -> Tuple[str, str
     return "", "", "", "", "", 0
 
 
+
+
+def _parse_location_from_text(raw: str, support: _SupportData) -> Tuple[str, str, str, str, str, int]:
+    """Preserve all preexisting location evidence, refining only safe city typos.
+
+    A positive geographic anchor comes from the old parser (not the SQLite
+    row). An absent or rejected SQLite match leaves the old result unchanged.
+    """
+    city, region, country, source_raw, pattern, confidence = _parse_location_from_text_legacy(raw, support)
+    if city and (region or country):
+        corrected = corrected_city(city, region, country, support.tlo_dbs_dir)
+        if corrected != city:
+            return corrected, region, country, source_raw, pattern + '_SQLITE_CORRECTED', confidence
+    return city, region, country, source_raw, pattern, confidence
 
 
 def _split_explicit_venue_value(value: str, support: _SupportData) -> Tuple[str, str, str, str, str, str, int]:
@@ -1754,7 +1776,7 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
     """Extract venue/location from one selected setlist text file.
 
     This is intentionally local-only and intended for the non-compliant path.
-    It uses TLOHome/TLO_DBs support files: venues.txt plus optional cities.csv,
+    It uses TLOHome/TLO_DBs support files: venues.txt plus optional cities.sqlite,
     states_regions.csv, and countries.csv.
     """
     if not setlist_file:

@@ -80,7 +80,8 @@ def test_known_city_without_venue_remains_supported(tmp_path):
 
 
 def test_optional_city_reference_is_accepted(tmp_path):
-    (tmp_path / "cities.csv").write_text("city^region^country^aliases\nWorcester^MA^US^\n", encoding="utf-8")
+    from tests._city_fixture import city_db
+    city_db(tmp_path / "cities.sqlite", [("Worcester", "MA", ())])
     record = _parse("Bob Dylan, Worcester 1975-10-21", tmp_path)
     assert record.city == "Worcester"
     assert record.venue == ""

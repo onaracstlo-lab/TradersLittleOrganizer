@@ -1,3 +1,8 @@
+HISTORICAL UPDATE MIGRATION NOTES — superseded city database contract
+Current Build 725 and later use cities.sqlite, not the retired city CSV.
+For initial migration from a CSV-only installation use an MSI or database-inclusive ZIP.
+The earlier instructions below are retained only for historical context.
+
 TLO v1.7 Build 653: update signatures, ZIP hashes and the external city database
 =========================================================================
 

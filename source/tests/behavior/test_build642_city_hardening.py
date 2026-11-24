@@ -3,33 +3,39 @@ import pytest
 pytestmark = pytest.mark.behavior
 from tlo_cities import catalog_for_tlo
 
-def test_layering_keeps_bundled_cities_and_adds_local(tmp_path):
-    p=tmp_path/'cities.csv'
-    p.write_text('city,region,country,aliases\nNew Testington,,United States,New Testing\n',encoding='utf-8')
+from tests._city_fixture import city_db
+
+
+def test_configured_sqlite_is_sole_reference(tmp_path):
+    city_db(tmp_path/'cities.sqlite', [('New Testington','NH',('New Testing',))])
+    (tmp_path/'cities.csv').write_text('city,region,country,aliases\nFake City,MA,USA,\n')
     cat=catalog_for_tlo(str(tmp_path))
-    assert cat.lookup_exact('London') is not None
+    assert cat.lookup_exact('London') is None
+    assert cat.lookup_exact('Fake City') is None
     assert cat.lookup_exact('New Testing').city=='New Testington'
 
-def test_malformed_rows_ignored_without_losing_valid_entries(tmp_path):
-    p=tmp_path/'cities.csv'
-    p.write_text('city^region^country^aliases\nBadly broken\nTest Town^^Canada^Town Test^extra_reason\n^^Attribution^\n',encoding='utf-8')
-    cat=catalog_for_tlo(str(tmp_path))
-    assert cat.lookup_exact('London') is not None
-    assert cat.lookup_exact('Town Test').city=='Test Town'
-    assert cat.warnings
 
-def test_local_collision_does_not_override_bundled_city(tmp_path):
-    p=tmp_path/'cities.csv'
-    p.write_text('city,region,country,aliases\nBerlin,,United States,New Berlin\n',encoding='utf-8')
-    cat=catalog_for_tlo(str(tmp_path))
-    assert cat.lookup_exact('Berlin').country=='Germany'
-    assert cat.lookup_exact('New Berlin') is None
+def test_corrupt_sqlite_falls_back_to_non_database_parsing(tmp_path):
+    (tmp_path/'cities.sqlite').write_bytes(b'bad file')
+    seen=[]
+    assert catalog_for_tlo(str(tmp_path),on_warning=seen.append) is None
+    assert seen and 'original parsing retained' in seen[0]
 
-def test_concert_cities_retained_but_country_unknown():
+
+def test_ambiguous_alias_cannot_assign_geography(tmp_path):
+    city_db(tmp_path/'cities.sqlite', [('Berlin','Germany',('New Berlin',)), ('Berlin','NH',())])
+    cat=catalog_for_tlo(str(tmp_path))
+    assert cat.lookup_exact('Berlin').country==''
+    assert cat.lookup_exact('New Berlin').country=='Germany'
+
+
+def test_concert_city_recognition_does_not_impute_geography():
     cat=catalog_for_tlo()
     for name in ('Bristol','Brighton','Aberdeen','York','Coventry','Perth'):
         row=cat.lookup_exact(name)
-        assert row and row.country == '', name
+        assert row, name
+        result=cat.suggest_for_known_artist(f'Phish, {name} 1997-07-01',artist='Phish',date='1997-07-01')
+        assert result and result.city==name
 
 def test_hyphen_within_word_not_explicit_separator():
     cat=catalog_for_tlo()

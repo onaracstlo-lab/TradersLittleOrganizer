@@ -1,6 +1,6 @@
 """Conservative city lookup for Traders Little Organizer.
 
-GeoNames city source: https://www.geonames.org/ (CC BY 4.0).
+Physical city data comes from the schema-v1 SQLite city master.
 Use after artist and date are independently established; never classify raw
 folders by city string alone. No network calls. No filesystem modifications.
 """
@@ -15,16 +15,18 @@ import logging
 from functools import lru_cache
 from pathlib import Path
 import sys
-import csv
+import sqlite3
+from match_city import US_STATES, CA_PROVS, GB_LABELS, normalize as compact_city_key
 import re
 import unicodedata
 
-_HEADER = ['city', 'region', 'country', 'aliases']
 _DATE = re.compile(r'(?<!\d)(?:19|20)\d{2}[-/.](?:0?[1-9]|1[0-2]|xx)[-/.](?:[0-2]?\d|3[01]|xx)(?!\d)', re.I)
 _WORD = re.compile(r'[^\W_]+', re.UNICODE)
 # There is no reliable generic way to distinguish these from musicians/ensembles
 # when the folder provides no location punctuation or corroborating geography.
 # The artist DB supplied by the calling application provides additional blocks.
+# Unsafe without independent geography; scoped matcher still recognizes these.
+_UNSCOPED_UNSAFE = frozenset({'nice', 'bowie', 'reading', 'woodstock', 'mobile', 'soundboard', 'matrix'})
 _CONFLICTING_ARTIST_NAMES = frozenset({
     'athens', 'berlin', 'boston', 'chicago', 'dallas', 'geneva',
     'london', 'memphis', 'miami', 'moscow', 'paris', 'phoenix',
@@ -74,22 +76,35 @@ class CityCatalog:
                 k = _canonical_key(name)
                 if k:
                     entries.setdefault(k,set()).add(city)
-        # Ambiguous aliases/canonical names are never returned at lookup time.
-        self._lookup = {key: next(iter(vals)) for key,vals in entries.items()
-                        if len(vals) == 1}
-        self._ambiguous = {key for key,vals in entries.items() if len(vals) > 1}
+        # A city spelling may be real in several regions. Recognize the
+        # spelling only; never select a geographic identity from an ambiguous key.
+        self._lookup = {}
+        for key, vals in entries.items():
+            if key in _UNSCOPED_UNSAFE:
+                continue
+            if len(vals) == 1:
+                self._lookup[key] = next(iter(vals))
+            else:
+                # A spelling that is itself a canonical city can be retained
+                # without asserting which city/region it refers to.
+                canonical = [v for v in vals if _canonical_key(v.city) == key]
+                if canonical:
+                    self._lookup[key] = City(sorted(canonical, key=lambda v: v.city)[0].city, '', '')
         self.max_words = max((len(k.split()) for k in self._lookup),default=0)
 
     @classmethod
-    def from_csv(cls, path: str | Path) -> 'CityCatalog':
-        """Read curated/user city rows, rejecting individual malformed records.
-
-        Both conventional CSV and legacy caret-delimited data are supported.
-        Trailing legacy comment/reason columns are ignored. Bad headers yield
-        an empty catalog rather than accepting arbitrary columns as cities.
-        """
-        rows, issues = _read_city_rows(Path(path))
-        return cls(rows, tuple(issues))
+    def from_sqlite(cls, path: str | Path) -> 'CityCatalog':
+        """Load the prototype's canonical names/aliases, not a second database."""
+        from match_city import CityMatcher
+        with CityMatcher(path) as matcher:
+            aliases = {}
+            for row in matcher.connection.execute('SELECT city_id,name FROM city_names WHERE is_canonical=0'):
+                aliases.setdefault(row[0], []).append(row[1])
+            cities = []
+            for city_id, name, geography in matcher.connection.execute('SELECT city_id,canonical_city,region FROM cities'):
+                region, country = _geography(geography)
+                cities.append(City(name, region, country, tuple(aliases.get(city_id, ()))))
+        return cls(cities)
 
     def lookup_exact(self, text: str) -> City | None:
         """Return a uniquely represented complete city name, never a substring."""
@@ -97,11 +112,11 @@ class CityCatalog:
 
     @property
     def lookup_keys(self) -> frozenset[str]:
-        """Unambiguous normalized keys, canonical names and aliases together."""
+        """Recognized normalized spellings; ambiguous geography remains unset."""
         return frozenset(self._lookup)
 
     def suffix_match(self, raw: str) -> tuple[str, City] | None:
-        """Longest whole-token suffix; no prefix-substring or ambiguous match."""
+        """Longest whole-token suffix; no prefix-substring or ambiguous alias."""
         words = list(_WORD.finditer(raw))
         for n in range(min(len(words), self.max_words), 0, -1):
             suffix = raw[words[-n].start():words[-1].end()]
@@ -169,6 +184,9 @@ class CityCatalog:
             prefix_raw = city_text[:start]
             venue_prefix = prefix_raw.strip(' ,\t\r\n-–—')
             explicit_delimiter = bool(re.search(r'[,;:]\s*$|\s[-–—]\s*$',prefix_raw))
+            # New York without a delimiter may be part of a venue/title.
+            if venue_prefix and not explicit_delimiter and city_key == 'new york':
+                continue
             # Single-word trailing place could just be artist, venue or title.
             if n == 1 and not explicit_delimiter and not (city_after_date and not venue_prefix):
                 continue
@@ -207,7 +225,7 @@ def refine_parsed_fields(
     artist_names: tuple[str,...] | list[str] | set[str] = (),
     artist_is_known: Callable[[str],bool] | None = None,
     raw_date: str = '',
-    csv_path: str | Path,
+    db_path: str | Path | None = None,
     on_warning=None, catalog: CityCatalog | None = None,
 ) -> dict[str,str]:
     """Safe opt-in adapter: FILL EMPTY city only. Never rewrite venue or override metadata.
@@ -221,8 +239,10 @@ def refine_parsed_fields(
         return fields
     try:
         if catalog is None:
-            catalog = _load_cached(str(Path(csv_path).resolve()))
-    except (OSError, UnicodeError, ValueError, csv.Error) as exc:
+            catalog = _load_path(Path(db_path)) if db_path is not None else catalog_for_tlo()
+        if catalog is None:
+            return fields
+    except (OSError, ValueError, sqlite3.Error) as exc:
         # Missing/corrupt optional city data must NEVER abort an inventory.
         if on_warning is not None:
             on_warning(f'City catalog unavailable; old parsing preserved: {exc}')
@@ -240,180 +260,70 @@ def refine_parsed_fields(
     return fields
 
 
-_HEADER_TUPLE = tuple(_HEADER)
-_MAX_LOCAL_BYTES = 3 * 1024 * 1024
-_REPORTED_ISSUES: set[tuple[str, str]] = set()
-
-
-def _read_city_rows(path: Path) -> tuple[list[City], list[str]]:
-    """Read a physical TLO_DBs/cities.csv, rejecting only malformed rows.
-
-    There is deliberately no internal/embedded CSV or fallback. A missing
-    external city database leaves TLO's preexisting parsing behavior intact.
-    """
-    issues: list[str] = []
-    rows: list[City] = []
-    label = path.name
-    if path.stat().st_size > _MAX_LOCAL_BYTES:
-        return [], [f"{label} ignored: file larger than 3 MB"]
-    handle = path.open('r', encoding='utf-8-sig', newline='')
-    with handle:
-        first = handle.readline().strip('\r\n')
-        handle.seek(0)
-        delimiter = '^' if first.startswith('city^') else ','
-        reader = csv.reader(handle, delimiter=delimiter)
-        try:
-            header = next(reader)
-        except StopIteration:
-            return [], [f"{label} ignored: empty file"]
-        if tuple(h.strip() for h in header[:3]) != _HEADER_TUPLE[:3]:
-            return [], [f"{label} ignored: expected city,region,country columns"]
-        for lineno, values in enumerate(reader, start=2):
-            if not values or values[0].lstrip().startswith('#'):
-                continue
-            if len(values) < 3 or not values[0].strip():
-                issues.append(f"{label} line {lineno} ignored: missing required city/columns")
-                continue
-            city, region, country = (v.strip() for v in values[:3])
-            if not city or len(city) > 120 or len(region) > 120 or len(country) > 120:
-                issues.append(f"{label} line {lineno} ignored: invalid field length")
-                continue
-            alias_text = values[3] if len(values) >= 4 else ''
-            if len(alias_text) > 4096:
-                issues.append(f"{label} line {lineno} ignored: aliases too long")
-                continue
-            aliases = tuple(alias.strip() for alias in alias_text.split('|') if alias.strip() and len(alias.strip()) < 120)
-            rows.append(City(city, region, country, aliases))
-            if len(rows) >= 40000:
-                issues.append(f"{label}: record limit reached; remaining entries ignored")
-                break
-    return rows, issues
+def _geography(value: str) -> tuple[str, str]:
+    """Map the prototype's single region field to the legacy two-field API."""
+    if value in US_STATES:
+        return value, 'United States'
+    if value in CA_PROVS:
+        return value, 'Canada'
+    if compact_city_key(value) in GB_LABELS | {'nireland'}:
+        return '', 'UK'
+    if value in {'NSW', 'QLD', 'New South Wales', 'South Australia', 'Tasmania', 'Victoria, Australia', 'Western Australia'}:
+        return value, 'Australia'
+    if value == 'PA - USA':
+        return 'PA', 'United States'
+    if value in {'Tokyo', 'Kanagawa'}:
+        return value, 'Japan'
+    if value == 'Tatarstan':
+        return value, 'Russia'
+    return '', value
 
 
 def _bundled_path() -> Path:
-    """Find a real city DB file next to TLO's other database masters.
-
-    For source Python it lives at <source>/TLO_DBs/cities.csv. For a frozen
-    executable, search next to the executable and its packaging parents. Do
-    NOT look inside _MEIPASS: there must be no internal PyInstaller copy.
-    """
     if getattr(sys, 'frozen', False):
         exe_dir = Path(sys.executable).resolve().parent
         candidates = (exe_dir, exe_dir.parent, exe_dir.parent.parent)
     else:
         candidates = (Path(__file__).resolve().parent,)
     for folder in candidates:
-        candidate = folder / 'TLO_DBs' / 'cities.csv'
+        candidate = folder / 'TLO_DBs' / 'cities.sqlite'
         if candidate.is_file():
             return candidate
-    return candidates[0] / 'TLO_DBs' / 'cities.csv'
-
-
-def _local_path(tlo_dbs_dir: str = '', tlo_home: str = '') -> Path | None:
-    root = Path(tlo_dbs_dir) if tlo_dbs_dir else (Path(tlo_home) / 'TLO_DBs' if tlo_home else None)
-    if root is None: return None
-    path = root / 'cities.csv'
-    return path if path.is_file() else None
-
-
-@lru_cache(maxsize=8)
-def _load_cached(path: str) -> CityCatalog:
-    return CityCatalog.from_csv(path)
+    return candidates[0] / 'TLO_DBs' / 'cities.sqlite'
 
 
 def catalog_path_for_tlo(tlo_dbs_dir: str = '', tlo_home: str = '') -> Path:
-    """Return the external city reference, preferring the configured TLOHome DB."""
-    return _local_path(tlo_dbs_dir, tlo_home) or _bundled_path()
-
-
-def catalog_for_tlo(tlo_dbs_dir: str = '', tlo_home: str = '', on_warning=None) -> CityCatalog | None:
-    """Combine bundled + local cities, skipping malformed/conflicting local rows.
-
-    Cache invalidates on file mtime/size changes. The output dictionary indexes
-    primary and alias spellings once, rather than probing files for each show.
-    """
-    bundled = _bundled_path()
-    local = _local_path(tlo_dbs_dir, tlo_home)
-    def signature(path):
-        try:
-            stat = path.stat()
-            return (str(path.resolve()), stat.st_mtime_ns, stat.st_size)
-        except OSError:
-            return ('',0,0)
-    b_sig = signature(bundled)
-    l_sig = signature(local) if local is not None else ('',0,0)
-    try:
-        catalog = _cached_layered(b_sig, l_sig)
-    except (OSError, UnicodeError, ValueError, csv.Error) as exc:
-        message = f"City reference unavailable; original parsing retained: {exc}"
-        if on_warning:
-            on_warning(message)
-        return None
-    if catalog is not None and catalog.warnings:
-        for issue in catalog.warnings:
-            key = (l_sig[0], issue)
-            if key not in _REPORTED_ISSUES:
-                _REPORTED_ISSUES.add(key)
-                logging.getLogger(__name__).warning('%s', issue)
-                if on_warning: on_warning(issue)
-    return catalog
+    root = Path(tlo_dbs_dir) if tlo_dbs_dir else (Path(tlo_home) / 'TLO_DBs' if tlo_home else None)
+    if root is not None and (root / 'cities.sqlite').is_file():
+        return root / 'cities.sqlite'
+    return _bundled_path()
 
 
 @lru_cache(maxsize=16)
-def _cached_layered(b_sig: tuple, l_sig: tuple) -> CityCatalog | None:
-    rows, warnings = ([], [])
-    if b_sig[0]:
-        rows, warnings = _read_city_rows(Path(b_sig[0]))
-    # With no packaged CSV, a configured TLOHome/TLO_DBs/cities.csv is
-    # still a normal physical reference, not an embedded fallback.
-    if not rows and l_sig[0]:
-        rows, warnings = _read_city_rows(Path(l_sig[0]))
-        l_sig = ('', 0, 0)  # already loaded as the primary physical reference
-    # Build an index of names/aliases to prevent local records from overriding
-    # an existing, unrelated meaning. User additions cannot suppress the base.
-    keys = {normalized(name): city for city in rows for name in (city.city, *city.aliases) if normalized(name)}
-    added = 0
-    local_names: set[str] = set()
-    if l_sig[0] and l_sig[0] != b_sig[0]:
-        extras, issues = _read_city_rows(Path(l_sig[0]))
-        warnings.extend(issues)
-        # Build 646 ships the full bundled CSV in TLO_DBs. Those 7k+ rows
-        # are not 7k explicit user confirmations. If at least 90% of the
-        # canonical records are reproduced, treat duplicates as shipped
-        # baseline while still allowing added, non-colliding local entries.
-        bundled_ids = {(normalized(c.city), normalized(c.region), normalized(c.country)) for c in rows}
-        reproduced = sum((normalized(c.city), normalized(c.region), normalized(c.country)) in bundled_ids for c in extras)
-        packaged_snapshot = bool(len(rows) > 500 and reproduced >= len(rows) * .90)
-        for entry in extras:
-            names = [entry.city, *entry.aliases]
-            collisions = [keys[normalized(n)] for n in names if normalized(n) in keys]
-            # Even same-name local rows can carry conflicting geography. Reject
-            # rather than replacing the bundled mapping, to avoid wrong places.
-            if collisions:
-                # A record affirming exactly the same city, region and country
-                # is not a geographic override. Treat it as explicit user
-                # corroboration (historical user-file behavior), but never
-                # let a local row change bundled geography or aliases.
-                def country_key(value):
-                    k = normalized(value)
-                    return 'united states' if k in {'usa','us','united states of america'} else k
-                same = (all(normalized(old.city) == normalized(entry.city) for old in collisions)
-                        and all((not old.region or old.region.casefold() == entry.region.casefold())
-                                and (not old.country or country_key(old.country) == country_key(entry.country))
-                                for old in collisions))
-                if same:
-                    if not packaged_snapshot:
-                        local_names.add(normalized(entry.city))
-                    continue
-                warnings.append(f"cities.csv local city {entry.city!r} ignored: conflicts with packaged city/alias")
-                continue
-            rows.append(entry)
-            for name in names:
-                if normalized(name): keys[normalized(name)] = entry
-            local_names.update(normalized(name) for name in names if normalized(name))
-            added += 1
-    if not rows:
+def _cached_catalog(path: str, stamp: tuple[int, int]) -> CityCatalog:
+    return CityCatalog.from_sqlite(path)
+
+
+def _load_path(path: Path) -> CityCatalog:
+    stat = path.stat()
+    return _cached_catalog(str(path.resolve()), (stat.st_mtime_ns, stat.st_size))
+
+
+_REPORTED_ISSUES: set[str] = set()
+
+
+def catalog_for_tlo(tlo_dbs_dir: str = '', tlo_home: str = '', on_warning=None) -> CityCatalog | None:
+    """Use one physical SQLite master, preferring TLOHome over distribution.
+
+    Missing/corrupt data is not evidence against a city. Never read legacy CSV.
+    """
+    try:
+        return _load_path(catalog_path_for_tlo(tlo_dbs_dir, tlo_home))
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        message = f"SQLite city reference unavailable; original parsing retained: {exc}"
+        if message not in _REPORTED_ISSUES:
+            _REPORTED_ISSUES.add(message)
+            logging.getLogger(__name__).warning('%s', message)
+        if on_warning:
+            on_warning(message)
         return None
-    if l_sig[0]:
-        warnings.insert(0, f"cities: {len(rows)-added} catalog + {added} local; {max(0,len(warnings))} warning(s)")
-    return CityCatalog(rows, tuple(warnings), frozenset(local_names))

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Check physical TLO_DBs/cities.csv inside a native TLO complete/update ZIP.
+"""Check physical TLO_DBs/cities.sqlite inside a native TLO complete/update ZIP.
 
-Fail if manifests omit city DB in 646+ database-inclusive packages or if the
+Fail if manifests omit city DB in 725+ database-inclusive packages or if the
 curated city file has been changed. Does not inspect signed executable bytes.
 """
 from __future__ import annotations
@@ -15,11 +15,12 @@ try:
 except ImportError:
     from stage_city_database import validate
 
-DBS = {'TLO_DBs/artists.sqlite','TLO_DBs/venues.txt','TLO_DBs/cities.csv'}
+DBS = {'TLO_DBs/artists.sqlite','TLO_DBs/venues.txt','TLO_DBs/cities.sqlite'}
 
 def verify(zip_path: Path, source_root: Path, build: int) -> dict:
-    curated = (source_root/'cities.csv').read_bytes()
-    validate(curated)
+    master = source_root / 'TLO_DBs' / 'cities.sqlite'
+    validate(master)
+    curated = master.read_bytes()
     expected_sha = hashlib.sha256(curated).hexdigest()
     with zipfile.ZipFile(zip_path) as archive:
         if archive.testzip() is not None:
@@ -27,9 +28,12 @@ def verify(zip_path: Path, source_root: Path, build: int) -> dict:
         names = archive.namelist()
         if len(names) != len(set(names)):
             raise ValueError('ZIP contains duplicate members')
-        if 'manifest.json' not in names:
-            raise ValueError('ZIP has no manifest.json')
-        metadata = json.loads(archive.read('manifest.json'))
+        manifests = [name for name in ('manifest.json', 'UPDATE_MANIFEST.json') if name in names]
+        if len(manifests) != 1:
+            raise ValueError('ZIP must have exactly one complete/update manifest')
+        metadata = json.loads(archive.read(manifests[0]))
+        if manifests[0] == 'UPDATE_MANIFEST.json' and metadata.get('kind') != 'update':
+            raise ValueError('update manifest kind mismatch')
         included = metadata.get('databases_included')
         if not isinstance(included,bool):
             raise ValueError('databases_included must be boolean')
@@ -44,10 +48,10 @@ def verify(zip_path: Path, source_root: Path, build: int) -> dict:
             raise ValueError('database_files manifest declaration mismatch')
         if metadata.get('kind') == 'complete' and not included:
             raise ValueError('complete package missing database masters')
-        if int(metadata.get('build_number',-1)) != build:
+        if int(metadata.get('build_number', metadata.get('build', -1))) != build:
             raise ValueError('package build number mismatch')
         if included:
-            binary=archive.read('TLO_DBs/cities.csv')
+            binary=archive.read('TLO_DBs/cities.sqlite')
             if hashlib.sha256(binary).hexdigest() != expected_sha:
                 raise ValueError('city database contents do not match curated source')
     return {'build':build,'kind':metadata.get('kind'),'databases_included':included,'city_sha256': expected_sha if included else None}

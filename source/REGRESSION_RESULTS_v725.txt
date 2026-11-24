@@ -1,0 +1,8 @@
+TLO v1.7 Build 725 — LOCAL SOURCE CANDIDATE, NOT RELEASE-ATTESTED
+Full application source regression: 3,039 passed, 7 skipped across 337 modules / 13 independent groups, with groups 1, 3, 4 and 5 rerun successfully after correcting version metadata, documentation and release-gate imports.
+New SQLite-only tests: 7 additional passes (3,046 total passed, 7 skipped). Tests cover unknown-city fallback, ignoring obsolete CSVs, master replacement/cache refresh, staging integrity, rejecting extra/wrong database bytes, and real update manifest forms with and without databases.
+Final focused release DB regression: 26 passed (overlaps full and new suite, not counted again). Earlier focused application regression: 135 passed (overlapping).
+Build Process v167: 192 passed, 14 skipped.
+Source documentation/metadata, root versions, AST test-import audit and release-readiness: PASS. Requirements DOCX files rendered and inspected.
+Native Windows/macOS/Linux hosted CI, Windows MSI installation/signing, release publication, security scans and pinned Ruff remain unverified. Native platform artifacts are not included in this source ZIP.
+The SQLite master is unchanged from the user-supplied database. Legacy city CSV files are ignored, not removed from existing installations. An old CSV-only city without independent geographic evidence may not resolve. Use an MSI or DB-inclusive ZIP for initial migration.

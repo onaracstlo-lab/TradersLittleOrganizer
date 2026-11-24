@@ -6,6 +6,7 @@ import pytest
 
 import tlo_phase23_v2 as phase
 from tlo_artist_db import ArtistMatcher
+from tests._city_fixture import city_db
 
 pytestmark = pytest.mark.behavior
 
@@ -25,7 +26,7 @@ def _extract(tmp_path: Path, folder: str, *, compliant=False, setlistfm=False, c
     db_dir = tmp_path / "TLO_DBs"
     db_dir.mkdir(exist_ok=True)
     if cities is not None:
-        (db_dir / "cities.csv").write_text(cities, encoding="utf-8")
+        city_db(db_dir / "cities.sqlite", cities)
     config = SimpleNamespace(
         compliant=compliant, current_volume_label="", current_slam="",
         as_is_artist_name=False, compliant_artist_mode="master", etree_lookup=False,
@@ -65,13 +66,13 @@ def test_explicit_state_not_replaced_with_regionless_inference(tmp_path):
     assert not any("medium-confidence right-to-left" in text for text in record.observations)
 
 
-def test_city_csv_can_extend_but_not_supply_unmentioned_state(tmp_path):
-    record, _, _ = _extract(tmp_path, "Twiddle at Small Theater Ithaca 2022-05-08", cities="city^region^country^aliases\nIthaca^NY^USA^\n")
+def test_city_sqlite_can_extend_but_not_supply_unmentioned_state(tmp_path):
+    record, _, _ = _extract(tmp_path, "Twiddle at Small Theater, Ithaca 2022-05-08", cities=[("Ithaca", "NY", ())])
     assert (record.venue, record.city, record.region, record.location) == ("Small Theater", "Ithaca", "", "Ithaca")
 
 
-def test_city_csv_alias_uses_original_spelling(tmp_path):
-    record, _, _ = _extract(tmp_path, "Twiddle at Northern Club NOLA 2022-05-08", cities="city^region^country^aliases\nNew Orleans^LA^USA^NOLA\n")
+def test_city_sqlite_alias_uses_original_spelling(tmp_path):
+    record, _, _ = _extract(tmp_path, "Twiddle at Northern Club, NOLA 2022-05-08", cities=[("New Orleans", "LA", ("NOLA",))])
     assert record.venue == "Northern Club"
     assert record.city == "New Orleans" or record.city == "NOLA"
     assert record.region == "LA" or not record.region

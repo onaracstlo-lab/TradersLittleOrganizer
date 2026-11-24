@@ -64,17 +64,15 @@ def test_city_diagnostic_identifies_external_catalog_instead_of_internal_bundle(
     # assertion with a behavior check of the warning users actually receive.
     import tlo_cities
 
-    master = tmp_path / 'packaged' / 'TLO_DBs' / 'cities.csv'
-    master.parent.mkdir(parents=True)
-    master.write_text('city,region,country,aliases\nBoston,MA,United States,\n', encoding='utf-8')
-    local = tmp_path / 'local' / 'cities.csv'
-    local.parent.mkdir(parents=True)
-    local.write_text('city,region,country,aliases\nLowell,MA,United States,\n', encoding='utf-8')
+    from tests._city_fixture import city_db
+    master = city_db(tmp_path / 'packaged' / 'TLO_DBs' / 'cities.sqlite', [('Boston','MA',())])
+    local = city_db(tmp_path / 'local' / 'cities.sqlite', [('Lowell','MA',())])
     monkeypatch.setattr(tlo_cities, '_bundled_path', lambda: master)
-    tlo_cities._cached_layered.cache_clear()
+    tlo_cities._cached_catalog.cache_clear()
+    assert tlo_cities.catalog_for_tlo().lookup_exact('Boston')
+    catalog = tlo_cities.catalog_for_tlo(tlo_dbs_dir=str(local.parent))
+    assert catalog.lookup_exact('Lowell') and not catalog.lookup_exact('Boston')
+    local.write_bytes(b'invalid database')
     seen = []
-    catalog = tlo_cities.catalog_for_tlo(tlo_dbs_dir=str(local.parent), on_warning=seen.append)
-    assert catalog is not None and catalog.lookup_exact('Boston')
-    assert catalog.lookup_exact('Lowell')
-    assert any('1 catalog + 1 local' in message for message in seen)
-    assert not any('bundled +' in message for message in seen)
+    assert tlo_cities.catalog_for_tlo(tlo_dbs_dir=str(local.parent), on_warning=seen.append) is None
+    assert any('SQLite city reference unavailable' in message for message in seen)

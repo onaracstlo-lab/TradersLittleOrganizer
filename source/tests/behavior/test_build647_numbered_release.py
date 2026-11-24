@@ -18,12 +18,13 @@ def test_new_numbered_release_not_a_v646_reissue():
 
 def test_ruff_f401_unused_import_not_reintroduced():
     text = (ROOT/'tests/behavior/test_build646_staged_city_database.py').read_text(encoding='utf-8')
-    assert 'from tlo_cities import catalog_for_tlo, _cached_layered' not in text
+    assert 'from tlo_cities import catalog_for_tlo, _cached_catalog' not in text
     assert 'from tlo_cities import catalog_for_tlo' in text
-    assert text.count('from tlo_cities import _cached_layered') == 1
+    assert text.count('from tlo_cities import _cached_catalog') == 1
 
 def test_city_database_is_external_and_not_embedded():
-    assert (ROOT/'TLO_DBs/cities.csv').read_bytes() == (ROOT/'cities.csv').read_bytes()
+    assert (ROOT/'TLO_DBs/cities.sqlite').is_file()
+    assert not (ROOT/'cities.csv').exists()
     assert not (ROOT/'tlo_cities_embedded.py').exists()
     for script in ('createWindowsDist.ps1','createLinuxDist.sh','createMacOSDist.sh'):
         text = (ROOT/script).read_text(encoding='utf-8')

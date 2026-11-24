@@ -1,7 +1,7 @@
 {
-  "build": 723,
+  "build": 725,
   "reviewed_baseline": 685,
-  "scope": "Build 723: status counters/current folder for Add Shows; auto review pending dups after Process New Shows with Quit/resume; explicit reusable Windows rmdir batch after volume-label checks, no batch recovery. Native Windows acceptance pending.",
+  "scope": "Build 725: SQLite city matcher integrated read-only into folder/setlist parsing with safe geography-scoped corrections, legacy positional/country/state fallback, MSI/ZIP physical database packaging; Build 723 Add Shows progress and guarded permanent rmdir are retained. Native Windows/CI acceptance pending.",
   "findings": {
     "H1": {
       "status": "fixed",

@@ -1,18 +1,24 @@
-# TLO Build 723 / Process v165 — Add Shows workflow and cleanup-template correction
+# Build 725 / GitHub Build Process v167 — SQLite city matching
+
+The supplied cities.sqlite and match_city.py are integrated read-only into folder and selected-setlist location handling. A known state/province/country can support high-confidence typo correction and multiword city boundaries; exact aliases retain source spelling. Unknown/ambiguous cities use the existing positional/region/online fallbacks. The SQLite master ships externally in TLO_DBs and is MSI-managed on Windows. The city CSV is retired: SQLite is the sole city reference master; older CSVs are ignored and are not deleted. Existing built-in and positional fallbacks remain. An old CSV-only city without other location evidence may no longer resolve. For the first upgrade from a CSV-only installation, use an MSI or database-inclusive ZIP. Windows/macOS hosted build, installer-signing and native runtime acceptance are NOT ATTESTED by these local tests.
+
+## Retained prior findings and gates
+
+## Historical TLO Build 723 / Process v165 — Add Shows workflow and cleanup-template correction
 
 Current source candidate: live per-folder Add Shows progress, automatic duplicate review after processing, and volume-checked deferred Windows rmdir cleanup without reversal. Native Windows command execution remains unverified.
 
-# TLO Build 723 / Process v165 — Windows duplicate Recycle Bin correction
+## Historical TLO Build 723 / Process v165 — Windows duplicate Recycle Bin correction
 
 The current source candidate resolves the missing per-volume registry-default false refusal. Windows Shell end-to-end acceptance is still required; old Build 721-generated cleanup batch files must not be reused. The delete-new path remains COM recycle-only and policy-protected; the earlier generated Windows delete-old batch recycling has been superseded by the Build 723 permanent-delete template, under the same exact volume label requirement. Previous Git publication hardening remains. Native release testing/signing NOT ATTESTED.
 
 ---
 
-# TLO v1.7 Build 723 — source candidate (NOT production)
+## Historical TLO v1.7 Build 723 — source candidate (NOT production)
 
 Retained Build 721 context: The Build 720 native Windows/Linux/macOS pipeline assembled and hash-bound local release artifacts, but public source publication failed in three attempts when Windows Git could not write loose objects under C:\TLO-GitHub-Build. The release helper now uses packed shallow Git fetch and short per-user temporary working directories, with controlled fallback. Signed source commits, verified annotated tags, immutable production releases and SHA-256/asset signing remain mandatory. The earlier publication-stage change remains; native Windows publication acceptance is pending.
 
-**Verified locally:** 3,028 application passes, 7 skips; 194 process passes, 14 skips; 13 independent behavior shards green; ready/hygiene checks pass. Native Windows publication is not verified.
+**Historical Build 723 test evidence:** 3,028 application passes, 7 skips; 194 process passes, 14 skips; 13 independent behavior shards; ready/hygiene checks pass. Native Windows publication is not verified.
 
 **Retained functionality:** Build 719 mixed-case city/venue display fix, Build 720 Ruff F841 correction, no new inventory/tag semantics.
 
@@ -28,7 +34,7 @@ Retained Build 719: Compliant/path-only String2 retains the full venue+city tail
 
 Retained Build 718 (2026-11-22): Apply conservative proper capitalization only to detected all-uppercase venue/city/location output at the final inventory metadata boundary; retain exact source case and intentional mixed case. Tests cover setlist headers and no-setlist folders. Hosted native CI pending.
 
-# TLO v1.7 Build 723 — source candidate (NOT production-ready)
+## Historical TLO v1.7 Build 723 — source candidate (NOT production-ready)
 
 Companion GitHub Build Process **v165**.
 
@@ -36,7 +42,7 @@ Companion GitHub Build Process **v165**.
 
 **Unverified/remaining:** Win11 standard-user C:\.tlo installation and ACL acceptance; actual MSI update/signing/rotation; mapped-drive and UNC mutation/recovery tests; hosted Windows/Linux/macOS CI; full pin-locked Ruff; remaining free-form location ambiguity, later-inventory selective undo, GUI control regrouping, uncommon tag/frame types and requirements-addenda consolidation. Source preflight is not native release attestation.
 
-Read `REMEDIATION_PLAN_v723.md` for the exact disposition and `REGRESSION_RESULTS_v723.txt` for measured test results. Every correction uses a new ZIP and build number; do not overwrite prior packages.
+Read `REMEDIATION_PLAN_v725.md` for the exact disposition and `REGRESSION_RESULTS_v725.txt` for measured test results. Every correction uses a new ZIP and build number; do not overwrite prior packages.
 
 Build 713 fixed hosted CI fixture portability and the Windows byte-locked-file test assumption; these remain in Build 723. Build 715 corrected the Build 714 Pygments/Ruff dependency-lock typos; Build 716 corrected the subsequent local bytecode-contamination error. Full native signing and CI gates remain required.
 
@@ -44,4 +50,4 @@ Build 713 fixed hosted CI fixture portability and the Windows byte-locked-file t
 
 **Retained Build 717 / process v159:** Restored non-attested verification-report contracts following run 45067649844. The gate remains mandatory in Build 723 / process v165. Native acceptance remains pending.
 
-**Local Build 723 validation:** see versioned REGRESSION_RESULTS_v723.txt for exact source-suite totals; source hygiene/readiness passed. Native and Ruff remain required.
+**Local Build 725 validation:** 3,039 passed and 7 skipped across 337 application test modules in 13 process-isolated groups; 194 process passes, 14 skipped. See REGRESSION_RESULTS_v725.txt for exact source-suite totals; source hygiene/readiness passed. Native and Ruff remain required.

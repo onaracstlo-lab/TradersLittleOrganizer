@@ -35,6 +35,7 @@ from tlo_artist_db import (
 )
 from tlo_audio_tags import collect_group_flac_tag_info
 from tlo_cities import catalog_for_tlo, normalized as normalized_city_key, refine_parsed_fields
+from tlo_city_sqlite import corrected_city, split_city_suffix, isolated_city_suffix
 from tlo_constants import (
     BIT24_PATTERNS,
     COUNTRY_ALIASES,
@@ -2710,6 +2711,7 @@ def _pre_date_place_hint_kind(config, place_hint: str) -> Tuple[str, Dict[str, s
     venue, city, region, country, extra = _parse_string2(
         hint,
         allow_lowercase_region_codes=_is_consistently_lowercase_path_fragment(hint),
+        tlo_dbs_dir=str(getattr(config, 'tlo_dbs_dir', '') or ''),
     )
     if venue or city or region or country:
         return "structured", {
@@ -2731,7 +2733,7 @@ def _pre_date_place_hint_kind(config, place_hint: str) -> Tuple[str, Dict[str, s
 
 
 # A modest, deliberately conservative city vocabulary for city-only venue
-# suffixes.  The optional TLOHome/TLO_DBs/cities.csv can extend this list.
+# suffixes.  The optional TLOHome/TLO_DBs/cities.sqlite can extend this list.
 # No state/country is inferred from a city name: Boston alone means Boston.
 # "New York" is intentionally omitted because its city/state boundary is
 # ambiguous without stronger independent evidence.
@@ -2750,7 +2752,7 @@ _ANCHORED_CITY_KEYS = frozenset(normalized_city_key(c) for c in _ANCHORED_CITY_S
 
 
 def _city_catalog(config):
-    """Shared indexed city/alias catalog, using a user override or bundled CSV."""
+    """Shared indexed city/alias catalog, using the configured or distribution SQLite master."""
     return catalog_for_tlo(
         str(getattr(config, 'tlo_dbs_dir', '') or ''),
         str(getattr(config, 'TLOHome', '') or ''),
@@ -2784,7 +2786,7 @@ def _infer_anchored_city_suffix(config, place: str, preposition: str, matcher=No
     candidates = []
     if catalog_hit:
         suffix, city_row = catalog_hit
-        candidates.append((suffix, bool(city_row.country), 'cities.csv'))
+        candidates.append((suffix, bool(city_row.country), 'cities.sqlite'))
     for builtin in _ANCHORED_CITY_SUFFIXES:
         match = re.search(r'(?i)(?:^|[\s,])(?P<city>' + re.escape(builtin) + r')$', raw)
         if match:
@@ -2805,9 +2807,10 @@ def _infer_anchored_city_suffix(config, place: str, preposition: str, matcher=No
         is_builtin = normalized_city_key(text_city) in builtin_keys
         explicitly_separated = raw[:match.start('city')].rstrip().endswith(',')
         # Delimited exact cities are acceptable; a venue + unmatched one-word
-        # suffix is not. Keep format-independent rules for both caret and CSV.
-        is_locally_confirmed = bool(catalog and normalized_city_key(text_city) in catalog.local_names)
-        if venue and not is_builtin and not explicitly_separated and not is_locally_confirmed:
+        # suffix is not. Keep format-independent rules for the SQLite reference.
+        if venue and not explicitly_separated and normalized_city_key(text_city) == 'new york':
+            continue
+        if venue and not is_builtin and not explicitly_separated:
             if len(normalized_city_key(text_city).split()) < 2 or not has_country:
                 continue
         if matcher is not None and not explicitly_separated:
@@ -2882,7 +2885,8 @@ def _match_anchored_artist_place_before_date(
             venue = city = region = country = extra = ""
         else:
             venue, city, region, country, extra = _parse_string2(
-                place, allow_lowercase_region_codes=_is_consistently_lowercase_path_fragment(place)
+                place, allow_lowercase_region_codes=_is_consistently_lowercase_path_fragment(place),
+                tlo_dbs_dir=str(getattr(config, 'tlo_dbs_dir', '') or ''),
             )
         # "in Santa Cruz, CA" names a city, not a venue called Santa.
         if boundary.group("prep").lower() == "in" and "," in place:
@@ -2977,7 +2981,7 @@ def _match_comma_artist_city_date(
     """Recognize a uniquely DB-backed ``Artist, City Date`` show folder.
 
     The comma supplies the artist/city boundary.  A single ordinary city word
-    need not be present in venues.txt or cities.csv; multiword cities must be
+    need not be present in venues.txt or cities.sqlite; multiword cities must be
     in the city reference.  The date token must be at the end of the folder,
     but its numeric *interpretation* is deferred to normal setlist and online
     corroboration.  No venue, state, or country is guessed.
@@ -3157,7 +3161,7 @@ def _resolve_ambiguous_dates_from_online(
 
 
 def _match_date_artist_venue_location(
-    text: str, matcher: Optional[ArtistMatcher]
+    text: str, matcher: Optional[ArtistMatcher], config=None
 ) -> Tuple[Optional[Dict[str, object]], List[str]]:
     """Match a conservative ``Date Artist Venue Location`` path component.
 
@@ -3201,6 +3205,7 @@ def _match_date_artist_venue_location(
         venue, city, region, country, extra_parenthetical = _parse_string2(
             string2,
             allow_lowercase_region_codes=_is_consistently_lowercase_path_fragment(string2),
+            tlo_dbs_dir=str(getattr(config, 'tlo_dbs_dir', '') or ''),
         )
         if not (venue and city and (region or country)):
             continue
@@ -3976,13 +3981,20 @@ def _is_invalid_single_word_city(value: str) -> bool:
     return bool(city and " " not in city and city.casefold() in LOCATION_CONNECTIVE_WORDS)
 
 
-def _split_left_for_city_and_venue(left_text: str, *, allow_city_only: bool = False) -> Tuple[str, str]:
+def _split_left_for_city_and_venue(left_text: str, *, allow_city_only: bool = False,
+                                   geography: str = "", tlo_dbs_dir: str = "") -> Tuple[str, str]:
     left = compact_ws(left_text).strip(" ,")
     if not left:
         return "", ""
     tokens = [token.strip(",") for token in left.split() if token.strip(",")]
     if not tokens:
         return "", ""
+    # SQLite may establish a *multiword* city boundary (including a reviewed
+    # typo) that the historical last-word splitter cannot know.  No match is
+    # not a failure: keep all historical positional and region fallbacks.
+    proposed = split_city_suffix(left, geography, tlo_dbs_dir)
+    if proposed is not None:
+        return proposed
 
     if allow_city_only:
         # Full state-name path fragments frequently appear as city/state/source
@@ -4073,7 +4085,7 @@ def _clean_numbered_path_location_noise(venue: str, city: str) -> Tuple[str, str
     return venue_clean, city_clean
 
 
-def _parse_string2(string2: str, *, allow_lowercase_region_codes: bool = False) -> Tuple[str, str, str, str, str]:
+def _parse_string2(string2: str, *, allow_lowercase_region_codes: bool = False, tlo_dbs_dir: str = "") -> Tuple[str, str, str, str, str]:
     value = compact_ws(string2).strip(" ,")
     if not value:
         return "", "", "", "", ""
@@ -4090,7 +4102,9 @@ def _parse_string2(string2: str, *, allow_lowercase_region_codes: bool = False) 
             if city and (region or country):
                 return venue, city, region, country, extra
         allow_city_only = bool(anchor in REGION_CODES and _ends_with_full_state_name(value))
-        venue, city = _split_left_for_city_and_venue(left, allow_city_only=allow_city_only)
+        venue, city = _split_left_for_city_and_venue(left, allow_city_only=allow_city_only,
+                                                      geography=anchor, tlo_dbs_dir=tlo_dbs_dir)
+        city = corrected_city(city, anchor, "", tlo_dbs_dir)
         venue, city = _clean_numbered_path_location_noise(venue, city)
         raw_region = compact_ws(value[len(left):]).strip(" ,") if left else compact_ws(value).strip(" ,")
         if (
@@ -4133,7 +4147,9 @@ def _parse_string2(string2: str, *, allow_lowercase_region_codes: bool = False) 
                 left_text = value[: match.start(1)].rstrip(" ,-")
                 tail = compact_ws(match.group('tail')).strip(" -,")
                 is_full_state_name = len(matched_state) > 2
-                venue, city = _split_left_for_city_and_venue(left_text, allow_city_only=is_full_state_name)
+                venue, city = _split_left_for_city_and_venue(left_text, allow_city_only=is_full_state_name,
+                                                              geography=region, tlo_dbs_dir=tlo_dbs_dir)
+                city = corrected_city(city, region, "", tlo_dbs_dir)
                 venue, city = _clean_numbered_path_location_noise(venue, city)
                 if (
                     allow_lowercase_region_codes
@@ -5101,8 +5117,6 @@ def _apply_city_catalog_last_resort(config, record, matcher, evidence, observati
     if lookup_artist_master_with_status(record.artist, matcher)[0] != 'matched':
         return
     catalog = _city_catalog(config)
-    if catalog is None:
-        return
     matching_dates = [item for item in _find_date_matches(record.main_dir_name, allow_slash=True, artist_matcher=matcher)
                       if item.get('normalized') == record.date]
     unique_spans = {(int(item['start']), int(item['end'])) for item in matching_dates}
@@ -5132,10 +5146,21 @@ def _apply_city_catalog_last_resort(config, record, matcher, evidence, observati
     fields = refine_parsed_fields(
         folder_name=city_lookup_name, artist=record.artist, date=record.date,
         raw_date=raw_date,
-        city='', region='', country='', venue='', csv_path='cities.csv', catalog=catalog,
+        city='', region='', country='', venue='', catalog=catalog,
         artist_is_known=lambda name: lookup_artist_master_with_status(name, matcher)[0] != 'no_match',
-    )
+    ) if catalog is not None else {'city': ''}
     proposed = fields['city']
+    if not proposed and raw_date:
+        # The SQLite database is intentionally incomplete.  Only use an
+        # independently verified Artist + Date + *entire* city remainder;
+        # ambiguous city names still fall through without guessing a state.
+        leading = re.match(r'^\s*' + re.escape(record.artist) + r'(?=$|[^\w])', city_lookup_name, re.I)
+        if leading:
+            after_artist = city_lookup_name[leading.end():]
+            date_hit = re.search(r'(?<!\d)' + re.escape(raw_date) + r'(?!\d)', after_artist)
+            if date_hit and not after_artist[:date_hit.start()].strip(' ,;:-'):
+                proposed = isolated_city_suffix(after_artist[date_hit.end():],
+                                               str(getattr(config, 'tlo_dbs_dir', '') or ''))
     if proposed:
         record.city = proposed
         record.location = _join_location(proposed, '', '')
@@ -6646,7 +6671,7 @@ def _resolve_date_with_structural_precedence(
     return "", []
 
 
-def _apply_string2_to_record(record: ShowMetadata, match: Optional[Dict[str, str]], evidence: Dict[str, List[Candidate]]) -> None:
+def _apply_string2_to_record(record: ShowMetadata, match: Optional[Dict[str, str]], evidence: Dict[str, List[Candidate]], tlo_dbs_dir: str = "") -> None:
     if not match or not match.get("string2"):
         return
     string2 = match["string2"]
@@ -6671,6 +6696,7 @@ def _apply_string2_to_record(record: ShowMetadata, match: Optional[Dict[str, str
     venue, city, region, country, extra_parenthetical = _parse_string2(
         string2,
         allow_lowercase_region_codes=_is_consistently_lowercase_path_fragment(string2),
+        tlo_dbs_dir=tlo_dbs_dir,
     )
     record.venue = venue
     record.city = city
@@ -6814,7 +6840,7 @@ def _apply_date_artist_venue_location_path(
 ) -> Optional[Dict[str, object]]:
     """Apply the first unambiguous date-first artist/show path component."""
     for part, part_path in _candidate_path_parts(group.get("main_dir_path", "")):
-        match, collision_masters = _match_date_artist_venue_location(part, matcher)
+        match, collision_masters = _match_date_artist_venue_location(part, matcher, config)
         if collision_masters:
             conflicts.append(
                 _collision_note(
@@ -6990,7 +7016,8 @@ def _match_db_artist_venue_city_date_without_string2(
     for token in reversed(tokens[:-2]):
         raw_artist = _clean_piece(before[:token.end()])
         place = _clean_piece(before[token.end():])
-        venue, city, region, country, _extra = _parse_string2(place)
+        venue, city, region, country, _extra = _parse_string2(
+            place, tlo_dbs_dir=str(getattr(config, 'tlo_dbs_dir', '') or ''))
         if not (venue and city and (region or country)):
             continue
         detail, _apostrophe_fallback = _lookup_artist_detail_with_apostrophe_fallback(raw_artist, matcher)
@@ -8074,7 +8101,8 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                 break
 
         if chosen_string2_match:
-            _apply_string2_to_record(record, chosen_string2_match, evidence)
+            _apply_string2_to_record(record, chosen_string2_match, evidence,
+                                     str(getattr(config, "tlo_dbs_dir", "") or ""))
 
         artist_place_date_technical_suffix_hint_kind = _apply_pre_date_place_hint_strong_fields(
             config,

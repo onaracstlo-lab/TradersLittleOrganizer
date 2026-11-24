@@ -23,7 +23,7 @@ def _generate(tmp_path, version="1.7.660"):
     stage.mkdir()
     (stage / "tlo-main.exe").write_bytes(b"signed exe")
     (stage / "TLO_DBs").mkdir()
-    (stage / "TLO_DBs" / "cities.csv").write_bytes(b"sample")
+    (stage / "TLO_DBs" / "cities.sqlite").write_bytes(b"sample")
     wxs = tmp_path / "result.wxs"
     WIX.generate(stage, wxs, version)
     return ET.parse(wxs).getroot()
@@ -94,6 +94,7 @@ def test_managed_db_master_replaced_on_new_msi_build_only(tmp_path, monkeypatch)
     (home / "TLO_DBs").mkdir(parents=True)
     for db in mode.MSI_MANAGED_DATABASES:
         (home / "TLO_DBs" / db).write_bytes(b"user edit")
+    (home / "TLO_DBs" / "cities.csv").write_bytes(b"obsolete user city file")
     (home / "bootlist.csv").write_bytes(b"inventory")
     (home / "tlo-preferences.ini").write_bytes(b"preferences")
     marker = home / "TLO_DBs" / mode.MSI_DATABASE_BUILD_MARKER
@@ -102,15 +103,16 @@ def test_managed_db_master_replaced_on_new_msi_build_only(tmp_path, monkeypatch)
     mode.seed_msi_data_home(home)
     for db in mode.MSI_MANAGED_DATABASES:
         assert (home / "TLO_DBs" / db).read_bytes() == b"new " + db.encode()
+    assert (home / "TLO_DBs" / "cities.csv").read_bytes() == b"obsolete user city file"
     assert (home / "bootlist.csv").read_bytes() == b"inventory"
     assert (home / "tlo-preferences.ini").read_bytes() == b"preferences"
     assert marker.read_text().strip() == str(BUNDLE_BUILD)
-    (home / "TLO_DBs" / "cities.csv").write_bytes(b"edited after upgrade")
+    (home / "TLO_DBs" / "cities.sqlite").write_bytes(b"edited after upgrade")
     mode.seed_msi_data_home(home)
-    assert (home / "TLO_DBs" / "cities.csv").read_bytes() == b"edited after upgrade"
+    assert (home / "TLO_DBs" / "cities.sqlite").read_bytes() == b"edited after upgrade"
     marker.write_text("659\n")
     mode.seed_msi_data_home(home)
-    assert (home / "TLO_DBs" / "cities.csv").read_bytes() == b"new cities.csv"
+    assert (home / "TLO_DBs" / "cities.sqlite").read_bytes() == b"new cities.sqlite"
 
 
 def test_validation_rejects_program_directory_and_writes_probe(tmp_path):

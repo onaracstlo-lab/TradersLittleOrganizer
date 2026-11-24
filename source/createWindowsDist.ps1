@@ -287,7 +287,7 @@ $PythonRunner = Get-PythonRunner
 if (-not (Test-Path -LiteralPath $VerifyEnvironmentScript -PathType Leaf)) { throw "Required build-environment verifier not found: $VerifyEnvironmentScript" }
 if (-not (Test-Path -LiteralPath $PrepareFfmpegScript -PathType Leaf)) { throw "Required ffmpeg preparation utility not found: $PrepareFfmpegScript" }
 Invoke-Python -Runner $PythonRunner -Arguments @($VerifyEnvironmentScript)
-# Keep the public cities.csv in the same TLO_DBs directory as ArtistDB masters.
+# Keep the public cities.sqlite in the same TLO_DBs directory as ArtistDB masters.
 # The independent GitHub Build Process must preserve this staged directory
 # when creating complete/update release ZIPs.
 Invoke-Python -Runner $PythonRunner -Arguments @((Join-Path $SourceRoot 'tools/stage_city_database.py'), '--source-root', $SourceRoot, '--dist-root', $DistRoot)
@@ -335,7 +335,7 @@ $MainRuntimeIcons = @(
     '--add-data', ($MainIconPng + ';icons'),
     '--add-data', ($MainIcon + ';icons')
 )
-# City data is external in TLO_DBs/cities.csv, beside artists.sqlite and venues.txt.
+# City data is external in TLO_DBs/cities.sqlite, beside artists.sqlite and venues.txt.
 # Never put it inside a PyInstaller executable.
 $SearchRuntimeIcons = @(
     '--add-data', ($SearchIconPng + ';icons'),

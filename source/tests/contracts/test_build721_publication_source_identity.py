@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_build721_identity_and_previous_capitalization_regressions():
-    assert tlo_version.BUNDLE_BUILD == 723
+    assert tlo_version.BUNDLE_BUILD == 725
     assert (ROOT / 'tlo_place_display.py').is_file()
     assert (ROOT / 'tests/behavior/test_build720_ruff_f841_place_display.py').is_file()
     assert (ROOT / 'tests/behavior/test_build719_mixed_case_place_fragments.py').is_file()

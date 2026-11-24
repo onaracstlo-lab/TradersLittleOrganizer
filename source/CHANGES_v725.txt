@@ -1,3 +1,21 @@
+TLO v1.7 Build 725 — SQLite-only city reference (Build Process v167)
+2026-11-24 | SOURCE CANDIDATE, NOT RELEASE-ATTESTED
+- Replace the city CSV index and layered local CSV behavior with an index loaded directly from the physical read-only cities.sqlite master. Retain source spelling and all non-database location rules.
+- Retire the city CSV in runtime, distribution, MSI seeding and publication checks. Require artists.sqlite, venues.txt and cities.sqlite in ArtistDB-Master. Ignore existing obsolete city CSV files in user data.
+- Recognize same-name cities without assigning unmentioned geography, preserve artist/venue safety guards, and require explicit boundaries before guessing a regionless city within a performer list.
+- Unknown or ambiguous city matches retain positional/region/country and other established fallbacks. No database contents changed.
+- Native build and signing not attested; see REGRESSION_RESULTS_v725.txt for local test results.
+
+PRIOR HISTORY — Build 724 and earlier:
+TLO v1.7 Build 724 — SQLite city matcher with conservative folder/setlist integration (Build Process v166)
+2026-11-24 | SOURCE CANDIDATE, NOT RELEASE-ATTESTED
+- Integrate supplied match_city.py with external TLO_DBs/cities.sqlite read-only for region/country-qualified folder names and selected setlist location headers. Correct only uniquely approved high-confidence misspellings; preserve valid source aliases/spelling and all unchanged city/region/venue precedence.
+- Recover longer city boundaries before the previous venue/last-word split when independently qualified by a state/province/country. Exact and unambiguous city-only matches can fill a previously empty location only under trusted Artist + Date boundaries. Fuzzy city-only guesses and ambiguous SQLite results never auto-replace.
+- When no SQLite match exists (including towns missing from the database), retain existing region/country positional parsing, CSV catalog and other historical fallbacks. Missing/corrupt DB does not prevent inventory. Tighten the setlist region-name prefix check to prevent Colombia being misclassified as Colorado.
+- Package cities.sqlite as an external physical TLO_DBs database alongside artists.sqlite, venues.txt and cities.csv in complete builds and database-inclusive updates, including Windows MSI seed/migration. CI and packaging reject missing/invalid SQLite masters, with independent build-process v166 and updated staging, manifest and verification gates.
+- Local Python regression testing and source lint are described in REGRESSION_RESULTS_v724.txt. Native release build, signing, Windows installer acceptance and GitHub-hosted scans have NOT been executed here.
+
+PRIOR HISTORY — preserved verbatim from Build 723:
 TLO v1.7 Build 723 — Add Shows status, automatic duplicate review and reusable permanent cleanup
 Process New Shows reports total/current/completed, staged, potential duplicates, held and errors in the GUI. After the completion summary, any queued potential duplicates/updates in dups open automatically for review; Quit retains unresolved folders, and Process Potential Duplicate/Upgrades remains available. Windows deferred deleteReplacedFolders.bat uses volume-verified rmdir /s /q again; no batch recycle, backups or undo. Delete New/Keep Old immediate GUI operation still uses native Recycle Bin; failure retains the folder.
 

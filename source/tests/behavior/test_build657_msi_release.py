@@ -79,11 +79,13 @@ def test_wix_payload_stable_and_data_seed_not_source_modified(tmp_path):
     (source / "tlo-main.exe").write_bytes(b"main")
     (source / "tlo-search.exe").write_bytes(b"search")
     db = tmp_path / "database"; db.mkdir()
-    for name in ("artists.sqlite", "venues.txt", "cities.csv"):
+    for name in ("artists.sqlite", "venues.txt", "cities.sqlite"):
         (db / name).write_bytes(b"base")
+    (db / "cities.csv").write_bytes(b"obsolete")
     prepared = tmp_path / "prepared"
     WIX.prepare_stage(source, prepared, ROOT / "msi" / "TLO-MSI-Update-Worker.ps1", db)
-    assert (prepared / "TLO_DBs" / "cities.csv").read_bytes() == b"base"
+    assert (prepared / "TLO_DBs" / "cities.sqlite").read_bytes() == b"base"
+    assert not (prepared / "TLO_DBs" / "cities.csv").exists()
     assert not (source / "TLO_DBs").exists()
     wxs = tmp_path / "out.wxs"
     data = WIX.generate(prepared, wxs, "1.7.657")
@@ -91,7 +93,7 @@ def test_wix_payload_stable_and_data_seed_not_source_modified(tmp_path):
     tree = ET.parse(wxs)
     assert tree.find("w:Package", {"w": WIX.NS}).get("Scope") == "perUser"
     assert tree.find(".//w:MajorUpgrade", {"w": WIX.NS}) is not None
-    assert any(p.get("Source", "").endswith("cities.csv") for p in tree.findall(".//w:File", {"w": WIX.NS}))
+    assert any(p.get("Source", "").endswith("cities.sqlite") for p in tree.findall(".//w:File", {"w": WIX.NS}))
 
 
 def test_msi_mode_not_detected_on_non_windows():
@@ -109,7 +111,7 @@ def test_msi_updates_managed_database_masters_and_seeds_user_files_only_once(tmp
     home = tmp_path / "TLOHome"
     (program / "TLO_DBs").mkdir(parents=True)
     for filename, content in {
-        "artists.sqlite": b"new master", "venues.txt": b"new venues", "cities.csv": b"new cities",
+        "artists.sqlite": b"new master", "venues.txt": b"new venues", "cities.sqlite": b"new sqlite cities",
     }.items():
         (program / "TLO_DBs" / filename).write_bytes(content)
     (program / "TLO-FAQ.txt").write_bytes(b"new FAQ")
@@ -121,7 +123,7 @@ def test_msi_updates_managed_database_masters_and_seeds_user_files_only_once(tmp
     mode.seed_msi_data_home(home)
     assert (home / "TLO_DBs" / "artists.sqlite").read_bytes() == b"new master"
     assert (home / "tlo-preferences.ini").read_bytes() == b"USER PREFERENCES"
-    assert (home / "TLO_DBs" / "cities.csv").read_bytes() == b"new cities"
+    assert (home / "TLO_DBs" / "cities.sqlite").read_bytes() == b"new sqlite cities"
     assert (home / "TLO_DBs" / "venues.txt").read_bytes() == b"new venues"
     assert (home / "TLO-FAQ.txt").read_bytes() == b"new FAQ"
     (home / "TLO_DBs" / "artists.sqlite").write_bytes(b"edited same-build master")

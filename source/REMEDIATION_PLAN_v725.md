@@ -1,3 +1,9 @@
+# Build 725 / GitHub Build Process v167 — SQLite city matching
+
+The supplied cities.sqlite and match_city.py are integrated read-only into folder and selected-setlist location handling. A known state/province/country can support high-confidence typo correction and multiword city boundaries; exact aliases retain source spelling. Unknown/ambiguous cities use the existing positional/region/online fallbacks. The SQLite master ships externally in TLO_DBs and is MSI-managed on Windows. The city CSV is retired: SQLite is the sole city reference master; older CSVs are ignored and are not deleted. Existing built-in and positional fallbacks remain. An old CSV-only city without other location evidence may no longer resolve. For the first upgrade from a CSV-only installation, use an MSI or database-inclusive ZIP. Windows/macOS hosted build, installer-signing and native runtime acceptance are NOT ATTESTED by these local tests.
+
+## Retained prior findings and gates
+
 # Build 723 Add Shows workflow and cleanup policy
 
 New behavior: immediate status counters and current folder displayed, automatic duplicate/upgrade review after Process New Shows when dups contains folders, Quit retains outstanding items, Process Duplicates remains. Deferred Windows old-folder batch has exact-label/reparse-point guard then permanent rmdir /s /q (no batch undo), and is intended as a reusable template for separate inventory copies. Immediate Delete New continues to recycle. Run native Windows cmd.exe tests before release.

@@ -14,12 +14,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> int:
     # City master must be a real TLO_DBs file, never an embedded Python copy.
-    source_csv = ROOT / 'cities.csv'
-    staged_csv = ROOT / 'TLO_DBs' / 'cities.csv'
-    if (not source_csv.is_file() or not staged_csv.is_file()
-            or source_csv.read_bytes() != staged_csv.read_bytes()
-            or (ROOT / 'tlo_cities_embedded.py').exists()):
-        print('BLOCKED: physical TLO_DBs/cities.csv missing/mismatched or embedded copy present', file=sys.stderr)
+    try:
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        from tools.stage_city_database import validate
+        if (ROOT / 'tlo_cities_embedded.py').exists():
+            raise ValueError('embedded city reference present')
+        validate(ROOT / 'TLO_DBs' / 'cities.sqlite')
+    except (OSError, ValueError) as exc:
+        print(f'BLOCKED: physical TLO_DBs/cities.sqlite invalid: {exc}', file=sys.stderr)
         return 1
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"

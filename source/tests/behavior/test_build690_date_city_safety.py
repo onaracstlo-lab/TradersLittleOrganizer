@@ -20,14 +20,14 @@ def test_city_candidate_uses_only_already_parsed_raw_date(folder, canonical):
     matches = [v for v in phase._find_date_matches(folder) if v['normalized'] == canonical]
     assert matches, folder
     fields = refine_parsed_fields(folder_name=folder, artist='Phish', date=canonical,
-                                  raw_date=matches[0]['raw'], csv_path='ignored.csv', catalog=catalog)
+                                  raw_date=matches[0]['raw'], catalog=catalog)
     assert fields['city'] == 'Berlin'
     assert fields['venue'] == ''
     # Without independent evidence of this source spelling the city adapter
     # must not infer its own alternative date.
     if canonical not in folder:
         fields_no_raw = refine_parsed_fields(folder_name=folder, artist='Phish', date=canonical,
-                                             csv_path='ignored.csv', catalog=catalog)
+                                             catalog=catalog)
         assert fields_no_raw['city'] == ''
 
 
@@ -35,7 +35,7 @@ def test_catalog_never_overrides_established_geography():
     catalog = CityCatalog([City('Berlin', '', 'Germany')])
     fields = refine_parsed_fields(folder_name='Phish 8 May 1987 Berlin', artist='Phish',
                                   date='1987-05-08', raw_date='8 May 1987',
-                                  city='Paris', csv_path='ignored.csv', catalog=catalog)
+                                  city='Paris', catalog=catalog)
     assert fields['city'] == 'Paris'
 
 
