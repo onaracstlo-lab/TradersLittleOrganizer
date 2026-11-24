@@ -1,0 +1,13 @@
+TLO v1.7 Build 723 — LOCAL SOURCE TESTS, NOT RELEASE-ATTESTED
+Companion GitHub Build Process: v165.
+Application behavior: 2,733 PASSED, 7 skipped, 3 warnings, 0 failed. All 284 behavior test modules run in 13 independent process shards; each shard passed. A monolithic local run stalled in a legacy test subprocess, so independent groups were used for reliable complete coverage.
+Application contracts/unit/integration: 295 PASSED. Additional Build 723 tests are included in behavior count, avoiding double counting.
+Combined unique application: 3,028 PASSED, 7 skipped, 3 warnings, zero failures across independently completed groups.
+Build-process source suite: 194 PASSED, 14 skipped.
+New behavior: Add Shows per-folder status and progress counts; automatic duplicate/upgrade review of pending dups after completion; manual Process Duplicates button and non-destructive Quit/resume retained.
+Batch-template policy: newly generated Windows deleteReplacedFolders.bat contains guarded permanent rmdir /s /q, not a Recycle Bin operation, and no batch undo/reversal. The expected volume label and directory/reparse checks must pass; unlabeled/mismatched volumes are skipped. The template is intended for reuse across inventory copies, with checked drive targets. Native Windows cmd.exe execution is NOT attested.
+Immediate GUI Delete New remains a guarded Windows Recycle Bin operation (outside the deferred batch template).
+Release hygiene and 25-disposition source readiness: PASS (before final packaging); offline import-use audit: 435 application Python files parsed without syntax errors (not a substitute for pinned Ruff).
+Requirements DOCX rendering: application 108 pages, process 29 pages; final pages visually inspected.
+Ruff 0.16.10, native Windows 11 actual batch/Recycle Bin behavior, native macOS/Linux, signing, scanning, MSI, hosted GitHub Actions and public release: NOT ATTESTED.
+Old batch templates already distributed remain unchanged. Generate a fresh Build 723 template for this policy.

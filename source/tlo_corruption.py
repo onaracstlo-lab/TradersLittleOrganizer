@@ -648,17 +648,34 @@ def _windows_recycle_policy(root, volume_guid, size_bytes, recycled_bytes):
         raise _RecycleUnavailable("volume GUID unavailable for Recycle Bin settings")
     key_name = guid[i + len('Volume'):guid.index('}', i) + 1]
     settings_path = r"Software\Microsoft\Windows\CurrentVersion\Explorer\BitBucket\Volume" + key_name
+    # Missing HKCU per-volume settings are normal on an uncustomized Windows
+    # installation. Windows supplies defaults. Do not treat an absent override
+    # as proof that the Recycle Bin has been disabled: IFileOperation is called
+    # with FOFX_RECYCLEONDELETE and FOFX_EARLYFAILURE after the native preflight.
+    # A *present* disable override or a known insufficient quota still blocks.
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, settings_path) as key:
-            nuke, _ = winreg.QueryValueEx(key, "NukeOnDelete")
-            maximum_mb, _ = winreg.QueryValueEx(key, "MaxCapacity")
-    except (FileNotFoundError, OSError, ValueError) as exc:
-        raise _RecycleUnavailable("per-volume Recycle Bin settings cannot be confirmed") from exc
-    if int(nuke) != 0:
-        raise _RecycleUnavailable("Recycle Bin is disabled for this volume")
-    capacity = int(maximum_mb) * 1024 * 1024
-    if capacity <= 0 or size_bytes + recycled_bytes >= capacity:
-        raise _RecycleUnavailable("item exceeds available Recycle Bin quota")
+            try:
+                nuke, _ = winreg.QueryValueEx(key, "NukeOnDelete")
+            except FileNotFoundError:
+                nuke = None
+            try:
+                maximum_mb, _ = winreg.QueryValueEx(key, "MaxCapacity")
+            except FileNotFoundError:
+                maximum_mb = None
+    except FileNotFoundError:
+        return  # No per-volume override; use the Windows shell's defaults.
+    except (OSError, ValueError) as exc:
+        raise _RecycleUnavailable("cannot inspect Recycle Bin settings") from exc
+    try:
+        if nuke is not None and int(nuke) != 0:
+            raise _RecycleUnavailable("Recycle Bin is disabled for this volume")
+        if maximum_mb is not None:
+            capacity = int(maximum_mb) * 1024 * 1024
+            if capacity <= 0 or size_bytes + recycled_bytes > capacity:
+                raise _RecycleUnavailable("item exceeds configured Recycle Bin quota")
+    except (TypeError, ValueError) as exc:
+        raise _RecycleUnavailable("invalid Recycle Bin settings") from exc
 
 
 def _windows_recycle_preflight(path):

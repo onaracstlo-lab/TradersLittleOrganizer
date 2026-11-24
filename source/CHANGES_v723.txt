@@ -1,3 +1,10 @@
+TLO v1.7 Build 723 — Add Shows status, automatic duplicate review and reusable permanent cleanup
+Process New Shows reports total/current/completed, staged, potential duplicates, held and errors in the GUI. After the completion summary, any queued potential duplicates/updates in dups open automatically for review; Quit retains unresolved folders, and Process Potential Duplicate/Upgrades remains available. Windows deferred deleteReplacedFolders.bat uses volume-verified rmdir /s /q again; no batch recycle, backups or undo. Delete New/Keep Old immediate GUI operation still uses native Recycle Bin; failure retains the folder.
+
+PRIOR HISTORY (the prior recycle-only batch design is superseded):
+TLO v1.7 Build 723 — Windows duplicate Recycle Bin defaults and previous deferred cleanup (superseded)
+Build 723: Windows duplicate cleanup now treats missing per-volume Recycle Bin registry overrides as normal shell defaults, retaining policy/explicit-disable/quota checks and mandatory Shell recycle flags. The earlier deferred cleanup used FileIO recycling; Build 723 restores permanent rmdir as explicitly requested; native Windows verification required.
+
 TLO v1.7 Build 721 — public release Git permission remediation (Build Process v163)
 Build 721 / Process v163: Fix Git source publication failing with Permission denied while writing loose Git objects. Use temp-root packed shallow fetch; retain signed commit/tag and asset hash gates. Build 720 Ruff fix unchanged.
 TLO v1.7 Build 718–719 — Retained prior display normalization (historical, no Build 721 behavior change)
@@ -2514,8 +2521,8 @@ v163
 - Keeps existing date-dash preservation and collision-safe filename truncation behavior unchanged.
 
 
-===== Historical record: CHANGES_v164.txt =====
-v164 changes
+===== Historical record: CHANGES_v165.txt =====
+v165 changes
 ============
 
 - Trust explicit VENUE: metadata before prose filtering, then trim broadcast/air-date/source tails before venue/location splitting.

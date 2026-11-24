@@ -52,9 +52,9 @@ def test_build533_cleanup_batch_quotes_metacharacter_volume_labels(tmp_path: Pat
     assert "TLO_DELETE_LABEL_B64=" in text
     assert 'if errorlevel 1 goto :TLO_SKIP_' in text
     assert 'after volume-label verification' in text
-    assert 'rmdir /s /q "' in text
+    assert 'rmdir /s /q "%TLO_DELETE_TARGET%"' in text
     # Compare occurs before any active delete, never only after it.
-    assert text.index('if errorlevel 1 goto :TLO_SKIP_') < text.index('  rmdir /s /q')
+    assert text.index('-EncodedCommand ') < text.index('if errorlevel 1 goto :TLO_SKIP_')
 
 
 @pytest.mark.skipif(os.name != "nt", reason="native cmd.exe confirmation requires Windows")

@@ -22,7 +22,7 @@ def _make(tmp_path: Path, *entries: tuple[str, str]) -> str:
 
 
 def _active_delete_lines(script: str) -> list[str]:
-    return [line for line in script.splitlines() if line.lstrip().lower().startswith("rmdir /s /q ")]
+    return [line for line in script.splitlines() if "-EncodedCommand " in line and not line.lstrip().startswith("REM")]
 
 
 def test_build559_labeled_volume_uses_encoded_exact_predelete_guard(tmp_path: Path):
@@ -33,15 +33,15 @@ def test_build559_labeled_volume_uses_encoded_exact_predelete_guard(tmp_path: Pa
     assert f'set "TLO_DELETE_LABEL_B64={expected_base64}"' in text
     assert f'set "TLO_DELETE_TARGET={IU._batch_escape_literal(path)}"' in text
     assert 'set "TLO_DELETE_DRIVE=%TLO_DELETE_TARGET:~0,1%"' in text
-    assert '[System.IO.DriveInfo]::new(' in text
-    assert '[StringComparison]::Ordinal' in text
-    assert 'IsNullOrEmpty($actual)' in text
-    assert '-NoProfile -NonInteractive -Command' in text
+    assert 'rmdir /s /q "%TLO_DELETE_TARGET%"' in text
+    assert '[StringComparison]::Ordinal' in base64.b64decode(_active_delete_lines(text)[0].split('-EncodedCommand ')[-1]).decode('utf-16le')
+    assert 'IsNullOrEmpty($drive.VolumeLabel)' in base64.b64decode(_active_delete_lines(text)[0].split('-EncodedCommand ')[-1]).decode('utf-16le')
+    assert '-NoProfile -NonInteractive -EncodedCommand' in text
     assert '%__APPDIR__%WindowsPowerShell\\v1.0\\powershell.exe' in text
     assert len(_active_delete_lines(text)) == 1
-    assert text.index('if errorlevel 1 goto :TLO_SKIP_') < text.index(_active_delete_lines(text)[0])
+    assert text.index(_active_delete_lines(text)[0]) < text.index('if errorlevel 1 goto :TLO_SKIP_')
     assert '100%%' in text
-    assert text.count('TLO_DELETE_TARGET') >= 5
+    assert text.count('TLO_DELETE_TARGET') >= 4
     # The drive probe and rmdir both consume the same editable path variable.
     assert 'set "TLO_DELETE_DRIVE=%TLO_DELETE_TARGET:~0,1%"' in text
     assert 'rmdir /s /q "%TLO_DELETE_TARGET%"' in text
@@ -56,7 +56,7 @@ def test_build559_unlabeled_records_are_non_destructive(tmp_path: Path):
     text = _make(tmp_path, (r'F:\Music Folder', ''))
     assert 'REM "[]" "F:\\Music Folder"' in text
     assert 'SKIPPED: unlabeled volume' in text
-    assert 'REM rmdir /s /q "F:\\Music Folder"' in text
+    assert 'rmdir /s /q' not in text
     assert not _active_delete_lines(text)
     assert 'TLO_DELETE_LABEL_B64=' not in text
 
@@ -67,13 +67,13 @@ def test_build559_each_volume_is_checked_independently(tmp_path: Path):
     assert len(_active_delete_lines(text)) == 2
     assert text.count('set "TLO_DELETE_TARGET=') == 2
     assert text.count('set "TLO_DELETE_DRIVE=%TLO_DELETE_TARGET:~0,1%"') == 2
-    assert text.count('if errorlevel 1 goto :TLO_SKIP_') == 2
+    assert text.count('if errorlevel 1 goto :TLO_SKIP_') == 4
     tokens = re.findall(r':TLO_SKIP_([0-9a-f]{32})', text)
     assert len(set(tokens)) == 2
     for token in set(tokens):
-        assert text.count(f':TLO_SKIP_{token}') == 3  # two gotos plus label
+        assert text.count(f':TLO_SKIP_{token}') == 5  # four gotos plus label
         assert text.count(f':TLO_DONE_{token}') == 2  # goto plus label
-    assert 'REM rmdir /s /q "F:\\Music\\B"' in text
+    assert text.count('rmdir /s /q "%TLO_DELETE_TARGET%"') == 2
 
 
 def test_build559_wsl_paths_translate_for_windows_guard(tmp_path: Path):
@@ -115,7 +115,7 @@ def test_build559_wrong_label_never_deletes_and_correct_label_can_delete(tmp_pat
     victim.mkdir()
     (victim / 'song.txt').write_text('fixture')
     bad = _make(tmp_path, (str(victim), buf.value + '-DEFINITELY-NOT-THIS-LABEL'))
-    assert 'rmdir' in bad
+    assert 'rmdir /s /q "%TLO_DELETE_TARGET%"' in bad
     cmd = [comspec, '/d', '/c', str(tmp_path / 'deleteReplacedFolders.bat')]
     completed = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=45)
     assert completed.returncode == 0, completed.stdout + completed.stderr

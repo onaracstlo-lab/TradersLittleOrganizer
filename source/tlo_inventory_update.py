@@ -17,7 +17,7 @@ import tempfile
 import uuid
 from dataclasses import asdict
 from types import SimpleNamespace
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 from tlo_security import csv_formula_escape, csv_formula_unescape
 
 from tlo_artist_db import load_artist_matcher, lookup_artist_master_with_status, match_line_to_artists
@@ -1176,6 +1176,28 @@ def _delete_guard_root(path_to_delete: str) -> str:
     return os.path.dirname(path_to_delete)
 
 
+def _windows_delete_guard_command() -> str:
+    """Check exact volume identity and folder safety before deferred rmdir.
+
+    This is a guard, NOT a deletion or a reversal mechanism. A batch template
+    can be copied to a different inventory host; the drive letter must point
+    to a volume whose actual label still equals the recorded label. Untrusted
+    strings are passed through environment variables, not PowerShell source.
+    """
+    payload = r"""try {
+$p=$env:TLO_DELETE_TARGET
+if ($p -notmatch '^[A-Za-z]:\\' -or $p.Length -le 3) { throw 'unsafe path' }
+$expected=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($env:TLO_DELETE_LABEL_B64))
+$drive=[IO.DriveInfo]::new($p.Substring(0,3))
+if (-not $drive.IsReady -or [string]::IsNullOrEmpty($drive.VolumeLabel) -or -not [string]::Equals($drive.VolumeLabel,$expected,[StringComparison]::Ordinal)) { throw 'wrong or unverifiable volume label' }
+$item=Get-Item -LiteralPath $p -ErrorAction Stop
+if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'unsafe folder or reparse point' }
+exit 0
+} catch { Write-Error ('SKIPPED: '+$_.Exception.Message); exit 1 }"""
+    command = base64.b64encode(payload.encode("utf-16le")).decode("ascii")
+    return f'"%__APPDIR__%WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -NonInteractive -EncodedCommand {command}'
+
+
 def _append_delete_command(script_path: str, path_to_delete: str, volume_label: str = "") -> bool:
     translated = _delete_command_path_for_script(script_path, path_to_delete)
     if not translated:
@@ -1200,7 +1222,7 @@ def _append_delete_command(script_path: str, path_to_delete: str, volume_label: 
                 outfile.write("setlocal DisableDelayedExpansion" + newline)
                 outfile.write("chcp 65001 >nul" + newline)
                 outfile.write("REM To adjust drive letters, edit each TLO_DELETE_TARGET value; do not edit just the comments." + newline)
-                outfile.write("REM The runtime label check and rmdir share that one target variable." + newline)
+                outfile.write("REM The runtime volume check and rmdir use one target variable." + newline)
                 outfile.write("REM [] identifies an unlabeled volume; its deletion is always disabled." + newline + newline)
             safe_path = _batch_escape_literal(translated)
             # Volume labels containing controls must remain inert in REM lines.
@@ -1209,41 +1231,30 @@ def _append_delete_command(script_path: str, path_to_delete: str, volume_label: 
             outfile.write(f'REM "[{safe_label}]" "{safe_path}"' + newline)
             if not label:
                 outfile.write(f'echo SKIPPED: unlabeled volume cannot be verified for "{safe_path}"' + newline)
-                outfile.write('REM SAFETY: destructive command disabled for unlabeled volume.' + newline)
-                outfile.write(f'REM rmdir /s /q "{safe_path}"' + newline + newline)
+                outfile.write('REM SAFETY: rmdir disabled for an unlabeled or unverifiable volume.' + newline + newline)
             else:
-                # Encode the recorded label so cmd.exe cannot interpret its
-                # punctuation, quotes, percent signs or non-ASCII characters
-                # as batch syntax.  Only PowerShell decodes it for comparison.
                 expected_base64 = base64.b64encode(label.encode("utf-16le")).decode("ascii")
                 token = uuid.uuid4().hex
                 skip = f':TLO_SKIP_{token}'
                 done = f':TLO_DONE_{token}'
-                ps = r'%__APPDIR__%WindowsPowerShell\v1.0\powershell.exe'
-                probe = (
-                    'try { '
-                    "$expected=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($env:TLO_DELETE_LABEL_B64)); "
-                    "$drive=[System.IO.DriveInfo]::new($env:TLO_DELETE_DRIVE + ':\\'); "
-                    '$actual=$drive.VolumeLabel; '
-                    'if ([string]::IsNullOrEmpty($actual) -or '
-                    '-not [string]::Equals($actual,$expected,[StringComparison]::Ordinal)) { exit 1 }; '
-                    'exit 0 } catch { exit 1 }'
-                )
+                outfile.write('REM PERMANENT removal by rmdir; this script has no undo. Verify paths before running.' + newline)
                 outfile.write(f'set "TLO_DELETE_TARGET={safe_path}"' + newline)
                 outfile.write('set "TLO_DELETE_DRIVE=%TLO_DELETE_TARGET:~0,1%"' + newline)
                 outfile.write(f'set "TLO_DELETE_LABEL_B64={expected_base64}"' + newline)
-                outfile.write(f'if not exist "{ps}" goto {skip}' + newline)
-                outfile.write(f'"{ps}" -NoProfile -NonInteractive -Command "{probe}" >nul 2>&1' + newline)
-                outfile.write(f'if errorlevel 1 goto {skip}' + newline)
-                outfile.write('if exist "%TLO_DELETE_TARGET%\" (' + newline)
-                outfile.write('  echo Deleting "%TLO_DELETE_TARGET%" after volume-label verification' + newline)
-                outfile.write('  rmdir /s /q "%TLO_DELETE_TARGET%"' + newline)
+                outfile.write('if not exist "%__APPDIR__%WindowsPowerShell\\v1.0\\powershell.exe" goto ' + skip + newline)
+                outfile.write('if exist "%TLO_DELETE_TARGET%\\" (' + newline)
+                outfile.write('  ' + _windows_delete_guard_command() + newline)
+                outfile.write('  if errorlevel 1 goto ' + skip + newline)
+                outfile.write('  echo Removing \"%TLO_DELETE_TARGET%\" after volume-label verification' + newline)
+                outfile.write('  rmdir /s /q \"%TLO_DELETE_TARGET%\"' + newline)
+                outfile.write('  if errorlevel 1 goto ' + skip + newline)
+                outfile.write('  if exist "%TLO_DELETE_TARGET%\\NUL" goto ' + skip + newline)
                 outfile.write(') else (' + newline)
                 outfile.write('  echo Not found "%TLO_DELETE_TARGET%"' + newline)
                 outfile.write(')' + newline)
                 outfile.write(f'goto {done}' + newline)
                 outfile.write(skip + newline)
-                outfile.write('echo SKIPPED: wrong, missing or unverifiable volume for "%TLO_DELETE_TARGET%"; see recorded label above' + newline)
+                outfile.write('echo SKIPPED: rmdir failed or wrong/unverifiable volume for "%TLO_DELETE_TARGET%"' + newline)
                 outfile.write(done + newline + newline)
         else:
             if label:
@@ -1550,7 +1561,7 @@ def _tag_add_shows_folder_in_place(config, folder_path: str, record_dict: Dict[s
     return subtotal
 
 
-def process_new_shows(config, current_volume: str, check_duplicates: bool = True, search_path: str = "") -> Dict[str, object]:
+def process_new_shows(config, current_volume: str, check_duplicates: bool = True, search_path: str = "", *, progress_callback: Optional[Callable[[dict], None]] = None) -> Dict[str, object]:
     prepare_updater_config(config)
     dirs = ensure_updater_directories(config.TLOHome)
     source_root = os.path.normpath(str(search_path or dirs["ready"]).strip())
@@ -1568,8 +1579,29 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
     issue_records: List[Dict[str, str]] = []
     # Fail before processing any candidates if a selected copy mode cannot run.
     _add_shows_tag_mode(config)
-    for folder in _iter_top_level_dirs(source_root):
+    folders = _iter_top_level_dirs(source_root)
+
+    def report_progress(stage: str, folder_name: str = "") -> None:
+        if progress_callback is not None:
+            progress_callback({
+                "stage": stage,
+                "folder": folder_name,
+                "total": len(folders),
+                "processed": processed_count,
+                "finished": processed_count - int(stage == "processing"),
+                "staged": staged_count,
+                "duplicates": duplicate_count,
+                "held": held_count,
+                "removed_corrupt": removed_count,
+                "errors": error_count,
+            })
+
+    report_progress("start")
+    for folder in folders:
+        source_leaf = os.path.basename(folder)
         processed_count += 1
+        report_progress("processing", source_leaf)
+        outcome = "error"
         try:
             record = identify_folder(config, folder, artist_matcher=artist_matcher)
             matches = []
@@ -1583,6 +1615,7 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
                 # Leave both identity and contents intact for later review.
                 move_folder_to(folder, dirs["dups"])
                 duplicate_count += 1
+                outcome = "duplicate"
                 _log_add_shows_metadata(
                     config, record_dict, folder, current_volume,
                     "Add Shows potential duplicate moved to dups for review; not inventoried or tagged",
@@ -1597,10 +1630,12 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
             excluded_count += int(status["excluded"])
             if status["removed"]:
                 removed_count += 1
+                outcome = "removed_corrupt"
                 _add_shows_tag_emit(config, f"ADD_SHOWS_REMOVED: {folder} | {status['reason']}")
                 continue
             if not status["accepted"]:
                 held_count += 1
+                outcome = "held"
                 _add_shows_tag_emit(config, f"ADD_SHOWS_HELD: {folder} | {status['reason']}")
                 issue_records.append({"path": folder, "message": status["reason"], "level": "warning"})
                 continue
@@ -1637,6 +1672,7 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
                 move_folder_to(staged_folder, incoming_parent)
                 raise
             staged_count += 1
+            outcome = "staged"
             _log_add_shows_metadata(config, record_dict, staged_folder, current_volume,
                                     "Add Shows staged new show; audio phase verified")
         except Exception as exc:
@@ -1645,6 +1681,9 @@ def process_new_shows(config, current_volume: str, check_duplicates: bool = True
                 "path": os.path.normpath(folder),
                 "message": str(exc).strip() or exc.__class__.__name__,
             })
+        finally:
+            report_progress(outcome, source_leaf)
+    report_progress("complete")
     return {
         "processed": processed_count,
         "staged": staged_count,

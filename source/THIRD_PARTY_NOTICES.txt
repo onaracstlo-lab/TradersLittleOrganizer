@@ -1,4 +1,4 @@
-Third-party dependency notices — Traders Little Organizer Build 721
+Third-party dependency notices — Traders Little Organizer Build 723
 
 This notice is informational and does not replace license texts. Distributors must verify the license versions for the exact locked dependencies built in CI. Original upstream license files should be included with the corresponding-source distribution.
 

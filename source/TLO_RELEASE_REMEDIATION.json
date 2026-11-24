@@ -1,7 +1,7 @@
 {
-  "build": 721,
+  "build": 723,
   "reviewed_baseline": 685,
-  "scope": "Build 721: harden Windows public Git source publication against loose-object write Permission denied using packed shallow fetch in per-user temporary working directories. Application inventory/tagging behavior unchanged; native Windows publishing acceptance pending.",
+  "scope": "Build 723: status counters/current folder for Add Shows; auto review pending dups after Process New Shows with Quit/resume; explicit reusable Windows rmdir batch after volume-label checks, no batch recovery. Native Windows acceptance pending.",
   "findings": {
     "H1": {
       "status": "fixed",

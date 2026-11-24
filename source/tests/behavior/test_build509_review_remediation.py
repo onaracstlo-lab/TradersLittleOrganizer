@@ -53,9 +53,9 @@ def test_build509_delete_replaced_batch_identifies_volume_and_quotes_paths(tmp_p
     assert 'vol E:' not in body and 'findstr' not in body
     assert 'REM "[Backup & One]" "E:\\Simon & Garfunkel 100%% Live ^ Set"' in body
     assert 'set "TLO_DELETE_TARGET=E:\\Simon & Garfunkel 100%% Live ^ Set"' in body
-    assert 'rmdir /s /q "%TLO_DELETE_TARGET%"' in body
+    assert '-EncodedCommand ' in body and 'rmdir /s /q "%TLO_DELETE_TARGET%"' in body
     assert 'REM "[]" "F:\\Unlabeled Show"' in body
-    assert 'REM rmdir /s /q "F:\\Unlabeled Show"' in body
+    assert 'SKIPPED: unlabeled volume' in body
     assert 'SKIPPED: unlabeled volume' in body
     assert 'TLO_DELETE_LABEL_B64=' in body
     assert 'if errorlevel 1 goto :TLO_SKIP_' in body

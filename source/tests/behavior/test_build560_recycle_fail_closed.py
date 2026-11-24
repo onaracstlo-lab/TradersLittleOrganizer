@@ -103,7 +103,7 @@ def test_disabled_per_volume_registry_setting_blocks_deletion(monkeypatch):
         C._windows_recycle_policy('C:\\', '\\\\?\\Volume{12345678-0000-0000-0000-123456789012}\\', 42, 0)
 
 
-def test_capacity_and_missing_registry_fail_closed(monkeypatch):
+def test_capacity_and_missing_registry_defaults(monkeypatch):
     class Key:
         def __init__(self, name): self.name = name
         def __enter__(self): return self
@@ -127,8 +127,7 @@ def test_capacity_and_missing_registry_fail_closed(monkeypatch):
     with pytest.raises(C._RecycleUnavailable, match='quota'):
         C._windows_recycle_policy('C:\\', guid, 512 * 1024, 700 * 1024)
     FakeRegistry.OpenKey = staticmethod(lambda hive, name: (_ for _ in ()).throw(FileNotFoundError(name)))
-    with pytest.raises(C._RecycleUnavailable, match='cannot be confirmed'):
-        C._windows_recycle_policy('C:\\', guid, 1, 0)
+    C._windows_recycle_policy('C:\\', guid, 1, 0)
 
 
 def test_policy_avoids_permanent_deletion_for_group_when_recycle_fails(monkeypatch, tmp_path):

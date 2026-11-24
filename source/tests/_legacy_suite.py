@@ -7598,7 +7598,7 @@ def test_v330_delete_backup_bat_has_no_echo_off_and_uses_bootlist_rooted_path(tm
     text = script.read_text(encoding="utf-8")
     assert not text.startswith("@echo off")
     assert 'REM "[]" "E:\\Artist 2001-02-03 Venue"' in text
-    assert 'REM rmdir /s /q "E:\\Artist 2001-02-03 Venue"' in text
+    assert 'rmdir /s /q' not in text
     assert 'SKIPPED: unlabeled volume' in text
     assert not any(line.strip().startswith('rmdir /s /q ') for line in text.splitlines())
 

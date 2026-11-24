@@ -4371,6 +4371,7 @@ class AddToInventoryWindow:
         self._finish_notice_shown = False
         self._started_at = None
         self._elapsed_after_id = None
+        self._add_shows_events = queue.SimpleQueue()
         self.window = tk.Toplevel(parent_app.root)
         parent_app.active_updater_window = self
         parent_app._update_main_action_states()
@@ -4397,6 +4398,7 @@ class AddToInventoryWindow:
         self.volume_status_var = tk.StringVar(value="")
         self.status_var = tk.StringVar(value="Ready")
         self.elapsed_var = tk.StringVar(value="Elapsed: 0:00")
+        self.add_shows_progress_var = tk.StringVar(value="")
 
         ttk.Label(frm, text="Search Path").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
         self.search_path_entry = ttk.Entry(frm, textvariable=self.search_path_var, width=56)
@@ -4429,6 +4431,9 @@ class AddToInventoryWindow:
         ttk.Label(status_box, textvariable=self.elapsed_var).grid(row=0, column=1, sticky="e", padx=(12, 0))
         self.progress_bar = ttk.Progressbar(status_box, mode="indeterminate")
         self.progress_bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        ttk.Label(status_box, textvariable=self.add_shows_progress_var, justify="left", wraplength=900).grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(5, 0)
+        )
 
         self.volume_var.trace_add("write", lambda *_args: self._refresh_volume_validation())
 
@@ -4535,8 +4540,33 @@ class AddToInventoryWindow:
             except tk.TclError:
                 pass
 
+    def _drain_add_shows_progress(self):
+        """Consume worker progress only on Tk's UI thread."""
+        events = getattr(self, "_add_shows_events", None)
+        if events is None:
+            return
+        latest = None
+        while True:
+            try:
+                latest = events.get_nowait()
+            except queue.Empty:
+                break
+        if latest is None:
+            return
+        text = (
+            f"Finished: {latest.get('finished', latest['processed'])}/{latest['total']}  |  "
+            f"Staged: {latest['staged']}  |  Potential duplicates: {latest['duplicates']}  |  "
+            f"Held: {latest['held']}  |  Errors: {latest['errors']}"
+        )
+        if latest.get("stage") == "processing":
+            text += f"\nProcessing: {latest.get('folder', '')}"
+        elif latest.get("stage") == "complete":
+            text += "\nProcess New Shows complete."
+        self.add_shows_progress_var.set(text)
+
     def _refresh_elapsed_display(self):
         try:
+            self._drain_add_shows_progress()
             if self._processing and self._started_at is not None:
                 self.elapsed_var.set(f"Elapsed: {format_elapsed(time.monotonic() - self._started_at)}")
             self._elapsed_after_id = self.window.after(500, self._refresh_elapsed_display)
@@ -4689,6 +4719,9 @@ class AddToInventoryWindow:
             )
             return
 
+        self._add_shows_events = queue.SimpleQueue()
+        self.add_shows_progress_var.set("Scanning candidate folders...")
+
         def worker():
             with inventory_operation_lock(self.config.TLOHome):
                 return process_new_shows(
@@ -4696,11 +4729,13 @@ class AddToInventoryWindow:
                     current_volume=current_volume,
                     check_duplicates=check_duplicates,
                     search_path=search_path,
+                    progress_callback=self._add_shows_events.put,
                 )
 
         self._start_background_task("Process New Shows", worker, self._show_process_new_result)
 
     def _show_process_new_result(self, result, *, elapsed_seconds=0.0):
+        self._drain_add_shows_progress()
         result = result or {}
         processed = int(result.get("processed", 0) or 0)
         duplicates = int(result.get("duplicates", 0) or 0)
@@ -4740,6 +4775,31 @@ class AddToInventoryWindow:
             issues=issues,
             tlo_home=self.config.TLOHome,
             primary_output=self._bootlist_path() if os.path.isfile(self._bootlist_path()) else "",
+        )
+        # Automatically review pre-existing and newly discovered dups. Users
+        # may quit any item without resolving it; it stays in dups and can be
+        # revisited with the still-available Process Duplicates button.
+        self._start_automatic_duplicate_review()
+
+    def _start_automatic_duplicate_review(self):
+        dups_dir = os.path.join(self.config.TLOHome, "dups")
+        if not os.path.isdir(dups_dir):
+            self.status_var.set("Process New Shows complete; no potential duplicates waiting")
+            return
+        try:
+            with os.scandir(dups_dir) as entries:
+                has_pending = any(entry.is_dir(follow_symlinks=False) for entry in entries)
+        except OSError as exc:
+            self.status_var.set(f"Unable to scan pending duplicates: {exc}; use Process Duplicates to retry")
+            return
+        if not has_pending:
+            self.status_var.set("Process New Shows complete; no potential duplicates waiting")
+            return
+        self.status_var.set("Checking potential duplicates/updates for automatic review...")
+        self._start_background_task(
+            "Scan Potential Duplicate/Upgrades",
+            lambda: duplicate_work_items(self.config),
+            self._show_duplicate_work_items,
         )
 
     def _process_duplicates(self):
@@ -4802,7 +4862,7 @@ class AddToInventoryWindow:
                 tlo_home=self.config.TLOHome,
             )
             return
-        self.status_var.set(f"Duplicate review ready: {len(items)} folder(s)")
+        self.status_var.set(f"Duplicate review ready: {len(items)} folder(s); Quit leaves a folder in dups for later review")
         self._duplicate_batch_active = True
         self._duplicate_batch_reported_complete = False
         for item in items:
