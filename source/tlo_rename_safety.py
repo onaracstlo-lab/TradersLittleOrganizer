@@ -10,6 +10,7 @@ __version__ = _TLO_CANONICAL_VERSION
 
 import re
 import unicodedata
+from datetime import date as calendar_date
 
 from tlo_constants import MONTHS
 from tlo_text_utils import compact_ws, split_trailing_parenthetical_groups
@@ -121,10 +122,63 @@ def _ordinary_suffixes_preserved(source: str, target: str) -> bool:
     return all(any(item == needed for item in proposed) for needed in required)
 
 
-def safe_rename_target(source_leaf: str, candidate_leaf: str, *, artist: str = "", date: str = "") -> tuple[str, str]:
+# A narrowly defined trading-directory convention, not a generic extension
+# remover. Bit-depth markers, source qualifiers, IDs and arbitrary titles must
+# still pass the independent preservation checks below.
+_SHORTHAND_LEAF = re.compile(
+    r"(?P<prefix>[A-Za-z]{1,4})(?P<date>(?:[0-9]{4}|[0-9]{2})-[0-9]{2}-[0-9]{2})"
+    r"(?:\.(?:flac|shnf?|wav|mp3))?", re.I
+)
+
+
+def shorthand_artist_prefix(source: str) -> str:
+    core, _ = split_trailing_parenthetical_groups(source)
+    match = _SHORTHAND_LEAF.fullmatch(core.strip())
+    return match.group("prefix") if match else ""
+
+
+def _normalize_verified_trading_leaf(source: str, target: str, artist: str,
+                                     date: str, verified_prefix: str) -> str:
+    core, suffixes = split_trailing_parenthetical_groups(source)
+    match = _SHORTHAND_LEAF.fullmatch(core.strip())
+    if not match or not artist.strip() or not _FULL_DATE.fullmatch(date):
+        return source
+    try:
+        selected_date = calendar_date.fromisoformat(date)
+    except ValueError:
+        return source
+    # Require the actual resolved date (not just numeric similarity), in the
+    # target as well as in the year-first shorthand.
+    if date not in _FULL_DATE.findall(target):
+        return source
+    if match.group("date") not in (date, selected_date.strftime("%y-%m-%d")):
+        return source
+    prefix = match.group("prefix")
+    if prefix.casefold() == verified_prefix.casefold():
+        # The extraction pipeline established a unique Artist DB alias for
+        # the selected artist; substitution is lossless.
+        artist_text = artist
+    elif prefix.casefold() in _words(artist):
+        # A literal complete artist word is already preserved in the target.
+        artist_text = prefix
+    else:
+        return source
+    return compact_ws(" ".join([artist_text, date, *suffixes]))
+
+
+def spaced_album_separator(show_name: str, artist: str, date: str) -> str:
+    """Normalize only the separator following the resolved artist on undated shows."""
+    if not artist or date:
+        return show_name
+    match = re.fullmatch(re.escape(artist.strip()) + r"\s*[-–—]\s*(.+)", show_name, re.IGNORECASE)
+    return f"{artist.strip()} - {match.group(1)}" if match else show_name
+
+
+def safe_rename_target(source_leaf: str, candidate_leaf: str, *, artist: str = "", date: str = "", verified_prefix: str = "") -> tuple[str, str]:
     """Return (accepted target, reason); empty target means do not rename.
 
-    Requires a positively identified artist and a date. The normalized candidate
+    Except for exact case and lossless undated Artist/Album separator repairs,
+    requires a positively identified artist and a date. The normalized candidate
     must retain all source identity words other than date spelling; no year or
     source qualifier can be lost. A punctuation-only *removal* is not a reason
     to rename a previously compliant folder again.
@@ -136,6 +190,15 @@ def safe_rename_target(source_leaf: str, candidate_leaf: str, *, artist: str = "
     # Exact identity with capitalization-only correction never discards data.
     if source.casefold() == target.casefold():
         return target, ""
+    # Undated Artist - Album folders may undergo a lossless separator repair.
+    # Match the resolved artist literally; leave every interior album dash,
+    # recording qualifier, year and other identifying character untouched.
+    if not date.strip() and artist.strip():
+        prefix = re.escape(artist.strip())
+        source_match = re.fullmatch(prefix + r"\s*[-–—]\s*(.+)", source, re.IGNORECASE)
+        target_match = re.fullmatch(prefix + r" - (.+)", target, re.IGNORECASE)
+        if source_match and target_match and source_match.group(1).casefold() == target_match.group(1).casefold():
+            return target, ""
     # A complete, specifically resolved Show can be enough when old callers
     # supply a record without separate artist/date fields. A missing or partial
     # proposed date is not enough to authorize a destructive rename.
@@ -146,7 +209,8 @@ def safe_rename_target(source_leaf: str, candidate_leaf: str, *, artist: str = "
         return "", "resolved artist missing from proposed name"
     # Recognize a *proved equivalent* human-readable source date.  The rest
     # of the source identity remains protected from deletion.
-    comparable_source = _normalize_verifiable_source_date(source, target)
+    comparable_source = _normalize_verified_trading_leaf(source, target, artist, date, verified_prefix)
+    comparable_source = _normalize_verifiable_source_date(comparable_source, target)
     # A year cannot disappear, and yyyy-xx-xx never replaces a known full date.
     source_years = set(_YEAR.findall(comparable_source))
     target_years = set(_YEAR.findall(target))

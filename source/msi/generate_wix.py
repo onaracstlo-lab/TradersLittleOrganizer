@@ -28,6 +28,7 @@ PER_USER_COMPONENTS_KEY = r"Software\TradersLittleOrganizer\Installer\Components
 # Installer payloads contain distributable templates only; user state lives in
 # TLOHome, outside the MSI-owned install directory. Uninstall should be clean.
 PRESERVE_NAMES = set()
+MANAGED_DATABASES = ("artists.sqlite", "venues.txt", "cities.sqlite", "venues.sqlite")
 
 
 def elt(parent, name, **attrs):
@@ -83,10 +84,10 @@ def prepare_stage(src, dest, worker, db_source=None, document_source=None):
     if db_source is not None:
         seed_folder = dest / "TLO_DBs"
         seed_folder.mkdir(exist_ok=False)
-        for name in ("artists.sqlite", "venues.txt", "cities.sqlite", "venues.sqlite"):
+        for name in MANAGED_DATABASES:
             source = db_source / name
             if not source.is_file() or source.stat().st_size == 0:
-                raise ValueError(f"Missing required MSI database seed: {source}")
+                raise ValueError(f"Missing required MSI database master: {source}")
             shutil.copy2(source, seed_folder / name)
     if document_source is not None:
         for name in ("TLO-FAQ.txt", "tlo-preferences.ini", "LICENSE", "SOURCE.txt", "THIRD_PARTY_NOTICES.txt"):
@@ -131,6 +132,11 @@ def generate(stage, wxs, version, main_exe=None):
     elt(pkg, "MajorUpgrade", DowngradeErrorMessage="A newer TLO version is already installed.",
         Schedule="afterInstallInitialize", AllowSameVersionUpgrades="no")
     elt(pkg, "MediaTemplate", EmbedCab="yes")
+    # Database masters are unversioned; default MSI rules preserve modified
+    # files. Force replacement of installer-owned payload on install/upgrade.
+    # No inventory, preferences, logs or setlists are in the data payload.
+    elt(pkg, "Property", Id="REINSTALLMODE", Value="amus")
+    elt(pkg, "Property", Id="TLODATAFOLDER", Secure="yes")
     # The UI chooses DATA, not the executable installation directory. WiX
     # InstallDir's folder selection requires an uppercase public Directory ID.
     # The user's choice is stored as an HKCU environment variable; no UAC.
@@ -139,7 +145,12 @@ def generate(stage, wxs, version, main_exe=None):
     # the duplicate with WIX7009. StandardDirectory references the built-in
     # root without producing a conflicting Directory symbol.
     target = elt(pkg, "StandardDirectory", Id="TARGETDIR")
-    elt(target, "Directory", Id="TLODATAFOLDER", Name=".tlo")
+    data_home = elt(target, "Directory", Id="TLODATAFOLDER", Name=".tlo")
+    data_files = [f for f in files if f.relative_to(stage).parts[0].casefold() == "tlo_dbs"]
+    for f in data_files:
+        if f.relative_to(stage).as_posix() not in {"TLO_DBs/" + name for name in MANAGED_DATABASES}:
+            raise ValueError(f"Unexpected MSI data payload: {f}")
+    data_db = elt(data_home, "Directory", Id="TLODATABASEFOLDER", Name="TLO_DBs") if data_files else None
     for name, registry_key, condition in (
         ("TLOEXISTINGHOME", r"Environment", "TLOEXISTINGHOME"),
         ("TLOLEGACYHOME", r"Software\TradersLittleOrganizer\UserSettings",
@@ -153,9 +164,10 @@ def generate(stage, wxs, version, main_exe=None):
     # 'first' means the initial location is not re-applied during execution
     # after the user has selected a different folder through InstallDirDlg.
     for name, value, condition in (
-        ("Existing", "[TLOEXISTINGHOME]", "TLOEXISTINGHOME"),
-        ("Legacy", "[TLOLEGACYHOME]", "NOT TLOEXISTINGHOME AND TLOLEGACYHOME"),
-        ("Default", r"C:\.tlo", "NOT TLOEXISTINGHOME AND NOT TLOLEGACYHOME"),
+        ("Installed", "[TLOLEGACYHOME]", "Installed AND TLOLEGACYHOME"),
+        ("Existing", "[TLOEXISTINGHOME]", "NOT Installed AND NOT TLODATAFOLDER AND NOT TLOLEGACYHOME AND TLOEXISTINGHOME"),
+        ("Legacy", "[TLOLEGACYHOME]", "NOT Installed AND NOT TLODATAFOLDER AND TLOLEGACYHOME"),
+        ("Default", r"C:\.tlo", "NOT TLODATAFOLDER AND NOT TLOEXISTINGHOME AND NOT TLOLEGACYHOME"),
     ):
         elt(pkg, "SetDirectory", Id="TLODATAFOLDER", Action="SetTLOData" + name,
             Value=value, Condition=condition, Sequence="first")
@@ -171,6 +183,11 @@ def generate(stage, wxs, version, main_exe=None):
     local = elt(pkg, "StandardDirectory", Id="LocalAppDataFolder")
     programs = elt(local, "Directory", Id="TLOLocalProgramsDir", Name="Programs")
     install = elt(programs, "Directory", Id="INSTALLFOLDER", Name="Traders Little Organizer")
+    elt(pkg, "CustomAction", Id="RejectTLODataInsideProgram",
+        Error="TLOHome must be outside the TLO application installation directory.")
+    execute = elt(pkg, "InstallExecuteSequence")
+    elt(execute, "Custom", Action="RejectTLODataInsideProgram", After="CostFinalize",
+        Condition="NOT Installed AND TLODATAFOLDER ~<< INSTALLFOLDER")
     directory_nodes = {"": install}
     # A file may be several levels below a directory that contains no files of
     # its own (e.g. THIRD_PARTY/vendor/runtime.dll). Include *every* ancestor,
@@ -178,6 +195,8 @@ def generate(stage, wxs, version, main_exe=None):
     # exist before nested Directory elements are attached.
     directory_paths = set()
     for file_path in files:
+        if file_path in data_files:
+            continue
         parent_parts = file_path.relative_to(stage).parts[:-1]
         for depth in range(1, len(parent_parts) + 1):
             directory_paths.add("/".join(parent_parts[:depth]))
@@ -202,16 +221,20 @@ def generate(stage, wxs, version, main_exe=None):
     for f in files:
         rel = f.relative_to(stage).as_posix()
         parent_rel = "/".join(rel.split("/")[:-1])
-        parent = directory_nodes[parent_rel]
-        compid = stable_id("Cmp", rel)
+        is_db = f in data_files
+        parent = data_db if is_db else directory_nodes[parent_rel]
+        # Moving files out of INSTALLFOLDER changes component identity. Do
+        # not reuse the old program-directory component GUID or registry key.
+        identity = "data-home/" + rel if is_db else rel
+        compid = stable_id("Cmp", identity)
         preserve = f.name.casefold() in PRESERVE_NAMES
-        attrs = {"Id": compid, "Guid": stable_guid("file/" + rel)}
+        attrs = {"Id": compid, "Guid": stable_guid("file/" + identity)}
         if preserve:
             attrs.update(Permanent="yes", NeverOverwrite="yes")
         component = elt(parent, "Component", **attrs)
         elt(component, "File", Id=stable_id("File", rel), Source=str(f), KeyPath="no")
         elt(component, "RegistryValue", Root="HKCU", Key=PER_USER_COMPONENTS_KEY,
-            Name=stable_id("Value", rel), Type="integer", Value="1", KeyPath="yes")
+            Name=stable_id("Value", identity), Type="integer", Value="1", KeyPath="yes")
         if f == main_candidates[0]:
             elt(component, "RegistryValue", Root="HKCU", Key=PER_USER_INSTALL_KEY,
                 Name="InstallPath", Type="string", Value="[INSTALLFOLDER]")
@@ -239,6 +262,14 @@ def generate(stage, wxs, version, main_exe=None):
         Name="DirectoryCleanup", Type="integer", Value="1", KeyPath="yes")
     elt(feature, "ComponentRef", Id="TLOInstallDirectoryCleanup")
 
+    if data_db is not None:
+        db_cleanup = elt(data_db, "Component", Id="TLODatabaseDirectoryCleanup",
+                         Guid=stable_guid("directory-cleanup/data-dbs"))
+        elt(db_cleanup, "RemoveFolder", Id="RemoveEmptyDatabaseDirectory", On="uninstall")
+        elt(db_cleanup, "RegistryValue", Root="HKCU", Key=PER_USER_COMPONENTS_KEY,
+            Name="DatabaseDirectoryCleanup", Type="integer", Value="1", KeyPath="yes")
+        elt(feature, "ComponentRef", Id="TLODatabaseDirectoryCleanup")
+
     menu = elt(pkg, "StandardDirectory", Id="ProgramMenuFolder")
     menu_dir = elt(menu, "Directory", Id="TLOProgramsMenu", Name="Traders Little Organizer")
     shortcut = elt(menu_dir, "Component", Id="TLOStartMenuComponent",
@@ -252,11 +283,11 @@ def generate(stage, wxs, version, main_exe=None):
         search_rel = search_candidates[0].relative_to(stage).as_posix().replace("/", "\\")
         elt(shortcut, "Shortcut", Id="TLOSearchStartMenuShortcut", Name="TLO Search",
             Target="[INSTALLFOLDER]" + search_rel, WorkingDirectory="INSTALLFOLDER", Advertise="no")
-    artist_search_candidates = [p for p in files if p.name.lower() == "search-artist-db.exe"]
-    if len(artist_search_candidates) == 1:
-        artist_rel = artist_search_candidates[0].relative_to(stage).as_posix().replace("/", "\\")
-        elt(shortcut, "Shortcut", Id="TLOArtistDatabaseSearchShortcut", Name="TLO Artist Database Search",
-            Target="[INSTALLFOLDER]" + artist_rel, WorkingDirectory="INSTALLFOLDER", Advertise="no")
+    aux_search_candidates = [p for p in files if p.name.lower() == "searchauxdbs.exe"]
+    if len(aux_search_candidates) == 1:
+        aux_rel = aux_search_candidates[0].relative_to(stage).as_posix().replace("/", "\\")
+        elt(shortcut, "Shortcut", Id="TLOAuxDatabaseSearchShortcut", Name="TLO Auxiliary Database Search",
+            Target="[INSTALLFOLDER]" + aux_rel, WorkingDirectory="INSTALLFOLDER", Advertise="no")
     elt(shortcut, "RemoveFolder", Id="RemoveStartMenu", On="uninstall")
     elt(shortcut, "RegistryValue", Root="HKCU", Key=PER_USER_INSTALL_KEY,
         Name="StartMenuShortcut", Type="integer", Value="1", KeyPath="yes")
@@ -277,7 +308,7 @@ def main(argv=None):
     p.add_argument("--worker", type=Path, required=True)
     p.add_argument("--wxs", required=True, type=Path)
     p.add_argument("--version", required=True)
-    p.add_argument("--data-source", type=Path, help="Required physical master databases for first MSI launch")
+    p.add_argument("--data-source", type=Path, help="Required physical master databases for direct MSI installation")
     p.add_argument("--document-source", type=Path, help="Application source with current FAQ, preferences template and documentation")
     p.add_argument("--main-exe", help="Optional relative path for tlo-main.exe")
     a = p.parse_args(argv)

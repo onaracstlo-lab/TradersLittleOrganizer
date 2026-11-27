@@ -18,6 +18,7 @@ import sqlite3
 import threading
 
 from match_city import CityMatcher
+from tlo_cities import catalog_path_for_tlo
 
 _THREAD = threading.local()
 _REPORTED: set[str] = set()
@@ -29,7 +30,7 @@ def _db_path(tlo_dbs_dir: str) -> Path | None:
     """Never probe an unrelated installation when a caller supplies a DB dir."""
     if not tlo_dbs_dir:
         return None
-    return Path(tlo_dbs_dir) / 'cities.sqlite'
+    return catalog_path_for_tlo(tlo_dbs_dir)
 
 
 def _open_on_thread(path: Path, stamp: tuple[int, int]) -> CityMatcher:

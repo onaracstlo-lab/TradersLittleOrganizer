@@ -93,7 +93,8 @@ def test_no_internal_fallback_and_external_executable_directory(tmp_path, monkey
         dbdir=tmp_path/'TLO_DBs'
         dbdir.mkdir()
         (dbdir/'cities.sqlite').write_bytes((ROOT/'TLO_DBs/cities.sqlite').read_bytes())
-        citycat=catalog_for_tlo()
+        assert catalog_for_tlo() is None
+        citycat=catalog_for_tlo(tlo_home=str(tmp_path))
         assert citycat.lookup_exact('London') is not None
         assert citycat.lookup_exact('Köln').country == 'Germany'
         assert citycat.lookup_exact('Cologne').country == ''

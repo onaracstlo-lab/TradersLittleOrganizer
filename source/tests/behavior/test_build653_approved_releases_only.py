@@ -115,5 +115,6 @@ def test_app_release_documentation_mentions_approval_gate():
     text = (root / RA.CHANGES_FILENAME).read_text(encoding="utf-8")
     assert "pre-release" in text.lower()
     assert "promot" in text.lower()
-    assert "Build Process v165" in (root / RA.SOURCE_README_FILENAME).read_text(encoding="utf-8")
+    assert "Build Process v165" in (root / "docs/history/SOURCE_BUNDLE_README_v733.txt").read_text(encoding="utf-8")
+    assert "Native GitHub Build Process: v169" in (root / RA.SOURCE_README_FILENAME).read_text(encoding="utf-8")
     assert "Build Process v126" in (root / "SOURCE_BUNDLE_HISTORY.txt").read_text(encoding="utf-8")

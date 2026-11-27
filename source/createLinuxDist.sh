@@ -111,7 +111,7 @@ build_one() {
         fail "Expected Linux executable was not created: ${TARGET_DIR}/${base}"
 }
 
-build_one "$(find_script search-artist-db.py)" --windowed
+build_one "$(find_script searchAuxDBs.py)" --windowed
 build_one "$(find_script tlo-search.py)" --windowed \
     --add-data "${SOURCE_ROOT}/icons/tlo-search-icon.png:icons"
 build_one "$(find_script tlo-gi.py)" \

@@ -204,7 +204,7 @@ MAIN_ICON="$(find_required_icon tlo-main-icon.icns)"
 SEARCH_ICON="$(find_required_icon tlo-search-icon.icns)"
 TAG_ICON="$(find_required_icon tlo-tag-icon.icns)"
 
-build_one "$(find_script search-artist-db.py)" yes
+build_one "$(find_script searchAuxDBs.py)" yes
 build_windowed_with_icon "$(find_script tlo-search.py)" "$SEARCH_ICON" \
     --add-data "${SOURCE_ROOT}/icons/tlo-search-icon.png:icons"
 build_one "$(find_script tlo-gi.py)" no \
@@ -235,7 +235,7 @@ IMAGEIO_FFMPEG_EXE=/usr/bin/true TLO_PACKAGING_SMOKE_TEST=1 "${TARGET_DIR}/tlo-g
 } > "$TOOL_RECEIPT"
 
 EXPECTED_EXECUTABLES=(
-    search-artist-db
+    searchAuxDBs
     tlo-search
     tlo-gi
     tlo-research
@@ -245,7 +245,7 @@ EXPECTED_EXECUTABLES=(
     tlo-deleteDupes
 )
 EXPECTED_APP_BUNDLES=(
-    search-artist-db.app
+    searchAuxDBs.app
     tlo-search.app
     tlo-main.app
 )

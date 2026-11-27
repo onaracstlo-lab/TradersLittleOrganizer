@@ -1,3 +1,14 @@
+Build 735: fix PowerShell HOME collision in native MSI smoke test and Windows acceptance script; process v169 unchanged.
+
+Build 734: confirmed Main hamburger Reverse and reconciled current documentation; Build Process v169 unchanged.
+
+Build 733: correct Windows/UNC/WSL evidence paths and conservative catalog fragment date-conflict validation; preserve all Build 732 changes. Process v169 unchanged.
+
+Build 732: undated album tag exception and separator spacing; auxiliary DB search and clipboard-enabled Main Search menu.
+
+Build 731: date-conflict online comparison and current eTreeDB GraphQL direct cursor arguments; Build Process v168 unchanged.
+Build 730: verified artist/date trading shorthand rename and independent track-date validation; Build Process v168 unchanged.
+Build 729: MSI directly installs its four managed databases into selected TLOHome/TLO_DBs; no GUI seeding or application-relative fallback. Build Process v168 unchanged.
 Build 725 (2026-11-24): SQLite-only city reference and native three-master package contract; Process v167.
 Build 724 (2026-11-24): SQLite city prototype integrated with conservative folder/setlist match, fallback retained; physical cities.sqlite for MSI and native ZIPs. GitHub Build Process v166. Source-only candidate, native CI not attested.
 TLO Build 716 (GitHub Build Process v158): Fix local preflight bytecode contamination from verify_build_lock.py import of tlo_version before GitHub upload. Enforce -B on local source Python checks; fail closed on incoming/generated pyc, retain prior pin verification. New immutable package.

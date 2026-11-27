@@ -43,6 +43,7 @@ class SetlistVenueLocationResult:
     source: str = ""
     raw: str = ""
     confidence: int = 0
+    venue_from_catalog: bool = False
 
 
 def _clean_spaces(value: str) -> str:
@@ -1381,6 +1382,10 @@ def _extract_inline_artist_date_header(lines: List[str], support: _SupportData) 
             continue
         before = _clean_spaces(raw[:match.start()].strip(" ,;-"))
         after = _clean_spaces(raw[match.end():].strip(" ,;-"))
+        # A date label left after splitting an explicit Date: line is not
+        # an artist; it must not invalidate otherwise genuine local evidence.
+        if re.fullmatch(r"(?i)(?:(?:performance|show|concert|recording)\s+)?date\s*[:=]?", before):
+            continue
         if not before or not _looks_like_unlabeled_artist_header_line(before, support):
             continue
         venue = after if after and _looks_like_unlabeled_venue_line(after) else ""
@@ -1864,6 +1869,7 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
     raw_venue = venue
     venue_confidence = 0
     venue_line_index = -1
+    venue_from_catalog = False
     city = region = country = raw_location = pattern_id = ""
     location_confidence = 0
     if venue:
@@ -1883,6 +1889,7 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
         location_confidence = max(84, structured_conf)
     else:
         venue, raw_venue, venue_confidence, venue_line_index = _best_venue_from_lines(metadata_lines, support)
+        venue_from_catalog = bool(venue)
 
     if not city and (fields.get("location") or fields.get("city")):
         raw_location = fields.get("location") or " ".join([fields.get("city", ""), fields.get("region", ""), fields.get("country", "")])
@@ -2009,4 +2016,5 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
         source=source,
         raw=raw,
         confidence=min(99, int(confidence or 0)),
+        venue_from_catalog=venue_from_catalog,
     )

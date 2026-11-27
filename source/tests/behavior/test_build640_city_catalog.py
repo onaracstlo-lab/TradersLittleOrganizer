@@ -1,5 +1,6 @@
 """Build 640: conservative city aliases and exact source-spelling output."""
 from pathlib import Path
+import shutil
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +12,7 @@ from tlo_cities import CityCatalog, catalog_for_tlo, refine_parsed_fields
 from tlo_setlist_metadata_lookup import _SupportData, _parse_location_from_text
 
 pytestmark = pytest.mark.behavior
+MASTER = Path(__file__).resolve().parents[2] / "TLO_DBs" / "cities.sqlite"
 
 
 def _matcher(include_city_artist=False):
@@ -25,6 +27,8 @@ def _matcher(include_city_artist=False):
 
 
 def _parse(tmp_path, name, *, compliant=False, matcher=None, setlist=''):
+    if not (tmp_path / 'cities.sqlite').exists():
+        shutil.copyfile(MASTER, tmp_path / 'cities.sqlite')
     folder = tmp_path / name
     folder.mkdir()
     info = folder / 'info.txt'
@@ -107,7 +111,7 @@ def test_existing_path_city_precedence_over_setlist_is_unchanged(tmp_path):
 
 
 def test_combined_index_name_alias_equivalence_and_full_text_guard():
-    cat = catalog_for_tlo()
+    cat = catalog_for_tlo(str(MASTER.parent))
     assert cat.lookup_exact('Cologne').country == ''  # also a distinct Italian city
     assert cat.lookup_exact('Köln').country == 'Germany'
     assert cat.lookup_exact('Cologne Germany') is None
@@ -123,12 +127,13 @@ def test_sqlite_alias_compatibility(tmp_path):
 
 def test_obsolete_local_csv_is_ignored(tmp_path):
     (tmp_path / 'cities.csv').write_text('city,region\nLondon,UK\n', encoding='utf-8')
-    assert catalog_for_tlo(str(tmp_path)).lookup_exact('Cologne') is not None
+    assert catalog_for_tlo(str(tmp_path)) is None
     r = _parse(tmp_path, 'The Who, Cologne 1970-04-01')
     assert r.city == 'Cologne'
 
 
 def test_setlist_parser_keeps_explicit_alias_spelling(tmp_path):
+    shutil.copyfile(MASTER, tmp_path / "cities.sqlite")
     support = _SupportData(str(tmp_path))
     r = _parse_location_from_text('Gürzenich, Cologne, Germany', support)
     assert r[:3] == ('Cologne', '', 'Germany')
@@ -155,7 +160,8 @@ def test_packaged_city_data_on_all_platforms(tmp_path, monkeypatch):
         db = tmp_path / 'TLO_DBs'
         db.mkdir()
         (db / 'cities.sqlite').write_bytes((root / 'TLO_DBs/cities.sqlite').read_bytes())
-        assert catalog_for_tlo().lookup_exact('London') is not None
+        assert catalog_for_tlo() is None
+        assert catalog_for_tlo(tlo_home=str(tmp_path)).lookup_exact('London') is not None
     _cached_catalog.cache_clear()
 
 

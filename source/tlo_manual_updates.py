@@ -356,6 +356,8 @@ def _apply_manual_name_tag_identity(record_dict: Dict[str, str], new_name: str) 
         if artist and album_piece:
             record["artist"] = artist
             record["album_name"] = album_piece
+            for field in ("date", "venue", "location", "city", "region", "country"):
+                record[field] = ""
     return record
 
 

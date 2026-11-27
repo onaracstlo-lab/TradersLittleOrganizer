@@ -294,7 +294,7 @@ def test_build501_requirements_reconcile_review_findings_and_remove_stale_label(
     text = "\n".join(p.text for p in Document(root / RA.REQUIREMENTS_FILENAME).paragraphs)
     assert "Old Grammar" not in text
     assert "14.8 Collection Search GUI (tlo-search)" in text
-    assert "14.9 Artist Database Search GUI (search-artist-db)" in text
+    assert "14.9 Auxiliary Database Search GUI (searchAuxDBs)" in text
     assert "REQ-CORR-000" in text and "fail closed" in text
     assert "SHA-256" in text
     assert "deleteBackupFolders.txt" not in text

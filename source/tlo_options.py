@@ -161,7 +161,7 @@ OPTIONS = [
     Option(
         "artist_in_album", "--no-artist-in-album", "store_false",
         default=True, gui="checkbox", gui_label="Artist In Album Tag", gui_row=0, gui_col=3,
-        help="Omit the artist-name prefix from Album tags. By default, Album tags begin with the artist name.",
+        help="Omit the artist-name prefix from Album tags. By default, dated performance Album tags begin with the artist name; undated Artist - Album tags always omit it.",
     ),
     Option(
         "tag_copy_destination", "--tag-copy-destination", "text",

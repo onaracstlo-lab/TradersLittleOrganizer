@@ -105,7 +105,7 @@ def test_noncompliant_album_name_is_used_before_unknown_fallback():
     )
 
     assert taglib._album_for_record(SimpleNamespace(compliant=False, artist_in_album=True), record) == (
-        "Pink Floyd 1988 Some More Secrets - Limited Edition Box Set"
+        "1988 Some More Secrets - Limited Edition Box Set"
     )
     assert taglib._album_for_record(SimpleNamespace(compliant=False, artist_in_album=False), record) == (
         "1988 Some More Secrets - Limited Edition Box Set"

@@ -59,7 +59,7 @@ def test_csv_search_gui_presents_encoding_specific_message(tmp_path, monkeypatch
     assert 'CSV UTF-8' in errors[0][1]
 
 
-def test_city_diagnostic_identifies_external_catalog_instead_of_internal_bundle(tmp_path, monkeypatch):
+def test_city_diagnostic_identifies_external_catalog_instead_of_internal_bundle(tmp_path):
     # Use real physical catalog files. This replaces a source-inspection-only
     # assertion with a behavior check of the warning users actually receive.
     import tlo_cities
@@ -67,9 +67,9 @@ def test_city_diagnostic_identifies_external_catalog_instead_of_internal_bundle(
     from tests._city_fixture import city_db
     master = city_db(tmp_path / 'packaged' / 'TLO_DBs' / 'cities.sqlite', [('Boston','MA',())])
     local = city_db(tmp_path / 'local' / 'cities.sqlite', [('Lowell','MA',())])
-    monkeypatch.setattr(tlo_cities, '_bundled_path', lambda: master)
     tlo_cities._cached_catalog.cache_clear()
-    assert tlo_cities.catalog_for_tlo().lookup_exact('Boston')
+    assert tlo_cities.catalog_for_tlo(str(master.parent)).lookup_exact('Boston')
+    assert tlo_cities.catalog_for_tlo(str(tmp_path / 'missing')) is None
     catalog = tlo_cities.catalog_for_tlo(tlo_dbs_dir=str(local.parent))
     assert catalog.lookup_exact('Lowell') and not catalog.lookup_exact('Boston')
     local.write_bytes(b'invalid database')

@@ -190,7 +190,7 @@ def test_reinventory_delta_log_contains_per_entry_detail_but_summary_formatter_c
 
 def test_all_gui_entry_points_install_global_ctrl_a_class_bindings():
     root = Path(__file__).resolve().parents[2]
-    for filename in ("tlo-main.py", "tlo-search.py", "search-artist-db.py"):
+    for filename in ("tlo-main.py", "tlo-search.py", "searchAuxDBs.py"):
         text = (root / filename).read_text(encoding="utf-8")
         assert "from tlo_gui_shortcuts import install_global_ctrl_a" in text
         assert "install_global_ctrl_a(self.root)" in text

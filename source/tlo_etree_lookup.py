@@ -100,7 +100,7 @@ def validate_yyyy_mm_dd(date_text: str) -> str:
 def normalize_text(text: str) -> str:
     text = (text or "").casefold()
     text = text.replace("&", " and ")
-    text = re.sub(r"^the\s+", "", text)
+    text = re.sub(r"^the\s+|,\s*the\s*$", "", text)
     text = re.sub(r"[^a-z0-9]+", " ", text)
     return " ".join(text.split())
 
@@ -115,6 +115,17 @@ def exact_artist_name_candidates(artist_name: str) -> list[str]:
             candidates.append(value)
 
     add(raw)
+    # TLO's canonical name may omit a leading article, while the current
+    # exact-name GraphQL filter requires the stored spelling.
+    if raw.casefold().startswith("the "):
+        add(raw[4:])
+        add(f"{raw[4:]}, The")
+    elif raw.casefold().endswith(", the"):
+        add("The " + raw[:-5])
+        add(raw[:-5])
+    elif "," not in raw:
+        add(f"The {raw}")
+        add(f"{raw}, The")
 
     if "," in raw:
         left, right = raw.split(",", 1)
@@ -317,9 +328,7 @@ query ArtistPerformancesFirstPage(
     filter: {
       name: { eq: $artistName }
     }
-    pagination: {
-      first: 5
-    }
+    first: 5
   ) {
     totalCount
     edges {
@@ -331,9 +340,7 @@ query ArtistPerformancesFirstPage(
           filter: {
             year: { eq: $year }
           }
-          pagination: {
-            first: $first
-          }
+          first: $first
         ) {
           totalCount
           pageInfo {
@@ -373,9 +380,7 @@ query ArtistPerformancesNextPage(
     filter: {
       name: { eq: $artistName }
     }
-    pagination: {
-      first: 5
-    }
+    first: 5
   ) {
     totalCount
     edges {
@@ -387,10 +392,8 @@ query ArtistPerformancesNextPage(
           filter: {
             year: { eq: $year }
           }
-          pagination: {
-            first: $first
-            after: $after
-          }
+          first: $first
+          after: $after
         ) {
           totalCount
           pageInfo {
@@ -485,8 +488,11 @@ def fetch_exact_artist_year_performances(
 
             data = graphql_request(query, variables)
             artists_connection = data.get("artistsRoot")
+            if not isinstance(artists_connection, dict) or not isinstance(artists_connection.get("edges"), list):
+                raise ETreeDBError("eTreeDB response lacks a complete artistsRoot connection.")
             artist_nodes = connection_nodes(artists_connection)
-
+            if int(artists_connection.get("totalCount") or 0) > len(artist_nodes):
+                raise ETreeDBError("eTreeDB artist search pagination incomplete; cannot establish absence.")
 
             matched_any_artist = False
             next_after: str | None = None
@@ -516,6 +522,8 @@ def fetch_exact_artist_year_performances(
                 matched_any_artist = True
 
                 performances_connection = artist_node.get("performances")
+                if not isinstance(performances_connection, dict) or not isinstance(performances_connection.get("edges"), list):
+                    raise ETreeDBError("eTreeDB response lacks a complete performances connection.")
                 perf_nodes = connection_nodes(performances_connection)
 
 
@@ -529,7 +537,9 @@ def fetch_exact_artist_year_performances(
                         all_results.append(result)
 
                 info = page_info(performances_connection)
-                if info.get("hasNextPage") and info.get("endCursor"):
+                if info.get("hasNextPage"):
+                    if not info.get("endCursor"):
+                        raise ETreeDBError("eTreeDB performance pagination returned no cursor.")
                     next_after = str(info["endCursor"])
 
             if not matched_any_artist:
@@ -537,7 +547,8 @@ def fetch_exact_artist_year_performances(
 
             if not next_after:
                 break
-
+            if next_after == after or page_number + 1 >= max_pages:
+                raise ETreeDBError("eTreeDB performance pagination incomplete; cannot establish absence.")
             after = next_after
 
         if all_results:

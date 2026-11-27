@@ -1,3 +1,6 @@
+CURRENT MSI DATABASE POLICY (BUILD 729)
+The installer installs the four master files directly to the chosen TLOHome/TLO_DBs during setup or upgrade. Runtime never copies or seeds databases. On uninstall only MSI-owned files may be removed; user data and the data home remain. The following earlier migration entries are historical and describe prior releases.
+
 HISTORICAL UPDATE MIGRATION NOTES — superseded city database contract
 Current Build 725 and later use cities.sqlite, not the retired city CSV.
 For initial migration from a CSV-only installation use an MSI or database-inclusive ZIP.
@@ -86,7 +89,7 @@ The Windows MSI prompts for the editable TLOHome data folder, defaulting to
 C:\.tlo or existing per-user TLOHome/DataHome configuration. It writes a
 per-user environment variable, not a system variable; no admin is required.
 Managed executables remain in LocalAppData Programs. Existing TLOHome content
-is not removed on uninstall. Only the three MSI-managed master files in
-TLOHome\TLO_DBs may be replaced upon the first launch after an MSI upgrade;
+is not removed on uninstall. Historical Build 660 behavior: only the three then-managed master files in
+TLOHome\TLO_DBs were replaced on first launch; this is superseded by direct installer placement.
 user-edited databases are unsupported across upgrades. All other user files
 remain preserved.

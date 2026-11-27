@@ -15,7 +15,7 @@ from tlo_runtime_control import (
     acquire_inventory_lock,
     release_inventory_lock,
 )
-from tlo_db_validation import validate_required_databases
+from tlo_db_validation import optional_database_status, validate_required_databases
 from tlo_options import apply_lookup_dependency
 from tlo_version import DISPLAY_VERSION
 from tlo_postprocess import postprocess_metadata_outputs
@@ -125,6 +125,8 @@ def run_inventory(config) -> int:
 
             ensure_corrupt_flacs_log(config)
         validate_required_databases(config)
+        for message in optional_database_status(config):
+            console_print(config, message)
         _preflight_cross_root_show_identities(config)
         walk_trees(config)
         config.inventory_scanning_complete = True

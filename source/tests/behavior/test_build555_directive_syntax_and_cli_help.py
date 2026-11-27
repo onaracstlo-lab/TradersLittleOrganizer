@@ -105,7 +105,7 @@ def test_build555_inventory_help_uses_slash_directives_and_clean_defaults():
     assert "(default: True)" not in help_text
     assert "(default: )" not in help_text
     assert "(default: None)" not in help_text
-    assert "By default, Album tags begin with the artist name" in compact
+    assert "By default, dated performance Album tags begin with the artist name" in compact
 
 
 def test_build555_shared_cli_help_is_not_gui_instruction_text():

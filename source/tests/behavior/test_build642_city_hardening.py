@@ -1,4 +1,5 @@
 """Build 642: layered city catalog and risk-averse collision handling."""
+from pathlib import Path
 import pytest
 pytestmark = pytest.mark.behavior
 from tlo_cities import catalog_for_tlo
@@ -30,7 +31,7 @@ def test_ambiguous_alias_cannot_assign_geography(tmp_path):
 
 
 def test_concert_city_recognition_does_not_impute_geography():
-    cat=catalog_for_tlo()
+    cat=catalog_for_tlo(str(Path(__file__).resolve().parents[2] / "TLO_DBs"))
     for name in ('Bristol','Brighton','Aberdeen','York','Coventry','Perth'):
         row=cat.lookup_exact(name)
         assert row, name
@@ -38,11 +39,11 @@ def test_concert_city_recognition_does_not_impute_geography():
         assert result and result.city==name
 
 def test_hyphen_within_word_not_explicit_separator():
-    cat=catalog_for_tlo()
+    cat=catalog_for_tlo(str(Path(__file__).resolve().parents[2] / "TLO_DBs"))
     assert cat.suggest_for_known_artist('Phish Soundboard-London 1997-07-01',artist='Phish',date='1997-07-01') is None
 
 def test_aliases_not_rewritten():
-    cat=catalog_for_tlo()
+    cat=catalog_for_tlo(str(Path(__file__).resolve().parents[2] / "TLO_DBs"))
     cand=cat.suggest_for_known_artist('The Who, Cologne 1970-04-01',artist='The Who',date='1970-04-01')
     assert cand.city=='Cologne'
 

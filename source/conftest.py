@@ -51,14 +51,14 @@ def _needs_tk_at_collection(path):
         if isinstance(item, ast.Assign) and any(isinstance(v, ast.Call)
                 and isinstance(v.func, ast.Attribute) and v.func.attr == 'spec_from_file_location'
                 and any(isinstance(arg, ast.Constant) and isinstance(arg.value, str)
-                        and arg.value in ('tlo-main.py', 'tlo-search.py') for arg in v.args)
+                        and arg.value in ('tlo-main.py', 'tlo-search.py', 'searchAuxDBs.py') for arg in v.args)
                 for v in ast.walk(item)):
             return True
     # Modules that dynamically load the GUI in a test function must also
     # be skipped when Tk is absent; inspecting top-level imports alone
     # misses these dependencies. The module name and loader call are
     # both necessary, to avoid skipping harmless source-text inspections.
-    gui_names = {'tlo-main.py', 'tlo-search.py'}
+    gui_names = {'tlo-main.py', 'tlo-search.py', 'searchAuxDBs.py'}
     has_gui_filename = any(isinstance(node, ast.Constant) and
                            isinstance(node.value, str) and node.value in gui_names
                            for node in ast.walk(module))

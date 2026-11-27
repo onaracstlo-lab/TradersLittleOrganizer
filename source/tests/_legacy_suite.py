@@ -63,7 +63,7 @@ def _docx_text(filename):
 
 def _load_local_module(filename, module_name):
     """Load a local script module while safely restoring sys.modules."""
-    if filename in {"tlo-main.py", "tlo-search.py", "search-artist-db.py"}:
+    if filename in {"tlo-main.py", "tlo-search.py", "searchAuxDBs.py"}:
         pytest.importorskip("tkinter", reason="Tkinter is required for GUI regression tests")
     module_path = SOURCE_DIR / filename
     spec = importlib.util.spec_from_file_location(module_name, module_path)
@@ -9510,7 +9510,7 @@ def test_v356_cli_description_and_no_artist_help_are_correct():
     assert "Inventory, identify, organize" in help_text
     assert "Drive/partition reporting tool" not in help_text
     assert "Omit the artist-name prefix from Album tags" in help_text
-    assert "By default, Album tags begin with the artist name" in " ".join(help_text.split())
+    assert "By default, dated performance Album tags begin with the artist name" in " ".join(help_text.split())
 
 
 def test_v356_tagger_issue_collection_uses_actual_log_names(tmp_path):
@@ -9528,9 +9528,9 @@ def test_v356_tagger_issue_collection_uses_actual_log_names(tmp_path):
 def test_v356_search_tools_use_central_display_version():
 
     assert 'DISPLAY_VERSION = "v1.6 Build' not in _source_text("tlo-search.py")
-    assert 'DISPLAY_VERSION = "v1.6 Build' not in _source_text("search-artist-db.py")
+    assert 'DISPLAY_VERSION = "v1.6 Build' not in _source_text("searchAuxDBs.py")
     assert "from tlo_version import DISPLAY_VERSION" in _source_text("tlo-search.py")
-    assert "from tlo_version import DISPLAY_VERSION" in _source_text("search-artist-db.py")
+    assert "from tlo_version import DISPLAY_VERSION" in _source_text("searchAuxDBs.py")
 
 
 # --------------------------------------------------------------------------- #

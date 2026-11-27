@@ -244,14 +244,18 @@ def match_city(db_path: str | Path, city: str, state: str = "", limit: int = 5) 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--db", "--master", dest="db", type=Path,
-                    default=Path(__file__).resolve().parent / "TLO_DBs" / "cities.sqlite",
                     help="Path to cities.sqlite (the old --master flag remains an alias for the DB path)")
+    ap.add_argument("--TLOHome", help="Active data folder (otherwise use TLOHome environment)")
     ap.add_argument("--city", required=True)
     ap.add_argument("--state", default="", help="US state, Canadian province, or country/region label")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--limit", type=int, default=5)
     args = ap.parse_args()
-    with CityMatcher(args.db) as matcher:
+    db = args.db
+    if db is None:
+        from tlo_path_inputs import resolve_tlo_home
+        db = Path(resolve_tlo_home(args.TLOHome or "", app_name="match_city")) / "TLO_DBs" / "cities.sqlite"
+    with CityMatcher(db) as matcher:
         result = matcher.resolve(args.city, args.state, args.limit)
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))

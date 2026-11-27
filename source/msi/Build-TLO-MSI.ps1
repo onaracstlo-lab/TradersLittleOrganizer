@@ -81,6 +81,107 @@ if ($LASTEXITCODE -ne 0) { throw 'MSI Authenticode verification failed.' }
 $sig = Get-AuthenticodeSignature -LiteralPath $msi
 if ($sig.Status -ne 'Valid') { throw "MSI signature status: $($sig.Status)" }
 
+# Exercise the signed package on an isolated GitHub-hosted Windows runner;
+# never install/uninstall a product on a developer's machine.
+if ($env:GITHUB_ACTIONS -eq 'true' -and $env:RUNNER_ENVIRONMENT -eq 'github-hosted') {
+    $installerKey = 'HKCU:\Software\TradersLittleOrganizer\Installer'
+    $settingsKey = 'HKCU:\Software\TradersLittleOrganizer\UserSettings'
+    if ((Test-Path -LiteralPath $installerKey) -or (Test-Path -LiteralPath $settingsKey)) {
+        throw 'Native MSI database smoke test requires a clean disposable runner.'
+    }
+    $smokeTestDataHome = Join-Path $working 'native test data'
+    $dbDir = Join-Path $smokeTestDataHome 'TLO_DBs'
+    New-Item -ItemType Directory -Path $dbDir -Force | Out-Null
+    $databases = @('artists.sqlite', 'venues.txt', 'cities.sqlite', 'venues.sqlite')
+    foreach ($db in $databases) {
+        # Existing unversioned and user-modified files must be replaced by MSI.
+        $path = Join-Path $dbDir $db
+        Set-Content -LiteralPath $path -Value 'old user-modified master'
+        (Get-Item -LiteralPath $path).LastWriteTime = (Get-Date).AddDays(1)
+    }
+    $sentinels = @('bootlist.csv', 'tlo-preferences.ini', 'TLO_DBs\unmanaged.txt', 'logs\preserve.txt', 'setlists\preserve.txt')
+    foreach ($relative in $sentinels) {
+        $path = Join-Path $smokeTestDataHome $relative
+        New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
+        Set-Content -LiteralPath $path -Value 'preserve user data'
+    }
+    $engine = Join-Path ([Environment]::GetFolderPath('System')) 'msiexec.exe'
+    $log = Join-Path $working 'native-msi-install.log'
+    $uninstallLog = Join-Path $working 'native-msi-uninstall.log'
+    $homeArg = 'TLODATAFOLDER="' + $smokeTestDataHome + '"'
+    $msiArg = '"' + $msi + '"'
+    $previousUserHome = [Environment]::GetEnvironmentVariable('TLOHome', 'User')
+    $attempted = $false
+    try {
+        $attempted = $true
+        $result = Start-Process -FilePath $engine -ArgumentList @('/i', $msiArg, $homeArg, '/qn', '/norestart', '/L*V', ('"' + $log + '"')) -Wait -PassThru
+        if ($result.ExitCode -ne 0) {
+            Get-Content -LiteralPath $log -Tail 80 | Write-Host
+            throw "Native MSI installation failed: $($result.ExitCode)"
+        }
+        foreach ($db in $databases) {
+            $expected = (Get-FileHash -LiteralPath (Join-Path $DataSourceDirectory $db) -Algorithm SHA256).Hash
+            $actual = (Get-FileHash -LiteralPath (Join-Path $dbDir $db) -Algorithm SHA256).Hash
+            if ($actual -ne $expected) { throw "Native MSI did not install current database directly: $db" }
+        }
+        $program = (Get-ItemProperty -LiteralPath $installerKey).InstallPath
+        $auxExe = Join-Path $program 'searchAuxDBs.exe'
+        if (-not (Test-Path -LiteralPath $auxExe -PathType Leaf)) {
+            throw 'Native MSI did not install searchAuxDBs.exe.'
+        }
+        if (Test-Path -LiteralPath (Join-Path $program 'search-artist-db.exe')) {
+            throw 'Native MSI unexpectedly installed the obsolete artist search executable.'
+        }
+        $menuFolder = Join-Path ([Environment]::GetFolderPath('Programs')) 'Traders Little Organizer'
+        $auxShortcut = Join-Path $menuFolder 'TLO Auxiliary Database Search.lnk'
+        if (-not (Test-Path -LiteralPath $auxShortcut -PathType Leaf)) {
+            throw 'Native MSI auxiliary database Start Menu shortcut is missing.'
+        }
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($auxShortcut)
+        if ([IO.Path]::GetFullPath($shortcut.TargetPath) -ne [IO.Path]::GetFullPath($auxExe)) {
+            throw 'Native MSI auxiliary database shortcut points to the wrong executable.'
+        }
+        $configured = (Get-ItemProperty -LiteralPath $settingsKey).DataHome
+        $userVariable = [Environment]::GetEnvironmentVariable('TLOHome', 'User')
+        if ($configured.TrimEnd('\') -ne $smokeTestDataHome -or $userVariable.TrimEnd('\') -ne $smokeTestDataHome) {
+            throw 'MSI did not persist the selected TLOHome.'
+        }
+        if (Test-Path -LiteralPath (Join-Path $program 'TLO_DBs')) {
+            throw 'MSI unexpectedly installed a second database directory under the applications.'
+        }
+        foreach ($relative in $sentinels) {
+            if ((Get-Content -LiteralPath (Join-Path $smokeTestDataHome $relative) -Raw).Trim() -ne 'preserve user data') {
+                throw "MSI modified unmanaged user data: $relative"
+            }
+        }
+        Write-Host 'Native MSI direct-install gate passed: all four database masters installed before application launch.'
+    } finally {
+        if ($attempted -and (Test-Path -LiteralPath $installerKey)) {
+            $removed = Start-Process -FilePath $engine -ArgumentList @('/x', $msiArg, '/qn', '/norestart', '/L*V', ('"' + $uninstallLog + '"')) -Wait -PassThru
+            if ($removed.ExitCode -ne 0) { throw "Native MSI uninstall failed: $($removed.ExitCode)" }
+        }
+        # The runner is disposable but persistent configuration must not point
+        # to our temporary fixture for subsequent pipeline steps.
+        if (Test-Path -LiteralPath $settingsKey) { Remove-Item -LiteralPath $settingsKey -Recurse -Force }
+        [Environment]::SetEnvironmentVariable('TLOHome', $previousUserHome, 'User')
+    }
+    foreach ($relative in $sentinels) {
+        if ((Get-Content -LiteralPath (Join-Path $smokeTestDataHome $relative) -Raw).Trim() -ne 'preserve user data') {
+            throw "MSI uninstall modified unmanaged user data: $relative"
+        }
+    }
+    foreach ($db in $databases) {
+        if (Test-Path -LiteralPath (Join-Path $dbDir $db)) {
+            throw "MSI uninstall did not remove owned database: $db"
+        }
+    }
+    if ((Test-Path -LiteralPath $auxExe) -or (Test-Path -LiteralPath $auxShortcut)) {
+        throw 'Native MSI uninstall retained the auxiliary database executable or shortcut.'
+    }
+    Write-Host 'Native MSI uninstall gate passed: unmanaged user data preserved.'
+}
+
 $hash = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToLowerInvariant()
 $shaFile = "$msi.sha256"
 Set-Content -LiteralPath $shaFile -Value "$hash  $filename" -Encoding ascii

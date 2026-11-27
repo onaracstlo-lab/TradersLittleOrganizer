@@ -1,3 +1,41 @@
+TLO v1.7 Build 735
+- Resolve the PowerShell case-insensitive HOME automatic-variable collision in the Windows MSI installation smoke test and opt-in acceptance diagnostics. Keep all signing, native install/uninstall and database/shortcut acceptance gates.
+- GitHub run 46074831272: MSI creation and Azure signing completed, but native fixture setup aborted on the read-only automatic variable. A new regression checks the collision and executes safe fixture preparation and diagnostics when PowerShell is available. Process v169 unchanged.
+
+TLO v1.7 Build 734
+- Add Reverse to the Main hamburger menu with an explicit default-No confirmation; use the current literal Path(s) and Dry Run selection, and run the existing logged folder reversal under the shared operation lock. Reconcile current documentation and requirements catalog.
+- No or closing the prompt performs no planning or mutation. Dry Run previews folder actions and records an audit; ordinary Reverse never restores audio tags or the inventory. Existing CLI modes remain available.
+- Documentation: clarify permanent deferred Windows old-folder cleanup vs GUI recycling, update all current references, move history out of current overview, reconcile catalog source locations and stale text. Build Process v169 unchanged.
+
+TLO v1.7 Build 733
+- Correct metadata evidence paths to retain Windows drive/UNC roots and WSL mount prefixes. Resolve date conflicts with a complete venue confirmed by both the folder and unlabeled setlist header rather than vetoing the result with a partial legacy venue-catalog match; preserve explicit venue and geographic disagreements.
+- GitHub run 46069821802: four Linux date-conflict failures and one Windows shorthand failure; correct production code and add coverage. Build Process v169 is unchanged.
+
+TLO v1.7 Build 732
+- Undated Artist - Album records write only String2 as the Album tag regardless of Artist in Album; lossless separator spacing is normalized for compliant renames. Main Search submenu opens Inventory, Artist, Cities or Venues with the clipboard query. searchAuxDBs searches the three installed SQLite catalogs read-only.
+- Companion build process v169 renames the executable and MSI shortcut and checks all platforms.
+
+TLO v1.7 Build 731 — evidence-based date conflict validation and current eTreeDB GraphQL (Build Process v168)
+2026-11-27 | SOURCE CANDIDATE, NOT RELEASE-ATTESTED
+- When non-compliant inventory finds competing complete dates involving sampled DATE tags and an online source is enabled, retain all date provenance and query every distinct candidate (up to four) against each enabled provider before applying online metadata. Compare actual ordered local setlist song titles, or recognizable track filenames when local setlist titles are unavailable, with the exact artist/date performances; independently compare venue, city, region and country. Do not prefer a date merely because it occurs in multiple tags, a folder, or a published concert. An explicit local performance date remains stronger than tags unless substantial contradictory song/place evidence warrants review. Select a uniquely corroborated date; with insufficient or tied evidence leave the date conflict unresolved and block ordinary automatic tagging/rename/transfer. Keep raw DATE_MATCH and per-date lookup evidence. Failed or incomplete requests are not no-match evidence. Only the selected date supplies online metadata and cached setlists. With both providers disabled retain existing local date behavior. Use the current eTreeDB GraphQL direct first/after cursor arguments at artistsRoot and nested performances, including exact article variants. Preserve KC in venue display.
+- Build 730 rename/artist identification and Build 729 direct MSI-managed database ownership retained. Build Process v168 unchanged.
+- The supplied Build 730 source baseline contains a zero-byte TLO_DBs/artists.sqlite and no TLO_DBs/venues.txt. This source candidate preserves the baseline database bytes without manufacturing replacement data. Build Process v168 must inject the authoritative reference files from ArtistDB-Master, as designed; this source archive alone is not a complete runnable distribution. Existing cities.sqlite and venues.sqlite are unchanged.
+
+PRIOR HISTORY — Build 730 and earlier:
+TLO v1.7 Build 730 — verified trading shorthand rename (Build Process v168)
+2026-11-27 | SOURCE CANDIDATE, NOT RELEASE-ATTESTED
+- Non-compliant inventory identifies the original source path before Copy/Delete, uses selected setlist metadata, and retains short DB-backed artist prefixes as a last resort. When one YY-MM-DD shorthand date is ambiguous and no selected setlist supplies a date, at least two distinct same-prefix full-date track filenames must agree on one path candidate before resolving it. Rename Compliantly accepts verified artist/date trading-folder shorthand (such as trey05-12-02.flac) and can expand an exact, unique Artist DB alias for the resolved artist. Only plain format suffixes in this narrow structure can disappear; known dates, venue/location, IDs, bit-depth/source markers, and trailing recording parentheticals remain protected. The same guard applies to Inventory in-place, Copy/Delete, and Add Shows. Track filenames are not renamed.
+- Build 729 direct MSI database ownership retained; Build Process v168 and all physical databases unchanged.
+
+PRIOR HISTORY — Build 729 and earlier:
+TLO v1.7 Build 729 — MSI database ownership and single runtime data path (Build Process v168)
+2026-11-27 | SOURCE CANDIDATE, NOT RELEASE-ATTESTED
+- Install artists.sqlite, venues.txt, cities.sqlite and venues.sqlite directly into the installer-selected TLOHome/TLO_DBs. Use distinct MSI component identities for the moved files and explicitly overwrite installer-managed unversioned database masters. Uninstall removes only managed database files, not user data or TLOHome.
+- Remove all application startup database copying and synchronization. Runtime city and venue lookups use only the active TLOHome/TLO_DBs, including explicit command-line homes. Missing/corrupt optional reference data retains positional and geographic fallback. Report database paths and availability before inventory scanning.
+- Add a native signed-MSI install/uninstall smoke gate on disposable GitHub-hosted Windows runners, checking SHA-256 against all four source masters before launching any application and protecting unmanaged data.
+- Preserve ZIP packaging, signing and release policy; Build Process v168 is unchanged.
+
+PRIOR HISTORY — Build 728 and earlier:
 TLO v1.7 Build 728 — original-folder parenthetical regression (Build Process v168)
 2026-11-26 | SOURCE CANDIDATE, NOT RELEASE-ATTESTED
 - Keep original trailing recording parentheticals, including (early), (late), (mtx), and (24). Do not append a redundant canonical performance qualifier when an equivalent complete original parenthetical is present. Refuse compliant folder renames that would discard, alter, or reorder any ordinary trailing group; retain existing collision/part and identity validation. Correct the historical projection to restore the original folder suffix, not the incomplete historical show name.

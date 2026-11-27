@@ -65,7 +65,7 @@ from tlo_wrapper_rules import (
 )
 from tlo_tree_compare import has_exact_tree_match_in_family
 from tlo_folder_rename import folder_name_write_needed, rename_folder_exact_case, same_existing_entry
-from tlo_rename_safety import safe_rename_target
+from tlo_rename_safety import safe_rename_target, spaced_album_separator
 from tlo_ffmpeg import bundled_ffmpeg_executable as _bundled_ffmpeg_executable
 
 
@@ -2519,6 +2519,8 @@ def _base_album_for_record(config: Config, record) -> str:
 def _album_for_record(config: Config, record) -> str:
     album = _base_album_for_record(config, record)
     artist = compact_ws(getattr(record, "artist", ""))
+    if not compact_ws(getattr(record, "date", "")) and compact_ws(getattr(record, "album_name", "")):
+        return album
     if bool(getattr(config, "artist_in_album", True)) and artist and album:
         return compact_ws(f"{artist} {album}")
     return album
@@ -3053,7 +3055,8 @@ def _show_name_with_parentheticals(show_name: str, parentheticals: str) -> str:
 
 
 def _compliant_rename_show_name_from_record(record) -> str:
-    return _show_name_with_parentheticals(getattr(record, "show_name", ""), getattr(record, "parentheticals", ""))
+    show_name = _show_name_with_parentheticals(getattr(record, "show_name", ""), getattr(record, "parentheticals", ""))
+    return spaced_album_separator(show_name, getattr(record, "artist", ""), getattr(record, "date", ""))
 
 
 
@@ -3402,7 +3405,7 @@ def prepare_inventory_copy_delete_target(
     show_name = _compliant_rename_show_name_from_record(record)
     use_compliant_name = bool(getattr(config, "rename_compliantly", False)) and bool(show_name)
     proposed_leaf = safe_compliant_folder_name(show_name, fallback=source_leaf)
-    accepted_leaf, reason = safe_rename_target(source_leaf, proposed_leaf, artist=getattr(record, "artist", ""), date=getattr(record, "date", "")) if use_compliant_name else ("", "")
+    accepted_leaf, reason = safe_rename_target(source_leaf, proposed_leaf, artist=getattr(record, "artist", ""), date=getattr(record, "date", ""), verified_prefix=getattr(record, "verified_rename_prefix", "")) if use_compliant_name else ("", "")
     if use_compliant_name and not accepted_leaf:
         _emit(emit, f"RENAME_COMPLIANTLY_SKIP: {source_root} | {reason}")
     destination_leaf = accepted_leaf or source_leaf
@@ -3459,7 +3462,7 @@ def prepare_inventory_tagging_target(
     use_compliant_name = bool(getattr(config, "rename_compliantly", False)) and bool(show_name)
     target_name = safe_compliant_folder_name(show_name if use_compliant_name else original_name, fallback=original_name)
     if use_compliant_name:
-        accepted, reason = safe_rename_target(original_name, target_name, artist=getattr(record, "artist", ""), date=getattr(record, "date", ""))
+        accepted, reason = safe_rename_target(original_name, target_name, artist=getattr(record, "artist", ""), date=getattr(record, "date", ""), verified_prefix=getattr(record, "verified_rename_prefix", ""))
         if not accepted:
             _emit(emit, f"RENAME_COMPLIANTLY_SKIP: {source_root} | {reason}")
             # When the only rejected change is punctuation, the original

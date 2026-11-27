@@ -20,7 +20,7 @@ def test_xdg_trash_round_trip_file_and_metadata(tmp_path, monkeypatch):
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_xdg_trash_name_collision_preserves_both(tmp_path, monkeypatch):
-    home = tmp_path / 'home'; home.mkdir(); monkeypatch.setenv('HOME', str(home))
+    home = tmp_path / 'home'; home.mkdir(); monkeypatch.setenv('HOME', str(home)); monkeypatch.delenv('XDG_DATA_HOME', raising=False)
     src = home / 'same.flac'
     for content in (b'first', b'second'):
         src.write_bytes(content)
@@ -32,7 +32,7 @@ def test_xdg_trash_name_collision_preserves_both(tmp_path, monkeypatch):
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX filesystem/shell semantics verified in required Linux CI tests")
 def test_xdg_rename_failure_keeps_source(tmp_path, monkeypatch):
-    home = tmp_path / 'home'; home.mkdir(); monkeypatch.setenv('HOME', str(home))
+    home = tmp_path / 'home'; home.mkdir(); monkeypatch.setenv('HOME', str(home)); monkeypatch.delenv('XDG_DATA_HOME', raising=False)
     src = home / 'original.shn'; src.write_bytes(b'unchanged')
     def broken(src_, dest_):
         raise OSError('simulated volume loss')
@@ -53,7 +53,7 @@ def test_xdg_missing_home_fails_closed(tmp_path, monkeypatch):
 
 
 def test_xdg_rejects_symlink_source(tmp_path, monkeypatch):
-    home = tmp_path / 'home'; home.mkdir(); monkeypatch.setenv('HOME', str(home))
+    home = tmp_path / 'home'; home.mkdir(); monkeypatch.setenv('HOME', str(home)); monkeypatch.delenv('XDG_DATA_HOME', raising=False)
     real = home / 'real'; real.write_text('x'); link = home / 'link'; link.symlink_to(real)
     with pytest.raises(OSError, match='symlink'):
         C._trash_linux_xdg(str(link))

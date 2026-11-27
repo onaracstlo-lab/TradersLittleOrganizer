@@ -40,6 +40,6 @@ def test_main_inventory_one_line_buttons_do_not_use_fake_blank_second_lines():
 
 
 def test_artist_db_tk_buttons_explicitly_center_their_labels():
-    source = (ROOT / "search-artist-db.py").read_text(encoding="utf-8")
+    source = (ROOT / "searchAuxDBs.py").read_text(encoding="utf-8")
     assert 'text="Search", width=12, anchor="center", justify="center"' in source
     assert 'text="Quit", width=12, anchor="center", justify="center"' in source

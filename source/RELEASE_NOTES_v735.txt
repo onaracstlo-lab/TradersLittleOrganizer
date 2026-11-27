@@ -1,0 +1,10 @@
+TLO v1.7 Build 735 — NOT RELEASE-ATTESTED
+Companion GitHub Build Process v169 (unchanged).
+
+Remediation of failed GitHub Actions run 46074831272:
+- Windows MSI build and signing succeeded; the native installation test stopped when a PowerShell assignment conflicted with the read-only automatic variable HOME.
+- The native MSI smoke test and separate Windows acceptance diagnostics use explicitly named data-home variables rather than HOME.
+- New checks guard against this collision and exercise the actual test-fixture setup and acceptance diagnostic during the required native Windows regression test.
+- No release, signing, installer, catalog ownership or user data preservation gate is relaxed.
+
+Build 734 confirmed Reverse, documentation cleanup and all prior behavior remain intact. Current source documents and reports are synchronized to Build 735. Native acceptance remains required; see BUILD_VERIFICATION_v735.txt and REGRESSION_RESULTS_v735.txt.

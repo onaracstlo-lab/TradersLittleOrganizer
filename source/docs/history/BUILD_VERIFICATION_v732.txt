@@ -1,0 +1,48 @@
+TLO v1.7 Build 732 — NOT RELEASE-ATTESTED
+Companion TLO GitHub Build Process v169.
+Local source candidate. This document does NOT attest successful native release/CI jobs for Build 732.
+Ruff lint: lint not attested for native hosted builds. Local source tree passes pinned Ruff 0.16.10; full native CI still required.
+
+Historical Build 532 / Build 613 test evidence — PREVIOUS BUILDS ONLY, not a Build 732 CI claim:
+  Xvfb display (CI=1): previous standalone GUI tests were run under a virtual display.
+  No display (DISPLAY and CI unset): standalone Build 532 GUI subset: 50 passed, 6 skipped.
+  Historic Build 613 full Linux CI job: 26 skipped (different population from the standalone no-display subset).
+  These historic counts must not be confused with the current full GitHub Actions run.
+
+Current hosted acceptance: NOT ATTESTED for Build 732.
+Build 720 native GitHub Actions finished sufficiently to produce locally hash-bound release artifacts, but public release source-repository publication then failed while Git wrote object files. The earlier FAILED Build 716 run 45067649844 remains historical evidence only.
+Required historical report assertions are retained; process v169 runs early Windows/Linux Add Shows batch and review-flow regression gates.
+Build 732 native Windows/Linux/macOS tests, pinned Ruff, signing and scan gates have NOT run successfully yet; full GitHub Actions run must pass before release promotion.
+Build 724 local evidence (historical): 3,039 application tests and 194 process tests passed. See REGRESSION_RESULTS_v732.txt for current test status.
+
+No bytecode-in-source, wheel hash, Authenticode, MSI installer or update-metadata verification gate has been relaxed.
+Source ZIP is not a runnable platform distribution and must not be promoted as production without native acceptance.
+
+Retained Build 718 behavior: conservative user-facing case normalization for identified all-uppercase venue/city/location. Full hosted GitHub Actions acceptance for Build 732 is NOT ATTESTED.
+
+Retained Build 719 correction: compliant String2 may store a mixed-case venue with an embedded uppercase city/region suffix. Output-only normalization corrects uppercase Latin place words and keeps terminal region codes uppercase without splitting, guessing, or changing raw paths or source evidence. Five supplied real examples reproduced and passed. Original typos remain verbatim; preexisting inventory requires reprocessing.
+
+Build 720 correction retained: unused wholly_upper was removed. Earlier venue/city casing behavior remains; Build 726 added guarded venue alias recognition; Build 727 preserves trailing nested qualifiers; Build 728 added final rename protection and equivalent qualifier deduplication.
+Retained Build 721 correction: publication stage failed locally after the signed and hash-bound Build 720 artifacts were assembled. Three Git shallow fetch attempts reported Windows Permission denied while writing loose objects in C:\TLO-GitHub-Build. Process v163 introduced packed Git fetch and short user-temp working roots with strict cleanup and preserved signed commit/annotated-tag verification. Actual Windows publication and GitHub release creation: NOT ATTESTED.
+
+Earlier Windows Recycle Bin defaults correction (retained for Delete New): missing HKCU per-volume BitBucket values are Windows defaults, not a reason to reject. An explicit NukeOnDelete policy, inaccessible settings, or configured insufficient quota still fails closed. The deferred old-show cleanup template now uses guarded rmdir /s /q, intentionally permanent when separately executed by the user. It does not record undo data. Native Windows COM/FileIO acceptance: NOT ATTESTED.
+
+Current local regression: see Regression_Test_Report.md; native gates NOT ATTESTED.
+
+Build 729 historical local evidence: 7 targeted tests passed.
+
+Build 730 historical local evidence: 10 targeted tests passed.
+
+
+Build 732 source verification: see REGRESSION_RESULTS_v732.txt. The supplied artists.sqlite, cities.sqlite and venues.sqlite pass quick_check and are included unchanged; legacy venues.txt still must be staged before native builds.
+
+TLO v1.7 Build 732 — NOT RELEASE-ATTESTED
+Companion GitHub Build Process v169.
+Local source regression: 3,139 passed, 37 skipped, 1 deselected (81.43 seconds; Python 3.12 / pytest 9.2.0). Eight subtests passed. The deselected existing process-pool crash test failed before reaching application logic because this environment denies UNIX socket creation; keep it enabled in native CI. Skips include absent Tk display, native Windows tests and missing standalone FLAC encoder.
+Focused application/shortcut regression with pinned pytest 9.1.1: 26 passed, 1 skipped (Tk display required).
+MSI source/packaging targeted regressions: 13 passed.
+Pinned Ruff 0.16.10: application tree passed. Document hygiene and release readiness checks passed.
+Real audio smoke: generated FLAC and MP3, wrote and reread Artist=Allman Brothers Band and Album=Eat a Peach with Artist in Album enabled.
+Real database quick_check: all three passed (49,545 artist records / 120,421 terms; 12,051 cities; 70,215 venue name records). Supplied catalogs included byte-for-byte. Legacy venues.txt remains an external required ArtistDB-Master input.
+Native MSI generated shortcut and install/uninstall assertions added. Native Windows/macOS/Linux build, hosted full tests, display interaction, signing and MSI upgrade have NOT been executed/attested here.
+The old search-artist-db executable is not included in new payloads. Manual overlay ZIP upgrades may leave an already-installed obsolete executable or .app; remove only that old application after upgrading, not TLOHome or databases.

@@ -1,33 +1,5 @@
 #!/usr/bin/env python3
-"""
-search-artist-db.py
-Version: supplied by tlo_version.py
-
-Simple Tkinter GUI for searching TLOHome/TLO_DBs/artists.sqlite using the
-newer artists / aliases / terms schema. TLOHome is resolved from --TLOHome,
-the TLOHome environment variable, or the executable/package location.
-
-Behavior:
-- Main window contains:
-  - query entry box
-  - Search button
-  - Quit button
-  - result/status text box
-- Searches the SQLite DB through the terms table.
-- If no matches are found, writes "no results" to the result/status text box.
-- If matches are found, writes "match found" to the result/status text box
-  and opens a new window listing, for each matching artist:
-      master/prime name
-      search term
-      all associated terms, one per line, as:
-          term_text  --  term_type
-
-Notes for the new schema:
-- The terms table stores one searchable row for the master and each alias.
-- term_type is either "master" or "alias".
-- The schema no longer stores normalized lookup fields or typed alias tags
-  such as abbreviation.
-"""
+"""Read-only lookup of artist, city and venue names/aliases in TLOHome/TLO_DBs."""
 
 from __future__ import annotations
 
@@ -39,12 +11,16 @@ import os
 import sqlite3
 import sys
 import tkinter as tk
+from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 from tkinter import messagebox
 from tkinter import scrolledtext
 
 from tlo_gui_shortcuts import install_global_ctrl_a
+from match_city import normalize as city_key
+from tlo_venue_matcher import key as venue_key
+from tlo_msi_install_mode import saved_msi_data_home_for_executable
 
 try:
     from tlo_version import DISPLAY_VERSION
@@ -52,8 +28,8 @@ except ImportError:
     DISPLAY_VERSION = "version unavailable"
 
 TLOHOME_ENV_VAR = "TLOHome"
-WINDOW_TITLE = f"Artist DB Search - {DISPLAY_VERSION}"
-RESULTS_WINDOW_TITLE = "Artist DB Matches"
+WINDOW_TITLE = f"TLO Auxiliary Database Search - {DISPLAY_VERSION}"
+DATABASES = {"Artist": "artists.sqlite", "City": "cities.sqlite", "Venue": "venues.sqlite"}
 
 
 @dataclass
@@ -71,11 +47,12 @@ class MatchRecord:
     associated_terms: list[AssociatedTerm] = field(default_factory=list)
 
 
-class ArtistSearchApp:
-    def __init__(self, root: tk.Tk, db_path: Path) -> None:
+class AuxiliarySearchApp:
+    def __init__(self, root: tk.Tk, db_dir: Path, database: str = "Artist", initial_find: str | None = None) -> None:
         self.root = root
         install_global_ctrl_a(self.root)
-        self.db_path = db_path
+        self.db_dir = db_dir
+        self.database_var = tk.StringVar(value=database)
         self.root.title(WINDOW_TITLE)
         self.root.geometry("820x320")
         self.root.minsize(620, 240)
@@ -87,6 +64,18 @@ class ArtistSearchApp:
         self._build_ui()
         self._bind_shortcuts()
         self.search_entry.focus_set()
+        if initial_find is None:
+            try:
+                initial_find = root.clipboard_get()
+            except tk.TclError:
+                initial_find = ""
+        if initial_find.strip():
+            self.search_var.set(initial_find.strip())
+            root.after_idle(self.run_search)
+
+    @property
+    def db_path(self) -> Path:
+        return self.db_dir / DATABASES[self.database_var.get()]
 
     def _build_ui(self) -> None:
         outer = tk.Frame(self.root, padx=12, pady=12)
@@ -106,6 +95,14 @@ class ArtistSearchApp:
 
         self.search_entry = tk.Entry(input_frame, textvariable=self.search_var, width=72)
         self.search_entry.grid(row=0, column=1, sticky="ew", pady=(0, 8))
+
+        choice_frame = tk.Frame(outer)
+        choice_frame.pack(fill="x", pady=(0, 8))
+        # One shared variable: selecting another checkbox clears the previous
+        # one; clicking the selected checkbox cannot leave no database selected.
+        for label in DATABASES:
+            tk.Checkbutton(choice_frame, text=label, variable=self.database_var,
+                           onvalue=label, offvalue=label).pack(side="left", padx=(0, 12))
 
         button_frame = tk.Frame(outer)
         button_frame.pack(fill="x", pady=(0, 8))
@@ -217,24 +214,32 @@ class ArtistSearchApp:
             self._set_status("enter a search term")
             return
 
-        if not self.db_path.exists():
+        if self.results_window is not None and self.results_window.winfo_exists():
+            self.results_window.destroy()
+            self.results_window = None
+            self.results_text_widget = None
+
+        if not self.db_path.is_file():
             messagebox.showerror("Database not found", f"Database file not found:\n{self.db_path}")
             self._set_status("database not found")
             return
 
         try:
-            matches = self._query_database(raw_term)
+            database = self.database_var.get()
+            if database == "Artist":
+                blocks = self._format_match_blocks(raw_term, self._query_database(raw_term))
+            else:
+                blocks = query_places(self.db_path, database, raw_term)
         except sqlite3.Error as exc:
             messagebox.showerror("Database error", f"SQLite query failed:\n{exc}")
             self._set_status("database error")
             return
 
-        if not matches:
+        if not blocks:
             self._set_status("no results")
             return
 
         self._set_status("match found")
-        blocks = self._format_match_blocks(raw_term, matches)
         self._show_results_window(blocks)
 
     def _query_database(self, raw_term: str) -> list[MatchRecord]:
@@ -260,7 +265,7 @@ class ArtistSearchApp:
             ORDER BY term_order ASC, term_id ASC
         """
 
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(read_only_database(self.db_path)) as conn:
             cursor = conn.cursor()
             self._validate_required_tables(cursor)
 
@@ -330,7 +335,7 @@ class ArtistSearchApp:
     def _show_results_window(self, blocks: list[str]) -> None:
         if self.results_window is None or not self.results_window.winfo_exists():
             self.results_window = tk.Toplevel(self.root)
-            self.results_window.title(RESULTS_WINDOW_TITLE)
+            self.results_window.title(f"{self.database_var.get()} DB Matches")
             self.results_window.geometry("940x560")
             self.results_window.minsize(680, 360)
 
@@ -354,28 +359,88 @@ class ArtistSearchApp:
             self.results_text_widget.configure(state="disabled")
 
 
+def read_only_database(path: Path) -> sqlite3.Connection:
+    return sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
+
+
+def query_places(path: Path, database: str, term: str) -> list[str]:
+    """List all exact normalized master/alias matches, not an arbitrary winner."""
+    blocks = []
+    with closing(read_only_database(path)) as conn:
+        if database == "City":
+            name, _, region = term.partition(",")
+            lookup = city_key(name)
+            if not lookup:
+                return []
+            rows = conn.execute(
+                """SELECT DISTINCT c.city_id, c.canonical_city, c.region
+                   FROM cities c JOIN city_names n ON n.city_id = c.city_id
+                   WHERE n.name_norm = ? AND (? = '' OR EXISTS (
+                       SELECT 1 FROM region_names r WHERE r.city_id = c.city_id
+                       AND r.region_norm = ?))
+                   ORDER BY c.canonical_city, c.region""",
+                (lookup, city_key(region), city_key(region)),
+            )
+            for city_id, city, geo in rows:
+                names = conn.execute("SELECT name, is_canonical FROM city_names WHERE city_id = ? ORDER BY is_canonical DESC, name", (city_id,))
+                aliases = "\n".join(f"  {name} -- {'master' if master else 'alias'}" for name, master in names)
+                regions = ", ".join(row[0] for row in conn.execute(
+                    "SELECT region_name FROM region_names WHERE city_id = ? ORDER BY is_canonical DESC, region_name", (city_id,)))
+                blocks.append(f"Master: {city}, {geo}\nSearch term: {term}\nAssociated names:\n{aliases}\nRegion names: {regions}")
+        elif database == "Venue":
+            lookup = venue_key(term)
+            if not lookup:
+                return []
+            rows = conn.execute(
+                """SELECT DISTINCT display_name, anchor FROM names
+                   WHERE normalized_key = ? ORDER BY display_name, anchor""", (lookup,))
+            for display, anchor in rows:
+                terms = conn.execute(
+                    """SELECT DISTINCT spelling, strength, kind, institution
+                       FROM names WHERE display_name = ? AND anchor = ?
+                       ORDER BY spelling, strength, kind, institution""", (display, anchor))
+                details = "\n".join(f"  {name} -- {strength}; {kind}" + (f"; institution: {institution}" if institution else "")
+                                    for name, strength, kind, institution in terms)
+                locations = conn.execute("SELECT DISTINCT city_key, state_key FROM locations WHERE display_name = ? ORDER BY city_key, state_key", (display,))
+                geography = ", ".join(" / ".join(filter(None, row)) for row in locations)
+                blocks.append(f"Venue: {display}\nSearch term: {term}\nAnchor: {anchor}\nAssociated spellings:\n{details}" +
+                              (f"\nLocation keys: {geography}" if geography else ""))
+        else:
+            raise ValueError(f"Unsupported place database: {database}")
+    return blocks
+
+
 def default_tlohome() -> Path:
     env_value = os.environ.get(TLOHOME_ENV_VAR, "").strip()
     if env_value:
         return Path(env_value).expanduser()
+    saved = saved_msi_data_home_for_executable()
+    if saved:
+        return Path(saved)
     if getattr(sys, "frozen", False):
-        # TLOHome/apps/<platform>/executable
-        return Path(sys.executable).resolve().parent.parent.parent
+        # Portable executable or macOS .app bundle.
+        executable = Path(sys.executable).resolve()
+        for parent in executable.parents:
+            if parent.name == "apps":
+                return parent.parent
+        return executable.parent
     return Path.cwd()
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Search TLOHome/TLO_DBs/artists.sqlite.")
+    parser = argparse.ArgumentParser(description="Search TLOHome/TLO_DBs auxiliary databases.")
     parser.add_argument("--TLOHome", default=None, help="Full path to TLOHome. Overrides the TLOHome environment variable.")
+    parser.add_argument("--database", choices=DATABASES, default="Artist")
+    parser.add_argument("--find", default=None, help="Initial search term; defaults to clipboard.")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     tlohome = Path(args.TLOHome).expanduser() if args.TLOHome else default_tlohome()
-    db_path = tlohome.resolve() / "TLO_DBs" / "artists.sqlite"
+    db_dir = tlohome.resolve() / "TLO_DBs"
     root = tk.Tk()
-    ArtistSearchApp(root, db_path)
+    AuxiliarySearchApp(root, db_dir, args.database, args.find)
     root.mainloop()
 
 

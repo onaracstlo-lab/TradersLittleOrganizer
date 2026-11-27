@@ -16,6 +16,7 @@ import queue
 import signal
 import shutil
 import sys
+import subprocess
 from console_output_lib import console_emit
 import threading
 import time
@@ -40,7 +41,7 @@ from tlo_options import (
     validate_compliant_rename_exclusivity,
     validate_corruption_policy,
 )
-from tlo_path_inputs import normalize_platform_input_path, resolve_current_storage_volume, resolve_tlo_home as resolve_inventory_tlo_home
+from tlo_path_inputs import normalize_platform_input_path, resolve_current_storage_volume, resolve_tlo_home as resolve_inventory_tlo_home, strip_optional_quotes
 from tlo_startup_help import report_missing_tlo_home
 from inventory_list_lib import parse_search_path_input
 from tlo_setlistfm_lookup import (
@@ -841,6 +842,7 @@ class App:
         self.current_config = None
         self.full_inventory_active = False
         self.tag_active = False
+        self.reverse_active = False
         self.active_main_operation = ""
         self.inventory_monitor = None
         self.inventory_issues = []
@@ -1176,6 +1178,14 @@ class App:
         self.hamburger_menu.add_command(
             label="Redundancy Groups",
             command=lambda: self._run_after_menu_closes(self._open_redundancy_groups),
+        )
+        self.search_menu = tk.Menu(self.hamburger_menu, tearoff=False)
+        for label, database in (("Inventory", "Inventory"), ("Artist", "Artist"), ("Cities", "City"), ("Venues", "Venue")):
+            self.search_menu.add_command(label=label, command=lambda db=database:
+                self._run_after_menu_closes(lambda: self._open_search(db)))
+        self.hamburger_menu.add_cascade(label="Search", menu=self.search_menu)
+        self.hamburger_menu.add_command(
+            label="Reverse", command=lambda: self._run_after_menu_closes(self._open_reverse),
         )
         self.hamburger_menu.add_cascade(label="Donate", menu=self.donate_menu)
         self.hamburger_menu.add_separator()
@@ -1657,6 +1667,139 @@ class App:
         except tk.TclError:
             callback()
 
+    def _open_search(self, database):
+        """Open the requested independent search GUI with the current clipboard."""
+        try:
+            home = self._resolve_gui_tlo_home(error_type=ValueError)
+            try:
+                term = self.root.clipboard_get().strip()
+            except tk.TclError:
+                term = ""
+            name = "tlo-search" if database == "Inventory" else "searchAuxDBs"
+            if getattr(sys, "frozen", False):
+                executable = os.path.abspath(sys.executable)
+                folder = os.path.dirname(executable)
+                # macOS .app/Contents/MacOS -> portable sibling executable.
+                if sys.platform == "darwin" and folder.endswith(os.path.join("Contents", "MacOS")):
+                    folder = os.path.dirname(os.path.dirname(os.path.dirname(folder)))
+                target = os.path.join(folder, name + (".exe" if sys.platform == "win32" else ""))
+                command = [target]
+            else:
+                command = [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), name + ".py")]
+            command += ["--TLOHome", str(home)]
+            if database == "Inventory":
+                command += ["--find", term]
+            else:
+                command += ["--database", database, "--find=" + term]
+            env = dict(os.environ)
+            if getattr(sys, "frozen", False):
+                env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+            subprocess.Popen(command, shell=False, env=env)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("TLO Search", str(exc), parent=self.root)
+
+    def _open_reverse(self):
+        """Reverse logged folder operations only after an affirmative confirmation."""
+        if (self._main_operation_is_running() or self._worker_is_alive()
+                or self._updater_is_open() or self._manual_updates_is_open()
+                or self._copy_requests_is_open() or self._redundancy_groups_is_open()):
+            messagebox.showwarning("TLO Reverse", "Finish the active operation and close other operation windows before starting Reverse.", parent=self.root)
+            return
+        try:
+            raw = str(self.vars["search_path_override"].get() or "").strip()
+            literal = strip_optional_quotes(raw)
+            # Reverse uses one literal path, not the inventory control-file,
+            # directive or wildcard grammar. A quoted literal semicolon is OK.
+            if (not literal or (";" in literal and not (raw != literal and raw.count('"') == 2))
+                    or any(c in literal for c in ("*", "?", "\n", "\r"))
+                    or any(token in literal.casefold() for token in ("--/slam", "--/copy"))
+                    or literal.lower().endswith(".txt")):
+                raise ValueError("Enter one fully qualified folder or containing path in Path(s), without a path list, control file, wildcard or directive.")
+            path = normalize_platform_input_path(literal)
+            if not os.path.isabs(path) or os.path.isfile(path):
+                raise ValueError("Reverse requires one fully qualified folder or containing path.")
+            home = self._resolve_gui_tlo_home(error_type=ValueError)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("TLO Reverse", str(exc), parent=self.root)
+            return
+
+        dry_run = bool(self.dry_run_var.get())
+        if dry_run:
+            action = "Preview matching logged folder reversals? No folders or audio tags will be changed."
+        else:
+            action = ("Reverse matching logged folder operations? This may move or rename folders back to their original paths "
+                      "or remove a logged Tag Copy after safety checks. Audio tags and the inventory are not restored.")
+        if messagebox.askyesno("Confirm Reverse", f"{action}\n\nPath: {path}\nTLOHome: {home}",
+                               default=messagebox.NO, parent=self.root) is not True:
+            return
+
+        self.reverse_active = True
+        self.active_main_operation = "Reverse"
+        self.inventory_monitor = None
+        self.output.delete("1.0", tk.END)
+        self._update_main_action_states()
+        self._update_progress_display()
+        self.progress_stage_var.set("Reverse preview" if dry_run else "Reversing logged folders")
+        self.queue.put(f"Reverse {'preview' if dry_run else 'request'} accepted: {path}\n")
+        try:
+            _start_activity_indicator(self.progress_bar)
+        except tk.TclError:
+            pass
+
+        def target():
+            result = None
+            error = None
+            try:
+                from tlo_reverse_folders import prepare_reverse_plan, reverse_folder_operations
+                # The same lock and reverse engine as the standalone CLI.
+                with inventory_operation_lock(home):
+                    plan = prepare_reverse_plan(path, tlo_home=home)
+                    self.queue.put(f"Selected log: {plan.log_path}\nMatching folder operations: {len(plan.operations)}\n")
+                    for op in plan.operations:
+                        self.queue.put(f"  {op.operation}: {op.source} -> {op.destination}\n")
+                    result = reverse_folder_operations(plan, dry_run=dry_run, emit=lambda line: self.queue.put(line + "\n"))
+            except Exception as exc:  # noqa: BLE001 - GUI worker must report failures and release state
+                error = str(exc)
+                self.queue.put(f"ERROR: {error}\n")
+            finally:
+                if not schedule_tk_after(self.root, 0, lambda: self._finish_reverse(result, error, dry_run)):
+                    self.reverse_active = False
+                    self.active_main_operation = ""
+                    self.worker = None
+
+        # Do not abandon an in-progress folder restoration on GUI shutdown.
+        self.worker = threading.Thread(target=target, daemon=False)
+        try:
+            self.worker.start()
+        except RuntimeError as exc:
+            self._finish_reverse(None, str(exc), dry_run)
+
+    def _finish_reverse(self, result, error, dry_run):
+        self.reverse_active = False
+        self.active_main_operation = ""
+        self.worker = None
+        self._consume_inventory_queue()
+        try:
+            if self.progress_bar is not None:
+                self.progress_bar.stop()
+        except tk.TclError:
+            pass
+        self._update_main_action_states()
+        title = "Reverse Preview" if dry_run else "Reverse"
+        if error is not None or result is None:
+            self.progress_stage_var.set(f"{title} stopped")
+            messagebox.showerror(f"TLO {title}", error or "No reverse result was returned.", parent=self.root)
+            return
+        message = (f"Matched: {result.planned}\n{'Would reverse' if dry_run else 'Reversed'}: {result.reversed}"
+                   f"\nAlready reversed: {result.already_reversed}\nConflicts: {result.conflicts}"
+                   f"\nSkipped: {result.skipped}\nErrors: {result.errors}\n\nSee the Main output and logs/reverseFolders.log for details.")
+        if result.conflicts or result.errors or result.skipped:
+            self.progress_stage_var.set(f"{title} completed with issues")
+            messagebox.showwarning(f"TLO {title}", message, parent=self.root)
+        else:
+            self.progress_stage_var.set(f"{title} complete")
+            messagebox.showinfo(f"TLO {title}", message, parent=self.root)
+
     def _open_tlo_home_folder(self):
         try:
             from tlo_msi_install_mode import open_tlo_home_folder
@@ -1898,7 +2041,12 @@ class App:
 
     def _resolve_faq_path(self):
         tlo_home = self._resolve_gui_tlo_home()
-        return os.path.join(tlo_home, "TLO-FAQ.txt")
+        local = os.path.join(tlo_home, "TLO-FAQ.txt")
+        if os.path.isfile(local):
+            return local
+        from tlo_msi_install_mode import msi_install_root
+        program = msi_install_root()
+        return str(program / "TLO-FAQ.txt") if program is not None else local
 
     def _show_faq(self):
         try:
@@ -2191,26 +2339,31 @@ class App:
         return bool(self.tag_active)
 
     def _main_operation_is_running(self):
-        return bool(self._inventory_is_running() or self._tag_is_running())
+        return bool(self._inventory_is_running() or self._tag_is_running() or getattr(self, "reverse_active", False))
 
     def _update_main_action_states(self):
         inventory_active = self._inventory_is_running()
         tag_active = self._tag_is_running()
+        reverse_active = bool(getattr(self, "reverse_active", False))
         updater_open = self._updater_is_open()
         manual_open = self._manual_updates_is_open()
         copy_requests_open = self._copy_requests_is_open()
         redundancy_open = self._redundancy_groups_is_open()
         try:
             if self.tag_button is not None:
-                self.tag_button.configure(state=("disabled" if inventory_active or updater_open or manual_open or copy_requests_open or redundancy_open or tag_active else "normal"))
+                self.tag_button.configure(state=("disabled" if reverse_active or inventory_active or updater_open or manual_open or copy_requests_open or redundancy_open or tag_active else "normal"))
             if self.add_shows_button is not None:
-                self.add_shows_button.configure(state=("disabled" if inventory_active or manual_open or copy_requests_open or redundancy_open or tag_active else "normal"))
+                self.add_shows_button.configure(state=("disabled" if reverse_active or inventory_active or manual_open or copy_requests_open or redundancy_open or tag_active else "normal"))
             if self.inventory_button is not None:
-                self.inventory_button.configure(state=("disabled" if updater_open or manual_open or copy_requests_open or redundancy_open or tag_active or inventory_active else "normal"))
+                self.inventory_button.configure(state=("disabled" if reverse_active or updater_open or manual_open or copy_requests_open or redundancy_open or tag_active or inventory_active else "normal"))
             if self.manual_tweaks_button is not None:
-                self.manual_tweaks_button.configure(state=("disabled" if inventory_active or updater_open or manual_open or copy_requests_open or redundancy_open or tag_active else "normal"))
+                self.manual_tweaks_button.configure(state=("disabled" if reverse_active or inventory_active or updater_open or manual_open or copy_requests_open or redundancy_open or tag_active else "normal"))
             if self.copy_requests_button is not None:
-                self.copy_requests_button.configure(state=("disabled" if inventory_active or updater_open or manual_open or tag_active else "normal"))
+                self.copy_requests_button.configure(state=("disabled" if reverse_active or inventory_active or updater_open or manual_open or tag_active else "normal"))
+            if getattr(self, "hamburger_menu", None) is not None:
+                self.hamburger_menu.entryconfigure("Reverse", state=(
+                    "disabled" if reverse_active or inventory_active or tag_active or updater_open
+                    or manual_open or copy_requests_open or redundancy_open else "normal"))
             if self.pause_button is not None:
                 self.pause_button.configure(state=("normal" if (inventory_active or tag_active) else "disabled"))
             if self.resume_button is not None:
@@ -2320,6 +2473,9 @@ class App:
         return jobs
 
     def _start_tagging_from_main(self):
+        if getattr(self, "reverse_active", False):
+            messagebox.showwarning("TLO Reverse", "Wait for Reverse to finish.", parent=self.root)
+            return
         if self._inventory_is_running():
             messagebox.showwarning(
                 _dialog_title("tlo-main"),
@@ -2428,7 +2584,7 @@ class App:
         if self._main_operation_is_running() or self._updater_is_open():
             messagebox.showwarning(
                 _dialog_title("tlo-main"),
-                "Manual Tweaks cannot be opened while Inventory, Tag, or Add New Shows is active.",
+                "Manual Tweaks cannot be opened while Inventory, Tag, Reverse, or Add New Shows is active.",
                 parent=self.root,
             )
             return
@@ -2449,6 +2605,9 @@ class App:
         ManualUpdatesWindow(self, config)
 
     def _open_redundancy_groups(self):
+        if getattr(self, "reverse_active", False):
+            messagebox.showwarning("TLO Reverse", "Wait for Reverse to finish.", parent=self.root)
+            return
         if self.full_inventory_active or self.tag_active or self._updater_is_open() or self._manual_updates_is_open():
             messagebox.showwarning(
                 _dialog_title("Redundancy Groups"),
@@ -2483,7 +2642,7 @@ class App:
         if self._main_operation_is_running() or self._updater_is_open() or self._manual_updates_is_open():
             messagebox.showwarning(
                 _dialog_title("tlo-main"),
-                "Copy Requests cannot be opened while Inventory, Tag, Add New Shows, or Manual Tweaks is active.",
+                "Copy Requests cannot be opened while Inventory, Tag, Reverse, Add New Shows, or Manual Tweaks is active.",
                 parent=self.root,
             )
             return
@@ -2502,6 +2661,9 @@ class App:
         CopyRequestsWindow(self, tlo_home)
 
     def _open_add_to_inventory(self):
+        if getattr(self, "reverse_active", False):
+            messagebox.showwarning("TLO Reverse", "Wait for Reverse to finish.", parent=self.root)
+            return
         if self._tag_is_running():
             messagebox.showwarning(
                 _dialog_title("tlo-main"),
@@ -2762,6 +2924,9 @@ class App:
         os._exit(code)
 
     def _handle_sigint(self, _signum, _frame):
+        if getattr(self, "reverse_active", False):
+            self.queue.put("Reverse is still running; wait for folder restoration to finish before exiting.\n")
+            return
         self._cancel_active_inventory_and_clean_logs()
         try:
             self.root.quit()
@@ -2771,6 +2936,9 @@ class App:
         self._force_exit_after_child_cleanup(130)
 
     def _on_quit(self):
+        if getattr(self, "reverse_active", False):
+            messagebox.showwarning("TLO Reverse", "Reverse is still running. Let it finish before exiting TLO.", parent=self.root)
+            return
         copy_manager = getattr(self, "active_copy_requests_window", None)
         if copy_manager is not None and bool(getattr(copy_manager, "busy", False)):
             messagebox.showwarning(
@@ -3075,6 +3243,8 @@ class App:
         return config
 
     def _pause_inventory(self):
+        if getattr(self, "reverse_active", False):
+            return
         if not self._main_operation_is_running():
             return
         label = "Tag" if self._tag_is_running() else "Inventory"
@@ -3085,6 +3255,8 @@ class App:
         self.queue.put(f"{label} paused. Click Resume to continue.\n")
 
     def _resume_inventory(self):
+        if getattr(self, "reverse_active", False):
+            return
         if not self._main_operation_is_running():
             return
         label = "Tag" if self._tag_is_running() else "Inventory"
@@ -3314,6 +3486,9 @@ class App:
             done.set()
 
     def _start(self):
+        if getattr(self, "reverse_active", False):
+            messagebox.showwarning("TLO Reverse", "Wait for Reverse to finish.", parent=self.root)
+            return
         if self._tag_is_running():
             messagebox.showwarning(
                 _dialog_title("tlo-main"),
@@ -5074,15 +5249,18 @@ def main() -> int:
         console_emit(HELP_TEXT)
         return 0
     cli_args = _parse_gui_command_line(sys.argv[1:])
-    from tlo_msi_install_mode import ensure_msi_tlo_home, is_msi_install
-    if is_msi_install() and not ((getattr(cli_args, "myTLO", "") or "").strip() or
-                                   (getattr(cli_args, "TLOHome", "") or "").strip()):
-        if not ensure_msi_tlo_home():
-            return 2
-    if not ((getattr(cli_args, "myTLO", "") or "").strip()
-            or (getattr(cli_args, "TLOHome", "") or "").strip()
-            or os.environ.get("TLOHome", "").strip()):
-        return report_missing_tlo_home("tlo-main")
+    try:
+        resolve_inventory_tlo_home(
+            tlo_home=getattr(cli_args, "TLOHome", "") or "",
+            my_tlo=getattr(cli_args, "myTLO", "") or "",
+        )
+    except ValueError as exc:
+        if not ((getattr(cli_args, "myTLO", "") or "").strip()
+                or (getattr(cli_args, "TLOHome", "") or "").strip()
+                or os.environ.get("TLOHome", "").strip()):
+            return report_missing_tlo_home("tlo-main")
+        console_emit(f"ERROR: {exc}", error=True)
+        return 2
     root, _drop_provider = create_tk_root(tk)
     install_window_icon(root, "main")
     root.withdraw()

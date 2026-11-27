@@ -1,7 +1,7 @@
 {
-  "build": 728,
+  "build": 735,
   "reviewed_baseline": 685,
-  "scope": "Build 728: Keep original trailing recording parentheticals, including (early), (late), (mtx), and (24). Do not append a redundant canonical performance qualifier when an equivalent complete original parenthetical is present. Refuse compliant folder renames that would discard, alter, or reorder any ordinary trailing group; retain existing collision/part and identity validation. Correct the historical projection to restore the original folder suffix, not the incomplete historical show name. Retain consecutive and nested trailing parenthetical recording qualifiers during parsing and venue matching. Apply venue/city display substitutions only to the name core, not the qualifier text. Match venue-only paths without treating the suffix as part of the venue. Keep existing missing/ambiguous catalog fallbacks, copy/alt verification, and historical venue protections. Recognize complete, context-supported venue names using read-only venues.sqlite; preserve historical names, unknown venues, legacy venues.txt and existing positional, setlist and online fallbacks. Reject ambiguous, partial and unsafe display changes. Do not modernize historical venue names. Native acceptance pending.",
+  "scope": "Resolve the PowerShell case-insensitive HOME automatic-variable collision in the Windows MSI installation smoke test and opt-in acceptance diagnostics. Keep all signing, native install/uninstall and database/shortcut acceptance gates. Build 734 Reverse and previous changes retained.",
   "findings": {
     "H1": {
       "status": "fixed",
@@ -94,7 +94,7 @@
     },
     "L8": {
       "status": "accepted-design",
-      "rationale": "The source ZIP carries an empty artists.sqlite placeholder by design. The build process injects the authoritative master before release; source-only runs require a real master."
+      "rationale": "The source ZIP now includes the supplied artists.sqlite. The build process injects the authoritative master before release; source-only runs require a real master."
     },
     "L9": {
       "status": "deferred",

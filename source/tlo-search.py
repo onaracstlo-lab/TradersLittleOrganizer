@@ -1299,6 +1299,9 @@ def parse_cli_args(argv: Sequence[str]) -> tuple[Path, str | None]:
 
     tlohome_value = mytlo_arg_value or tlohome_arg_value or env_value
     if not tlohome_value:
+        from tlo_msi_install_mode import saved_msi_data_home_for_executable
+        tlohome_value = saved_msi_data_home_for_executable()
+    if not tlohome_value:
         raise AppConfigError(missing_tlo_home_message("tlo-search"))
     tlohome_path = validate_tlohome(tlohome_value)
     return tlohome_path, find_value
@@ -1676,10 +1679,6 @@ def show_config_error_dialog(message: str) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
 
-    from tlo_msi_install_mode import ensure_msi_tlo_home, is_msi_install
-    if is_msi_install() and not any(a in {"--TLOHome", "--tlo-home", "--myTLO"} for a in argv):
-        if not ensure_msi_tlo_home():
-            return 2
     try:
         tlohome, initial_find = parse_cli_args(argv)
     except SystemExit as exc:

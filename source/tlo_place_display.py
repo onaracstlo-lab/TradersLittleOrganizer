@@ -19,7 +19,7 @@ __version__ = _TLO_CANONICAL_VERSION
 # Keep this narrow: ordinary uppercase words such as ROME and ROXY must become
 # Rome and Roxy, even when they happen to be only four letters long.
 _ACRONYMS = frozenset({
-    "ABC", "ACL", "BBC", "CBGB", "CBGBS", "CMT", "DC", "FM", "JFK", "KEXP",
+    "ABC", "ACL", "BBC", "CBGB", "CBGBS", "CMT", "DC", "FM", "JFK", "KC", "KEXP",
     "LA", "MGM", "MIT", "MSG", "MTV", "NASA", "NBA", "NPR", "NYC", "NYU",
     "PBS", "RCA", "RFK", "SXSW", "TD", "TV", "UCLA", "UK", "UMASS", "US",
     "USA", "USC", "UBS", "VFW", "WFUV", "WFMU", "YMCA",

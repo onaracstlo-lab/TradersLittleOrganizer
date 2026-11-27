@@ -70,7 +70,7 @@ def test_build548_manual_warns_about_corruption_defaults_and_fixes_stale_example
     assert "The default corruption settings are Keep and report for files, Never for folders" in manual
     assert "TLO_V1.7Build<BUILD>_complete_Linux.zip" in manual
     assert "Build524" not in release_history()
-    assert "tlo-main, tlo-gi, tlo-tag, tlo-deleteDupes, tlo-research, tlo-reverse, tlo-search, search-artist-db" in manual
+    assert "tlo-main, tlo-gi, tlo-tag, tlo-deleteDupes, tlo-research, tlo-reverse, tlo-search, searchAuxDBs" in manual
     assert manual.count("Copies are compared with one another as well as with unsuffixed folders.") == 1
     assert "Build 532 - " in release_history()
     assert 'Release verification integrity: added the Ruff release lint gate' in release_history()

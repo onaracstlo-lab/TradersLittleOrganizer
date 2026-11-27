@@ -10,7 +10,7 @@ import os
 import re
 import unicodedata
 from datetime import date, datetime
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from console_output_lib import console_print
 from tlo_media_rules import MEDIA_EXTENSIONS, VIDEO_EXTENSIONS, parse_music_dir_marker
@@ -59,6 +59,7 @@ from tlo_show_descriptor import extract_fallback_descriptor
 from tlo_text_utils import (balanced_parenthetical_groups, compact_ws, normalized_compare_value,
                             split_trailing_parenthetical_groups, standard_ascii_text)
 from tlo_place_display import display_place_case, replace_place_in_show_tail
+from tlo_rename_safety import shorthand_artist_prefix
 from tlo_security import escape_structured_log_text
 from tlo_etree_lookup import lookup_venue_and_location
 from tlo_setlistfm_lookup import collect_setlists_by_performance as collect_setlistfm_setlists_by_performance, is_us_country, lookup_venue_and_location as lookup_setlistfm_venue_and_location
@@ -1666,29 +1667,32 @@ def _is_wrapper(name: str) -> bool:
 
 
 
+def _physical_metadata_path_parts(music_dir: str) -> Iterable[Tuple[str, str]]:
+    # Metadata names omit the drive/UNC root and WSL mount infrastructure,
+    # but evidence must retain the real path for same-folder identity checks.
+    current = os.path.normpath(music_dir)
+    for raw in reversed(_path_parts(music_dir)):
+        yield raw, current
+        current = os.path.dirname(current)
+
+
 def _candidate_path_parts(music_dir: str) -> List[Tuple[str, str]]:
-    parts = _path_parts(music_dir)
     candidates: List[Tuple[str, str]] = []
-    for idx in range(len(parts) - 1, -1, -1):
-        raw = parts[idx]
+    for raw, part_path in _physical_metadata_path_parts(music_dir):
         cleaned = _clean_piece(_strip_trailing_parenthetical_items(raw))
         if not cleaned or _is_wrapper(cleaned):
             continue
-        part_path = os.path.join(os.sep, *parts[: idx + 1]) if os.path.isabs(music_dir) else os.path.join(*parts[: idx + 1])
         candidates.append((cleaned, part_path))
     return candidates
 
 
 
 def _all_clean_path_parts(music_dir: str) -> List[Tuple[str, str]]:
-    parts = _path_parts(music_dir)
     results: List[Tuple[str, str]] = []
-    for idx in range(len(parts) - 1, -1, -1):
-        raw = parts[idx]
+    for raw, part_path in _physical_metadata_path_parts(music_dir):
         cleaned = _clean_piece(_strip_trailing_parenthetical_items(raw))
         if not cleaned:
             continue
-        part_path = os.path.join(os.sep, *parts[: idx + 1]) if os.path.isabs(music_dir) else os.path.join(*parts[: idx + 1])
         results.append((cleaned, part_path))
     return results
 
@@ -2743,7 +2747,7 @@ _ANCHORED_CITY_KEYS = frozenset(normalized_city_key(c) for c in _ANCHORED_CITY_S
 
 
 def _city_catalog(config):
-    """Shared indexed city/alias catalog, using the configured or distribution SQLite master."""
+    """Shared indexed city/alias catalog, using only the active TLOHome SQLite master."""
     return catalog_for_tlo(
         str(getattr(config, 'tlo_dbs_dir', '') or ''),
         str(getattr(config, 'TLOHome', '') or ''),
@@ -3225,7 +3229,7 @@ def _match_date_artist_venue_location(
     return None, []
 
 
-_STRING_DASH_STRING_RE = re.compile(r"^(?P<string1>.+?)\s+-\s+(?P<string2>.+)$")
+_STRING_DASH_STRING_RE = re.compile(r"^(?P<string1>.+?)\s+[-–—]\s+(?P<string2>.+)$")
 _COMMERCIAL_RELEASE_YEAR_RE = re.compile(r"^(?:\((?P<paren_year>(?:19|20)\d{2})\)|(?P<bare_year>(?:19|20)\d{2}))$")
 
 
@@ -3249,10 +3253,10 @@ def _artist_aware_unspaced_dash_row(text: str, matcher: Optional[ArtistMatcher])
     whose left side does not resolve uniquely remains ordinary folder text.
     """
     cleaned = _clean_piece(text)
-    if not cleaned or matcher is None or "-" not in cleaned:
+    if not cleaned or matcher is None or not re.search(r"[-–—]", cleaned):
         return None
 
-    for match in re.finditer(r"-", cleaned):
+    for match in re.finditer(r"[-–—]", cleaned):
         index = match.start()
         if (index > 0 and cleaned[index - 1] == "-") or (index + 1 < len(cleaned) and cleaned[index + 1] == "-"):
             continue
@@ -4809,7 +4813,7 @@ def _apply_online_fields_fill_blanks(
     return applied
 
 
-def _apply_etree_lookup_to_record(config, record: ShowMetadata, evidence: Dict[str, List[Candidate]], observations: List[str]) -> bool:
+def _apply_etree_lookup_to_record(config, record: ShowMetadata, evidence: Dict[str, List[Candidate]], observations: List[str], *, prefetched=None) -> bool:
     """Use eTreeDB as an online venue/location source when enabled.
 
     In non-compliant mode, eTreeDB runs after path parsing and before setlist
@@ -4824,7 +4828,8 @@ def _apply_etree_lookup_to_record(config, record: ShowMetadata, evidence: Dict[s
         observations.append(f"etree lookup skipped: date is not yyyy-mm-dd: {record.date}")
         return False
     try:
-        results = lookup_venue_and_location(record.artist, record.date, debug=bool(getattr(config, "debug", False)))
+        results = (prefetched if prefetched is not None else
+                   lookup_venue_and_location(record.artist, record.date, debug=bool(getattr(config, "debug", False))))
     except Exception as exc:
         observations.append(f"etree lookup failed: {exc}")
         return False
@@ -4886,7 +4891,24 @@ def _store_setlistfm_setlist_candidates(record: ShowMetadata, results: Sequence[
         observations.append(f"setlist.fm lookup returned cached setlist text in same API response for {len(candidates)} matching result(s)")
 
 
-def _apply_setlistfm_lookup_to_record(config, record: ShowMetadata, evidence: Dict[str, List[Candidate]], observations: List[str]) -> bool:
+def _setlistfm_query_kwargs(config, *, conflict=False):
+    lookup_kwargs = {
+        "debug": bool(getattr(config, "debug", False)),
+        "min_interval_seconds": float(getattr(config, "setlistfm_min_interval_seconds", 0.600) or 0.600),
+        "max_calls": int(getattr(config, "setlistfm_max_calls", 1400) or 0),
+        "max_calls_per_day": int(getattr(config, "setlistfm_max_calls_per_day", 0) or 0),
+        "run_id": str(getattr(config, "setlistfm_run_id", "") or ""),
+        "tlo_home": str(getattr(config, "TLOHome", "") or ""),
+        "lock_timeout_seconds": float(getattr(config, "setlistfm_lock_timeout_seconds", 20.0) or 20.0),
+    }
+    if bool(getattr(config, "thorough_setlist_matching", False)):
+        lookup_kwargs["thorough"] = True
+    if conflict:
+        lookup_kwargs["thorough"] = True
+    return lookup_kwargs
+
+
+def _apply_setlistfm_lookup_to_record(config, record: ShowMetadata, evidence: Dict[str, List[Candidate]], observations: List[str], *, prefetched=None) -> bool:
     """Use setlist.fm as the last venue/location lookup source when requested.
 
     In non-compliant mode this runs after path parsing, eTreeDB, and selected
@@ -4901,18 +4923,9 @@ def _apply_setlistfm_lookup_to_record(config, record: ShowMetadata, evidence: Di
         observations.append(f"setlist.fm lookup skipped: date is not yyyy-mm-dd: {record.date}")
         return False
     try:
-        lookup_kwargs = {
-            "debug": bool(getattr(config, "debug", False)),
-            "min_interval_seconds": float(getattr(config, "setlistfm_min_interval_seconds", 0.600) or 0.600),
-            "max_calls": int(getattr(config, "setlistfm_max_calls", 1400) or 0),
-            "max_calls_per_day": int(getattr(config, "setlistfm_max_calls_per_day", 0) or 0),
-            "run_id": str(getattr(config, "setlistfm_run_id", "") or ""),
-            "tlo_home": str(getattr(config, "TLOHome", "") or ""),
-            "lock_timeout_seconds": float(getattr(config, "setlistfm_lock_timeout_seconds", 20.0) or 20.0),
-        }
-        if bool(getattr(config, "thorough_setlist_matching", False)):
-            lookup_kwargs["thorough"] = True
-        results = lookup_setlistfm_venue_and_location(record.artist, record.date, **lookup_kwargs)
+        lookup_kwargs = _setlistfm_query_kwargs(config)
+        results = (prefetched if prefetched is not None else
+                   lookup_setlistfm_venue_and_location(record.artist, record.date, **lookup_kwargs))
     except Exception as exc:
         observations.append(f"setlist.fm lookup failed: {exc}")
         return False
@@ -5013,6 +5026,307 @@ def _apply_setlistfm_only_after_etree_fallback(
         observations.append("Thorough Setlist Matching: querying setlist.fm for corroboration even though eTreeDB returned usable data")
     _apply_setlistfm_lookup_to_record(config, record, evidence, observations)
     return etree_success, etree_lookup_key
+
+
+
+def _conflicting_tag_dates(record, date_matches, tag_matches):
+    """Return actual complete date candidates, never infer a date from a tag count."""
+    tags = {item["normalized"] for item in tag_matches
+            if _is_exact_yyyy_mm_dd_date(item.get("normalized", ""))}
+    dates = tags | {item["normalized"] for item in date_matches
+                    if _is_exact_yyyy_mm_dd_date(item.get("normalized", ""))}
+    if _is_exact_yyyy_mm_dd_date(record.date):
+        dates.add(record.date)
+    return sorted(dates) if tags and len(dates) > 1 else []
+
+
+def _conflict_place_key(value, field=""):
+    value = str(value or "")
+    if field == "country":
+        value = COUNTRY_ALIASES.get(value.casefold().strip(), value)
+    elif field == "region":
+        value = US_STATE_ALIASES.get(value.casefold().strip(), CANADIAN_REGION_ALIASES.get(value.casefold().strip(), value))
+    # Accept exact punctuation/spacing equivalence (CrossroadsKC/Crossroads KC),
+    # not arbitrary substring matches between different historic venue names.
+    return normalized_compare_value(standard_ascii_text(value or "")).replace(" ", "")
+
+
+def _conflict_artist_matches(left, right):
+    a, b = _corroborated_artist_tokens(left), _corroborated_artist_tokens(right)
+    return bool(a and b and a == b)
+
+
+def _date_conflict_local_tracks(record, group):
+    """Use genuine local song sequences, never padded Unknown rows or TITLE tags."""
+    from tlo_tag_lib import (
+        parse_setlist_tracks, _exact_count_unnumbered_candidates,
+        _explicit_unnumbered_track_section_candidate, tracks_from_audio_filenames,
+    )
+    from tlo_date_conflict import title_sequence
+
+    sequences = []
+    for path in _unique_preserve([record.setlist_file] + list(record.setlist_files or [])):
+        if not path or not os.path.isfile(path):
+            continue
+        numbered = parse_setlist_tracks(path)
+        rows = [numbered] if numbered else [_explicit_unnumbered_track_section_candidate(path)]
+        if not numbered and record.music_file_count:
+            rows.extend(candidate for candidate, _source in
+                        _exact_count_unnumbered_candidates(path, record.music_file_count))
+        for candidate in rows:
+            sequence = title_sequence(candidate)
+            if len(sequence) >= 4 and sequence not in sequences:
+                sequences.append(sequence)
+    # Named track files are independent corroboration when a local setlist
+    # contains no useful track titles. Do not consult unreliable audio tags.
+    if not sequences:
+        sequence = title_sequence(tracks_from_audio_filenames(list(_iter_group_media_files(group))))
+        if len(sequence) >= 4:
+            sequences.append(sequence)
+    return sequences
+
+
+def _resolve_tag_date_conflict(config, record, group, dates, date_matches, evidence, conflicts, observations):
+    """Validate every conflicting complete performance-date candidate before merging online metadata.
+
+    Local performance dates are stronger than tags.  Query each enabled source
+    for each candidate, compare each individual performance to the local song
+    order and geography, then use only a uniquely corroborated winner.  An
+    outage is not a negative result.  Never populate place or tag-title caches
+    from a losing date.
+    """
+    from tlo_date_conflict import sequence_fit, title_sequence
+    from tlo_etree_lookup import collect_setlists_by_performance as etree_sets
+    from tlo_tag_lib import parse_setlist_text_tracks
+
+    if not dates:
+        return
+    original_date = record.date
+    date_matches.extend(row for row in _collect_tag_date_candidates(record) if row not in date_matches)
+    # The local setlist header is independent evidence; it is not an online
+    # answer and must be read before querying either candidate.
+    local_dates = [row for row in _collect_setlist_date_matches(group)
+                   if _is_exact_yyyy_mm_dd_date(row.get("normalized", ""))
+                   and int(row.get("setlist_date_score", "0") or "0") >= 70]
+    local_values = {row["normalized"] for row in local_dates}
+    date_matches.extend(row for row in local_dates if row not in date_matches)
+    candidates = sorted(set(dates) | local_values)
+    observations.append("date conflict validation: candidate dates " + ", ".join(candidates))
+    observations[:] = [item for item in observations if not item.startswith("conflicting DATE tag ignored because structural/setlist date is established:")]
+    # Local metadata may contain an unambiguous place even when the path did
+    # not parse it. Keep separate fields rather than joining unrelated clues.
+    header = extract_setlist_venue_location(record.setlist_file, getattr(config, "tlo_dbs_dir", ""))
+    header_artist = compact_ws(getattr(header, "artist", ""))
+    header_usable = not header_artist or _conflict_artist_matches(record.artist, header_artist)
+    places = {}
+    for name in ("venue", "city", "region", "country"):
+        values = {str(value) for value in (getattr(record, name, ""), getattr(header, name, "") if header_usable else "") if value}
+        places[name] = {_conflict_place_key(value, name) for value in values} - {""}
+    # Compare whole raw post-date folder tail as a positive venue clue when
+    # the positional parser could not parse a fused spelling like CrossroadsKC.
+    folder_tails = set()
+    for match in _find_date_matches(record.main_dir_name):
+        if match.get("normalized") in candidates:
+            tail, _ = split_trailing_parenthetical_groups(record.main_dir_name[int(match["end"]):])
+            tail_key = _conflict_place_key(tail)
+            if tail_key:
+                folder_tails.add(tail_key)
+    # The legacy text catalog may recognize only a fragment of an unlabeled
+    # header (e.g. Crossroads in Black Keys Crossroads KC). It must not veto
+    # the complete name independently present in both the folder and header.
+    # Explicit/structured venue fields and other independent venue evidence
+    # remain authoritative; never generalize this to a substring match.
+    partial_venue = _conflict_place_key(getattr(header, "venue", ""))
+    local_venue_evidence = _matching_evidence_for_value(evidence, "venue", record.venue)
+    raw_header = _conflict_place_key(getattr(header, "raw", "").split(" | ", 1)[0])
+    artist_key = _conflict_place_key(record.artist)
+    may_expand_catalog_fragment = (
+        header_usable and getattr(header, "venue_from_catalog", False)
+        and bool(partial_venue and artist_key and not header.city and not header.region and not header.country)
+        and places["venue"] == {partial_venue}
+        and _conflict_place_key(record.venue) == partial_venue
+        and bool(local_venue_evidence)
+        and all(c.source.startswith("setlist_metadata") for c in local_venue_evidence)
+    )
+    local_sequences = _date_conflict_local_tracks(record, group) if header_usable else []
+    sources = [source for source, option in (("etreedb", "etree_lookup"), ("setlist.fm", "setlistfm_lookup"))
+               if getattr(config, option, False)]
+    outcomes = {}
+    rows = []
+    # Bound extra requests in malformed or multi-date collections.
+    if record.artist and len(candidates) <= 4:
+        for candidate_date in candidates:
+            for source in sources:
+                throttle_point(config)
+                try:
+                    if source == "etreedb":
+                        results = lookup_venue_and_location(record.artist, candidate_date,
+                                                           debug=bool(getattr(config, "debug", False)))
+                    else:
+                        results = lookup_setlistfm_venue_and_location(record.artist, candidate_date,
+                                                                     **_setlistfm_query_kwargs(config, conflict=True))
+                except Exception as exc:
+                    outcomes[(source, candidate_date)] = False
+                    observations.append(f"date conflict validation: {source} {candidate_date} lookup failed: {exc}")
+                    continue
+                outcomes[(source, candidate_date)] = True
+                accepted = 0
+                for result in results or []:
+                    event_date = (getattr(result, "normalized_date", "") if source == "etreedb"
+                                  else getattr(result, "event_date", ""))
+                    expected_date = candidate_date if source == "etreedb" else datetime.strptime(candidate_date, "%Y-%m-%d").strftime("%d-%m-%Y")
+                    if event_date != expected_date or not _conflict_artist_matches(record.artist, getattr(result, "artist", "")):
+                        continue
+                    accepted += 1
+                    if source == "etreedb":
+                        city, region, country, _location = _normalize_etree_location_parts(result)
+                        sets = etree_sets([result]) if hasattr(result, "setlists_in_order") else []
+                    else:
+                        city = getattr(result, "city", "")
+                        region = getattr(result, "state_code", "")
+                        country = getattr(result, "country", "")
+                        sets = [(result, list(getattr(result, "setlists", ()) or ()))]
+                    venue = compact_ws(getattr(result, "venue", ""))
+                    remote = {"venue": venue, "city": city, "region": region, "country": country}
+                    hits = []
+                    mismatches = []
+                    for field, value in remote.items():
+                        key = _conflict_place_key(value, field)
+                        local_keys = places[field]
+                        if not key or not local_keys:
+                            continue
+                        if local_keys == {key}:
+                            hits.append(field)
+                        elif field in {"city", "region", "country", "venue"}:
+                            mismatches.append(field)
+                    remote_venue_key = _conflict_place_key(venue)
+                    venue_expansion = (
+                        may_expand_catalog_fragment
+                        and remote_venue_key in folder_tails
+                        and remote_venue_key != partial_venue
+                        and remote_venue_key.startswith(partial_venue)
+                        and raw_header in {remote_venue_key, artist_key + remote_venue_key}
+                    )
+                    if venue_expansion and "venue" in mismatches:
+                        mismatches.remove("venue")
+                    if "venue" not in hits and remote_venue_key in folder_tails:
+                        hits.append("venue")
+                    title_rows = parse_setlist_text_tracks("\n".join(text for _result, setlists in sets for text in setlists))
+                    remote_sequence = title_sequence(title_rows)
+                    fits = [sequence_fit(local, remote_sequence) for local in local_sequences]
+                    score, matched = max(fits, default=(0.0, 0))
+                    # Missing online song data isn't a track mismatch. A weak
+                    # song match cannot override actual local geography.
+                    strong_titles = matched >= 4 and score >= .75
+                    place_support = ("venue" in hits or "city" in hits) and bool(venue and city)
+                    # A venue name alone can be reused in a different city;
+                    # a known contradictory geography always rules that row out.
+                    compatible = not mismatches
+                    strong_place = place_support and compatible and (not remote_sequence or not local_sequences or strong_titles)
+                    identifier = getattr(result, "performance_id", "") or getattr(result, "setlist_url", "")
+                    observations.append(
+                        f"date conflict candidate: {source} {candidate_date} {identifier} | {venue} | {city} {region or country} | "
+                        f"ordered title match={matched} score={score:.2f} | place matches={','.join(hits) or 'none'} "
+                        f"disagreements={','.join(mismatches) or 'none'}"
+                    )
+                    rows.append(dict(date=candidate_date, source=source, result=result,
+                                     compatible=compatible, strong_titles=strong_titles,
+                                     strong_place=strong_place, score=score, matched=matched,
+                                     hits=len(hits), place=place_support, has_titles=bool(remote_sequence),
+                                     venue_expansion=venue_expansion))
+                if not accepted:
+                    observations.append(f"date conflict validation: {source} {candidate_date} no exact artist/date performance")
+    else:
+        observations.append("date conflict validation: artist unavailable or more than four complete dates; online probes declined")
+
+    chosen = ""
+    reason = ""
+    # One explicit/header-like local date settles the issue unless genuine
+    # contradictory strong online song+place evidence indicates another date.
+    local_date = next(iter(local_values)) if len(local_values) == 1 else ""
+    strong = [row for row in rows if row["compatible"] and row["strong_titles"]]
+    complete_sources = {source for source in sources if all(outcomes.get((source, d)) for d in candidates)}
+    if local_date and header_usable:
+        opposing = [row for row in strong if row["date"] != local_date and row["place"]]
+        supporting = [row for row in strong if row["date"] == local_date]
+        if not opposing or supporting:
+            chosen, reason = local_date, "selected local setlist performance date"
+    elif len(local_values) <= 1:
+        # A high ordered-title fit is the first discriminator. When the
+        # touring setlists are nearly identical, independent geography can
+        # break the tie, but merely existing online cannot prove a date.
+        if strong:
+            best_score = max(row["score"] for row in strong)
+            near = [row for row in strong if best_score - row["score"] < .15]
+            best_hits = max(row["hits"] for row in near)
+            best = {row["date"] for row in near if row["hits"] == best_hits}
+            if len(best) == 1:
+                winner = next(iter(best))
+                winner_rows = [row for row in near if row["date"] == winner]
+                winner_hits = max(row["hits"] for row in winner_rows)
+                # A competing date at an equally supported place with no
+                # published tracks is not disproved by song matching alone.
+                plausible_without_titles = [
+                    row for row in rows if row["date"] != winner and row["compatible"]
+                    and row["place"] and row["hits"] >= winner_hits and not row["has_titles"]
+                ]
+                if not plausible_without_titles and any(row["source"] in complete_sources for row in winner_rows):
+                    chosen, reason = winner, "ordered local/online song-title and place comparison"
+        else:
+            # Place-only confirmation requires comparable successful coverage
+            # for every candidate from at least one enabled source. A failure
+            # for another date cannot be treated as no matching performance.
+            eligible = {row["date"] for row in rows if row["strong_place"] and row["source"] in complete_sources}
+            competing = {row["date"] for row in rows if row["strong_place"]}
+            if len(eligible) == 1 and eligible == competing:
+                chosen, reason = next(iter(eligible)), "unique online venue/city corroboration across all dates"
+    if not chosen:
+        record.date = ""
+        if not any("date conflict" in value.casefold() for value in conflicts):
+            conflicts.append("date conflict across path/setlist and sampled DATE tags (online comparison inconclusive)")
+        evidence.pop("date", None)
+        observations.append("date conflict validation unresolved; no automatic show date or mutation")
+        return
+
+    record.date = chosen
+    conflicts[:] = [value for value in conflicts if not value.casefold().startswith("date conflict across ")]
+    evidence.setdefault("date", []).append(Candidate(chosen, "date_conflict_validation:" + reason, 90))
+    observations.append(f"date conflict resolved: {original_date or 'undecided'} -> {chosen}; {reason}")
+    # Merge only exact-date rows that agree with independently known places.
+    # Rank same-date alternatives before calling the ordinary field merger,
+    # and avoid choosing arbitrarily between equal-scoring distinct venues.
+    chosen_rows = [row for row in rows if row["date"] == chosen and row["compatible"]]
+    if any(row["strong_titles"] for row in chosen_rows):
+        # A source lacking song data can corroborate only the venue/city of
+        # a strongly matching row, not inject a separate performance.
+        matching_places = {
+            (_conflict_place_key(getattr(row["result"], "venue", "")),
+             _conflict_place_key(getattr(row["result"], "city", "")))
+            for row in chosen_rows if row["strong_titles"]
+        }
+        chosen_rows = [row for row in chosen_rows if
+                       (_conflict_place_key(getattr(row["result"], "venue", "")),
+                        _conflict_place_key(getattr(row["result"], "city", ""))) in matching_places
+                       and (row["strong_titles"] or not row["has_titles"])]
+    for source, apply in (("etreedb", _apply_etree_lookup_to_record), ("setlist.fm", _apply_setlistfm_lookup_to_record)):
+        available = [row for row in chosen_rows if row["source"] == source]
+        if not available:
+            continue
+        available.sort(key=lambda row: (row["strong_titles"], row["score"], row["hits"]), reverse=True)
+        first = available[0]
+        tied = [row for row in available if (row["strong_titles"], row["score"], row["hits"]) ==
+                (first["strong_titles"], first["score"], first["hits"])]
+        identities = {(_conflict_place_key(getattr(row["result"], "venue", "")),
+                       _conflict_place_key(getattr(row["result"], "city", ""))) for row in tied}
+        if len(identities) > 1:
+            observations.append(f"date conflict validation: {source} selected date has multiple equally supported places; metadata withheld")
+            continue
+        if first["venue_expansion"] and _conflict_place_key(record.venue) == partial_venue:
+            complete_venue = compact_ws(getattr(first["result"], "venue", ""))
+            observations.append(f"date conflict validation: expanded catalog venue fragment {record.venue} -> {complete_venue} using full folder and header corroboration")
+            record.venue = complete_venue
+            evidence.setdefault("venue", []).append(Candidate(complete_venue, "date_conflict_validation:catalog_fragment_expansion", 90))
+        apply(config, record, evidence, observations, prefetched=[row["result"] for row in tied])
 
 
 def _append_parentheticals_to_show_name(show_name: str, parentheticals: str) -> str:
@@ -6064,7 +6378,7 @@ def _db_backed_artist_hits_for_path_part(
         if _is_complete_normalized_date(match["normalized"])
         and _is_abbreviation_candidate(part, int(match["start"]), part[: int(match["start"])])
     ]
-    if len(abbreviation_dates) == 1:
+    if abbreviation_dates and len({(m["start"], m["end"]) for m in abbreviation_dates}) == 1:
         leading = compact_ws(part[: int(abbreviation_dates[0]["start"])])
         add_lookup(leading, leading)
         return hits, _unique_preserve(collisions)
@@ -6607,6 +6921,39 @@ def _resolve_date_from_candidates_with_setlist_validation(
 
     setlist_matches = _collect_setlist_date_matches(group)
     if not setlist_matches:
+        # Two readings of a single compact trading-folder date are not two
+        # independent performance dates. With no setlist date, allow only
+        # agreeing four-digit-year track names with the SAME leading prefix
+        # to settle that ambiguity. Never override a conflicting setlist.
+        prefix = shorthand_artist_prefix(group.get("main_dir_name", ""))
+        values = {item.get("normalized", "") for item in matches}
+        origins = {(item.get("part_path", ""), item.get("raw", "")) for item in matches}
+        if (prefix and len(values) > 1 and len(origins) == 1
+                and all(item.get("source") == "path_pattern" for item in matches)
+                and all(_is_complete_normalized_date(value) for value in values)):
+            origin, raw = next(iter(origins))
+            if (os.path.normcase(origin) == os.path.normcase(group.get("main_dir_path", ""))
+                    and re.fullmatch(r"\d{2}-\d{2}-\d{2}", raw)):
+                pattern = re.compile(
+                    rf"^{re.escape(prefix)}((?:18|19|20)\d{{2}}-\d{{2}}-\d{{2}})"
+                    r"(?:d\d+t\d+|t\d+|[-_ .]\d+)?$", re.I
+                )
+                filenames = []
+                for filename in _iter_group_media_files(group):
+                    hit = pattern.fullmatch(os.path.splitext(os.path.basename(filename))[0])
+                    if hit:
+                        if not _is_exact_yyyy_mm_dd_date(hit.group(1)):
+                            continue
+                        filenames.append({"raw": hit.group(1), "normalized": hit.group(1),
+                                          "part": os.path.basename(filename), "part_path": filename,
+                                          "source": "filename_shorthand_date_validation"})
+                dates = {item["normalized"] for item in filenames}
+                if len({item["part"].casefold() for item in filenames}) >= 2 and len(dates) == 1 and dates <= values:
+                    chosen = next(iter(dates))
+                    del conflicts[before_conflicts:]
+                    evidence.setdefault("date", []).append(Candidate(chosen, "filename_shorthand_date_validation", 70))
+                    observations.append(f"ambiguous shorthand folder date confirmed by agreeing full-date track filenames: {chosen}")
+                    return chosen, matches + filenames
         return "", matches
 
     conflict_values = _unique_preserve([match["normalized"] for match in matches if match.get("normalized")])
@@ -7791,6 +8138,23 @@ def _resolve_dash_album_or_performance_before_date_resolution(
     observations.append("non-compliant String1 - String2 matched: String2 treated as album name; no date assigned")
     return dash_album_match, True
 
+def _record_verified_rename_prefix(record: ShowMetadata, matcher: Optional[ArtistMatcher]) -> None:
+    """Authorize an alias expansion only with a unique exact DB entry for this artist."""
+    if matcher is None or record.show_in_conflict or not record.artist or not record.date:
+        return
+    prefix = shorthand_artist_prefix(record.main_dir_name)
+    if not prefix:
+        return
+    masters = matcher.exact_map.get(prefix.casefold(), set())
+    if len(masters) != 1:
+        return
+    status, selected = lookup_artist_master_with_status(record.artist, matcher)
+    if status != "matched" or set(selected) != set(masters):
+        return
+    record.verified_rename_prefix = prefix
+    record.observations.append(f"rename identity: exact Artist DB prefix {prefix} -> {record.artist}")
+
+
 def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[ArtistMatcher]) -> Tuple[ShowMetadata, List[Dict[str, str]], List[str]]:
     if getattr(config, "compliant", False):
         return _extract_metadata_for_group_compliant(config, group, artist_matcher)
@@ -8133,7 +8497,8 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
         # terminal numeric date only AFTER the selected-setlist resolver has
         # declined to choose.  Keep unrelated conflict flags intact.
         for date_conflict in ("date conflict across path pattern matches", "date conflict across path parts"):
-            if not record.date and date_conflict in conflicts and record.artist:
+            if (not record.date and date_conflict in conflicts and record.artist
+                    and not _conflicting_tag_dates(record, date_matches, tag_date_matches)):
                 online_date = _resolve_ambiguous_dates_from_online(
                     config, record, group, date_matches, evidence, observations
                 )
@@ -8156,9 +8521,14 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
             observations,
         )
 
+        pending_tag_date_conflict = (
+            _conflicting_tag_dates(record, date_matches, tag_date_matches)
+            if getattr(config, "etree_lookup", False) or getattr(config, "setlistfm_lookup", False)
+            else []
+        )
         etree_success = False
         etree_lookup_key = None
-        if not dash_album_mode and record.artist and record.date:
+        if not pending_tag_date_conflict and not dash_album_mode and record.artist and record.date:
             etree_lookup_key = _online_lookup_key(record)
             etree_success = _apply_etree_lookup_to_record(config, record, evidence, observations)
 
@@ -8185,11 +8555,11 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                 )
             # A tag-derived artist may still enable online venue/location lookup,
             # but only after stronger local artist evidence has failed.
-            if not dash_album_mode and record.date and not etree_success:
+            if not pending_tag_date_conflict and not dash_album_mode and record.date and not etree_success:
                 etree_lookup_key = _online_lookup_key(record)
                 etree_success = _apply_etree_lookup_to_record(config, record, evidence, observations)
 
-        if not dash_album_mode:
+        if not pending_tag_date_conflict and not dash_album_mode:
             etree_success, etree_lookup_key = _apply_setlistfm_only_after_etree_fallback(
                 config, record, evidence, observations, etree_success, etree_lookup_key
             )
@@ -8241,7 +8611,9 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
         # names) is deliberately the final local artist fallback.  It must not
         # drive eTree/setlist.fm lookup until path, setlist, tags, and the other
         # structured artist fallbacks have all failed.
-        if not record.artist and abbreviation_matches and len(conflicts) == 0:
+        if not record.artist and abbreviation_matches and (
+            not conflicts or (pending_tag_date_conflict and all("date conflict" in item.casefold() for item in conflicts))
+        ):
             abbreviation_artist, _abbr_lookups = _resolve_artist_from_pattern_matches(
                 abbreviation_matches,
                 artist_matcher,
@@ -8266,7 +8638,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                 # additional confirmation of the weak abbreviation before the
                 # final metadata is emitted.
                 abbreviation_confirmed_online = False
-                if record.date and _is_exact_yyyy_mm_dd_date(record.date):
+                if not pending_tag_date_conflict and record.date and _is_exact_yyyy_mm_dd_date(record.date):
                     if getattr(config, "etree_lookup", False):
                         abbreviation_confirmed_online = _apply_etree_lookup_to_record(
                             config, record, evidence, observations
@@ -8287,6 +8659,9 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                     observations.append(
                         "last-resort artist abbreviation remained unconfirmed by stronger local or enabled online evidence"
                     )
+        if pending_tag_date_conflict:
+            _resolve_tag_date_conflict(config, record, group, pending_tag_date_conflict,
+                                       date_matches, evidence, conflicts, observations)
     else:
         # Even album-style String1 - String2 folders may have selected setlist
         # files with explicit Artist:/Date:/Venue:/Location: labels. Apply the
@@ -8295,7 +8670,12 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
         # disagreements without overwriting.
         etree_success = False
         etree_lookup_key = None
-        if record.artist and record.date:
+        album_conflict_dates = (
+            _conflicting_tag_dates(record, date_matches, tag_date_matches)
+            if (getattr(config, "etree_lookup", False) or getattr(config, "setlistfm_lookup", False))
+            and _is_exact_yyyy_mm_dd_date(record.date) else []
+        )
+        if record.artist and record.date and not album_conflict_dates:
             etree_lookup_key = _online_lookup_key(record)
             etree_success = _apply_etree_lookup_to_record(config, record, evidence, observations)
         _apply_setlist_metadata_to_noncompliant_record(config, record, evidence, observations, artist_matcher, conflicts)
@@ -8320,9 +8700,20 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
                 )
                 if record.date:
                     observations.append("date fallback used selected setlist file contents in String1 - String2 album mode")
-        etree_success, etree_lookup_key = _apply_setlistfm_only_after_etree_fallback(
-            config, record, evidence, observations, etree_success, etree_lookup_key
-        )
+        if getattr(config, "etree_lookup", False) or getattr(config, "setlistfm_lookup", False):
+            if _is_exact_yyyy_mm_dd_date(record.date):
+                album_conflict_dates = _conflicting_tag_dates(record, date_matches, tag_date_matches)
+        if album_conflict_dates:
+            _resolve_tag_date_conflict(config, record, group, album_conflict_dates,
+                                       date_matches, evidence, conflicts, observations)
+            # A known conflicting performance must not fall back to an album
+            # name that would allow tagging/transfer despite the unresolved date.
+            if not record.date:
+                dash_album_mode = False
+        else:
+            etree_success, etree_lookup_key = _apply_setlistfm_only_after_etree_fallback(
+                config, record, evidence, observations, etree_success, etree_lookup_key
+            )
 
     path_qualifier = _detect_qualifier([record.main_dir_name, record.main_dir_path])
     if path_qualifier:
@@ -8372,6 +8763,7 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
         # recovered. Never rewrite a previously valid show name gratuitously.
         record.show_name = _build_show_name(record)
     _protect_numbered_show_identity(record)
+    _record_verified_rename_prefix(record, artist_matcher)
     _normalize_record_ascii_for_output(record)
     return record, date_matches, _unique_preserve(unresolved_reasons + record.conflicts)
 

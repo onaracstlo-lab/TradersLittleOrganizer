@@ -1,24 +1,18 @@
-# Build 728 source-candidate regression report
+# Build 735 source-candidate regression report
 
-## Correction to Build 727's historical review
-The earlier Parenthetical_Review_Build727.csv wrongly used the historical show-name suffix as the basis for its suggested projection, although the historical show name already omitted original qualifiers in many rows. That report must not be used to determine a restored folder name. Parenthetical_Review_Build728.csv supersedes it: the suggested projection explicitly uses every complete trailing group from the ORIGINAL folder, preserving order and wording. All 364 suggestions were mechanically checked against the original suffix. For unresolved rows it keeps the original folder intact. The historical suffix and any historical-only groups remain separately visible. This is an advisory comparison, not a set of rename commands.
+TLO v1.7 Build 735 — NOT RELEASE-ATTESTED
+Companion GitHub Build Process v169 (unchanged).
 
-## Path fixture replay of all 364 affected rows
-The real Build 728 metadata extractor was exercised with all 364 original folder names and recorded compliant/non-compliant mode, the packaged cities/venues databases, an isolated artist matcher seeded from the logged artist, and temporary directories without original media/setlists or online access. The 364 are comparison rows, not necessarily unique performances; 193 are in the previous unexpected-changes report.
+GitHub Actions run 46074831272 (Build 734): the Windows MSI was created through WiX, signed successfully through Azure Artifact Signing and then aborted before native installation. PowerShell rejected assignment to its read-only automatic variable HOME. The supplied log ends with exit code 1 and preservation of the failed hosted run. Per-user ICE91 messages were warnings, not the terminating error.
 
-- 358 produced a resolved show name; none lost ordinary source qualifiers.
-- Six did not resolve a show name (five rows for the same Graham Parker collaborative performance without a logged artist, and one malformed Los Lobos name). The source qualifiers were still captured; the suggested and guarded folder names retain the original.
-- 154 resolved rows contained a copy marker that was classified as an alt marker in the isolated fixture. This is expected when no matching sibling is available; the actual audio trees must be checked under the existing duplicate rules. The advisory suggested projection keeps the original copy marker.
-- The corrected CSV distinguishes the historical projection (original suffix restored), actual path-fixture show name, and the conservative guarded folder-name preview using the tagger's filename sanitizer. The guard preview alone is not a physical rename (it does not include collision allocation, selected options, or actual media). It permits a different name in 83 of these isolated rows.
-- The six exact user-reported source names retain all original qualifiers; their logged mode is compliant. All six were also tested in both modes with and without the catalog, including actual temporary Add Shows folder renames or intentional refusals to rename.
+Corrected the case-insensitive collision in msi/Build-TLO-MSI.ps1 and tools/Test-TLO-Windows-Acceptance.ps1. All references to the explicit test/data directory now use unambiguous names, including install command line, configured TLOHome verification and sentinel checks. No native MSI gate is bypassed. WiX signing, direct ownership/hash comparison of four master catalogs, new auxiliary search shortcut, install/uninstall and user-data preservation checks remain mandatory. The existing forced replacement policy for installer-owned payload is unchanged.
+Audited other application and companion PowerShell scripts for direct assignments to read-only automatic variables; no additional collisions of this type were found.
 
-## Additional runtime protection
-Build 727's non-compliant mode could display both (Late Show) and (late), or both (Early Show) and (early), from a single source qualifier. Build 728 suppresses only the redundant canonical addition when a complete recognized equivalent source group exists. Independently derived qualifiers and free-form notes remain supported. The final compliant rename safety guard now explicitly verifies presence and order of complete ordinary trailing groups, including nested groups and repetition, rather than relying on a set of source words. Existing structural marker, numeric, source-word, date, and collision guards remain in place. A rejected name leaves the original folder untouched.
-
-## Tests executed
-- 81 targeted tests passed: 29 new cases, 45 retained venue/suffix tests, and 7 retained artist-performance-qualifier tests.
-- Exact paired comparisons of the original Build 727 source and Build 728 candidate: 28 targeted cases; 8 changed (4 eliminate a redundant qualifier; 4 reject unsafe proposed folder names), 20 unchanged. Separate Test_Folder_Name_Changes_v728.csv lists all 8, including explicit test kind and mode/catalog.
-- Final full local application suite: 3,089 passed, 37 skipped, 1 failed, 2 warnings in 61.07s. Sole failure: test_build683_rename_search_parallel.py::test_process_pool_crash_retains_completed_groups. Same failure reproduced in exact original Build 726 and 727 under the restricted environment (multiprocessing.Manager AF_UNIX socket denied, PermissionError then EOFError); native gate remains required. No prior expectation weakened.
-- Source hygiene and package hash verification: passed. No native CI/signing, installer, pinned Ruff/Python, or full rendered documentation QA claimed. Requirements specification/version metadata updated without layout changes; existing normative rule already requires original parenthetical preservation. Build Process v168 unchanged.
-
-Original media and actual test folders remain unavailable. No user files or folders have been renamed. This is a tested source candidate, not a published release.
+Local regression (Python 3.12, pinned pytest 9.1.1): 3173 passed, 39 skipped, 1 deselected, 1 warning, 8 subtests passed in 82.80s (0:01:22).
+Focused PowerShell regression: 3 passed, 2 skipped; runtime execution requires native Windows, which is unavailable here. On hosted Windows, the tests require PowerShell and exercise the real smoke-test fixture preparation and opt-in diagnostics without installing the MSI, before actual installer acceptance.
+One existing process-pool crash test is deselected due to local UNIX socket restrictions; it remains enabled in GitHub CI. Native GUI, native Windows and other environment-dependent checks may skip locally.
+Pinned Ruff 0.16.10, source hygiene and release-readiness checks passed.
+Unmodified Build Process v169: 194 passed, 14 skipped in 2.26s.
+Current manual, specification, requirements catalog, FAQ and current version references retained from Build 734 and advanced to Build 735. Both documents rendered successfully, and the requirements catalog integrity contract passed.
+Build 734 Reverse and documentation cleanup and earlier behavior remain intact. All three supplied SQLite catalogs remain byte-identical. Authoritative ArtistDB-Master staging still supplies venues.txt.
+Native Windows MSI signing/install/uninstall, hosted Linux/macOS/Windows CI and signed release acceptance for Build 735: NOT ATTESTED.

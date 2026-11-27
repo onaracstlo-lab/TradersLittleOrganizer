@@ -1,0 +1,18 @@
+TLO v1.7 Build 735 — NOT RELEASE-ATTESTED
+Companion TLO GitHub Build Process v169.
+Current source candidate; hosted acceptance is NOT ATTESTED for Build 735.
+Ruff lint: lint not attested for the full GitHub Actions run. Local lint results are in REGRESSION_RESULTS_v735.txt.
+
+Historical Build 532 / Build 613 evidence — PREVIOUS BUILDS ONLY:
+  Xvfb display (CI=1): previous standalone GUI tests were run under virtual display.
+  No display (DISPLAY and CI unset): standalone Build 532 GUI subset: 50 passed, 6 skipped.
+  Historical Build 613 full Linux CI job: 26 skipped (different population).
+  These counts are not the current full GitHub Actions run.
+
+Prior hosted failure: Build 716 run 45067649844 was FAILED (historical only). Details and subsequent publication history remain in docs/history/BUILD_VERIFICATION_v733.txt.
+
+Release gate: native Windows/Linux/macOS tests, pinned lint, scan, signing, MSI install/uninstall and release integrity checks remain mandatory. No source-local test attests a signed release.
+
+Build 734 GitHub Actions run 46074831272 FAILED after WiX built and Azure signed the MSI; the smoke test hit a read-only automatic variable HOME before native installation. Build 735 corrects both affected scripts. Full native installation/uninstallation remains a hard release gate.
+
+Local results: 3173 passed, 39 skipped, 1 deselected, 1 warning, 8 subtests passed in 82.80s (0:01:22). See REGRESSION_RESULTS_v735.txt for the test scope and environment limitations.

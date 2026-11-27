@@ -1,0 +1,18 @@
+TLO v1.7 Build 734 — NOT RELEASE-ATTESTED
+Companion GitHub Build Process v169 (unchanged).
+
+NEW: Main hamburger > Reverse
+- Enter one fully qualified original/current folder or containing path in Path(s).
+- A confirmation box shows the selected path, TLOHome and potential effects. No is the default; only Yes starts the operation.
+- Main Dry Run previews the logged actions and records the reverse audit without changing folders or tags.
+- Reverse uses the established logged reversal engine and shared inventory lock. Its output and summary identify the selected log, matching operations, conflicts and errors.
+- Ordinary reversal does not restore audio tags or inventory records. Advanced Manual Tweaks undo and interrupted staging recovery remain available through the standalone CLI.
+
+DOCUMENTATION
+- Updated the manual, FAQ, requirements and release references for the current UI and install behavior.
+- Repaired requirements-catalog cross-references and synchronized changed requirement text.
+- Clarified immediate GUI recycling versus guarded, permanent deferred Windows old-folder cleanup.
+- Separated historical evidence from current release status.
+
+Build 733 date/venue and path-evidence fixes, and Build 732 auxiliary search and album/rename behavior remain intact.
+Native release acceptance is still required; see BUILD_VERIFICATION_v734.txt and REGRESSION_RESULTS_v734.txt.

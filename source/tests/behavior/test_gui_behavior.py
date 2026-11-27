@@ -85,11 +85,17 @@ def test_three_progress_bars_receive_shared_interval(tk_root):
     assert calls == [gui.ACTIVITY_INDICATOR_INTERVAL_MS] * 3
 
 
-def test_reverse_folder_workflow_is_not_exposed_in_inventory_gui(tk_root, monkeypatch, tmp_path):
+def test_reverse_is_a_hamburger_command_not_the_obsolete_button(tk_root, monkeypatch, tmp_path):
     gui = _load_gui_module()
     monkeypatch.setenv("TLOHome", str(tmp_path))
     app = gui.App(tk_root, gui._parse_gui_command_line([]))
     assert app is not None
     assert not hasattr(app, "reverse_copy_delete_button")
     assert not hasattr(app, "_open_reverse_copy_delete")
+    assert app.hamburger_menu.entrycget("Reverse", "label") == "Reverse"
+    calls = []
+    monkeypatch.setattr(app, "_open_reverse", lambda: calls.append("reverse"))
+    app.hamburger_menu.invoke("Reverse")
+    tk_root.update_idletasks()
+    assert calls == ["reverse"]
 

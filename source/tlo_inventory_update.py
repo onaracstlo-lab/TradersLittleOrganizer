@@ -51,7 +51,7 @@ from tlo_setlist_file_selection import find_setlist_files_for_music_dir
 from tlo_text_utils import normalized_compare_value
 from tlo_version import versioned_title
 from tlo_folder_rename import folder_name_write_needed, rename_folder_exact_case, same_existing_entry
-from tlo_rename_safety import safe_rename_target
+from tlo_rename_safety import safe_rename_target, spaced_album_separator
 from tlo_unc import unc_root, unc_label
 
 
@@ -226,6 +226,7 @@ def _metadata_to_record_dict(record) -> Dict[str, str]:
         "setlist_file": data.get("setlist_file", "") or "",
         "volume_label": data.get("volume_label", "") or "",
         "artist": data.get("artist", "") or "",
+        "verified_rename_prefix": data.get("verified_rename_prefix", "") or "",
         "date": data.get("date", "") or "",
         "venue": data.get("venue", "") or "",
         "location": data.get("location", "") or "",
@@ -745,7 +746,8 @@ def _show_name_with_parentheticals(show_name: str, parentheticals: str) -> str:
 
 
 def _compliant_rename_show_name_from_record_dict(record_dict: Dict[str, str]) -> str:
-    return _show_name_with_parentheticals(record_dict.get("show_name", ""), record_dict.get("parentheticals", ""))
+    show_name = _show_name_with_parentheticals(record_dict.get("show_name", ""), record_dict.get("parentheticals", ""))
+    return spaced_album_separator(show_name, record_dict.get("artist", ""), record_dict.get("date", ""))
 
 
 def _rewrite_path_under_root(path_name: str, old_root: str, new_root: str) -> str:
@@ -797,7 +799,8 @@ def _rename_add_shows_folder_compliantly(config, folder_path: str, record_dict: 
     original_leaf = os.path.basename(source_root)
     target_leaf = _safe_compliant_folder_name(show_name, fallback=original_leaf)
     target_leaf, _reason = safe_rename_target(
-        original_leaf, target_leaf, artist=record_dict.get("artist", ""), date=record_dict.get("date", "")
+        original_leaf, target_leaf, artist=record_dict.get("artist", ""), date=record_dict.get("date", ""),
+        verified_prefix=record_dict.get("verified_rename_prefix", "")
     )
     if not target_leaf:
         return source_root

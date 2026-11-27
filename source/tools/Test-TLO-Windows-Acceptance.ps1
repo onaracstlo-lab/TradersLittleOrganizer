@@ -18,10 +18,10 @@ function Report([string]$label, [string]$result, [string]$reason = '') {
 if (-not (Test-Path -LiteralPath $TLOHome -PathType Container)) {
     Report 'TLOHome exists' 'FAIL' $TLOHome
 } else {
-    $home = (Resolve-Path -LiteralPath $TLOHome).Path
-    Report 'TLOHome exists' 'PASS' $home
+    $resolvedDataHome = (Resolve-Path -LiteralPath $TLOHome).Path
+    Report 'TLOHome exists' 'PASS' $resolvedDataHome
     try {
-        $scratch = Join-Path $home ('.tlo-acceptance-' + [guid]::NewGuid().ToString('N'))
+        $scratch = Join-Path $resolvedDataHome ('.tlo-acceptance-' + [guid]::NewGuid().ToString('N'))
         $content = [Text.Encoding]::UTF8.GetBytes('TLO permission acceptance diagnostic')
         [IO.File]::WriteAllBytes($scratch, $content)
         try {

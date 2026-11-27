@@ -88,15 +88,15 @@ def test_msi_start_menu_shortcut_for_artist_search(tmp_path):
     spec.loader.exec_module(gen)
     stage = tmp_path / 'stage'
     stage.mkdir()
-    for filename in ('tlo-main.exe', 'tlo-search.exe', 'search-artist-db.exe'):
+    for filename in ('tlo-main.exe', 'tlo-search.exe', 'searchAuxDBs.exe'):
         (stage / filename).write_bytes(b'fake stage executable')
     wxs = tmp_path / 'test.wxs'
     gen.generate(stage, wxs, '1.7.686')
     tree = ET.parse(wxs)
-    node = tree.find('.//{*}Shortcut[@Id="TLOArtistDatabaseSearchShortcut"]')
+    node = tree.find('.//{*}Shortcut[@Id="TLOAuxDatabaseSearchShortcut"]')
     assert node is not None
-    assert node.attrib['Name'] == 'TLO Artist Database Search'
-    assert node.attrib['Target'].endswith('search-artist-db.exe')
+    assert node.attrib['Name'] == 'TLO Auxiliary Database Search'
+    assert node.attrib['Target'].endswith('searchAuxDBs.exe')
 
 
 def test_invalid_bootlist_aborts_actual_inventory_before_scanning_or_tagging(tmp_path, monkeypatch):

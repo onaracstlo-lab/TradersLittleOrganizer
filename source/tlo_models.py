@@ -47,3 +47,4 @@ class ShowMetadata:
     flac_tag_date_values: List[str] = field(default_factory=list)
     setlistfm_setlist_candidates: List[Dict[str, object]] = field(default_factory=list)
     observations: List[str] = field(default_factory=list)
+    verified_rename_prefix: str = ""

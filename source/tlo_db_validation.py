@@ -85,3 +85,19 @@ def validate_venue_reference(config) -> str:
 
 def validate_required_databases(config) -> Tuple[str, str]:
     return validate_artist_sqlite(config), validate_venue_reference(config)
+
+
+def optional_database_status(config):
+    """Report runtime reference availability without copying or creating a database."""
+    from pathlib import Path
+    from tlo_cities import catalog_for_tlo
+    from tlo_venue_sqlite import get_matcher
+
+    directory = str(getattr(config, "tlo_dbs_dir", "") or "")
+    for filename, loader in (("cities.sqlite", catalog_for_tlo), ("venues.sqlite", get_matcher)):
+        path = Path(directory) / filename
+        if directory and path.is_file() and loader(directory) is not None:
+            yield f"Reference database available: {path}"
+        else:
+            yield (f"WARNING: Reference database unavailable: {path}; "
+                   "install or repair the database in TLOHome/TLO_DBs. Existing location parsing retained.")

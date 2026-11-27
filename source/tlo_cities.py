@@ -14,7 +14,6 @@ from typing import Callable
 import logging
 from functools import lru_cache
 from pathlib import Path
-import sys
 import sqlite3
 from match_city import US_STATES, CA_PROVS, GB_LABELS, normalize as compact_city_key
 import re
@@ -279,24 +278,11 @@ def _geography(value: str) -> tuple[str, str]:
     return '', value
 
 
-def _bundled_path() -> Path:
-    if getattr(sys, 'frozen', False):
-        exe_dir = Path(sys.executable).resolve().parent
-        candidates = (exe_dir, exe_dir.parent, exe_dir.parent.parent)
-    else:
-        candidates = (Path(__file__).resolve().parent,)
-    for folder in candidates:
-        candidate = folder / 'TLO_DBs' / 'cities.sqlite'
-        if candidate.is_file():
-            return candidate
-    return candidates[0] / 'TLO_DBs' / 'cities.sqlite'
-
-
-def catalog_path_for_tlo(tlo_dbs_dir: str = '', tlo_home: str = '') -> Path:
-    root = Path(tlo_dbs_dir) if tlo_dbs_dir else (Path(tlo_home) / 'TLO_DBs' if tlo_home else None)
-    if root is not None and (root / 'cities.sqlite').is_file():
-        return root / 'cities.sqlite'
-    return _bundled_path()
+def catalog_path_for_tlo(tlo_dbs_dir: str = '', tlo_home: str = '') -> Path | None:
+    """Resolve only the active TLOHome/TLO_DBs; never use an application copy."""
+    home = tlo_home
+    root = Path(tlo_dbs_dir) if tlo_dbs_dir else (Path(home) / 'TLO_DBs' if home else None)
+    return root / 'cities.sqlite' if root is not None else None
 
 
 @lru_cache(maxsize=16)
@@ -313,12 +299,15 @@ _REPORTED_ISSUES: set[str] = set()
 
 
 def catalog_for_tlo(tlo_dbs_dir: str = '', tlo_home: str = '', on_warning=None) -> CityCatalog | None:
-    """Use one physical SQLite master, preferring TLOHome over distribution.
+    """Use only the active TLOHome SQLite master.
 
     Missing/corrupt data is not evidence against a city. Never read legacy CSV.
     """
     try:
-        return _load_path(catalog_path_for_tlo(tlo_dbs_dir, tlo_home))
+        path = catalog_path_for_tlo(tlo_dbs_dir, tlo_home)
+        if path is None:
+            return None
+        return _load_path(path)
     except (OSError, ValueError, sqlite3.Error) as exc:
         message = f"SQLite city reference unavailable; original parsing retained: {exc}"
         if message not in _REPORTED_ISSUES:

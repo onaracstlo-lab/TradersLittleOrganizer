@@ -67,7 +67,7 @@ def test_build522_docs_state_release_layout_and_macos_permission_consequence():
     req = "\n".join([p.text for p in doc.paragraphs] + [cell.text for table in doc.tables for row in table.rows for cell in row.cells])
     assert "TLO_V1.7Build<BUILD>" in manual
     assert "Windows hybrid package uses seven PyInstaller onefile executables" in manual
-    assert "tlo-main.app" in manual and "tlo-search.app" in manual and "search-artist-db.app" in manual
+    assert "tlo-main.app" in manual and "tlo-search.app" in manual and "searchAuxDBs.app" in manual
     assert "Full Disk Access" in manual and "Full Disk Access" in faq
     assert "Official release package layout" in req
     assert "tlo-deleteDupes.cmd" in req and "shared _internal" in req

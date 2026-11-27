@@ -99,7 +99,7 @@ def test_prototype_cli_uses_runtime_TLO_DBs_default():
     import subprocess
     import sys
     completed = subprocess.run([sys.executable, '-B', str(ROOT / 'match_city.py'),
-                                '--city', 'San Fransisco', '--state', 'CA', '--json'],
+                                '--TLOHome', str(ROOT), '--city', 'San Fransisco', '--state', 'CA', '--json'],
                                capture_output=True, text=True, check=False)
     assert completed.returncode == 0, completed.stderr
     payload = json.loads(completed.stdout)

@@ -536,6 +536,11 @@ def api_get(
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             body = read_bounded_text(response, MAX_METADATA_RESPONSE_BYTES, label="setlist.fm response")
     except urllib.error.HTTPError as exc:
+        # The exact-date search endpoint reports an empty search as HTTP 404.
+        # Authentication, rate-limit, server and other endpoint errors remain
+        # failures, not evidence that a candidate performance does not exist.
+        if path == "/search/setlists" and str(params.get("p", "1")) == "1" and exc.code == 404:
+            return {"setlist": [], "total": 0}
         try:
             detail = read_bounded_text(exc, MAX_ERROR_RESPONSE_BYTES, label="setlist.fm HTTP error response")
         except (ResponseTooLargeError, UnicodeError, OSError, ValueError):
@@ -684,6 +689,8 @@ def search_setlists(
             tlo_home=tlo_home,
             lock_timeout_seconds=lock_timeout_seconds,
         )
+        if not isinstance(payload, dict) or ("setlist" not in payload and "total" not in payload):
+            raise SetlistFMError("setlist.fm response lacks search results.")
         raw_setlists = ensure_list(payload.get("setlist"))
         results.extend(parse_result(item) for item in raw_setlists if isinstance(item, dict))
         if not thorough:
@@ -697,14 +704,18 @@ def search_setlists(
         except Exception:
             items_per_page = 0
         if not raw_setlists:
+            if total and len(results) < total:
+                raise SetlistFMError("setlist.fm pagination incomplete; cannot establish absence.")
             break
         if total and len(results) >= total:
             break
         if items_per_page and len(raw_setlists) < items_per_page:
+            if total and len(results) < total:
+                raise SetlistFMError("setlist.fm pagination incomplete; cannot establish absence.")
             break
         page += 1
         if page > max(1, int(max_pages or 25)):
-            break
+            raise SetlistFMError("setlist.fm pagination limit reached; cannot establish absence.")
 
     wanted = normalize_name(artist)
     exact_artist_results = [result for result in results if normalize_name(result.artist) == wanted]
