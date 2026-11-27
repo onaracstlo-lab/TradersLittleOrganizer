@@ -273,3 +273,7 @@ Build 713: New immutable source ZIP. Addresses CI 44808377418 Linux missing FFmp
 Build 719 (2026-11-22): Fix uppercase city fragments embedded in mixed-case compliant raw String2 (Process v161).
 
 Build 720 (2026-11-22): remove unused wholly_upper assignment in tlo_place_display.py (Ruff F841); no behavior change. Build process v162.
+
+Build 726 / Process v168: conservative venue SQLite integration; source candidate.
+Build 727 / Process v168: retain balanced trailing recording qualifiers during venue normalization; source candidate.
+Build 728 / Process v168: original-folder qualifier regression, semantic deduplication and final rename guard; source candidate.

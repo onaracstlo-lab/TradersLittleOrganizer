@@ -1,0 +1,2 @@
+TLO v1.7 Build 728 — source candidate, NOT RELEASE-ATTESTED
+See Regression_Test_Report.md for current local results. Native CI, Windows MSI installation, signing and pinned Ruff not attested. Previous Build 727 report preserved in docs/history/Regression_Test_Report_v727.md.

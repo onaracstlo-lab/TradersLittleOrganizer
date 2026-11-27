@@ -139,6 +139,51 @@ def safe_title(text: str) -> str:
     return " ".join(words)
 
 
+def split_trailing_parenthetical_groups(text: str) -> tuple[str, tuple[str, ...]]:
+    """Separate consecutive balanced terminal groups, including nested groups.
+
+    Do not consume unbalanced text or parentheses inside the name's core.
+    The caller controls any whitespace/ASCII normalization.
+    """
+    value = str(text or "").rstrip()
+    end = len(value)
+    groups = []
+    while end and value[end - 1] == ")":
+        depth = 0
+        start = end - 1
+        while start >= 0:
+            char = value[start]
+            if char == ")":
+                depth += 1
+            elif char == "(":
+                depth -= 1
+                if depth == 0:
+                    break
+            start -= 1
+        if depth:
+            break
+        groups.append(value[start:end])
+        end = len(value[:start].rstrip())
+    return value[:end], tuple(reversed(groups))
+
+
+def balanced_parenthetical_groups(text: str) -> tuple[str, ...]:
+    """Extract complete outer groups in source order, not inner fragments."""
+    groups = []
+    depth = 0
+    start = 0
+    for index, char in enumerate(text or ""):
+        if char == "(":
+            if not depth:
+                start = index
+            depth += 1
+        elif char == ")" and depth:
+            depth -= 1
+            if not depth:
+                groups.append(text[start:index + 1])
+    return tuple(groups)
+
+
 def compact_ws(text: str) -> str:
     return " ".join(normalize_single_quotes(text).strip().split())
 

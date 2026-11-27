@@ -83,7 +83,7 @@ def prepare_stage(src, dest, worker, db_source=None, document_source=None):
     if db_source is not None:
         seed_folder = dest / "TLO_DBs"
         seed_folder.mkdir(exist_ok=False)
-        for name in ("artists.sqlite", "venues.txt", "cities.sqlite"):
+        for name in ("artists.sqlite", "venues.txt", "cities.sqlite", "venues.sqlite"):
             source = db_source / name
             if not source.is_file() or source.stat().st_size == 0:
                 raise ValueError(f"Missing required MSI database seed: {source}")

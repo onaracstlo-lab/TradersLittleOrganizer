@@ -36,6 +36,7 @@ from tlo_artist_db import (
 from tlo_audio_tags import collect_group_flac_tag_info
 from tlo_cities import catalog_for_tlo, normalized as normalized_city_key, refine_parsed_fields
 from tlo_city_sqlite import corrected_city, split_city_suffix, isolated_city_suffix
+from tlo_venue_sqlite import get_matcher, match_full_venue, safe_venue_display
 from tlo_constants import (
     BIT24_PATTERNS,
     COUNTRY_ALIASES,
@@ -55,7 +56,8 @@ from tlo_constants import (
 )
 from tlo_models import Candidate, ShowMetadata
 from tlo_show_descriptor import extract_fallback_descriptor
-from tlo_text_utils import compact_ws, normalized_compare_value, standard_ascii_text
+from tlo_text_utils import (balanced_parenthetical_groups, compact_ws, normalized_compare_value,
+                            split_trailing_parenthetical_groups, standard_ascii_text)
 from tlo_place_display import display_place_case, replace_place_in_show_tail
 from tlo_security import escape_structured_log_text
 from tlo_etree_lookup import lookup_venue_and_location
@@ -212,26 +214,12 @@ def _strip_multi_extension(name: str) -> str:
 
 
 def _strip_trailing_parenthetical_items(text: str) -> str:
-    value = compact_ws(text)
-    while value:
-        updated = re.sub(r"\s*\([^()]*\)\s*$", "", value).strip()
-        if updated == value:
-            break
-        value = compact_ws(updated)
-    return compact_ws(value)
-
+    return split_trailing_parenthetical_groups(compact_ws(text))[0]
 
 
 def _strip_trailing_parenthetical_items_with_cache(text: str) -> Tuple[str, str]:
-    value = compact_ws(text)
-    cached: List[str] = []
-    while value:
-        match = re.search(r"\s*(\([^()]*\))\s*$", value)
-        if not match:
-            break
-        cached.insert(0, match.group(1).strip())
-        value = compact_ws(value[: match.start()])
-    return compact_ws(value), " ".join(cached)
+    base, groups = split_trailing_parenthetical_groups(compact_ws(text))
+    return base, " ".join(groups)
 
 
 def _merge_parenthetical_items(*values: str) -> str:
@@ -247,7 +235,7 @@ def _merge_parenthetical_items(*values: str) -> str:
         cleaned = compact_ws(value)
         if not cleaned:
             continue
-        matches = [compact_ws(item) for item in re.findall(r"\([^()]*\)", cleaned)]
+        matches = [compact_ws(item) for item in balanced_parenthetical_groups(cleaned)]
         if not matches:
             matches = [cleaned]
         for item in matches:
@@ -2672,10 +2660,13 @@ def _match_artist_place_date_technical_suffix(
 
 
 def _known_venue_exact(config, value: str) -> str:
-    """Return the canonical venues.txt line for an exact hint, if available."""
+    """Recognize an exact venue; retain legacy venues.txt fallback."""
     hint = compact_ws(value)
     if not hint:
         return ""
+    candidate = match_full_venue(hint, getattr(config, "tlo_dbs_dir", ""))
+    if candidate is not None:
+        return safe_venue_display(hint, candidate)
     venue_path = compact_ws(getattr(config, "venue_reference_db_file", "") or "")
     if not venue_path:
         db_dir = compact_ws(getattr(config, "tlo_dbs_dir", "") or "")
@@ -5174,7 +5165,18 @@ def _build_show_name(record: ShowMetadata) -> str:
     parts = [part for part in [record.artist, record.date, record.venue, record.location, record.descriptor] if part]
     show_name = " ".join(parts)
     qualifier = compact_ws(record.qualifier)
-    if qualifier and qualifier.casefold() not in show_name.casefold() and qualifier.casefold() not in compact_ws(record.parentheticals).casefold():
+    # A detected display qualifier such as "Late Show" must not duplicate
+    # an already captured source group such as "(late)". Only compare
+    # complete, recognized performance qualifiers; free-form recording notes
+    # must not suppress independently established set/show information.
+    source_qualifier_present = any(
+        TRAILING_PERFORMANCE_QUALIFIER_SUFFIX_RE.fullmatch(group[1:-1].strip())
+        and _detect_qualifier([group[1:-1]]).casefold() == qualifier.casefold()
+        for group in balanced_parenthetical_groups(record.parentheticals)
+    )
+    if (qualifier and not source_qualifier_present
+            and qualifier.casefold() not in show_name.casefold()
+            and qualifier.casefold() not in compact_ws(record.parentheticals).casefold()):
         show_name = compact_ws(f"{show_name} ({qualifier})")
     return _append_parentheticals_to_show_name(show_name, record.parentheticals)
 
@@ -5199,7 +5201,7 @@ def _protect_explicit_regionless_place(config, record: ShowMetadata) -> None:
     """
     if not record.artist or not record.date:
         return
-    leaf = compact_ws(getattr(record, 'main_dir_name', '') or '')
+    leaf = _strip_trailing_parenthetical_items(getattr(record, 'main_dir_name', '') or '')
     prefix = re.match(rf'(?i)^\s*{re.escape(record.artist)}\s+{re.escape(record.date)}\s+(.*)$', leaf)
     if not prefix:
         return
@@ -5246,6 +5248,46 @@ def _protect_explicit_regionless_place(config, record: ShowMetadata) -> None:
     elif country:
         record.country = country
     record.location = _join_location(record.city, record.region, record.country)
+
+
+def _apply_venue_catalog(config, record, evidence, observations, *, allow_path_fallback=False):
+    """Apply only to an isolated venue or a positively recognized complete date tail."""
+    db_dir = getattr(config, "tlo_dbs_dir", "")
+    if get_matcher(db_dir) is None:
+        return
+    old = record.venue
+    sources = evidence.get("venue", [])
+    explicit = any(c.value == old and c.source.startswith(("setlist_metadata:EXPLICIT", "etreeDB", "setlist.fm")) for c in sources)
+    if not old and allow_path_fallback and record.artist and record.date and not any((record.city, record.region, record.country, record.location, record.album_name, record.descriptor)):
+        # Do not recognize arbitrary words before the artist/date or in album mode.
+        leaf = _strip_trailing_parenthetical_items(record.main_dir_name)
+        prefix = re.match(rf"(?i)^{re.escape(record.artist)}\s+{re.escape(record.date)}\s+(.+)$", leaf)
+        if prefix:
+            old = prefix.group(1)
+    if not old:
+        return
+    field, suffix = old, ""
+    city, state = record.city, record.region or record.country
+    if record.venue and not explicit and not (record.city or record.location):
+        # A compliant String2 may be an opaque venue+city+region tail. Never
+        # let a catalog alias consume the geographic suffix or change its shape.
+        venue, parsed_city, region, country, _ = _parse_string2(old, tlo_dbs_dir=db_dir)
+        if venue and parsed_city and (region or country) and old.startswith(venue):
+            field, suffix = venue, old[len(venue):]
+            city, state = parsed_city, region or country
+    c = match_full_venue(field, db_dir, artist=record.artist, city=city,
+                         state=state, explicit=explicit)
+    if c is None:
+        return
+    new = safe_venue_display(field, c) + suffix
+    if record.venue and new == record.venue:
+        return
+    previous = record.venue
+    record.venue = new
+    if previous and record.album_name == previous:
+        record.album_name = new
+    evidence.setdefault("venue", []).append(Candidate(new, "venues.sqlite:" + c.reason, 75))
+    observations.append(f"venue catalog: {old!r} -> {new!r}; {c.reason}; {c.strength}; matched={c.matched!r}; span={c.start}:{c.end}; inferred={c.inferred}")
 
 
 def _normalize_record_ascii_for_output(record: ShowMetadata) -> ShowMetadata:
@@ -6801,7 +6843,7 @@ def _apply_pre_date_place_hint_strong_fields(
         if venue and not record.venue:
             record.venue = venue
             evidence.setdefault("venue", []).append(Candidate(venue, source, 42))
-        observations.append(f"pre-date place text matched venues.txt exactly: {hint}")
+        observations.append(f"pre-date place text matched venue reference exactly: {hint}")
     return kind
 
 
@@ -7627,6 +7669,8 @@ def _extract_metadata_for_group_compliant(config, group: dict, artist_matcher: O
     _apply_selected_day_range_parenthetical(record, date_matches, observations)
     _apply_unknown_date_descriptor_fallback(record, observations)
     _apply_proper_grammar_artist_output(config, record, artist_matcher, observations)
+    if not compliant_dash_match and record.artist and record.date:
+        _apply_venue_catalog(config, record, evidence, observations)
     if compliant_dash_match:
         record.show_name = _build_compliant_dash_show_name(record)
     elif compliant_string_date_match:
@@ -8295,6 +8339,8 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
     _apply_city_catalog_last_resort(config, record, artist_matcher, evidence, observations)
     _apply_selected_day_range_parenthetical(record, date_matches, observations)
     _apply_proper_grammar_artist_output(config, record, artist_matcher, observations)
+    if not dash_album_mode:
+        _apply_venue_catalog(config, record, evidence, observations, allow_path_fallback=True)
     if dash_album_mode:
         if _dash_album_mode_should_use_structured_show_name(record, evidence):
             record.show_name = _build_show_name(record)
@@ -8318,6 +8364,9 @@ def _extract_metadata_for_group(config, group: dict, artist_matcher: Optional[Ar
     record.show_in_conflict = bool(record.conflicts)
     previous_place = (record.venue, record.city, record.region, record.country, record.location)
     _protect_explicit_regionless_place(config, record)
+    if not dash_album_mode:
+        _apply_venue_catalog(config, record, evidence, observations)
+        record.observations = _unique_preserve(observations)
     if previous_place != (record.venue, record.city, record.region, record.country, record.location) and record.artist and record.date:
         # Recompose only when explicit, independently known venue evidence was
         # recovered. Never rewrite a previously valid show name gratuitously.

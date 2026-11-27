@@ -1,3 +1,5 @@
+Venue catalog: Recognize complete, context-supported venue names using read-only venues.sqlite; preserve historical names, unknown venues, legacy venues.txt and existing positional, setlist and online fallbacks. Reject ambiguous, partial and unsafe display changes. Do not modernize historical venue names. If the catalog is absent or cannot be read, existing recognition remains available.
+
 Q: Is TLO a commercial application?
 A: No. TLO is freeware.
 

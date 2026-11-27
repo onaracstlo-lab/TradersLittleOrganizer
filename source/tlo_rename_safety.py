@@ -12,6 +12,7 @@ import re
 import unicodedata
 
 from tlo_constants import MONTHS
+from tlo_text_utils import compact_ws, split_trailing_parenthetical_groups
 
 _WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
 _NUMBER = re.compile(r"(?<!\d)\d+(?!\d)")
@@ -96,6 +97,30 @@ def _normalize_verifiable_source_date(source: str, target: str) -> str:
     return source
 
 
+# Explicit part/collision markers are governed by grouping and duplicate validation,
+# not the ordinary recording-qualifier preservation rule.
+_STRUCTURAL_SUFFIX = re.compile(
+    r"\((?:(?:copy|alt|disc|cd|set)\s*\d+|one|two|three|four|five)\)", re.I
+)
+
+
+def _ordinary_suffixes_preserved(source: str, target: str) -> bool:
+    """Keep every complete ordinary source group, in its original order.
+
+    A set of words is insufficient: (late) can be lost even when "late"
+    appears in the venue, and (AUD (Remaster)) is not two separate groups.
+    Accept normal accent/quote/case folding, but do not weaken the existing
+    identifier or copy/alt guards. Extra metadata-derived groups are allowed.
+    """
+    def key(group: str) -> str:
+        return compact_ws(_fold_text(group)).casefold()
+
+    required = (key(group) for group in split_trailing_parenthetical_groups(source)[1]
+                if not _STRUCTURAL_SUFFIX.fullmatch(group))
+    proposed = iter(key(group) for group in split_trailing_parenthetical_groups(target)[1])
+    return all(any(item == needed for item in proposed) for needed in required)
+
+
 def safe_rename_target(source_leaf: str, candidate_leaf: str, *, artist: str = "", date: str = "") -> tuple[str, str]:
     """Return (accepted target, reason); empty target means do not rename.
 
@@ -144,6 +169,8 @@ def safe_rename_target(source_leaf: str, candidate_leaf: str, *, artist: str = "
     missing = (_words(comparable_source) - _date_months(comparable_source) - _GENERIC) - _words(target)
     if missing:
         return "", "source identifying text would be lost: " + ", ".join(sorted(missing))
+    if not _ordinary_suffixes_preserved(source, target):
+        return "", "trailing recording parenthetical would be lost or altered"
     # Case changes remain permitted. Prevent losing commas/other punctuation
     # alone, which otherwise causes run-two rename churn.
     if source != target and re.sub(r"[,;]", "", source) == re.sub(r"[,;]", "", target):

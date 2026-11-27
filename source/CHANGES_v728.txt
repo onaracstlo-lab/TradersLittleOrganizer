@@ -1,3 +1,21 @@
+TLO v1.7 Build 728 — original-folder parenthetical regression (Build Process v168)
+2026-11-26 | SOURCE CANDIDATE, NOT RELEASE-ATTESTED
+- Keep original trailing recording parentheticals, including (early), (late), (mtx), and (24). Do not append a redundant canonical performance qualifier when an equivalent complete original parenthetical is present. Refuse compliant folder renames that would discard, alter, or reorder any ordinary trailing group; retain existing collision/part and identity validation. Correct the historical projection to restore the original folder suffix, not the incomplete historical show name.
+- Add exact user-reported name fixtures in both modes with and without venue catalog, and verify real temporary-folder rename behavior.
+
+PRIOR HISTORY — Build 727 and earlier:
+TLO v1.7 Build 727 — trailing recording qualifiers (Build Process v168)
+2026-11-26 | SOURCE CANDIDATE, NOT RELEASE-ATTESTED
+- Retain consecutive and nested trailing parenthetical recording qualifiers during parsing and venue matching. Apply venue/city display substitutions only to the name core, not the qualifier text. Match venue-only paths without treating the suffix as part of the venue. Keep existing missing/ambiguous catalog fallbacks, copy/alt verification, and historical venue protections.
+- Separate historical omissions from newly altered projected suffixes; no media replay claimed.
+
+PRIOR HISTORY — Build 726 and earlier:
+TLO v1.7 Build 726 — conservative SQLite venue catalog (Build Process v168)
+2026-11-25 | SOURCE CANDIDATE, NOT RELEASE-ATTESTED
+- Recognize complete, context-supported venue names using read-only venues.sqlite; preserve historical names, unknown venues, legacy venues.txt and existing positional, setlist and online fallbacks. Reject ambiguous, partial and unsafe display changes. Do not modernize historical venue names.
+- Package venues.sqlite in database-inclusive MSI/ZIP distributions.
+
+PRIOR HISTORY — Build 725 and earlier:
 TLO v1.7 Build 725 — SQLite-only city reference (Build Process v167)
 2026-11-24 | SOURCE CANDIDATE, NOT RELEASE-ATTESTED
 - Replace the city CSV index and layered local CSV behavior with an index loaded directly from the physical read-only cities.sqlite master. Retain source spelling and all non-database location rules.

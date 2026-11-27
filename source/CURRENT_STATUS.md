@@ -1,3 +1,15 @@
+# Build 728 / GitHub Build Process v168 — original-folder parenthetical preservation
+
+Keep original trailing recording parentheticals, including (early), (late), (mtx), and (24). Do not append a redundant canonical performance qualifier when an equivalent complete original parenthetical is present. Refuse compliant folder renames that would discard, alter, or reorder any ordinary trailing group; retain existing collision/part and identity validation. Correct the historical projection to restore the original folder suffix, not the incomplete historical show name. Native CI, signing and full visual documentation QA not attested. Prior status follows as historical evidence.
+
+# Build 727 / GitHub Build Process v168 — trailing parenthetical preservation
+
+Retain consecutive and nested trailing parenthetical recording qualifiers during parsing and venue matching. Apply venue/city display substitutions only to the name core, not the qualifier text. Match venue-only paths without treating the suffix as part of the venue. Keep existing missing/ambiguous catalog fallbacks, copy/alt verification, and historical venue protections. Native CI, signing and full visual documentation QA not attested. Prior status follows as historical evidence.
+
+# Build 726 / GitHub Build Process v168 — SQLite venue matching
+
+Recognize complete, context-supported venue names using read-only venues.sqlite; preserve historical names, unknown venues, legacy venues.txt and existing positional, setlist and online fallbacks. Reject ambiguous, partial and unsafe display changes. Do not modernize historical venue names. Database-inclusive packages carry all four physical reference masters. Native acceptance pending. Prior status follows.
+
 # Build 725 / GitHub Build Process v167 — SQLite city matching
 
 The supplied cities.sqlite and match_city.py are integrated read-only into folder and selected-setlist location handling. A known state/province/country can support high-confidence typo correction and multiword city boundaries; exact aliases retain source spelling. Unknown/ambiguous cities use the existing positional/region/online fallbacks. The SQLite master ships externally in TLO_DBs and is MSI-managed on Windows. The city CSV is retired: SQLite is the sole city reference master; older CSVs are ignored and are not deleted. Existing built-in and positional fallbacks remain. An old CSV-only city without other location evidence may no longer resolve. For the first upgrade from a CSV-only installation, use an MSI or database-inclusive ZIP. Windows/macOS hosted build, installer-signing and native runtime acceptance are NOT ATTESTED by these local tests.

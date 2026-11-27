@@ -1,3 +1,12 @@
+Build 728 / Process v168: Keep original trailing recording parentheticals, including (early), (late), (mtx), and (24). Do not append a redundant canonical performance qualifier when an equivalent complete original parenthetical is present. Refuse compliant folder renames that would discard, alter, or reorder any ordinary trailing group; retain existing collision/part and identity validation. Correct the historical projection to restore the original folder suffix, not the incomplete historical show name. Native acceptance pending.
+
+HISTORICAL NOTES:
+Build 727 / Process v168: Retain consecutive and nested trailing parenthetical recording qualifiers during parsing and venue matching. Apply venue/city display substitutions only to the name core, not the qualifier text. Match venue-only paths without treating the suffix as part of the venue. Keep existing missing/ambiguous catalog fallbacks, copy/alt verification, and historical venue protections. Native acceptance pending.
+
+HISTORICAL NOTES:
+Build 726 / Process v168: Recognize complete, context-supported venue names using read-only venues.sqlite; preserve historical names, unknown venues, legacy venues.txt and existing positional, setlist and online fallbacks. Reject ambiguous, partial and unsafe display changes. Do not modernize historical venue names. Stage venues.sqlite alongside the existing masters. Native acceptance pending.
+
+HISTORICAL NOTES:
 Build 725 / Process v167: cities.sqlite is the only city reference. Folder and setlist parsers retain built-in, positional, region/country, venue and online rules; unknown cities remain supported. Retire the city CSV from native release, MSI and database-inclusive updates. Existing obsolete files in TLOHome are ignored, not deleted. Native signing/CI pending.
 
 HISTORICAL NOTES:

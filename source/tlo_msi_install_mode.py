@@ -131,7 +131,7 @@ def launch_verified_portable_msi_install(msi_file, trusted_expected_sha256):
 
 # The only files that MSI may replace in TLOHome. Everything else, including
 # preferences, inventory, logs, and setlists, remains user-managed.
-MSI_MANAGED_DATABASES = ("artists.sqlite", "venues.txt", "cities.sqlite")
+MSI_MANAGED_DATABASES = ("artists.sqlite", "venues.txt", "cities.sqlite", "venues.sqlite")
 MSI_DATABASE_BUILD_MARKER = ".tlo-msi-db-build"
 MSI_USER_SETTINGS_KEY = r"Software\TradersLittleOrganizer\UserSettings"
 

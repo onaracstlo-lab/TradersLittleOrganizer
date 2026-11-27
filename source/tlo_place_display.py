@@ -10,6 +10,7 @@ import re
 import unicodedata
 
 from tlo_constants import REGION_CODES
+from tlo_text_utils import split_trailing_parenthetical_groups
 from tlo_version import VERSION as _TLO_CANONICAL_VERSION
 
 __version__ = _TLO_CANONICAL_VERSION
@@ -118,10 +119,16 @@ def replace_place_in_show_tail(show_name: str, artist: str, changes: tuple[tuple
     """
     if not show_name or not changes or not artist or not show_name.startswith(artist):
         return show_name
-    prefix, tail = show_name[:len(artist)], show_name[len(artist):]
+    # Do not normalize a repeated venue/city inside a recording annotation.
+    # The full balanced suffix is restored verbatim, even with nested groups.
+    core, groups = split_trailing_parenthetical_groups(show_name)
+    if len(core) < len(artist):
+        return show_name
+    suffix = show_name[len(core):] if groups else ""
+    prefix, tail = core[:len(artist)], core[len(artist):]
     for before, after in sorted(changes, key=lambda pair: len(pair[0]), reverse=True):
         if not before or before == after:
             continue
         pattern = re.compile(r"(?<!\w)" + re.escape(before) + r"(?!\w)")
         tail = pattern.sub(lambda _: after, tail)
-    return prefix + tail
+    return prefix + tail + suffix

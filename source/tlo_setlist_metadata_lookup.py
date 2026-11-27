@@ -15,6 +15,7 @@ from typing import Dict, List, Optional, Tuple
 
 from tlo_cities import catalog_for_tlo
 from tlo_city_sqlite import corrected_city
+from tlo_venue_sqlite import get_matcher, match_full_venue, normalized_venue, safe_venue_display
 from tlo_constants import (
     AMBIGUOUS_CANADIAN_REGION_CODES, CANADIAN_REGION_ALIASES, CANADIAN_REGION_CODES,
     COUNTRY_ALIASES, COUNTRY_SEARCH_TERMS, LOCATION_CONNECTIVE_WORDS,
@@ -1673,6 +1674,22 @@ def _best_venue_from_lines(lines: List[str], support: _SupportData) -> Tuple[str
             score += 15
         if score > best[2]:
             best = (venue, raw_line, score, line_index)
+    if not best[0] and get_matcher(support.tlo_dbs_dir) is not None:
+        # SQLite recognition is deliberately a fallback to the existing header
+        # interpretation. Require a complete, independently place-like line;
+        # do not scan track titles or match a venue substring in an artist name.
+        for idx, line, _ in usable_lines:
+            if len(lines) > 1:
+                if idx == 0 or not _looks_like_unlabeled_venue_line(line):
+                    continue
+                nearby = lines[max(0, idx - 2):idx] + lines[idx + 1:idx + 3]
+                if not any(_looks_like_date_header_line(x) or _parse_location_from_text(x, support)[0] for x in nearby):
+                    continue
+            c = match_full_venue(line, support.tlo_dbs_dir)
+            if c is not None and _short_one_word_venue_match_allowed(c.venue, line):
+                score = 84 - idx // 2
+                if score > best[2]:
+                    best = (safe_venue_display(line, c), line, score, idx)
     return best
 
 
@@ -1969,6 +1986,9 @@ def extract_setlist_venue_location(setlist_file: str, tlo_dbs_dir: str) -> Setli
             artist_source = "setlist_metadata:STRUCTURED_UNLABELED_ARTIST_HEADER"
             artist_confidence = max(88, min(95, max(venue_confidence, location_confidence)))
 
+    # Normalize only the venue selected by the established header parser.
+    venue = normalized_venue(venue, tlo_dbs_dir, artist=artist, city=city,
+                             state=region or country, explicit=bool(fields.get("venue")))
     raw = _clean_spaces(" | ".join(part for part in [raw_venue, raw_location] if part))
     confidence = max(venue_confidence, location_confidence)
     if venue and location:

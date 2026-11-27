@@ -291,6 +291,7 @@ Invoke-Python -Runner $PythonRunner -Arguments @($VerifyEnvironmentScript)
 # The independent GitHub Build Process must preserve this staged directory
 # when creating complete/update release ZIPs.
 Invoke-Python -Runner $PythonRunner -Arguments @((Join-Path $SourceRoot 'tools/stage_city_database.py'), '--source-root', $SourceRoot, '--dist-root', $DistRoot)
+Invoke-Python -Runner $PythonRunner -Arguments @((Join-Path $SourceRoot 'tools/stage_venue_database.py'), '--source-root', $SourceRoot, '--dist-root', $DistRoot)
 
 if (-not (Test-Path -LiteralPath $ScanScript -PathType Leaf)) {
     throw "Required scan utility not found: $ScanScript"

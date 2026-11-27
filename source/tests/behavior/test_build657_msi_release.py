@@ -79,12 +79,13 @@ def test_wix_payload_stable_and_data_seed_not_source_modified(tmp_path):
     (source / "tlo-main.exe").write_bytes(b"main")
     (source / "tlo-search.exe").write_bytes(b"search")
     db = tmp_path / "database"; db.mkdir()
-    for name in ("artists.sqlite", "venues.txt", "cities.sqlite"):
+    for name in ("artists.sqlite", "venues.txt", "cities.sqlite", "venues.sqlite"):
         (db / name).write_bytes(b"base")
     (db / "cities.csv").write_bytes(b"obsolete")
     prepared = tmp_path / "prepared"
     WIX.prepare_stage(source, prepared, ROOT / "msi" / "TLO-MSI-Update-Worker.ps1", db)
     assert (prepared / "TLO_DBs" / "cities.sqlite").read_bytes() == b"base"
+    assert (prepared / "TLO_DBs" / "venues.sqlite").read_bytes() == b"base"
     assert not (prepared / "TLO_DBs" / "cities.csv").exists()
     assert not (source / "TLO_DBs").exists()
     wxs = tmp_path / "out.wxs"
@@ -111,7 +112,7 @@ def test_msi_updates_managed_database_masters_and_seeds_user_files_only_once(tmp
     home = tmp_path / "TLOHome"
     (program / "TLO_DBs").mkdir(parents=True)
     for filename, content in {
-        "artists.sqlite": b"new master", "venues.txt": b"new venues", "cities.sqlite": b"new sqlite cities",
+        "artists.sqlite": b"new master", "venues.txt": b"new venues", "cities.sqlite": b"new sqlite cities", "venues.sqlite": b"new sqlite venues",
     }.items():
         (program / "TLO_DBs" / filename).write_bytes(content)
     (program / "TLO-FAQ.txt").write_bytes(b"new FAQ")
@@ -124,6 +125,7 @@ def test_msi_updates_managed_database_masters_and_seeds_user_files_only_once(tmp
     assert (home / "TLO_DBs" / "artists.sqlite").read_bytes() == b"new master"
     assert (home / "tlo-preferences.ini").read_bytes() == b"USER PREFERENCES"
     assert (home / "TLO_DBs" / "cities.sqlite").read_bytes() == b"new sqlite cities"
+    assert (home / "TLO_DBs" / "venues.sqlite").read_bytes() == b"new sqlite venues"
     assert (home / "TLO_DBs" / "venues.txt").read_bytes() == b"new venues"
     assert (home / "TLO-FAQ.txt").read_bytes() == b"new FAQ"
     (home / "TLO_DBs" / "artists.sqlite").write_bytes(b"edited same-build master")

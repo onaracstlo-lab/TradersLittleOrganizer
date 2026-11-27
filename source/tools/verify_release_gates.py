@@ -18,11 +18,13 @@ def main() -> int:
         if str(ROOT) not in sys.path:
             sys.path.insert(0, str(ROOT))
         from tools.stage_city_database import validate
+        from tools.stage_venue_database import validate as validate_venue
         if (ROOT / 'tlo_cities_embedded.py').exists():
             raise ValueError('embedded city reference present')
         validate(ROOT / 'TLO_DBs' / 'cities.sqlite')
+        validate_venue(ROOT / 'TLO_DBs' / 'venues.sqlite')
     except (OSError, ValueError) as exc:
-        print(f'BLOCKED: physical TLO_DBs/cities.sqlite invalid: {exc}', file=sys.stderr)
+        print(f'BLOCKED: physical SQLite reference database invalid: {exc}', file=sys.stderr)
         return 1
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
