@@ -4,6 +4,7 @@ from tlo_version import VERSION as _TLO_CANONICAL_VERSION
 __version__ = _TLO_CANONICAL_VERSION
 
 import hashlib
+from tlo_path_policy import is_tlo_work_directory
 import os
 import re
 from typing import Dict, List, Optional, Set, Tuple
@@ -42,8 +43,8 @@ def _tree_manifest(
     for current_dir, dir_names, file_names in os.walk(
         root, topdown=True, followlinks=False, onerror=_raise_walk_error
     ):
-        if '.tlo-shn-originals' in ignored:
-            dir_names[:] = [name for name in dir_names if name.casefold() != '.tlo-shn-originals']
+        if ".tlo-shn-originals" in ignored:
+            dir_names[:] = [name for name in dir_names if not is_tlo_work_directory(name)]
         if os.path.normcase(os.path.abspath(os.path.normpath(current_dir))) == root_norm and ignored:
             dir_names[:] = [name for name in dir_names if name.casefold() not in ignored]
             file_names = [name for name in file_names if name.casefold() not in ignored]

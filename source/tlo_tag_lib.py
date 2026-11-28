@@ -43,6 +43,7 @@ from tlo_artist_db import load_artist_matcher
 from tlo_audio_tags import collect_group_flac_tag_info
 from tlo_db_validation import validate_required_databases
 from tlo_tree_compare import directory_trees_exactly_match
+from tlo_path_policy import is_tlo_work_directory
 from tlo_phase23_v2 import (
     _build_groups_from_search_path,
     _extract_metadata_for_group,
@@ -73,21 +74,7 @@ READY_FOR_XFER_DIRNAME = "readyForXfer"
 
 # Audio formats with common metadata containers.  SHN/SHNF are intentionally
 # omitted because they are normally not taggable through mutagen.
-TAGGABLE_AUDIO_EXTENSIONS = {
-    ".flac",
-    ".mp3",
-    ".wav",
-    ".m4a",
-    ".aac",
-    ".ogg",
-    ".oga",
-    ".opus",
-    ".aiff",
-    ".aif",
-    ".ape",
-    ".wv",
-    ".alac",
-}
+from tlo_media_rules import TAG_WRITABLE as TAGGABLE_AUDIO_EXTENSIONS, COUNTED_AUDIO as AUDIO_EXTENSIONS_FOR_COUNTING, SHN_AUDIO as SHN_AUDIO_EXTENSIONS, has_media_extension
 
 
 UNWANTED_TOTAL_DISC_TAG_KEYS = {"tracktotal", "discnumber", "disctotal"}
@@ -210,10 +197,8 @@ def _clear_total_disc_mp4_tags(audio) -> None:
         except Exception as exc:  # noqa: BLE001 - best-effort boundary
             debug_suppressed_exception(__name__, exc)
 
-SHN_AUDIO_EXTENSIONS = {".shn", ".shnf"}
-AUDIO_EXTENSIONS_FOR_COUNTING = TAGGABLE_AUDIO_EXTENSIONS | SHN_AUDIO_EXTENSIONS
 AUDIO_FILENAME_EXT_RE = re.compile(
-    r"\.(?:flac|mp3|wav|m4a|aac|ogg|oga|opus|aiff?|ape|wv|alac|shn|shnf)$",
+    r"\.(?:" + "|".join(sorted(ext[1:] for ext in AUDIO_EXTENSIONS_FOR_COUNTING)) + r")$",
     re.IGNORECASE,
 )
 SAMPLE_AUDIO_STEM_RE = re.compile(r"(?i)(?:^|[ _.-])sample(?:[ _.-]*\d*)?$")
@@ -477,10 +462,7 @@ def _validate_existing_directory(path_name: str, label: str) -> str:
 
 
 def resolve_tlo_home(tlo_home: str = "", my_tlo: str = "") -> str:
-    try:
-        return resolve_tlo_home_common(tlo_home=tlo_home, my_tlo=my_tlo, error_type=TaggerError, app_name="tlo-tag")
-    except TaggerError:
-        raise
+    return resolve_tlo_home_common(tlo_home=tlo_home, my_tlo=my_tlo, error_type=TaggerError, app_name="tlo-tag")
 
 
 def resolve_tagging_path(tlo_home: str, tag_path: str = "") -> str:
@@ -528,7 +510,7 @@ def build_tagger_config(
     if bool(setlistfm_lookup) and not bool(etree_lookup):
         raise TaggerError("setlist.fm lookup requires eTreeDB lookup.")
     try:
-        validate_setlistfm_upgrade_environment({"setlistfm_upgrade": bool(setlistfm_upgrade)})
+        validate_setlistfm_upgrade_environment({"setlistfm_upgrade": bool(setlistfm_upgrade), "setlistfm_lookup": bool(setlistfm_lookup)})
     except ValueError as exc:
         raise TaggerError(str(exc)) from exc
     corruption_values = {
@@ -595,7 +577,7 @@ def _should_prune_dir(dir_name: str) -> bool:
 def _is_audio_file(path_name: str) -> bool:
     if not path_name or not os.path.isfile(path_name):
         return False
-    return os.path.splitext(path_name)[1].lower() in AUDIO_EXTENSIONS_FOR_COUNTING
+    return has_media_extension(path_name, AUDIO_EXTENSIONS_FOR_COUNTING)
 
 
 def _is_sample_audio_file(path_name: str) -> bool:
@@ -611,7 +593,7 @@ def _is_sample_audio_file(path_name: str) -> bool:
 def _is_taggable_audio_file(path_name: str) -> bool:
     if not path_name or not os.path.isfile(path_name):
         return False
-    return os.path.splitext(path_name)[1].lower() in TAGGABLE_AUDIO_EXTENSIONS
+    return has_media_extension(path_name, TAGGABLE_AUDIO_EXTENSIONS)
 
 
 def _natural_sort_key(path_name: str) -> List[object]:
@@ -3168,6 +3150,7 @@ def _file_size_map(root: str) -> Dict[str, int]:
     """Return relative file sizes or fail verification on any unreadable stat."""
     result: Dict[str, int] = {}
     for current_dir, _dir_names, file_names in os.walk(root, onerror=_raise_verification_walk_error):
+        _dir_names[:] = [name for name in _dir_names if not is_tlo_work_directory(name)]
         for file_name in file_names:
             full_path = os.path.join(current_dir, file_name)
             relative = os.path.relpath(full_path, root)
@@ -3183,6 +3166,7 @@ def _directory_path_set(root: str) -> set[str]:
     """Return every descendant directory path, including empty directories."""
     result: set[str] = set()
     for current_dir, dir_names, _file_names in os.walk(root, onerror=_raise_verification_walk_error):
+        dir_names[:] = [name for name in dir_names if not is_tlo_work_directory(name)]
         for dir_name in dir_names:
             full_path = os.path.join(current_dir, dir_name)
             relative = os.path.relpath(full_path, root)
@@ -3200,7 +3184,7 @@ def _tree_contains_symlink(root: str) -> bool:
 
 def _ignore_held_shn_originals(_directory: str, names) -> set[str]:
     """Recovery-only originals must never be copied to a trader's directory."""
-    return {name for name in names if name.casefold() == '.tlo-shn-originals'}
+    return {name for name in names if is_tlo_work_directory(name)}
 
 
 def _copy_entire_directory_tree(source_root: str, destination_root: str) -> None:
@@ -3401,6 +3385,10 @@ def prepare_inventory_copy_delete_target(
     if os.path.normcase(source_root) == os.path.normcase(destination_parent) or _path_is_under(destination_parent, source_root):
         raise TaggerError("Tag Copy and Delete destination must not be the source folder or a child of it")
 
+    # Never delete or transfer recovery data as a side effect of moving a show.
+    for current, directories, _files in os.walk(source_root, onerror=_raise_verification_walk_error):
+        if any(is_tlo_work_directory(name) for name in directories):
+            raise TaggerError(f"Copy/Delete refused: TLO recovery/work directory under {current}; move it to a safe separate location first")
     source_leaf = os.path.basename(source_root) or compact_ws(getattr(record, "main_dir_name", "")) or "TLO Show"
     show_name = _compliant_rename_show_name_from_record(record)
     use_compliant_name = bool(getattr(config, "rename_compliantly", False)) and bool(show_name)

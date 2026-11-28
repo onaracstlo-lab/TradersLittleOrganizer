@@ -149,3 +149,23 @@ def windows_reserved_folder_name(name: str) -> bool:
     """Return True when a leaf would be a reserved Windows DOS device name."""
     leaf = str(name or "").strip(" .")
     return bool(leaf and _WINDOWS_DEVICE_RE.fullmatch(leaf))
+
+
+def trusted_windows_tool(name: str, *, directory_provider=None) -> str:
+    """Resolve explicitly allowed native tools without PATH or CWD lookup."""
+    import ntpath
+    import re
+    paths = {
+        "powershell.exe": ("System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+        "msiexec.exe": ("System32", "msiexec.exe"),
+        "whoami.exe": ("System32", "whoami.exe"),
+        "icacls.exe": ("System32", "icacls.exe"),
+        "explorer.exe": ("explorer.exe",),
+    }
+    if name not in paths:
+        raise ValueError("Unsupported Windows helper")
+    directory = ntpath.normpath((directory_provider or windows_directory_from_api)())
+    drive, tail = ntpath.splitdrive(directory)
+    if not re.fullmatch(r"[A-Za-z]:", drive) or not tail.startswith("\\"):
+        raise ValueError("Invalid Windows directory reported by the OS")
+    return ntpath.join(directory, *paths[name])

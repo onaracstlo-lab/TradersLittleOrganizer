@@ -92,13 +92,8 @@ def _setlistfm_upgrade_gate_message(status: str) -> str:
     """Return a non-secret explanation when a setlist.fm control is unavailable."""
     if status == "missing-normal":
         return "setlist.fm is disabled because SETLISTFM_API_KEY is unavailable."
-    if status == "missing-upgrade":
-        return (
-            "setlist.fm Upgrade is disabled because neither SETLISTFMUPGRADE_API_KEY nor "
-            "SETLISTFM_UPGRADE_API_KEY is available."
-        )
     if status == "mismatch":
-        return "setlist.fm Upgrade is disabled because the upgrade key does not match SETLISTFM_API_KEY."
+        return "setlist.fm Upgrade is disabled because the legacy upgrade key does not match SETLISTFM_API_KEY. Remove or correct the legacy variable."
     if status == "invalid-characters":
         return "setlist.fm Upgrade is disabled because one of the configured keys contains invalid control or invisible characters."
     return ""
@@ -305,7 +300,7 @@ def _build_help_text() -> str:
         "  --delete-extra-tags          Remove all tag fields except Artist, Album, Track Number, and Track Title when tagging.\n"
         "  --etree-lookup                Enable etreeDB venue/location lookup after artist and date are identified.\n"
         "  --setlistfm-lookup            Enable setlist.fm fallback/evidence lookup. Requires --etree-lookup on the command line.\n"
-        "  --setlistfm-upgrade           Enable upgraded setlist.fm limits when the matching upgrade key is available.\n"
+        "  --setlistfm-upgrade           Enable approved upgraded setlist.fm limits using the normal API key.\n"
         "  --thorough-setlist-matching  Compare additional local and enabled online setlist candidates for better track-title accuracy.\n"
         "  --corrupt-files ACTION       keep or delete individual corrupt files when their folder is retained.\n"
         "  --corrupt-folders POLICY     never, all, or threshold.\n"
@@ -1185,6 +1180,10 @@ class App:
                 self._run_after_menu_closes(lambda: self._open_search(db)))
         self.hamburger_menu.add_cascade(label="Search", menu=self.search_menu)
         self.hamburger_menu.add_command(
+            label="Manage Storage Identities",
+            command=lambda: self._run_after_menu_closes(self._open_storage_identities),
+        )
+        self.hamburger_menu.add_command(
             label="Reverse", command=lambda: self._run_after_menu_closes(self._open_reverse),
         )
         self.hamburger_menu.add_cascade(label="Donate", menu=self.donate_menu)
@@ -1498,7 +1497,7 @@ class App:
         self._sync_corruption_controls_state()
 
     def _apply_setlistfm_key_availability(self):
-        """Gate normal and upgraded setlist.fm controls on their environment variables."""
+        """Gate setlist.fm controls on the normal key and optional legacy key compatibility."""
         lookup_available = api_key_available()
         upgrade_available = lookup_available and upgrade_api_key_available()
 
@@ -1697,6 +1696,26 @@ class App:
             subprocess.Popen(command, shell=False, env=env)
         except (OSError, ValueError) as exc:
             messagebox.showerror("TLO Search", str(exc), parent=self.root)
+
+    def _open_storage_identities(self):
+        if (self._main_operation_is_running() or self._worker_is_alive()
+                or self._updater_is_open() or self._manual_updates_is_open()
+                or self._copy_requests_is_open() or self._redundancy_groups_is_open()):
+            messagebox.showwarning("Storage Identities", "Finish the active operation and close other operation windows first.", parent=self.root)
+            return
+        try:
+            from tlo_storage_gui import manage_storage_identities
+            manage_storage_identities(self.root, self._resolve_gui_tlo_home(error_type=ValueError))
+        except (OSError, RuntimeError, ValueError) as exc:
+            messagebox.showerror("Storage Identities", str(exc), parent=self.root)
+
+    def _confirm_inventory_loss(self, message):
+        return self._run_on_gui_thread(lambda: messagebox.askyesno(
+            "Significant Inventory Change", message, default=messagebox.NO, parent=self.root))
+
+    def _confirm_legacy_storage(self, message):
+        return self._run_on_gui_thread(lambda: messagebox.askyesno(
+            "Connect Existing Inventory?", message, default=messagebox.NO, parent=self.root))
 
     def _open_reverse(self):
         """Reverse logged folder operations only after an affirmative confirmation."""
@@ -2569,7 +2588,8 @@ class App:
             totals = None
             error = None
             try:
-                totals = run_tagger_jobs(config, jobs, emit=self.queue.put)
+                with inventory_operation_lock(config.TLOHome):
+                    totals = run_tagger_jobs(config, jobs, emit=self.queue.put)
             except Exception as exc:
                 error = exc
                 self.queue.put(f"ERROR: {exc}\n")
@@ -2854,6 +2874,9 @@ class App:
 
     def _cleanup_active_logs(self):
         if self.current_config is None:
+            return []
+        if getattr(self.current_config, "storage_identity_enabled", False):
+            # Let the inventory worker archive its unfinished run and restore metadata.
             return []
         return delete_logs_for_tokens(
             self.current_config.TLOHome,
@@ -3514,6 +3537,8 @@ class App:
                 raise ValueError(search_status.message)
             config = self._build_config()
             config.volume_action_callback = self._ask_existing_volume_action_threadsafe
+            config.inventory_loss_callback = self._confirm_inventory_loss
+            config.storage_legacy_callback = self._confirm_legacy_storage
         except _InventoryStartCancelled:
             return
         except Exception as exc:
@@ -4057,7 +4082,7 @@ class CopyRequestsWindow:
                     _dialog_title("Clear Stale Copy Request Lock"),
                     f"A stale Copy Request lock from {host} was found on the destination.\n\n"
                     f"Approximate age: {age_hours:.1f} hours.\n\nClear this stale lock and continue?",
-                    parent=dialog,
+                    default=messagebox.NO, parent=dialog,
                 ):
                     return
                 if not clear_destination_stale_lock(evaluation.destination):
@@ -4120,7 +4145,7 @@ class CopyRequestsWindow:
                 _dialog_title("Clear Stale Copy Request Lock"),
                 f"A stale Copy Request lock from {host} was found on:\n{destination}\n\n"
                 f"Approximate age: {age_hours:.1f} hours.\n\nClear this stale lock before Process All?",
-                parent=self.window,
+                default=messagebox.NO, parent=self.window,
             ):
                 return
             if not clear_destination_stale_lock(destination):
@@ -4129,7 +4154,7 @@ class CopyRequestsWindow:
         if not messagebox.askyesno(
             _dialog_title("Process All Active Requests"),
             f"Process {len(states)} active Copy Request(s) against the volumes that are connected now?\n\nEach request performs its own complete free-space preflight before copying.",
-            parent=self.window,
+            default=messagebox.NO, parent=self.window,
         ):
             return
 
@@ -4152,7 +4177,7 @@ class CopyRequestsWindow:
             messagebox.showinfo(
                 _dialog_title("Process All Active Requests"),
                 f"Requests processed: {len(results)}\nFolders copied: {copied}\nCopy failures: {failures}\nRequest-level errors: {request_errors}",
-                parent=self.window,
+                default=messagebox.NO, parent=self.window,
             )
             self._refresh()
 
@@ -4192,7 +4217,7 @@ class CopyRequestsWindow:
         if not messagebox.askyesno(
             _dialog_title("Close Copy Request"),
             "Close this request? Closed requests are kept for history but are not processed again. Copied music is not changed.",
-            parent=self.window,
+            default=messagebox.NO, parent=self.window,
         ):
             return
         try:
@@ -4208,7 +4233,7 @@ class CopyRequestsWindow:
         if not messagebox.askyesno(
             _dialog_title("Delete Copy Request"),
             "Delete this request's TLO state and report history?\n\nThis does NOT delete any copied music.",
-            parent=self.window,
+            default=messagebox.NO, parent=self.window,
         ):
             return
         try:
@@ -5259,7 +5284,15 @@ def main() -> int:
                 or (getattr(cli_args, "TLOHome", "") or "").strip()
                 or os.environ.get("TLOHome", "").strip()):
             return report_missing_tlo_home("tlo-main")
-        console_emit(f"ERROR: {exc}", error=True)
+        try:
+            error_root = tk.Tk()
+            error_root.withdraw()
+            try:
+                messagebox.showerror("TLO configuration error", str(exc), parent=error_root)
+            finally:
+                error_root.destroy()
+        except Exception:
+            console_emit(f"ERROR: {exc}", error=True)
         return 2
     root, _drop_provider = create_tk_root(tk)
     install_window_icon(root, "main")

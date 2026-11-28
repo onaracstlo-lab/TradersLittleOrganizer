@@ -2,11 +2,11 @@ from tlo_version import VERSION as _TLO_CANONICAL_VERSION
 __version__ = _TLO_CANONICAL_VERSION
 import os
 
-from tlo_media_rules import MEDIA_EXTENSIONS, parse_music_dir_marker
+from tlo_media_rules import has_media_extension, parse_music_dir_marker
 
 
 def _is_media_path_by_extension(path_name: str) -> bool:
-    return os.path.splitext(str(path_name or '').strip())[1].lower() in MEDIA_EXTENSIONS
+    return has_media_extension(str(path_name or '').strip())
 
 
 def compact_complete_path_log(log_file: str) -> int:

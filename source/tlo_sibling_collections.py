@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from tlo_diagnostics import debug_suppressed_exception
-from tlo_media_rules import MEDIA_EXTENSIONS
+from tlo_media_rules import has_media_extension
 from tlo_setlist_file_selection import _ordered_exception_files, _ordered_txt_files
 from tlo_wrapper_rules import split_wrapper_part_suffix
 from tlo_text_utils import decode_text_bytes, read_text_file_full
@@ -325,7 +325,7 @@ def _logged_media_paths(complete_path_log: str) -> List[str]:
     for raw in lines:
         value = raw.strip()
         if value and not value.startswith("#") and not value.startswith("SEARCH_PATH:"):
-            if os.path.splitext(value)[1].lower() in MEDIA_EXTENSIONS:
+            if has_media_extension(value):
                 results.append(os.path.normpath(value))
     return results
 
@@ -434,7 +434,7 @@ def _audio_files_under(root: str) -> List[str]:
             and not is_phase1_pruned_directory(name)
         ]
         for name in files:
-            if os.path.splitext(name)[1].lower() in MEDIA_EXTENSIONS:
+            if has_media_extension(name):
                 results.append(os.path.normpath(os.path.join(current, name)))
     return sorted(results, key=_natural_key)
 

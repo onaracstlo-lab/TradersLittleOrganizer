@@ -4,17 +4,12 @@ import os
 import re
 
 from tlo_runtime_control import throttle_point, normalize_performance_mode
-from tlo_path_policy import OS_MANAGED_DIR_NAMES, is_phase1_pruned_directory
+from tlo_path_policy import OS_MANAGED_DIR_NAMES, is_phase1_pruned_directory, is_ignorable_filesystem_artifact
 from console_output_lib import console_emit
 
 SYSTEM_DIR_NAMES_TO_PRUNE = OS_MANAGED_DIR_NAMES
 
-MUSIC_FILE_EXTENSIONS_PHASE1 = {
-    ".3gp", ".aac", ".aif", ".aiff", ".alac", ".ape", ".avi", ".flac",
-    ".flv", ".m2ts", ".m4a", ".m4v", ".mkv", ".mov", ".mp3", ".mp4",
-    ".mpeg", ".mpg", ".oga", ".ogg", ".opus", ".shn", ".shnf", ".ts",
-    ".vob", ".wav", ".webm", ".wmv", ".wv",
-}
+from tlo_media_rules import DISCOVERY as MUSIC_FILE_EXTENSIONS_PHASE1, has_media_extension
 
 SETLIST_LOOKUP_EXTENSIONS_PHASE1 = {".txt", ".rtf", ".doc", ".docx"}
 
@@ -64,7 +59,7 @@ def _phase1_is_real_music_file(path):
             return False
     except OSError:
         return False
-    return os.path.splitext(path)[1].lower() in MUSIC_FILE_EXTENSIONS_PHASE1
+    return has_media_extension(path, MUSIC_FILE_EXTENSIONS_PHASE1)
 
 
 def _phase1_is_setlist_lookup_file(path):
@@ -73,6 +68,8 @@ def _phase1_is_setlist_lookup_file(path):
         if not os.path.isfile(path):
             return False
     except OSError:
+        return False
+    if is_ignorable_filesystem_artifact(path):
         return False
     ext = os.path.splitext(path)[1].lower()
     if ext not in SETLIST_LOOKUP_EXTENSIONS_PHASE1:

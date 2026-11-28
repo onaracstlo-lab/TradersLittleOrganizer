@@ -1297,7 +1297,9 @@ def parse_cli_args(argv: Sequence[str]) -> tuple[Path, str | None]:
 
         raise AppConfigError(f"Unknown argument: {arg}")
 
-    tlohome_value = mytlo_arg_value or tlohome_arg_value or env_value
+    if mytlo_arg_value and tlohome_arg_value and os.path.normcase(os.path.normpath(mytlo_arg_value)) != os.path.normcase(os.path.normpath(tlohome_arg_value)):
+        raise AppConfigError("--TLOHome and --myTLO disagree; specify only one home.")
+    tlohome_value = tlohome_arg_value or mytlo_arg_value or env_value
     if not tlohome_value:
         from tlo_msi_install_mode import saved_msi_data_home_for_executable
         tlohome_value = saved_msi_data_home_for_executable()

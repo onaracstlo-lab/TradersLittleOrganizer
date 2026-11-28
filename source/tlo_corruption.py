@@ -32,18 +32,7 @@ from tlo_runtime_control import is_cancel_requested
 TRASH_SUBPROCESS_TIMEOUT_SECONDS = 60.0
 DEEP_AUDIO_CHECK_TIMEOUT_SECONDS = 1800.0
 
-MEDIA_EXTENSIONS = {
-    ".flac", ".mp3", ".m4a", ".mp4", ".aac", ".alac", ".ogg", ".oga", ".opus", ".wav",
-    ".aif", ".aiff", ".ape", ".wv", ".tta", ".wma", ".shn", ".shnf",
-}
-
-# Match the formats the tagger currently attempts to mutate.  Corruption
-# validation only performs the write round-trip when a real tagging mode is
-# active; non-tagging inventory remains header/read validation only.
-TAG_WRITE_CHECK_EXTENSIONS = {
-    ".flac", ".mp3", ".wav", ".m4a", ".aac", ".ogg", ".oga", ".opus",
-    ".aiff", ".aif", ".ape", ".wv", ".alac",
-}
+from tlo_media_rules import COUNTED_AUDIO as MEDIA_EXTENSIONS, TAG_WRITABLE as TAG_WRITE_CHECK_EXTENSIONS, has_media_extension
 
 _TAG_TEST_KEY = "TLO_CORRUPTION_TEST"
 _TAG_TEST_ID3_DESC = "TLO_CORRUPTION_TEST"
@@ -258,7 +247,7 @@ def group_audio_snapshot(group):
             except Exception as exc:
                 errors.append((path, f"{type(exc).__name__}: {exc}"))
                 continue
-            if is_file and Path(name).suffix.lower() in MEDIA_EXTENSIONS:
+            if is_file and has_media_extension(name, MEDIA_EXTENSIONS):
                 key = _norm(path)
                 if key not in seen:
                     seen.add(key)

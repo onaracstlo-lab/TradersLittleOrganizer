@@ -9,17 +9,14 @@ __version__ = _TLO_CANONICAL_VERSION
 
 from pathlib import Path
 import json
-import ntpath
 import os
 import sys
 
 
 def _trusted_system32_executable(name):
     """Fail closed to Windows' API-reported System32, never PATH or CWD."""
-    if name not in {"powershell.exe", "msiexec.exe"}:
-        raise ValueError("Unsupported Windows helper")
-    from tlo_security import windows_directory_from_api
-    return ntpath.join(windows_directory_from_api(), "System32", name)
+    from tlo_security import trusted_windows_tool
+    return trusted_windows_tool(name)
 
 
 def msi_install_root(executable=None):

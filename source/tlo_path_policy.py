@@ -26,7 +26,12 @@ TLO_TEMP_DIR_PREFIXES = (
     ".tlo-restore-",
     ".tlo-convert-",
     ".tlo-shn-originals",
+    ".tlo-deletedupes-originals-",
 )
+
+
+def is_tlo_work_directory(name: str) -> bool:
+    return str(name or "").strip().casefold().startswith(TLO_TEMP_DIR_PREFIXES)
 
 
 def is_phase1_pruned_directory(name: str) -> bool:
@@ -35,3 +40,11 @@ def is_phase1_pruned_directory(name: str) -> bool:
         lowered in OS_MANAGED_DIR_NAMES
         or any(lowered.startswith(prefix) for prefix in TLO_TEMP_DIR_PREFIXES)
     )
+
+
+def is_ignorable_filesystem_artifact(name: str) -> bool:
+    """Exclude OS sidecars and TLO-generated scratch files, not ordinary dotfiles."""
+    import os
+    leaf = os.path.basename(str(name or "").replace("\\", "/")).casefold()
+    return (leaf.startswith(("._", ".tlo-"))
+            or leaf in {".ds_store", "thumbs.db", "desktop.ini"})

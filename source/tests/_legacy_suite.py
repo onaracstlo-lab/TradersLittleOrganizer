@@ -2034,7 +2034,9 @@ def test_tlohome_mytlo_env_precedence_is_preserved(monkeypatch, tmp_path):
         path.mkdir()
 
     monkeypatch.setenv("TLOHome", str(env_home))
-    assert T.resolve_tlo_home(tlo_home=str(tlo_home), my_tlo=str(my_tlo)) == os.path.normpath(str(my_tlo))
+    with pytest.raises(T.TaggerError, match="disagree"):
+        T.resolve_tlo_home(tlo_home=str(tlo_home), my_tlo=str(my_tlo))
+    assert T.resolve_tlo_home(my_tlo=str(my_tlo)) == os.path.normpath(str(my_tlo))
     assert T.resolve_tlo_home(tlo_home=str(tlo_home), my_tlo="") == os.path.normpath(str(tlo_home))
     assert T.resolve_tlo_home(tlo_home="", my_tlo="") == os.path.normpath(str(env_home))
 
@@ -7075,11 +7077,9 @@ def test_v319_tlo_search_accepts_hidden_mytlo_with_same_precedence(tmp_path, mon
         path.mkdir()
     monkeypatch.setenv("TLOHome", str(env_home))
 
-    resolved, find_value = gsi.parse_cli_args([
-        "--TLOHome", str(cli_home),
-        "--myTLO", str(my_home),
-        "--find", "Dylan",
-    ])
+    with pytest.raises(gsi.AppConfigError, match="disagree"):
+        gsi.parse_cli_args(["--TLOHome", str(cli_home), "--myTLO", str(my_home)])
+    resolved, find_value = gsi.parse_cli_args(["--myTLO", str(my_home), "--find", "Dylan"])
 
     assert resolved == my_home
     assert find_value == "Dylan"
@@ -7552,7 +7552,9 @@ def test_v330_search_cli_keeps_mytlo_before_tlohome_before_env(tmp_path, monkeyp
         home.mkdir()
     monkeypatch.setenv("TLOHome", str(env_home))
 
-    resolved, _find = search_gui.parse_cli_args(["--TLOHome", str(tlo_home), "--myTLO", str(my_home)])
+    with pytest.raises(search_gui.AppConfigError, match="disagree"):
+        search_gui.parse_cli_args(["--TLOHome", str(tlo_home), "--myTLO", str(my_home)])
+    resolved, _find = search_gui.parse_cli_args(["--myTLO", str(my_home)])
 
     assert resolved == my_home
 

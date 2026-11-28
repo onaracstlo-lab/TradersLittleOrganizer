@@ -21,7 +21,7 @@ from tlo_diagnostics import debug_suppressed_exception
 from tlo_ffmpeg import bundled_ffmpeg_executable as _bundled_ffmpeg_executable
 from tlo_path_inputs import normalize_platform_input_path, resolve_tlo_home, strip_optional_quotes
 from tlo_text_utils import normalized_compare_value
-from tlo_path_policy import is_phase1_pruned_directory
+from tlo_path_policy import is_phase1_pruned_directory, is_ignorable_filesystem_artifact
 
 
 _COPY_SUFFIX_RE = re.compile(r"^(?P<base>.+?)\s+\(copy\s*(?P<number>[1-9]\d*)\)$", re.IGNORECASE)
@@ -794,9 +794,10 @@ def _relative_flac_paths(root: str) -> List[str]:
         # Do not descend through directory symlinks even if os.walk reports them.
         dir_names[:] = [
             name for name in dir_names if not os.path.islink(os.path.join(current_dir, name))
+            and not is_phase1_pruned_directory(name)
         ]
         for file_name in file_names:
-            if os.path.splitext(file_name)[1].lower() != ".flac":
+            if is_ignorable_filesystem_artifact(file_name) or os.path.splitext(file_name)[1].lower() != ".flac":
                 continue
             full_path = os.path.join(current_dir, file_name)
             if os.path.islink(full_path) or not os.path.isfile(full_path):
@@ -813,7 +814,7 @@ def _sha256_file(path: str) -> str:
     return digest.hexdigest()
 
 
-def _replace_file_from_copy(source_path: str, destination_path: str) -> None:
+def _replace_file_from_copy(source_path: str, destination_path: str, *, holding_parent=None, holding_run=None, relative_name=None, repair_log=None) -> None:
     """Stage, verify, atomically install, and safely roll back a FLAC repair.
 
     The prior keeper bytes are snapshotted before any replacement. A backup is
@@ -908,14 +909,40 @@ def _replace_file_from_copy(source_path: str, destination_path: str) -> None:
                 pass
         if backup_path:
             if installed and installation_verified:
-                # Successful repair: cleanup is best-effort. Leaving a verified
-                # backup behind is safer than turning cleanup failure into a
-                # failed repair.
+                # Keep the original bytes in a unique, same-volume holding
+                # directory. If relocation fails, retain the verified backup
+                # exactly where it was instead of deleting it.
                 try:
-                    os.remove(backup_path)
+                    holding_dir = holding_parent or destination_dir
+                    if os.stat(holding_dir).st_dev != os.stat(destination_dir).st_dev:
+                        holding_dir = destination_dir
+                        relative_name = None
+                    if holding_run is not None and holding_dir == holding_parent:
+                        if not holding_run.get(holding_dir):
+                            holding_run[holding_dir] = tempfile.mkdtemp(prefix=".tlo-deleteDupes-originals-", dir=holding_dir)
+                        held = holding_run[holding_dir]
+                    else:
+                        held = tempfile.mkdtemp(prefix=".tlo-deleteDupes-originals-", dir=holding_dir)
+                    relative = relative_name or os.path.basename(destination_path)
+                    if os.path.isabs(relative) or ".." in relative.replace("\\", "/").split("/"):
+                        relative = os.path.basename(destination_path)
+                    held_name = os.path.join(held, relative)
+                    os.makedirs(os.path.dirname(held_name), exist_ok=True)
+                    if os.path.lexists(held_name):
+                        held_name = os.path.join(tempfile.mkdtemp(dir=held), os.path.basename(destination_path))
+                    os.rename(backup_path, held_name)
                     backup_path = ""
+                    console_emit(f"Original FLAC retained for recovery: {held_name}")
+                    if repair_log:
+                        try:
+                            _log_retained_original(repair_log, destination_path, held_name, source_path)
+                        except OSError as exc:
+                            console_emit(f"WARNING: repair log could not be written: {exc}; original retained at {held_name}", error=True)
                 except OSError:
-                    pass
+                    retained_path = backup_path or held_name
+                    console_emit(f"Original FLAC retained for recovery: {retained_path}", error=True)
+                    if repair_log and backup_path:
+                        _log_retained_original(repair_log, destination_path, retained_path, source_path)
             elif not installed:
                 # Installation never happened, so the keeper still has its
                 # original bytes. A partial or complete backup must never be
@@ -927,6 +954,25 @@ def _replace_file_from_copy(source_path: str, destination_path: str) -> None:
                     pass
 
 
+def _log_retained_original(path, keeper, retained, source):
+    import datetime
+    with open(path, "a", encoding="utf-8", newline="") as log:
+        csv.writer(log).writerow([datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                                  os.path.abspath(keeper), os.path.abspath(retained), os.path.abspath(source)])
+        log.flush()
+        os.fsync(log.fileno())
+
+
+def _recorded_flac_md5(path):
+    """Return the declared nonzero STREAMINFO MD5, or None if it is absent."""
+    from tlo_flac_fingerprint import _streaminfo, FingerprintCorrupt
+    try:
+        digest = _streaminfo(path, allow_unset_md5=True)[-1]
+    except FingerprintCorrupt:
+        return None
+    return digest if any(digest) else None
+
+
 def repair_corrupt_flacs_from_copies(
     original_path: str,
     copies: Iterable[CopyCandidate],
@@ -935,6 +981,9 @@ def repair_corrupt_flacs_from_copies(
     health_check=flac_file_is_healthy,
     replace_func=_replace_file_from_copy,
     emit=console_emit,
+    search_root=None,
+    holding_run=None,
+    repair_log=None,
 ) -> Tuple[int, int, bool]:
     """Repair corrupt original FLACs from healthy copies in numeric copy order.
 
@@ -969,6 +1018,11 @@ def repair_corrupt_flacs_from_copies(
 
         emit(f"Corrupt FLAC detected in kept folder: {original_flac}", error=True)
         repaired = False
+        try:
+            keeper_md5 = _recorded_flac_md5(original_flac)
+        except (OSError, MemoryError):
+            emit(f"Cannot read keeper STREAMINFO: {original_flac}; no duplicate moved", error=True)
+            return repaired_count, unrepaired_count, True
         for candidate in ordered_copies:
             candidate_flac = os.path.normpath(os.path.join(candidate.path, relative_path))
             if not os.path.isfile(candidate_flac) or os.path.islink(candidate_flac):
@@ -979,7 +1033,23 @@ def repair_corrupt_flacs_from_copies(
                     emit(f"FLAC integrity unverifiable for repair candidate (no copy used): {candidate_flac}", error=True)
                 continue
             try:
-                replace_func(candidate_flac, original_flac)
+                if keeper_md5 is not None and _recorded_flac_md5(candidate_flac) != keeper_md5:
+                    emit(f"Different recorded FLAC audio MD5; repair candidate skipped: {candidate_flac}", error=True)
+                    continue
+                if replace_func is _replace_file_from_copy:
+                    # Hold originals outside the show when the parent is on
+                    # the same volume; future Copy/Delete cannot consume them.
+                    parent = os.path.dirname(os.path.abspath(original_path))
+                    if search_root:
+                        root = os.path.abspath(search_root)
+                        outside = os.path.dirname(root)
+                        parent = outside if os.stat(outside).st_dev == os.stat(original_flac).st_dev else root
+                    relative_name = os.path.relpath(original_flac, parent)
+                    replace_func(candidate_flac, original_flac, holding_parent=parent,
+                                 holding_run=holding_run, relative_name=relative_name if search_root else None,
+                                 repair_log=repair_log)
+                else:
+                    replace_func(candidate_flac, original_flac)
             except KeyboardInterrupt:
                 raise
             except (OSError, DeleteDupesError) as exc:
@@ -1052,6 +1122,9 @@ def delete_duplicate_copy_directories(
     log_path = os.path.join(tlo_home, "deletedDirs.txt")
     mismatch_log_path = os.path.join(tlo_home, "deleteDupesMismatches.txt")
     moved_count = 0
+    repaired_count = 0
+    holding_run = {}
+    repair_log = os.path.join(tlo_home, "deleteDupesRepairs.txt")
     validator = ffmpeg_executable or _bundled_ffmpeg_executable()
     if not validator:
         raise DeleteDupesError(
@@ -1108,7 +1181,11 @@ def delete_duplicate_copy_directories(
                 health_check=health_check,
                 replace_func=replace_func,
                 emit=emit,
+                search_root=search_root,
+                holding_run=holding_run,
+                repair_log=repair_log,
             )
+            repaired_count += _repaired
             if keeper_unverifiable:
                 emit(
                     f"Skipping duplicate cluster; keeper has unverifiable FLAC (see file-specific reason above): {original_path}",
@@ -1149,6 +1226,10 @@ def delete_duplicate_copy_directories(
                 moved_count += 1
                 emit(f"Moved duplicate folder to {destination_path}")
 
+    emit(f"Repair summary: repaired={repaired_count}; retained originals recorded in {repair_log}")
+    if moved_count:
+        emit(f"{moved_count} duplicate folder(s) relocated. Re-inventory {search_root} to refresh bootlist.csv; "
+             "the significant-change approval may appear when 25% or more previously inventoried performances are affected.")
     return moved_count
 
 
@@ -1169,7 +1250,7 @@ def _parse_args(argv=None):
         ),
     )
     parser.add_argument(
-        "--TLOHome",
+        "--TLOHome", "--tlo-home",
         dest="TLOHome",
         default="",
         metavar="DIR",
@@ -1179,6 +1260,7 @@ def _parse_args(argv=None):
         "--duplicates-dir", dest="duplicates_dir", default=None, metavar="DIR",
         help="Optional same-filesystem destination for relocated duplicate folders.",
     )
+    parser.add_argument("--dry-run", action="store_true", help="List candidate duplicate clusters; no repair, move, or log changes.")
     parser.add_argument("--myTLO", dest="myTLO", default="", metavar="DIR", help=argparse.SUPPRESS)
     parser.add_argument("path", metavar="PATH", help="Fully qualified directory path to search recursively.")
     return parser.parse_args(argv)
@@ -1187,9 +1269,24 @@ def _parse_args(argv=None):
 def main(argv=None) -> int:
     try:
         args = _parse_args(argv)
-        tlo_home = resolve_tlo_home(args.TLOHome, args.myTLO, error_type=DeleteDupesError, app_name="tlo-deleteDupes")
+        try:
+            tlo_home = resolve_tlo_home(args.TLOHome, args.myTLO, error_type=DeleteDupesError, app_name="tlo-deleteDupes")
+        except DeleteDupesError as exc:
+            console_emit(f"ERROR: {exc}", error=True)
+            return 2
         search_root = validate_input_path(args.path)
-        moved_count = delete_duplicate_copy_directories(search_root, tlo_home, duplicates_root=args.duplicates_dir)
+        if args.dry_run:
+            exclusions = (args.duplicates_dir,) if args.duplicates_dir else ()
+            count = 0
+            for keeper, copies in _matching_duplicate_groups(search_root, exclude_paths=exclusions):
+                for copy in copies:
+                    console_emit(f"Candidate: {copy.path} | keep {keeper} (subject to real FLAC validation)")
+                    count += 1
+            console_emit(f"Dry Run: {count} candidate duplicate folders; no repair or relocation performed.")
+            return 0
+        from tlo_runtime_control import inventory_operation_lock
+        with inventory_operation_lock(tlo_home):
+            moved_count = delete_duplicate_copy_directories(search_root, tlo_home, duplicates_root=args.duplicates_dir)
         console_emit(f"Complete: duplicate_folders_moved={moved_count}")
         return 0
     except KeyboardInterrupt:

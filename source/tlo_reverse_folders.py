@@ -322,7 +322,18 @@ def reverse_folder_operations(
 
     # Reverse deepest destinations first so nested mappings cannot invalidate parents.
     operations = sorted(plan.operations, key=lambda op: (op.destination.count(os.sep), op.line_number), reverse=True)
+    from tlo_storage_identities import check_folder_operation
+    verified = {}
     for op in operations:
+        try:
+            if not check_folder_operation(plan.tlo_home, op.code, op.source, op.destination, verified):
+                result.conflicts += 1
+                report(f"CONFLICT: logged storage identity cannot be verified; folders left untouched | {op.source} | {op.destination}")
+                continue
+        except Exception as exc:
+            result.errors += 1
+            report(f"ERROR: storage identity verification failed; folders left untouched | {exc}")
+            continue
         src_exists = os.path.isdir(op.source)
         dst_exists = os.path.isdir(op.destination)
         prefix = f"{op.operation.upper()} line {op.line_number}"

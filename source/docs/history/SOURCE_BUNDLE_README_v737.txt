@@ -1,9 +1,13 @@
-TLO Source Bundle v735 — SOURCE CANDIDATE / NOT A RUNNABLE DISTRIBUTION
-Traders Little Organizer v1.7 Build 735
+TLO Source Bundle v737 — SOURCE CANDIDATE / NOT A RUNNABLE DISTRIBUTION
+Traders Little Organizer v1.7 Build 737
 Native GitHub Build Process: v169
 
 Current functionality
 ---------------------
+Rename Compliantly expands verified alphanumeric Artist DB trading aliases and omits narrow ordinary dotted source/media tails (e.g. rw2c2002-03-24.aud.flac16), preserving the resolved performance name and other identity safeguards.
+
+Manage Storage Identities is available in Main. Registration separates physical disk/partition, inventory folder and logical backup relationship. Optional native hardware information supplements the root identification file. Re-inventory requires explicit approval at 25% or more previous performances lost/changed; fresh logs and prior metadata snapshots safeguard the previous inventory. Use the GUI, not system commands. See the manual and FAQ.
+
 This source candidate contains TLO inventory, tagging, Add New Shows, Manual Tweaks, copy requests, search, log research, folder reversal and duplicate cleanup. The Main hamburger includes Search (Inventory, Artist, Cities, Venues) and Reverse. Search preloads the clipboard; Reverse uses a single fully qualified Path(s), requires affirmative default-No confirmation, honors Dry Run, and uses the existing locked folder reversal engine. Ordinary Reverse does not restore audio tags or inventory records. See the User Manual for workflow details.
 
 Undated Artist - Album writes the album title only even with Artist In Album Tag checked. Rename Compliantly normalizes the artist/album separator with one space on each side of the dash and preserves other identity information. The date-conflict validator compares distinct dates and only accepts uniquely corroborated performance evidence. Metadata evidence retains full drive, UNC and WSL mount paths. Venue matching preserves historical names and rejects unsafe or ambiguous changes.
@@ -24,20 +28,20 @@ tlo-deleteDupes.py: duplicate-folder review/cleanup.
 
 Current release files
 ---------------------
-TLO_Inventory_User_Manual_v735.rtf
-TLO_Inventory_Requirements_Working_v735.docx
-TLO_Requirements_Catalog_v735.csv
+TLO_Inventory_User_Manual_v737.rtf
+TLO_Inventory_Requirements_Working_v737.docx
+TLO_Requirements_Catalog_v737.csv
 TLO-FAQ.txt
-CHANGES_v735.txt
-SOURCE_BUNDLE_README_v735.txt
-BUILD_VERIFICATION_v735.txt
-REGRESSION_RESULTS_v735.txt
-RELEASE_NOTES_v735.txt
-REMEDIATION_PLAN_v735.md
-FINAL_DOCUMENTATION_AUDIT_v735.md
+CHANGES_v737.txt
+SOURCE_BUNDLE_README_v737.txt
+BUILD_VERIFICATION_v737.txt
+REGRESSION_RESULTS_v737.txt
+RELEASE_NOTES_v737.txt
+REMEDIATION_PLAN_v737.md
+FINAL_DOCUMENTATION_AUDIT_v737.md
 TLO_RELEASE_REMEDIATION.json
 CURRENT_STATUS.md
-SHA256SUMS_v735.txt
+SHA256SUMS_v737.txt
 SOURCE.txt
 THIRD_PARTY_NOTICES.txt
 LICENSE
@@ -48,8 +52,8 @@ WINDOWS_TEST_REMEDIATION_v680.csv (archival Windows CI checklist)
 Build and publication
 ---------------------
 Use TLO_GitHub_Build_Process_v169.zip separately. From PowerShell:
-  .\Run-TLO-GitHub-Build.ps1 -vnumber 1.7 -bnumber 735 -RepositoryPreflightOnly
-  .\Run-TLO-GitHub-Build.ps1 -vnumber 1.7 -bnumber 735
+  .\Run-TLO-GitHub-Build.ps1 -vnumber 1.7 -bnumber 737 -RepositoryPreflightOnly
+  .\Run-TLO-GitHub-Build.ps1 -vnumber 1.7 -bnumber 737
 
 Every successful build is a public pre-release by default; production promotion is manual. Preserve each build ZIP; never overwrite or reuse an earlier build. Full native Windows, Linux and macOS tests, pinned Ruff, build, scan, signing and MSI gates must pass before publication/promotion as applicable. Source Git SSH-signed commit and annotated pre-release tag must be GitHub-verified before source publication. The source tree must not contain bytecode or generated caches. The offline AST audit is not proof of Ruff success.
 
@@ -76,4 +80,4 @@ Examples:
 
 Documentation and evidence
 --------------------------
-User Manual, FAQ and Requirements describe current operation. Historical changes and results are in CHANGES_v735.txt, SOURCE_BUNDLE_HISTORY.txt and docs/history; the older incident matrices above are retained as evidence, not current acceptance claims. CURRENT_STATUS.md is the current summary. SOURCE.txt points to the corresponding source release tag. SHA256SUMS_v735.txt covers every source member except itself. Local source results never substitute for successful hosted CI, signing or installation acceptance.
+User Manual, FAQ and Requirements describe current operation. Historical changes and results are in CHANGES_v737.txt, SOURCE_BUNDLE_HISTORY.txt and docs/history; the older incident matrices above are retained as evidence, not current acceptance claims. CURRENT_STATUS.md is the current summary. SOURCE.txt points to the corresponding source release tag. SHA256SUMS_v737.txt covers every source member except itself. Local source results never substitute for successful hosted CI, signing or installation acceptance.

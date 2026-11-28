@@ -11,8 +11,8 @@ from tlo_setlistfm_lookup import ENV_API_KEY, ENV_UPGRADE_API_KEY, ENV_UPGRADE_A
 LOOKUP_DEPENDENCY_ERROR = "--setlistfm-lookup requires --etree-lookup on the command line."
 COMPLIANT_RENAME_CONFLICT_ERROR = "--compliant and --rename-compliantly are mutually exclusive."
 SETLISTFM_UPGRADE_KEY_ERROR = (
-    f"--setlistfm-upgrade requires {ENV_API_KEY} and either {ENV_UPGRADE_API_KEY} "
-    f"or {ENV_UPGRADE_API_KEY_ALIASES[0]}, with both variables containing the same setlist.fm API key."
+    f"--setlistfm-upgrade requires a valid {ENV_API_KEY}. If legacy {ENV_UPGRADE_API_KEY} "
+    f"or {ENV_UPGRADE_API_KEY_ALIASES[0]} is configured, it must contain the same setlist.fm API key; otherwise remove it."
 )
 
 
@@ -191,7 +191,7 @@ OPTIONS = [
     Option(
         "setlistfm_upgrade", "--setlistfm-upgrade", "flag",
         gui="checkbox", gui_label="setlist.fm Upgrade", gui_row=2, gui_col=0,
-        help="When setlist.fm lookup is enabled, use upgraded access limits of 14 requests/second and 48,000 requests/day. Requires SETLISTFMUPGRADE_API_KEY or SETLISTFM_UPGRADE_API_KEY, set to the same API key as SETLISTFM_API_KEY.",
+        help="When setlist.fm lookup is enabled, use upgraded access limits of 14 requests/second and 48,000 requests/day. Select only if your setlist.fm access has been approved for upgraded limits. Requires SETLISTFM_API_KEY; no duplicate secret is needed.",
     ),
     Option(
         "thorough_setlist_matching", "--thorough-setlist-matching", "flag",
@@ -368,7 +368,7 @@ def validate_compliant_rename_exclusivity(values: dict) -> None:
 
 
 def validate_setlistfm_upgrade_environment(values: dict) -> None:
-    """Require matching normal/upgrade keys only when setlist.fm lookup is active."""
+    """Validate the normal key and optional legacy upgrade key when explicit lookup/upgrade is active."""
     if not bool(values.get("setlistfm_upgrade", False)) or not bool(values.get("setlistfm_lookup", False)):
         return
     if not upgrade_api_key_available():

@@ -13,7 +13,7 @@ from datetime import date, datetime
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from console_output_lib import console_print
-from tlo_media_rules import MEDIA_EXTENSIONS, VIDEO_EXTENSIONS, parse_music_dir_marker
+from tlo_media_rules import has_media_extension, MEDIA_EXTENSIONS, VIDEO_EXTENSIONS, parse_music_dir_marker
 from tlo_wrapper_rules import (
     is_exact_wrapper_name,
     is_standard_video_folder_name,
@@ -287,7 +287,7 @@ def _group_trailing_parentheticals(group: dict) -> str:
 
 
 def _is_music_file(path_name: str) -> bool:
-    return bool(path_name and os.path.isfile(path_name) and os.path.splitext(path_name)[1].lower() in MEDIA_EXTENSIONS)
+    return bool(path_name and os.path.isfile(path_name) and has_media_extension(path_name))
 
 
 def _is_video_media_file_name(path_name: str) -> bool:
@@ -1603,6 +1603,7 @@ def _build_groups_from_search_path(config, start_path: str) -> List[dict]:
         chosen = setlist_files[0] if setlist_files else ""
         item = {
             "main_dir_path": main_dir_path,
+            "search_root": os.path.abspath(start_path),
             "main_dir_name": bucket["main_dir_name"],
             "music_dirs": music_dirs,
             "music_files": music_files,
@@ -1704,8 +1705,29 @@ def _eligible_artist_path_parts(group: dict) -> List[Tuple[str, str]]:
     music_dirs = list(group.get("music_dirs", []) or [])
     if not music_dirs and group.get("main_dir_path"):
         music_dirs = [group.get("main_dir_path")]
+    root = group.get("search_root")
+    main_path = group.get("main_dir_path", "")
     for music_dir in music_dirs:
         for cleaned, part_path in _all_clean_path_parts(music_dir):
+            if root and not _physical_path_is_same_or_under(part_path, root):
+                continue
+            # POSIX mount plumbing is not artist metadata, even if explicitly
+            # selected as the collection root.
+            physical = os.path.abspath(part_path).replace("\\", "/")
+            if re.fullmatch(r"/(?:Volumes/[^/]+|mnt/[^/]+|media/[^/]+(?:/[^/]+)?|run/media/[^/]+(?:/[^/]+)?)", physical, re.I):
+                continue
+            if root and main_path and not _physical_path_is_same_or_under(part_path, main_path):
+                # Dated show with an explicit artist prefix: do not replace it
+                # with the name of a container. Compact trading abbreviations
+                # remain eligible when the ancestor independently matches them.
+                leaf = os.path.basename(os.path.normpath(main_path))
+                match = re.search(r"(?<![0-9])(?:18|19|20)[0-9]{2}[-_.][0-9xX]{2}[-_.][0-9xX]{2}", leaf)
+                if match:
+                    prefix = leaf[:match.start()].strip(" -_.")
+                    if prefix and not (len(prefix) <= 4 and not leaf[match.start()-1].isspace()):
+                        continue
+                if group.get("flac_tag_artist_values") or group.get("flac_tag_albumartist_values"):
+                    continue
             if (
                 INTEGER_RE.fullmatch(cleaned)
                 or len(cleaned) == 1
@@ -6130,7 +6152,11 @@ def _collect_pattern_matches_for_group(group: dict, artist_matcher: Optional[Art
     a metadata hint so a name like "Artist Date Venue City ST (Volume 1)" can
     still provide Artist/Date/Venue/Location after the folders are grouped.
     """
-    required_matches, optional_matches = _collect_pattern_matches(group.get("main_dir_path", ""), artist_matcher)
+    parts = _candidate_path_parts(group.get("main_dir_path", ""))
+    root = group.get("search_root")
+    if root:
+        parts = [(part, path) for part, path in parts if _physical_path_is_same_or_under(path, root)]
+    required_matches, optional_matches = _collect_pattern_matches_from_parts(parts, artist_matcher)
     hint = compact_ws(group.get("aggregate_release_base", ""))
     if not hint:
         return required_matches, optional_matches

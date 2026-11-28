@@ -14,6 +14,7 @@ from tlo_bootlist_volume_policy import (
     read_group_log_volume_rows,
     paths_related,
     path_is_same_or_under,
+    read_bootlist_rows,
     normalize_path_for_compare,
     normalize_volume_action,
     normalize_volume_label,
@@ -864,11 +865,29 @@ def _resolve_existing_volume_actions(config, accessible_items):
         scope = _inventory_scope_for_item(config, item)
         path_name = scope["inventory_path"]
         volume_label = scope["volume_label"]
+        registered = bool(getattr(config, "storage_identity_enabled", False))
+        if registered:
+            from tlo_storage_identities import register_inventory_root, stored_path
+            callback = getattr(config, "storage_legacy_callback", None)
+            root_id, identity = register_inventory_root(config.TLOHome, path_name, callback, suggested_name=volume_label)
+            if volume_label and volume_label.casefold() != identity["name"].casefold():
+                console_print(config, f"Requested label [{volume_label}] differs from registered inventory [{identity['name']}]; using registered inventory name.")
+            volume_label = identity["name"]
+            scope_path = stored_path(config.TLOHome, volume_label, path_name)
+            # Stable inventory name and canonical root path are separate from
+            # the physical mount and user-visible filesystem label.
+            scope["volume_label"] = volume_label
+        else:
+            root_id = ""
+            scope_path = path_name
         same_volume_rows = [
             row for row in group_rows
             if volume_key(row.get("Volume", "")) == volume_key(volume_label)
         ]
-        related_rows = [] if not volume_label else _related_group_rows_for_item(path_name, volume_label, group_rows)
+        related_rows = [] if not volume_label else _related_group_rows_for_item(scope_path, volume_label, group_rows)
+        previous_rows = [row for row in read_bootlist_rows(config.TLOHome)
+                         if volume_key(row.get("Volume", "")) == volume_key(volume_label)
+                         and path_is_same_or_under(row.get("Path", ""), scope_path)] if registered else []
 
         if not volume_label:
             # Drives with no visible volume label are intentionally append-only.
@@ -879,9 +898,9 @@ def _resolve_existing_volume_actions(config, accessible_items):
                 config,
                 f"Blank volume label inventory: {path_name} will append to the blank-volume log set; duplicate control is left to the user.",
             )
-        elif not same_volume_rows:
+        elif not same_volume_rows and not previous_rows:
             action = "new"
-        elif related_rows and scope.get("copy_mode") == "copy-delete":
+        elif (related_rows or previous_rows) and scope.get("copy_mode") == "copy-delete":
             # Copy/Delete Original inventories the transferred shows under the
             # destination parent, but that parent is only a container.  Treating
             # the whole destination (for example /mnt/d/boots) as the
@@ -895,7 +914,7 @@ def _resolve_existing_volume_actions(config, accessible_items):
                 f"Existing inventory decision: [{volume_label}] {path_name} is a Copy/Delete destination container; "
                 f"preserving existing destination inventory and appending transferred shows.",
             )
-        elif related_rows:
+        elif related_rows or previous_rows:
             # Deterministic volume/path policy: same labeled volume + overlapping
             # path always re-inventories the affected subtree.  No prompt is shown.
             action = "reinventory"
@@ -913,14 +932,16 @@ def _resolve_existing_volume_actions(config, accessible_items):
                 f"Existing inventory decision: [{volume_label}] {path_name} -> append non-overlapping path to existing volume log.",
             )
 
-        exact_rows, child_rows, parent_rows = _token_rows_by_relationship(related_rows, path_name)
+        exact_rows, child_rows, parent_rows = _token_rows_by_relationship(related_rows, scope_path)
         decisions.append({
             "item_index": item_index,
             "source_path": source_path,
             "volume": volume_label or "",
             "volume_key": volume_key(volume_label),
-            "path": path_name,
-            "path_key": normalize_path_for_compare(path_name),
+            "path": scope_path,
+            "physical_path": path_name,
+            "root_id": root_id,
+            "path_key": normalize_path_for_compare(scope_path),
             "action": action,
             "exact_tokens": _tokens_from_rows(exact_rows),
             "child_tokens": _tokens_from_rows(child_rows),
@@ -985,6 +1006,9 @@ def _prepare_log_reuse_for_decision(config, decision, path_name, volume_label):
 
 def apply_existing_volume_actions(config, accessible_items):
     decisions = _resolve_existing_volume_actions(config, accessible_items)
+    if getattr(config, "storage_identity_enabled", False):
+        from tlo_inventory_guard import preflight_inventory_loss
+        preflight_inventory_loss(config, decisions)
     filtered = []
     skipped = []
     for item_index, item in enumerate(accessible_items):
@@ -997,11 +1021,18 @@ def apply_existing_volume_actions(config, accessible_items):
         copy_destination = scope.get("copy_destination", "") or ""
         decision = next((d for d in decisions if d.get("item_index") == item_index), None)
         action = (decision or {}).get("action", "new")
+        if (decision or {}).get("root_id"):
+            volume_label = decision["volume"]
         if action == "skip":
             skipped.append((source_path, inventory_path, volume_label))
             continue
 
-        token, log_mode = _prepare_log_reuse_for_decision(config, decision, inventory_path, volume_label)
+        # Registered runs use new tokens. Old metadata is not pruned until the
+        # completed scan and loss confirmation have succeeded.
+        if (decision or {}).get("root_id"):
+            token, log_mode = "", "w"
+        else:
+            token, log_mode = _prepare_log_reuse_for_decision(config, decision, inventory_path, volume_label)
         if copy_mode or copy_destination or os.path.normpath(str(inventory_path or "")) != os.path.normpath(str(source_path or "")):
             filtered.append((
                 source_path,

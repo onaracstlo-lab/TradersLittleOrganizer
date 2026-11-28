@@ -89,7 +89,9 @@ while ($true) {
     }
     Start-Sleep -Seconds 2
 }
-# Revalidate the file immediately before running Windows Installer.
+# Prevent writes and replacement during final verification and installer use.
+$msiHandle = [IO.File]::Open($msi, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+try {
 if ((Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash -ine $ExpectedSha256) {
     throw 'MSI changed while waiting for application exit.'
 }
@@ -97,9 +99,10 @@ $log = Join-Path ([IO.Path]::GetTempPath()) ('TLO-MSI-Update-' + (Get-Date -Form
 $quoted = '"' + $msi + '"'
 $msiArgs = @('/i', $quoted, '/qn', '/norestart', '/L*v', ('"' + $log + '"'))
 $result = Start-Process -FilePath (Join-Path ([Environment]::SystemDirectory) 'msiexec.exe') -ArgumentList $msiArgs -Wait -PassThru
+} finally { $msiHandle.Dispose() }
 if ($result.ExitCode -notin @(0,3010)) {
     $sourceHint = switch ($result.ExitCode) {
-        1612 { 'Windows Installer could not locate a previous installation source (possibly the Build 685 MSI), not necessarily the newly downloaded MSI. Inspect the MSI log for SOURCEMGMT and ResolveSource messages.' }
+        1612 { 'Windows Installer could not locate a previous installation source, not necessarily the newly downloaded MSI. Inspect the MSI log for SOURCEMGMT and ResolveSource messages.' }
         1619 { 'Windows Installer could not open the downloaded MSI. Confirm its exact path and check access controls and security software.' }
         1620 { 'Windows Installer rejected the MSI package. Confirm the package and signature before retrying.' }
         default { 'Inspect the MSI verbose log for the actual failing operation.' }

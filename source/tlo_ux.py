@@ -370,8 +370,7 @@ def _preview_actions(config, *, copy_mode: str = "", tagger: bool = False, shn_c
     else:
         actions.append("inventory only")
 
-    if bool(getattr(config, "rename_compliantly", False)):
-        actions.append("rename to resolved compliant show name")
+
     if bool(getattr(config, "convert_shn", False)) and shn_count:
         actions.append("convert SHN to FLAC and remove verified SHN source")
     return tuple(actions)
@@ -587,6 +586,23 @@ def preview_operation(
                     result.media_files += len(audio_files)
                     result.shn_files += shn_count
                     actions = _preview_actions(preview_config, copy_mode=copy_mode, tagger=tagger, shn_count=shn_count)
+                    record = plan.get("_record")
+                    if bool(getattr(preview_config, "rename_compliantly", False)):
+                        from tlo_tag_lib import _compliant_rename_show_name_from_record, safe_compliant_folder_name
+                        from tlo_rename_safety import safe_rename_target
+                        leaf = os.path.basename(os.path.normpath(group["main_dir_path"]))
+                        if not record or not record.artist or not record.show_name:
+                            actions += ("rename skipped: show unidentified",)
+                        else:
+                            target = safe_compliant_folder_name(_compliant_rename_show_name_from_record(record), fallback=leaf)
+                            accepted, reason = safe_rename_target(leaf, target, artist=record.artist, date=record.date,
+                                                                  verified_prefix=record.verified_rename_prefix)
+                            actions += (("rename skipped: " + reason) if not accepted else
+                                        ("no rename needed" if accepted == leaf else "rename to " + accepted),)
+                    if record and record.evidence.get("artist") and all(
+                        item.source.startswith("subdirectory:") for item in record.evidence["artist"]
+                    ):
+                        actions += ("Review artist: based only on directory evidence",)
                     if not tagger and (
                         bool(getattr(preview_config, "deep_audio_check", False))
                         or bool(getattr(preview_config, "tag_during_inventory", False))

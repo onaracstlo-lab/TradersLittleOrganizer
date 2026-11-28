@@ -1,3 +1,11 @@
+Build 743: Bound generic ancestor artist evidence to the selected root and prevent explicit dated artist text or existing tags from being replaced by container names; fold accent queries against the Artist DB; report non-Latin unrepresentable artists as unidentified; use the actual rename guard in Dry Run; lock mutating CLI Tag, GUI Tag and duplicate cleanup. Exclude TLO work/held-original directories from Tag Copy and Copy Requests; refuse Copy/Delete when held data is nested; retain duplicate-repair originals with source-relative provenance and log repairs; warn to re-inventory after moves; align home options, safe confirmation defaults, auxiliary search and CLI preview.
+Build 741: Fix native Windows re-inventory metadata backup finalization: finish the ZIP, flush and fsync the writable stream, close it, then atomically publish it. A durability failure still prevents inventory replacement and preserves prior metadata. Build Process v169 and database masters unchanged.
+Build 740: native Windows pre-signing regression failed; see archived verification.
+Build 740: repair source-owned remediation evidence identity and reserved findings namespace; source-local preflight regression; process v169 unchanged.
+Build 739: verified local review remediation; release preparation blocked by stale evidence identity and supplemental entries in reserved namespace.
+Build 738: source safety, catalog and recovery improvements.
+Build 737: verified alphanumeric trading shorthand and ordinary dotted source/media suffix normalization; process v169 unchanged.
+Build 736: storage identities, 25% inventory loss guard, GUI and documentation; process v169 unchanged.
 Build 735: fix PowerShell HOME collision in native MSI smoke test and Windows acceptance script; process v169 unchanged.
 
 Build 734: confirmed Main hamburger Reverse and reconciled current documentation; Build Process v169 unchanged.

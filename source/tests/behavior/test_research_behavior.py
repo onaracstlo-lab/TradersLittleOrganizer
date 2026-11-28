@@ -161,7 +161,9 @@ def test_research_cli_uses_my_tlo_then_tlohome_then_environment(tmp_path, monkey
     _write_logs(my_home, artist="My Artist", stem="My")
     monkeypatch.setenv("TLOHome", str(env_home))
 
-    assert cli.main(["--TLOHome", str(tlo_home), "--myTLO", str(my_home), "1977-05-08"]) == 0
+    assert cli.main(["--TLOHome", str(tlo_home), "--myTLO", str(my_home), "1977-05-08"]) == 2
+    assert "disagree" in capsys.readouterr().err
+    assert cli.main(["--myTLO", str(my_home), "1977-05-08"]) == 0
     output = capsys.readouterr().out
     assert "My Artist" in output
     assert "Explicit Artist" not in output

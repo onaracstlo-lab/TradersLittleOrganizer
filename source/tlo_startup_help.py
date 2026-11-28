@@ -17,7 +17,7 @@ def missing_tlo_home_message(app_name: str = "tlo-main") -> str:
         executable = executable[:-4]
     if executable not in {
         "tlo-main", "tlo-search", "tlo-tag", "tlo-gi",
-        "tlo-research", "tlo-reverse", "tlo-deleteDupes", "setlistFM",
+        "tlo-research", "tlo-reverse", "tlo-deleteDupes", "setlistFM", "searchAuxDBs",
     }:
         executable = "tlo-main"
     windows_command = (

@@ -1,0 +1,11 @@
+TLO v1.7 Build 736 — NOT RELEASE-ATTESTED
+Companion GitHub Build Process v169 (unchanged).
+Local Linux source regression (Python 3.12, pytest): 3197 passed, 39 skipped, 1 deselected, 1 warning, 8 subtests passed in 84.88s (0:01:24)
+Local companion build process regression: 194 passed, 14 skipped in 2.46s
+Ruff check .: PASS (local Ruff 0.16.10; pinned hosted lint is not attested).
+Release hygiene and requirements/catalog consistency checks: PASS.
+New storage-identity tests: 24 passed; include native local marker registration, simulated Windows GPT/MBR, WSL, Linux and macOS hardware adapters, network-folder replacement, missing local root marker, separate partitions and roots, copied markers, explicit replacement, legacy adoption, read-only fallback, verified Copy Requests, Reverse rejection on changed storage, 25% inclusive threshold, offsetting additions, fresh logs, and real postprocess metadata preservation/restoration.
+The full run deselected test_process_pool_crash_retains_completed_groups because the execution environment prevents its multiprocessing socket operations (PermissionError: Operation not permitted). Platform-specific, graphical-display, and unavailable audio-fixture tests account for the skips. The one warning is the deliberate duplicate ZIP filename fixture.
+Document validation: current Word requirements rendered; updated pages and manual storage management section reviewed. Requirements CSV locators match the current DOCX. User manual, FAQ and normative requirements describe the matching behavior and safeguards.
+All three supplied SQLite masters verified byte-for-byte unchanged from Build 735. Authoritative ArtistDB-Master staging still supplies venues.txt.
+Native GUI, real Windows/macOS/WSL disk queries and UNC remapping, complete Windows/Linux/macOS hosted acceptance, signed MSI installation/uninstallation and release acceptance are NOT ATTESTED for Build 736. Mock platform coverage does not certify physical hardware access. Run the unchanged process v169 and retain all native release gates.

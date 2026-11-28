@@ -204,17 +204,15 @@ def upgrade_api_key_status() -> str:
     normal, upgrade, _normal_source, _upgrade_source = _resolve_api_key_pair()
     if not normal:
         return "missing-normal"
-    if not upgrade:
-        return "missing-upgrade"
     if _key_has_invalid_characters(normal) or _key_has_invalid_characters(upgrade):
         return "invalid-characters"
-    if not hmac.compare_digest(normal.encode("utf-8"), upgrade.encode("utf-8")):
+    if upgrade and not hmac.compare_digest(normal.encode("utf-8"), upgrade.encode("utf-8")):
         return "mismatch"
     return "available"
 
 
 def upgrade_api_key_available() -> bool:
-    """Return True only when normal and upgrade variables hold the same API key."""
+    """Return True with a valid normal key; any configured legacy upgrade key must match."""
     return upgrade_api_key_status() == "available"
 
 

@@ -151,7 +151,7 @@ def test_main_search_launches_requested_tool_with_clipboard(monkeypatch, tmp_pat
 
 
 @pytest.mark.gui
-def test_aux_checkboxes_are_mutually_exclusive_and_search_preloads():
+def test_aux_radio_buttons_are_mutually_exclusive_and_search_preloads():
     try:
         root = tk.Tk()
     except tk.TclError:
@@ -166,7 +166,7 @@ def test_aux_checkboxes_are_mutually_exclusive_and_search_preloads():
             for child in widget.winfo_children():
                 yield child
                 yield from descendants(child)
-        choices = {w.cget("text"): w for w in descendants(root) if isinstance(w, tk.Checkbutton)}
+        choices = {w.cget("text"): w for w in descendants(root) if isinstance(w, tk.Radiobutton)}
         assert set(choices) == {"Artist", "City", "Venue"}
         choices["Venue"].invoke()
         assert app.database_var.get() == "Venue"

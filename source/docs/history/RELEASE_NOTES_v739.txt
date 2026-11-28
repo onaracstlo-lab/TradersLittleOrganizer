@@ -1,0 +1,3 @@
+TLO v1.7 Build 739 — source candidate
+Use same-volume retained originals and declared FLAC audio MD5 equality in duplicate repair; improve Artist/City/Venue search, shared read-only home resolution and explicit setlist.fm upgraded-access preference; fail CI startup without Tk; reconcile current documents and archive superseded notes.
+Build process v169 unchanged. Native acceptance pending.

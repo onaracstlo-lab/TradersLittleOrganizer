@@ -1,6 +1,6 @@
 # TLO source/build lint contract. The GitHub Build Process runs `python -m ruff check .`
 # so local and CI lint use this same checked-in rule set.
-target-version = "py310"
+target-version = "py313"
 
 [lint]
 select = ["F", "E9"]

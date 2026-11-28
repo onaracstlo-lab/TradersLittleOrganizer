@@ -75,7 +75,8 @@ class CityMatcher:
         self.path = Path(db_path).resolve()
         if not self.path.is_file():
             raise FileNotFoundError(f"Missing cities.sqlite: {self.path}")
-        self.connection = sqlite3.connect(self.path.as_uri() + "?mode=ro", uri=True)
+        from tlo_catalog_io import open_catalog_readonly
+        self.connection = open_catalog_readonly(self.path)
         self.connection.row_factory = sqlite3.Row
         try:
             self.connection.execute("PRAGMA query_only=ON")

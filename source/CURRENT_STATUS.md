@@ -1,9 +1,7 @@
-# Build 735 / GitHub Build Process v169
+# Build 743 / GitHub Build Process v169
 
-Resolve the PowerShell case-insensitive HOME automatic-variable collision in the Windows MSI installation smoke test and opt-in acceptance diagnostics. Keep all signing, native install/uninstall and database/shortcut acceptance gates.
+Cumulative follow-up for W1–W16; see detailed dispositions including limitations.
 
-Build 734 run 46074831272 built and signed the MSI but failed before native install acceptance. Native release acceptance for Build 735 is pending; see current release notes, regression report and verification. Prior status is in docs/history/CURRENT_STATUS_through_v734.md.
+Final cumulative local full application regression: 3270 passed, 39 skipped, 1 deselected, 2 warnings, 8 subtests passed in 124.71s. Focused follow-up: 102 passed, 2 display skips; new follow-up tests: 11 passed. Raw logs in docs/validation.
 
-All Build 734 Reverse and documentation changes remain. All three supplied SQLite catalogs remain unchanged; authoritative ArtistDB-Master staging includes venues.txt.
-
-Local application regression: 3173 passed, 39 skipped, 1 deselected, 1 warning, 8 subtests passed in 82.80s (0:01:22). Build process v169 regression: 194 passed, 14 skipped in 2.26s. Native checks pending.
+Complete source candidate; not a runnable signed distribution. See remediation plan and regression report.

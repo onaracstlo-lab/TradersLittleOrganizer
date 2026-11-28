@@ -36,7 +36,8 @@ def ensure_readable_file(path: str, label: str) -> str:
 def validate_artist_sqlite(config) -> str:
     path = ensure_readable_file(_require_path(config, "artist_sqlite_db_file", "Artist database"), "Artist database")
     try:
-        conn = sqlite3.connect(path)
+        from tlo_catalog_io import open_catalog_readonly
+        conn = open_catalog_readonly(path)
     except sqlite3.Error as exc:
         raise DatabaseAccessError(f"Unable to open artist database: {path} | {exc}") from exc
 
@@ -54,12 +55,9 @@ def validate_artist_sqlite(config) -> str:
                     )
 
         artist_row = cur.execute("SELECT COUNT(*) FROM artists").fetchone()
-        alias_row = cur.execute("SELECT COUNT(*) FROM aliases").fetchone()
         term_row = cur.execute("SELECT COUNT(*) FROM terms").fetchone()
         if not artist_row or int(artist_row[0]) <= 0:
             raise DatabaseAccessError(f"Artist database loaded but no artist records were found: {path}")
-        if not alias_row or int(alias_row[0]) <= 0:
-            raise DatabaseAccessError(f"Artist database loaded but no alias records were found: {path}")
         if not term_row or int(term_row[0]) <= 0:
             raise DatabaseAccessError(f"Artist database loaded but no term records were found: {path}")
     except sqlite3.Error as exc:
@@ -84,7 +82,12 @@ def validate_venue_reference(config) -> str:
 
 
 def validate_required_databases(config) -> Tuple[str, str]:
-    return validate_artist_sqlite(config), validate_venue_reference(config)
+    artist = validate_artist_sqlite(config)
+    from tlo_venue_sqlite import get_matcher
+    directory = str(getattr(config, "tlo_dbs_dir", "") or "")
+    if directory and get_matcher(directory) is not None:
+        return artist, os.path.join(directory, "venues.sqlite")
+    return artist, validate_venue_reference(config)
 
 
 def optional_database_status(config):

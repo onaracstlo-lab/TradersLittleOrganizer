@@ -24,11 +24,13 @@ from tlo_artist_db import ArtistMatcher, load_artist_matcher, lookup_artist_mast
 from tlo_diagnostics import debug_suppressed_exception
 from tlo_bootlist_volume_policy import (
     normalize_volume_label,
+    path_is_same_or_under,
     parse_volume_path_value,
     read_bootlist_rows,
     volume_key,
 )
 from tlo_tree_compare import directory_trees_exactly_match
+from tlo_path_policy import is_tlo_work_directory
 from tlo_path_policy import OS_MANAGED_DIR_NAMES
 from tlo_path_inputs import normalize_platform_input_path, strip_optional_quotes
 from tlo_locking import acquire_owned_lock, release_owned_lock, lock_is_held, clear_unheld_lock_payload
@@ -907,6 +909,58 @@ def connected_volume_roots() -> Dict[str, List[str]]:
     return result
 
 
+class _VerifiedStorageRoots(dict):
+    def __init__(self, home, roots):
+        from tlo_storage_identities import verified_roots
+        super().__init__(roots)
+        mounts = list(dict.fromkeys(root for values in roots.values() for root in values))
+        self.identities = verified_roots(home, mounts)
+        self.blocked_labels = {volume_key(item.get("hardware", {}).get("label", ""))
+                               for item, _path in self.identities.values()
+                               if volume_key(item.get("hardware", {}).get("label", "")) != volume_key(item["name"])}
+        self.blocked_labels.difference_update(self.identities)
+        self.blocked_labels.discard("")
+        for label in self.blocked_labels:
+            self[label] = []
+        for key, (_item, path) in self.identities.items():
+            self[key] = [path] if path else []
+
+
+def _request_roots(home, roots):
+    if isinstance(roots, _VerifiedStorageRoots):
+        return roots
+    return _VerifiedStorageRoots(home, connected_volume_roots() if roots is None else roots)
+
+
+def _relative_for_equivalent(stored, source, candidate, roots):
+    from tlo_storage_identities import physical_path
+    import posixpath
+    identities = getattr(roots, "identities", {})
+    a, b = identities.get(volume_key(source)), identities.get(volume_key(candidate))
+    if a and b and volume_key(source) != volume_key(candidate):
+        # Rebase explicitly related copies even when their inventory folders
+        # sit at different paths. Never escape either registered root.
+        prefix = a[0]["prefix"]
+        if not path_is_same_or_under(stored, prefix):
+            return ""
+        relative = posixpath.relpath(stored.replace("\\", "/"), prefix)
+        mapped = posixpath.normpath(posixpath.join(b[0]["prefix"], relative))
+        return mapped if not b[1] or physical_path(b[0], b[1], mapped) else ""
+    return stored
+
+
+def _registered_redundancy_groups(home):
+    from tlo_storage_identities import load_registry
+    groups = list(load_redundancy_groups(home))
+    already = {volume_key(v) for g in groups for v in g.members}
+    collections = {}
+    for item in load_registry(home).values():
+        if volume_key(item["name"]) not in already:
+            collections.setdefault(item["collection_id"], []).append(item["name"])
+    groups += [RedundancyGroup(tuple(members)) for members in collections.values() if len(members) > 1]
+    return groups
+
+
 def _physical_paths_for_volume_stored(
     volume: str,
     stored: str,
@@ -916,6 +970,14 @@ def _physical_paths_for_volume_stored(
 ) -> Tuple[List[str], bool]:
     stored = str(stored or "").strip()
     vkey = volume_key(volume)
+    registered = getattr(roots, "identities", {}).get(vkey)
+    if registered is not None:
+        from tlo_storage_identities import physical_path
+        item, current = registered
+        candidate = physical_path(item, current, stored)
+        return ([candidate] if candidate else []), bool(current)
+    if vkey in getattr(roots, "blocked_labels", set()):
+        return [], False
     share_root = root_from_unc_label(volume)
     if share_root:
         candidate = compose_unc_path(volume, stored)
@@ -987,7 +1049,7 @@ def source_status_for_show(
         for precedence, candidate_volume in enumerate(equivalents):
             candidates, is_connected = _physical_paths_for_volume_stored(
                 candidate_volume,
-                stored,
+                _relative_for_equivalent(stored, inventory_volume, candidate_volume, roots),
                 roots,
                 allow_native_absolute=(volume_key(candidate_volume) == volume_key(inventory_volume)),
             )
@@ -1059,7 +1121,8 @@ def _resolve_direct_source(item: RequestItem, roots: Mapping[str, Sequence[str]]
         volume = str(item.direct_volume or "").strip()
         candidates = [os.path.normpath(path_name) for path_name in roots.get(volume_key(volume), [])]
         share_root = root_from_unc_label(volume)
-        if share_root:
+        if (share_root and volume_key(volume) not in getattr(roots, "identities", {})
+                and volume_key(volume) not in getattr(roots, "blocked_labels", set())):
             candidates.append(share_root)
         for candidate in candidates:
             try:
@@ -1141,7 +1204,7 @@ def _shows_covered_by_direct_source(
         inventory_volume, stored = parse_volume_path_value(str(row.get("VolumePath", "") or ""))
         for candidate_volume in ordered_equivalents(inventory_volume, redundancy_groups):
             candidates, _connected = _physical_paths_for_volume_stored(
-                candidate_volume, stored, roots,
+                candidate_volume, _relative_for_equivalent(stored, inventory_volume, candidate_volume, roots), roots,
                 allow_native_absolute=(volume_key(candidate_volume) == volume_key(inventory_volume)),
             )
             found = False
@@ -1217,7 +1280,7 @@ def evaluate_request(tlo_home: str, request_id: str, *, roots: Optional[Mapping[
     text = saved_request_text(tlo_home, request_id)
     rows = read_bootlist_rows(tlo_home)
     shows = sorted({row.get("Show", "").strip() for row in rows if row.get("Show", "").strip()}, key=str.casefold)
-    roots = dict(connected_volume_roots() if roots is None else roots)
+    roots = _request_roots(tlo_home, roots)
     inventory_volumes = []
     for row in rows:
         volume, _stored = parse_volume_path_value(str(row.get("VolumePath", "") or ""))
@@ -1238,7 +1301,7 @@ def evaluate_request(tlo_home: str, request_id: str, *, roots: Optional[Mapping[
         if show:
             rows_by_show.setdefault(show, []).append(row)
 
-    redundancy_groups = load_redundancy_groups(tlo_home)
+    redundancy_groups = _registered_redundancy_groups(tlo_home)
     completed_map = state.setdefault("completed", {})
     if not isinstance(completed_map, dict):
         completed_map = {}
@@ -1391,7 +1454,11 @@ def _volume_ignore_names(
     source_path: str = "",
     roots: Optional[Mapping[str, Sequence[str]]] = None,
 ) -> set[str]:
-    return set(VOLUME_ROOT_EXCLUDED_NAMES) if _source_is_volume_root(item, source_path, roots) else set()
+    from tlo_storage_identities import MARKER
+    names = set(VOLUME_ROOT_EXCLUDED_NAMES) if _source_is_volume_root(item, source_path, roots) else set()
+    if source_path and os.path.isfile(os.path.join(source_path, MARKER)):
+        names.add(MARKER)
+    return names
 
 
 def _walk_tree_size_and_reject_links(root: str, *, ignore_root_names: Sequence[str] = ()) -> int:
@@ -1401,7 +1468,7 @@ def _walk_tree_size_and_reject_links(root: str, *, ignore_root_names: Sequence[s
     try:
         for current, dir_names, file_names in os.walk(root, followlinks=False, onerror=_raise_walk_error):
             # SHN originals are a recovery cache, never transfer material.
-            dir_names[:] = [name for name in dir_names if name.casefold() != HELD_SHN_ORIGINALS_DIRNAME]
+            dir_names[:] = [name for name in dir_names if not is_tlo_work_directory(name)]
             if os.path.normcase(os.path.abspath(os.path.normpath(current))) == root_norm and ignored:
                 dir_names[:] = [name for name in dir_names if name.casefold() not in ignored]
                 file_names = [name for name in file_names if name.casefold() not in ignored]
@@ -1427,7 +1494,7 @@ def _copytree_ignore_root_names(source_root: str, ignored_names: Sequence[str]):
     source_norm = os.path.normcase(os.path.abspath(os.path.normpath(source_root)))
     def ignore(current: str, names: Sequence[str]) -> List[str]:
         current_norm = os.path.normcase(os.path.abspath(os.path.normpath(current)))
-        return [name for name in names if str(name).casefold() == HELD_SHN_ORIGINALS_DIRNAME
+        return [name for name in names if is_tlo_work_directory(name)
                 or (current_norm == source_norm and str(name).casefold() in ignored)]
 
     return ignore
@@ -2027,7 +2094,7 @@ def _preflight_direct_items(
         target_to_items.setdefault(target_key, []).append(raw)
         ignore_names = _volume_ignore_names(item, source.source_path, roots)
         try:
-            size = _walk_tree_size_and_reject_links(source.source_path, ignore_root_names=ignore_names)
+            size = _walk_tree_size_and_reject_links(source.source_path, ignore_root_names=set(ignore_names) | {HELD_SHN_ORIGINALS_DIRNAME})
         except CopyRequestError as exc:
             failures.append((raw, str(exc)))
             continue
@@ -2035,8 +2102,8 @@ def _preflight_direct_items(
             exact = False
             if os.path.isdir(target) and not os.path.islink(target):
                 try:
-                    _walk_tree_size_and_reject_links(target, ignore_root_names=ignore_names)
-                    exact = directory_trees_exactly_match(source.source_path, target, ignore_root_names=ignore_names)
+                    _walk_tree_size_and_reject_links(target, ignore_root_names=set(ignore_names) | {HELD_SHN_ORIGINALS_DIRNAME})
+                    exact = directory_trees_exactly_match(source.source_path, target, ignore_root_names=set(ignore_names) | {HELD_SHN_ORIGINALS_DIRNAME})
                 except CopyRequestError:
                     exact = False
             if exact:
@@ -2072,14 +2139,14 @@ def _copy_available_unlocked(tlo_home: str, request_id: str, *, roots: Optional[
     state = load_request(tlo_home, request_id)
     if bool(state.get("closed")):
         raise CopyRequestError("This Copy Request is Closed and cannot be continued.")
-    effective_roots = dict(connected_volume_roots() if roots is None else roots)
+    effective_roots = _request_roots(tlo_home, roots)
     evaluation = evaluate_request(tlo_home, request_id, roots=effective_roots, matcher=matcher)
     destination = evaluation.destination
     if not os.path.isdir(destination):
         raise CopyRequestError(f"Destination is not accessible: {destination}")
 
     rows = read_bootlist_rows(tlo_home)
-    redundancy_groups = load_redundancy_groups(tlo_home)
+    redundancy_groups = _registered_redundancy_groups(tlo_home)
     result = CopyPassResult(request_id=request_id, status=evaluation.status)
     stale_removed = _cleanup_stale_copy_temps(destination)
     if stale_removed:
@@ -2130,7 +2197,7 @@ def _copy_available_unlocked(tlo_home: str, request_id: str, *, roots: Optional[
             if os.path.isdir(target) and not os.path.islink(target):
                 try:
                     _walk_tree_size_and_reject_links(target)
-                    exact_existing = directory_trees_exactly_match(source.source_path, target)
+                    exact_existing = directory_trees_exactly_match(source.source_path, target, ignore_root_names={HELD_SHN_ORIGINALS_DIRNAME})
                 except CopyRequestError:
                     exact_existing = False
             if exact_existing:
@@ -2334,11 +2401,11 @@ def copy_available(tlo_home: str, request_id: str, *, roots: Optional[Mapping[st
 
 def preview_request(tlo_home: str, request_id: str, *, roots: Optional[Mapping[str, Sequence[str]]] = None, matcher: Optional[ArtistMatcher] = None) -> Tuple[RequestEvaluation, int, int, List[Tuple[str, str]]]:
     """Return evaluation, bytes required now, free bytes, and preflight errors."""
-    effective_roots = dict(connected_volume_roots() if roots is None else roots)
+    effective_roots = _request_roots(tlo_home, roots)
     evaluation = evaluate_request(tlo_home, request_id, roots=effective_roots, matcher=matcher)
     destination = evaluation.destination
     rows = read_bootlist_rows(tlo_home)
-    redundancy_groups = load_redundancy_groups(tlo_home)
+    redundancy_groups = _registered_redundancy_groups(tlo_home)
     direct_plans, _direct_existing, errors, covered_shows, direct_targets = _preflight_direct_items(
         evaluation, destination, rows, effective_roots, redundancy_groups
     )
@@ -2378,7 +2445,7 @@ def preview_request(tlo_home: str, request_id: str, *, roots: Optional[Mapping[s
             if os.path.isdir(target) and not os.path.islink(target):
                 try:
                     _walk_tree_size_and_reject_links(target)
-                    exact_existing = directory_trees_exactly_match(source.source_path, target)
+                    exact_existing = directory_trees_exactly_match(source.source_path, target, ignore_root_names={HELD_SHN_ORIGINALS_DIRNAME})
                 except CopyRequestError:
                     exact_existing = False
             if exact_existing:

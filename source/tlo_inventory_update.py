@@ -26,7 +26,7 @@ from tlo_corruption import move_to_trash
 from logging_lib import allocate_log_tokens, setup_logging
 from tlo_db_validation import validate_required_databases
 from tlo_audio_tags import collect_group_flac_tag_info
-from tlo_media_rules import MEDIA_EXTENSIONS
+from tlo_media_rules import has_media_extension
 from tlo_path_policy import is_phase1_pruned_directory
 from tlo_phase23_v2 import (
     _extract_metadata_for_group,
@@ -151,7 +151,7 @@ def _collect_folder_paths(folder_path: str) -> Tuple[List[str], List[str], List[
         for filename in sorted(files, key=lambda value: value.casefold()):
             path_name = os.path.join(root, filename)
             all_paths.append(path_name)
-            if os.path.splitext(filename)[1].lower() in MEDIA_EXTENSIONS:
+            if has_media_extension(filename):
                 music_files.append(path_name)
                 key = os.path.normcase(os.path.normpath(root))
                 if key not in music_dirs_seen:
@@ -1059,6 +1059,16 @@ def _format_add_shows_volume_path(current_storage: str, folder_leaf: str) -> str
 
 def _delete_target_from_bootlist_volume_path(volume_path: str, *, tlo_home: str = "") -> Tuple[str, str]:
     volume_label, path_to_delete = parse_volume_path_value(volume_path)
+    if tlo_home:
+        from tlo_storage_identities import registered_entry, verified_roots, physical_path
+        item = registered_entry(tlo_home, volume_label)
+        if item:
+            from tlo_copy_requests import _candidate_mount_roots
+            _item, current = verified_roots(tlo_home, _candidate_mount_roots()).get(volume_label.casefold(), (item, ""))
+            path_to_delete = physical_path(item, current, path_to_delete)
+            # Cleanup templates still check the actual OS volume label at
+            # execution time, never the internal registered inventory name.
+            volume_label = _resolve_storage_label_for_root(current) if current else ""
     safe_path = _canonical_safe_delete_path(path_to_delete, tlo_home=tlo_home)
     return str(volume_label or "").strip(), safe_path
 
@@ -1072,9 +1082,16 @@ def _add_bootlist_row_for_record(tlo_home: str, record_dict: Dict[str, str], cur
     if not show:
         raise InventoryUpdateError(f"Unable to create show name for {record_dict.get('main_dir_path') or folder_leaf}")
     rows = read_bootlist(tlo_home)
+    from tlo_storage_identities import storage_name_and_path, registered_entry
+    label, root = _split_storage_designation(current_volume)
+    volume_path = _format_add_shows_volume_path(current_volume, folder_leaf)
+    if root and os.path.isdir(root) and os.path.isfile(os.path.join(tlo_home, "storage-identities.json")):
+        label, canonical = storage_name_and_path(tlo_home, _join_storage_root(root, folder_leaf))
+        if registered_entry(tlo_home, label):
+            volume_path = _format_bootlist_volume_path(label, canonical)
     rows.append({
         "Show": show,
-        "VolumePath": _format_add_shows_volume_path(current_volume, folder_leaf),
+        "VolumePath": volume_path,
         "Setlist": os.path.basename(setlist_path) if setlist_path else "",
     })
     write_bootlist(tlo_home, rows)

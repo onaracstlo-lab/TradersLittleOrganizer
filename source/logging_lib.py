@@ -733,7 +733,9 @@ class LogManager:
         self.search_counter = index or 0
         scope_label = sanitize_scope_label(search_path)
         token = str(log_token or self.search_counter or "0")
-        display_search_path = str(search_path) if display_full_path else format_log_volume_path(volume_label, search_path)
+        from tlo_storage_identities import stored_path
+        canonical_path = stored_path(self.tlo_home, volume_label, search_path) if volume_label else search_path
+        display_search_path = str(search_path) if display_full_path else format_log_volume_path(volume_label, canonical_path)
         append_mode = str(log_mode or "w").lower().startswith("a")
         self._switch_to_scope(scope_label, token, display_search_path, log_mode=log_mode)
         if not append_mode:
@@ -768,6 +770,8 @@ class LogManager:
 
     def tag_success(self, message, *args):
         self._safe_log(self._tag_success_logger, message, args)
+        from tlo_storage_identities import record_folder_operation
+        record_folder_operation(self.tlo_home, _format_logger_message(message, args))
 
     def tag_error(self, message, *args):
         text = escape_structured_log_text(_format_logger_message(message, args))
@@ -789,6 +793,8 @@ class LogManager:
             self._tag_error_logger.info("%s", text)
         else:
             self._tag_success_logger.info("%s", text)
+            from tlo_storage_identities import record_folder_operation
+            record_folder_operation(self.tlo_home, _format_logger_message(message, args))
 
 
 def setup_logging(config):

@@ -7,7 +7,7 @@ from typing import Deque, Dict, List, Optional, Set, Tuple
 from collections import OrderedDict, deque
 
 from tlo_db_validation import validate_artist_sqlite
-from tlo_text_utils import compact_ws
+from tlo_text_utils import compact_ws, standard_ascii_text
 
 THE_PREFIX_RE = re.compile(r"^(?:the|a)\s+", re.IGNORECASE)
 THE_SUFFIX_RE = re.compile(r",\s*(?:the|a)$", re.IGNORECASE)
@@ -40,7 +40,7 @@ def _compressed_artist_key(text: str) -> str:
 
     Digits are significant (for example 10cc is not the same as cc).
     """
-    return "".join(ch for ch in (text or "").casefold() if ch.isalnum())
+    return "".join(ch for ch in standard_ascii_text(text or "").casefold() if ch.isalnum())
 
 
 def _split_terminal_artist_suffix(text: str) -> Tuple[str, str]:
@@ -234,7 +234,8 @@ def load_artist_matcher(config) -> ArtistMatcher:
     db_path = validate_artist_sqlite(config)
     matcher = ArtistMatcher(db_path=db_path)
 
-    conn = sqlite3.connect(db_path)
+    from tlo_catalog_io import open_catalog_readonly
+    conn = open_catalog_readonly(db_path)
     try:
         cur = conn.cursor()
         artist_rows = cur.execute("SELECT artist_id, master_name FROM artists ORDER BY artist_id").fetchall()
@@ -242,7 +243,6 @@ def load_artist_matcher(config) -> ArtistMatcher:
             "SELECT artist_id, term_text FROM terms ORDER BY artist_id, term_order"
         ).fetchall()
     except sqlite3.Error as exc:
-        conn.close()
         raise RuntimeError(f"Artist database query failed: {db_path} | {exc}") from exc
     finally:
         conn.close()
@@ -280,7 +280,6 @@ def load_artist_matcher(config) -> ArtistMatcher:
     # Write/read symmetry: TLO's compliant folder names are ASCII folded.
     # Index every master and alias under that same spelling; preserve collision
     # reporting instead of guessing when two masters fold to one spelling.
-    from tlo_text_utils import standard_ascii_text
     for master, aliases in master_aliases.items():
         for alias in aliases:
             folded = standard_ascii_text(alias).casefold()
@@ -304,7 +303,9 @@ def _query_matches_cached_aliases(variants: List[str], matcher: ArtistMatcher) -
         aliases = matcher.master_aliases.get(master, [master])
         alias_folded = {alias.casefold() for alias in aliases}
         if variant_folded & alias_folded:
-            return [master]
+            indexed = set().union(*(matcher.exact_map.get(key, set()) for key in variant_folded))
+            if indexed == {master}:
+                return [master]
     return []
 
 
@@ -367,6 +368,11 @@ def lookup_artist_masters(
     found: Set[str] = set()
     for variant in variants:
         found.update(matcher.exact_map.get(variant.casefold(), set()))
+    if not found:
+        for variant in variants:
+            folded = standard_ascii_text(variant).casefold()
+            if folded:
+                found.update(matcher.exact_map.get(folded, set()))
 
     # Use the existing Artist DB compressed-name representation as a fallback.
     # Exact masters/aliases always win; never pick one of multiple compressed

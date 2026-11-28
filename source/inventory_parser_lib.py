@@ -95,6 +95,8 @@ class Config:
     inventory_path_actions: list = field(default_factory=list)
     volume_action_callback: object = None
     capacity_alert_callback: object = None
+    storage_identity_enabled: bool = False
+    inventory_loss_callback: object = None
 
 
 
@@ -203,7 +205,7 @@ def build_inventory_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true", default=False,
                         help="Preview search path and enabled operations without scanning, tagging, renaming or modifying files. No catalog is written.")
     parser.add_argument("--debug", nargs="?", const=True, type=parse_bool, default=False, metavar="BOOL", help="Enable debug output. With no value, enables debug output; also accepts true/false, yes/no, y/n, 1/0. This is the only toggle that accepts an optional BOOL for backwards compatibility.")
-    parser.add_argument("--TLOHome", metavar="DIR", help="Fully qualified existing writable directory path for TLOHome. Defaults from the TLOHome environment variable when present.")
+    parser.add_argument("--TLOHome", "--tlo-home", metavar="DIR", help="Fully qualified existing writable directory path for TLOHome. Defaults from the TLOHome environment variable when present.")
     parser.add_argument("--myTLO", metavar="STRING", help=argparse.SUPPRESS)
     add_options_to_parser(parser, fields=(
         "silent",

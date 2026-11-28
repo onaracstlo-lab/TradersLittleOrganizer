@@ -198,4 +198,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
         terminalreporter.write_line(f"  - {nodeid}")
 
 
+if _ci_enabled() and not _TKINTER_AVAILABLE:
+    raise RuntimeError("CI requires Tkinter; GUI tests cannot silently disappear")
+
 _start_ci_xvfb_if_needed()

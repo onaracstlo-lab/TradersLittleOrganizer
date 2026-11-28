@@ -7,6 +7,7 @@ __version__ = _TLO_CANONICAL_VERSION
 
 import json
 import os
+import stat
 import threading
 import time
 from typing import BinaryIO, Mapping
@@ -57,10 +58,28 @@ def _unlock_file(handle: BinaryIO) -> None:
 
 def _open_lock_file(path_name: str) -> BinaryIO:
     os.makedirs(os.path.dirname(path_name) or ".", exist_ok=True)
-    handle = open(path_name, "a+b")
+    # Reject symlinks, reparse points, hard links and special files before any
+    # bytes are written. O_NOFOLLOW closes the POSIX final-component race.
+    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0)
+    fd = os.open(path_name, flags, 0o600)
+    try:
+        opened = os.fstat(fd)
+        named = os.lstat(path_name)
+        if (not stat.S_ISREG(opened.st_mode) or not stat.S_ISREG(named.st_mode)
+                or not os.path.samestat(opened, named)
+                or opened.st_nlink != 1
+                or getattr(named, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+                or (hasattr(os, "getuid") and opened.st_uid != os.getuid())):
+            raise OSError(f"Unsafe lock file: {path_name}")
+        handle = os.fdopen(fd, "r+b")
+    except BaseException:
+        os.close(fd)
+        raise
+
     # msvcrt byte-range locking requires the byte to exist.
     handle.seek(0, os.SEEK_END)
-    if handle.tell() == 0:
+    if os.name == "nt" and handle.tell() == 0:
         handle.write(b"\n")
         handle.flush()
         try:

@@ -1,0 +1,2 @@
+TLO v1.7 Build 736 — source candidate
+Manage Storage Identities, distinct disk/partition/root/collection identities, 25% prior-performance loss warning, previous metadata and log protection, verified source resolution. User Manual and FAQ explain the GUI. Existing bootlist columns retained. GitHub Build Process v169 unchanged. Native acceptance pending.

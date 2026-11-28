@@ -128,10 +128,16 @@ def run_inventory(config) -> int:
         for message in optional_database_status(config):
             console_print(config, message)
         _preflight_cross_root_show_identities(config)
+        config.storage_identity_enabled = True
         walk_trees(config)
         config.inventory_scanning_complete = True
         console_print(config, "Inventory phase complete; cleanup, aggregation, and output generation still need to run.")
         postprocess_metadata_outputs(config)
+        from tlo_inventory_guard import retire_previous_logs
+        try:
+            retire_previous_logs(config)
+        except OSError as exc:
+            console_print(config, f"WARNING: older metadata logs could not be retired: {exc}", error=True)
         console_print(config, "Cleanup, aggregation, and output generation complete.")
         if config is not None:
             config.inventory_complete = True
@@ -141,13 +147,23 @@ def run_inventory(config) -> int:
             config.cancel_requested = True
             request_cancel_and_terminate_active_executor()
             terminate_all_children()
-            tokens = getattr(config, "newly_allocated_log_tokens", [])
-            delete_logs_for_tokens(config.TLOHome, tokens)
+            if getattr(config, "storage_identity_enabled", False):
+                from tlo_inventory_guard import preserve_aborted_logs
+                preserve_aborted_logs(config)
+            else:
+                tokens = getattr(config, "newly_allocated_log_tokens", [])
+                delete_logs_for_tokens(config.TLOHome, tokens)
         else:
             request_cancel_and_terminate_active_executor()
             terminate_all_children()
     except Exception as exc:
         exit_code = 1
+        if config is not None and getattr(config, "storage_identity_enabled", False) and not getattr(config, "inventory_complete", False):
+            from tlo_inventory_guard import preserve_aborted_logs
+            try:
+                preserve_aborted_logs(config)
+            except OSError as cleanup_error:
+                console_print(config, f"Unable to archive incomplete scan logs: {cleanup_error}", error=True)
         if config is None or not getattr(config, "silent", False):
             if config is not None:
                 console_print(config, f"ERROR: {exc}", error=True)

@@ -78,7 +78,7 @@ def normalize_platform_input_path(path: str) -> str:
     return os.path.normpath(cleaned)
 
 
-def tlo_home_type(path):
+def tlo_home_type(path, *, require_writable=True):
     path = _strip_optional_quotes(path)
     if not os.path.isabs(path):
         raise argparse.ArgumentTypeError(f"TLOHome must be a fully qualified directory path: {path}")
@@ -86,15 +86,19 @@ def tlo_home_type(path):
         raise argparse.ArgumentTypeError(f"TLOHome directory does not exist: {path}")
     if not os.path.isdir(path):
         raise argparse.ArgumentTypeError(f"TLOHome exists but is not a directory: {path}")
-    if not os.access(path, os.W_OK):
+    if require_writable and not os.access(path, os.W_OK):
         raise argparse.ArgumentTypeError(f"TLOHome directory is not writable: {path}")
     return path
 
 
-def resolve_tlo_home(tlo_home: str = "", my_tlo: str = "", *, error_type=ValueError, app_name="tlo-main") -> str:
+def resolve_tlo_home(tlo_home: str = "", my_tlo: str = "", *, error_type=ValueError, app_name="tlo-main", require_writable=True) -> str:
     """Resolve TLOHome precedence: explicit option -> environment -> MSI saved home."""
     env_tlo_home = _strip_optional_quotes(os.environ.get("TLOHome", ""))
-    resolved = _strip_optional_quotes(my_tlo).strip() or _strip_optional_quotes(tlo_home).strip() or env_tlo_home
+    explicit = _strip_optional_quotes(tlo_home).strip()
+    legacy = _strip_optional_quotes(my_tlo).strip()
+    if explicit and legacy and os.path.normcase(os.path.normpath(explicit)) != os.path.normcase(os.path.normpath(legacy)):
+        raise error_type("--TLOHome and --myTLO disagree; specify only one home.")
+    resolved = explicit or legacy or env_tlo_home
     if not resolved:
         try:
             from tlo_msi_install_mode import saved_msi_data_home_for_executable
@@ -104,7 +108,7 @@ def resolve_tlo_home(tlo_home: str = "", my_tlo: str = "", *, error_type=ValueEr
     if not resolved:
         raise error_type(missing_tlo_home_message(app_name))
     try:
-        return os.path.normpath(tlo_home_type(resolved))
+        return os.path.normpath(tlo_home_type(resolved, require_writable=require_writable))
     except argparse.ArgumentTypeError as exc:
         raise error_type(str(exc)) from exc
 

@@ -6,6 +6,9 @@ from tlo_version import VERSION as _TLO_CANONICAL_VERSION
 __version__ = _TLO_CANONICAL_VERSION
 
 import argparse
+import os
+import hashlib
+import stat
 import sys
 
 from tlo_reverse_folders import ReverseFoldersError, prepare_reverse_plan, reverse_folder_operations
@@ -23,7 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("path", nargs="?", default="", help="Folder to reverse, or destination parent for --recover-staging; omitted with --manual-updates --list")
-    parser.add_argument("--TLOHome", dest="tlo_home", default="", help="TLOHome override")
+    parser.add_argument("--TLOHome", "--tlo-home", dest="tlo_home", default="", help="TLOHome override")
     parser.add_argument("--myTLO", dest="my_tlo", default="", help=argparse.SUPPRESS)
     parser.add_argument("--log", default="", help="Use one specific success tag log when a broad path is ambiguous")
     parser.add_argument("--dry-run", action="store_true", help="Show the selected log and folder actions without changing folders")
@@ -33,7 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     modes.add_argument("--recover-staging", action="store_true",
                        help="Recover interrupted Copy/Delete moves under PATH (destination parent directory)")
     parser.add_argument('--list', action='store_true', help='With --manual-updates, list undo journals newest first and report inventory eligibility')
-    parser.add_argument('--batch', type=int, default=0, metavar='N', help='With --manual-updates, undo exactly N linked updates newest-first (1–100); omit PATH')
+    parser.add_argument('--batch', type=int, default=None, metavar='N', help='With --manual-updates, undo exactly N linked updates newest-first (1–100); omit PATH')
     return parser
 
 
@@ -44,32 +47,44 @@ def main(argv: list[str] | None = None) -> int:
         parser.error('--list requires --manual-updates')
     if args.batch and (not args.manual_updates or args.list or args.log or args.path):
         parser.error('--batch requires --manual-updates without PATH, --list or --log')
-    if args.batch < 0 or args.batch > 100:
+    if args.batch is not None and not 1 <= args.batch <= 100:
         parser.error('--batch must be between 1 and 100')
     if not args.path and not (args.manual_updates and (args.list or args.batch)):
         parser.error('PATH is required except for --manual-updates --list/--batch')
     try:
         from tlo_path_inputs import resolve_tlo_home
         from tlo_runtime_control import inventory_operation_lock
-        if args.recover_staging and not (args.tlo_home or args.my_tlo or __import__('os').environ.get('TLOHome')):
+        if args.recover_staging and not (args.tlo_home or args.my_tlo or os.environ.get('TLOHome')):
             # Staging recovery is also available when TLOHome is not configured.
-            # Use a destination-local lock in this standalone recovery mode.
-            import hashlib
-            import os
-            import tempfile
-            key = hashlib.sha256(os.path.abspath(args.path).encode('utf-8')).hexdigest()[:32]
-            home = os.path.join(tempfile.gettempdir(), 'tlo-staging-recovery-locks', key)
+            # A private per-user directory, never a predictable shared /tmp tree.
+            home = _private_recovery_lock_home(args.path)
         else:
             home = resolve_tlo_home(tlo_home=args.tlo_home, my_tlo=args.my_tlo,
                                     error_type=ManualUndoError, app_name="tlo-reverse")
         with inventory_operation_lock(home):
             return _run_locked(args, home)
-    except (ReverseFoldersError, ManualUndoError, OSError, ValueError) as exc:
+    except (ReverseFoldersError, ManualUndoError, OSError, ValueError, RuntimeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:
         print("Cancelled.", file=sys.stderr)
         return 130
+
+
+def _private_recovery_lock_home(destination):
+    key = hashlib.sha256(os.path.normcase(os.path.realpath(destination)).encode("utf-8")).hexdigest()[:32]
+    root = os.path.join(os.path.expanduser("~"), ".tlo-staging-recovery-locks")
+    for directory in (root, os.path.join(root, key), os.path.join(root, key, "logs")):
+        try:
+            os.mkdir(directory, 0o700)
+        except FileExistsError:
+            pass
+        info = os.lstat(directory)
+        if (not stat.S_ISDIR(info.st_mode)
+                or getattr(info, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+                or (hasattr(os, "getuid") and (info.st_uid != os.getuid() or info.st_mode & 0o077))):
+            raise OSError(f"Unsafe standalone recovery lock directory: {directory}")
+    return os.path.join(root, key)
 
 
 def _run_locked(args, home: str) -> int:
@@ -93,7 +108,7 @@ def _run_locked(args, home: str) -> int:
             print(f"TLO Staged Move Recovery {DISPLAY_VERSION}")
             results = recover_interrupted_stage_moves(args.path, dry_run=args.dry_run, emit=print)
             pending = f"; would restore: {results['would_restore']}" if args.dry_run else ""
-            print(f"Recovery records: {results['found']}; restored: {results['restored']}{pending}; conflicts: {results['conflicts']}")
+            print(f"Recovery records: {results['found']}; restored: {results['restored']}{pending}; cleaned: {results['cleaned']}; conflicts: {results['conflicts']}")
             return 2 if results['conflicts'] else 0
         plan = prepare_reverse_plan(args.path, tlo_home=args.tlo_home, my_tlo=args.my_tlo, log_path=args.log)
         print(f"TLO Reverse Folders {DISPLAY_VERSION}")
@@ -105,7 +120,7 @@ def _run_locked(args, home: str) -> int:
             print("Dry run: no folders will be changed.")
         result = reverse_folder_operations(plan, dry_run=args.dry_run, emit=print)
         return 0 if result.errors == 0 and result.conflicts == 0 else 2
-    except (ReverseFoldersError, ManualUndoError, OSError, ValueError) as exc:
+    except (ReverseFoldersError, ManualUndoError, OSError, ValueError, RuntimeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:

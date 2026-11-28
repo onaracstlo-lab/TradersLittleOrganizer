@@ -4,7 +4,7 @@ from __future__ import annotations
 from tlo_version import VERSION as _TLO_CANONICAL_VERSION
 __version__ = _TLO_CANONICAL_VERSION
 import re
-import sqlite3
+from tlo_catalog_io import open_catalog_readonly
 import unicodedata
 from collections import defaultdict
 from contextlib import closing
@@ -55,8 +55,7 @@ class Candidate:
 class VenueMatcher:
     """Load immutable indexes once per inventory worker/process; safe for concurrent reads."""
     def __init__(self, database: str | Path):
-        uri = Path(database).resolve().as_uri() + '?mode=ro'
-        with closing(sqlite3.connect(uri, uri=True)) as db:
+        with closing(open_catalog_readonly(database)) as db:
             version = db.execute('PRAGMA user_version').fetchone()[0]
             if version != 1:
                 raise ValueError(f'Unsupported venues.sqlite schema {version}')

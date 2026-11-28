@@ -12,6 +12,7 @@ from tlo_options import add_options_to_parser, apply_lookup_dependency, parse_bo
 from tlo_path_inputs import strip_optional_quotes
 from tlo_tag_lib import build_tagger_config, resolve_tagging_path, run_tagger
 from tlo_run_settings import append_run_settings
+from tlo_runtime_control import inventory_operation_lock
 from tlo_ux import operation_review_lines
 
 
@@ -44,7 +45,7 @@ def _parse_args(argv=None):
         "compliant": "Use the simplified compliant folder-name parsing rules. Mutually exclusive with --rename-compliantly.",
         "etree_lookup": "Use eTreeDB as a metadata and song-title fallback during tagging.",
         "setlistfm_lookup": "Use setlist.fm as the enabled online fallback/evidence source during tagging. Requires --etree-lookup.",
-        "setlistfm_upgrade": "Use upgraded setlist.fm rate/daily limits when setlist.fm lookup is enabled. Requires SETLISTFMUPGRADE_API_KEY or SETLISTFM_UPGRADE_API_KEY, set to the same API key as SETLISTFM_API_KEY.",
+        "setlistfm_upgrade": "Use upgraded setlist.fm rate/daily limits when setlist.fm lookup is enabled. Requires a valid SETLISTFM_API_KEY and explicit opt-in for approved access; duplicate legacy key is optional.",
         "thorough_setlist_matching": "Collect and compare additional local and enabled online setlist candidates during tagging.",
         "rename_compliantly": "Rename an identified folder using the resolved Show Name before tagging it in place. Mutually exclusive with --compliant.",
         "convert_shn": "Convert .shn/.shnf files in the selected search folder to .flac; delete a source only after successful verified conversion.",
@@ -54,6 +55,7 @@ def _parse_args(argv=None):
         if action.dest in tagger_help:
             action.help = tagger_help[action.dest]
     parser.add_argument("--debug", dest="debug", nargs="?", const=True, default=False, type=parse_bool, metavar="BOOL", help="Enable debug output and write Unknown-title diagnostic setlist copies under TLOHome/debug; optional BOOL accepts true/false, yes/no, y/n, 1/0.")
+    parser.add_argument("--dry-run", action="store_true", help="Preview resolved metadata and proposed operations without changing files or logs.")
     parser.add_argument("--search-folder", "--tag-path", dest="tagPathOption", default="", metavar="DIR", help="Required fully qualified search folder. --tag-path is retained as a compatibility alias.")
     parser.add_argument("tagPath", nargs="?", default="", metavar="SEARCH_FOLDER", help="Required fully qualified search folder (positional form).")
     args = parser.parse_args(argv)
@@ -76,6 +78,12 @@ def _parse_args(argv=None):
 
 def main(argv=None) -> int:
     args = _parse_args(argv)
+    try:
+        from tlo_path_inputs import resolve_tlo_home
+        resolve_tlo_home(args.TLOHome, args.myTLO, app_name="tlo-tag")
+    except ValueError as exc:
+        console_emit(f"ERROR: {exc}", error=True)
+        return 2
     try:
         review_config = build_tagger_config(
             tlo_home=args.TLOHome,
@@ -100,7 +108,7 @@ def main(argv=None) -> int:
         review_config.tag_during_inventory = True
         review_config.tag_copy_during_inventory = False
         review_config.tag_copy_and_delete_path = ""
-        review_config.dry_run = False
+        review_config.dry_run = args.dry_run
         resolved_tag_path = resolve_tagging_path(review_config.TLOHome, args.tagPath)
         review_lines = operation_review_lines(
             review_config,
@@ -108,29 +116,35 @@ def main(argv=None) -> int:
             path_text=resolved_tag_path,
             dry_run=False,
         )
-        append_run_settings(review_config.TLOHome, "Tag", review_lines)
-        run_tagger(
-            tlo_home=args.TLOHome,
-            my_tlo=args.myTLO,
-            compliant=bool(args.compliant),
-            tag_path=args.tagPath,
-            etree_lookup=bool(args.etree_lookup),
-            setlistfm_lookup=bool(args.setlistfm_lookup),
-            setlistfm_upgrade=bool(args.setlistfm_upgrade),
-            thorough_setlist_matching=bool(args.thorough_setlist_matching),
-            corrupt_files=str(args.corrupt_files),
-            corrupt_folders=str(args.corrupt_folders),
-            corrupt_folder_threshold=int(getattr(args, "corrupt_folder_threshold", 100)),
-            debug=bool(args.debug),
-            rename_compliantly=bool(args.rename_compliantly),
-            convert_shn=bool(args.convert_shn),
-            artist_in_album=bool(args.artist_in_album),
-            delete_extra_tags=bool(args.delete_extra_tags),
-            as_is_artist_name=bool(args.as_is_artist_name),
-            proper_grammar=bool(args.proper_grammar),
-            deep_audio_check=bool(args.deep_audio_check),
-            emit=lambda text: console_emit(str(text), end="" if str(text).endswith("\n") else "\n"),
-        )
+        if args.dry_run:
+            from tlo_ux import format_preview, preview_operation
+            result = preview_operation(review_config, operation="Tag", tag_path=resolved_tag_path)
+            print(format_preview(result), end="")
+            return 2 if any(issue.severity == "error" for issue in result.issues) else 0
+        with inventory_operation_lock(review_config.TLOHome):
+            append_run_settings(review_config.TLOHome, "Tag", review_lines)
+            run_tagger(
+                tlo_home=args.TLOHome,
+                my_tlo=args.myTLO,
+                compliant=bool(args.compliant),
+                tag_path=args.tagPath,
+                etree_lookup=bool(args.etree_lookup),
+                setlistfm_lookup=bool(args.setlistfm_lookup),
+                setlistfm_upgrade=bool(args.setlistfm_upgrade),
+                thorough_setlist_matching=bool(args.thorough_setlist_matching),
+                corrupt_files=str(args.corrupt_files),
+                corrupt_folders=str(args.corrupt_folders),
+                corrupt_folder_threshold=int(getattr(args, "corrupt_folder_threshold", 100)),
+                debug=bool(args.debug),
+                rename_compliantly=bool(args.rename_compliantly),
+                convert_shn=bool(args.convert_shn),
+                artist_in_album=bool(args.artist_in_album),
+                delete_extra_tags=bool(args.delete_extra_tags),
+                as_is_artist_name=bool(args.as_is_artist_name),
+                proper_grammar=bool(args.proper_grammar),
+                deep_audio_check=bool(args.deep_audio_check),
+                emit=lambda text: console_emit(str(text), end="" if str(text).endswith("\n") else "\n"),
+            )
         return 0
     except KeyboardInterrupt:
         console_emit("Tagger cancelled.", error=True)

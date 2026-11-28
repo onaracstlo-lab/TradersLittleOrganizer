@@ -159,7 +159,7 @@ def test_build501_tlo_tag_main_passes_proper_grammar_to_shared_tagger(tmp_path, 
     monkeypatch.setattr(tag, "operation_review_lines", lambda *a, **k: [])
     monkeypatch.setattr(tag, "append_run_settings", lambda *a, **k: None)
     monkeypatch.setattr(tag, "run_tagger", fake_run)
-    assert tag.main([str(tmp_path), "--proper-grammar"]) == 0
+    assert tag.main(["--TLOHome", str(tmp_path), str(tmp_path), "--proper-grammar"]) == 0
     assert captured["build"]["proper_grammar"] is True
     assert captured["run"]["proper_grammar"] is True
 

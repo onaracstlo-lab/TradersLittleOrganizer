@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only audit of original SHN audio held when native Trash failed.
+"""Read-only audit of held SHN and duplicate-repair FLAC originals.
 
 Usage: python tools/report_held_shn_originals.py PATH
 This command does not move, remove, or restore files.
@@ -11,13 +11,16 @@ from pathlib import Path
 
 HOLDER = '.tlo-shn-originals'
 
+def is_holder(name):
+    return name.casefold() == HOLDER or name.casefold().startswith('.tlo-deletedupes-originals-')
+
 
 def scan(root: Path):
     """Yield safe regular originals, skipping symlinks and unreadable paths."""
     root = root.resolve(strict=True)
     for current, directories, _ in os.walk(root, followlinks=False):
-        held = [name for name in directories if name.casefold() == HOLDER]
-        directories[:] = [name for name in directories if name.casefold() != HOLDER
+        held = [name for name in directories if is_holder(name)]
+        directories[:] = [name for name in directories if not is_holder(name)
                           and not Path(current, name).is_symlink()]
         for name in held:
             holder = Path(current, name)
@@ -48,7 +51,7 @@ def main():
         print(f'{size:>12}  {original}')
         total+=size
         count+=1
-    print(f'HELD SHN ORIGINALS: {count} file(s), {total} bytes (read-only report)')
+    print(f'HELD SHN ORIGINALS AND DUPLICATE-REPAIR ORIGINALS: {count} file(s), {total} bytes (read-only report)')
 
 if __name__ == '__main__':
     main()

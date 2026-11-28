@@ -1,7 +1,7 @@
 {
-  "build": 735,
+  "build": 743,
   "reviewed_baseline": 685,
-  "scope": "Resolve the PowerShell case-insensitive HOME automatic-variable collision in the Windows MSI installation smoke test and opt-in acceptance diagnostics. Keep all signing, native install/uninstall and database/shortcut acceptance gates. Build 734 Reverse and previous changes retained.",
+  "scope": "Build 743: Bound generic ancestor artist evidence to the selected root and prevent explicit dated artist text or existing tags from being replaced by container names; fold accent queries against the Artist DB; report non-Latin unrepresentable artists as unidentified; use the actual rename guard in Dry Run; lock mutating CLI Tag, GUI Tag and duplicate cleanup. Exclude TLO work/held-original directories from Tag Copy and Copy Requests; refuse Copy/Delete when held data is nested; retain duplicate-repair originals with source-relative provenance and log repairs; warn to re-inventory after moves; align home options, safe confirmation defaults, auxiliary search and CLI preview. Native acceptance pending.",
   "findings": {
     "H1": {
       "status": "fixed",
@@ -349,6 +349,173 @@
     "T1": {
       "status": "deferred-native",
       "source": "Pinned Ruff unavailable offline; native lint mandatory."
+    }
+  },
+  "review_732_remediation": {
+    "baseline": "Build 737 / GitHub Build Process v169",
+    "738": {
+      "status": "local source remediation passed",
+      "findings": [
+        "B1",
+        "B2",
+        "B3",
+        "B4",
+        "B6 (partial)",
+        "S1",
+        "S2",
+        "S3 (partial)",
+        "D1",
+        "D2 (partial)",
+        "D3",
+        "D4",
+        "R2",
+        "R9"
+      ],
+      "test": "tests/behavior/test_build738_review_remediation.py"
+    },
+    "739": {
+      "status": "local source remediation passed",
+      "findings": [
+        "B5",
+        "B6",
+        "B7",
+        "U1 (aux only)",
+        "U3",
+        "U4 (partial)",
+        "D5 (partial)",
+        "D6",
+        "R1 (aux only)",
+        "R10 (partial)"
+      ],
+      "test": "tests/behavior/test_build739_review_followup.py",
+      "local_regression": "3234 passed, 39 skipped, 1 deselected, 2 warnings, 8 subtests passed in 91.18s (0:01:31)"
+    },
+    "open": [
+      "U1/U2 Main GUI radio/layout redesign",
+      "U4 native icon integration",
+      "U5 vocabulary",
+      "D2 remaining traceability/atomization",
+      "D7 and R3\u2013R8/R11 broad refactoring",
+      "S3 private MSI staging and native acceptance",
+      "Native Windows/macOS/WSL and signed release acceptance"
+    ]
+  },
+  "supplemental_findings": {
+    "STORAGE736": {
+      "status": "fixed",
+      "summary": "Verify storage roots independently of mount labels; require explicit approval at 25% prior-performance loss; archive previous metadata.",
+      "test": "tests/behavior/test_build736_storage_identities.py"
+    },
+    "RENAME737": {
+      "status": "fixed",
+      "summary": "Use unique exact Artist DB alphanumeric alias and resolved date to safely normalize compact trading source/format tails.",
+      "test": "tests/behavior/test_build737_numeric_trading_alias.py"
+    },
+    "ARCHIVE741": {
+      "status": "fixed",
+      "summary": "Fix native Windows re-inventory metadata backup finalization: finish the ZIP, flush and fsync the writable stream, close it, then atomically publish it. A durability failure still prevents inventory replacement and preserves prior metadata. Build Process v169 and database masters unchanged.",
+      "test": "tests/behavior/test_build741_inventory_archive_sync.py",
+      "failure_path_test": "tests/behavior/test_build741_inventory_archive_sync.py::test_metadata_zip_sync_failure_preserves_inventory_and_publishes_nothing",
+      "reported_native_test": "tests/behavior/test_build700_venue_punctuation_idempotency.py::test_four_inventory_passes_keep_folder_album_and_bootlist_identical",
+      "native_acceptance": "pending",
+      "test_case": "test_metadata_zip_is_complete_and_synced_on_writable_handle"
+    }
+  },
+  "release_readiness_740": {
+    "status": "fixed-locally-source-only",
+    "baseline": 739,
+    "summary": "Build 739 carried stale Build 737 evidence identity and two supplemental records inside the exact Build 681 findings namespace. Move those records intact to supplemental_findings; maintain all 25 legacy dispositions and cited tests.",
+    "test": "tests/contracts/test_build740_remediation_evidence.py::test_current_remediation_evidence_is_release_ready",
+    "native_acceptance": "not attested"
+  },
+  "review_739_remediation": {
+    "baseline": 739,
+    "source_baseline": 741,
+    "scope": "W1\u2013W16 (see per-finding dispositions); residual limitations recorded",
+    "test": "tests/behavior/test_build742_artist_safety.py",
+    "native_acceptance": "pending",
+    "followup_test": "tests/behavior/test_build743_review_consistency.py",
+    "dispositions": {
+      "W1": {
+        "iteration": "742",
+        "disposition": "Addressed for reproduced dated-show/container cases; root-limited generic path and primary-pattern lookups. Existing tags suppress ancestor-only generic matches. Other metadata heuristics retained.",
+        "evidence": "Real catalog helper and full Inventory CLI regression"
+      },
+      "W2": {
+        "iteration": "742",
+        "disposition": "Addressed: query-side folding and compressed lookup; auxiliary matcher fallback; collision-safe exact-cache check.",
+        "evidence": "Six shipped-catalog names and BJ\u00d6RK auxiliary query"
+      },
+      "W3": {
+        "iteration": "743",
+        "disposition": "Addressed: same-volume holding outside show where possible; recursive work-tree exclusions for Tag Copy/Copy Requests and verification; Copy/Delete refuses nested recovery/work data.",
+        "evidence": "Disc-level retention, real verified tag-copy and request-copy helpers, destructive refusal"
+      },
+      "W4": {
+        "iteration": "743",
+        "disposition": "Addressed for successful retention: run-scoped holder and relative names; durable CSV log and repair total; report scans both types. Inaccessible log/holder retains original bytes and shows warning; log may be unavailable on I/O failure.",
+        "evidence": "Recorded keeper/held/copy paths and original-byte assertion"
+      },
+      "W5": {
+        "iteration": "742",
+        "disposition": "Addressed lexical rename-guard mismatch and ancestor-only warning. Preview remains provisional where real runtime corruption or destination conditions differ.",
+        "evidence": "CLI preview versus actual rename safety rule"
+      },
+      "W6": {
+        "iteration": "742",
+        "disposition": "Addressed at public GUI Tag, CLI Tag and duplicate-cleanup entry points. Library helpers called directly by third-party code remain caller-managed.",
+        "evidence": "Held-lock CLI subprocess test for both media tools"
+      },
+      "W7": {
+        "iteration": "743",
+        "disposition": "Mitigated: explicit moved-count/re-inventory warning and significant-change approval note. No automatic deletion of existing inventory rows; re-inventory required.",
+        "evidence": "Existing move/log suite; warning source inspection"
+      },
+      "W8": {
+        "iteration": "743",
+        "disposition": "Implemented GUI configuration error dialog with stderr fallback.",
+        "evidence": "Native/windowed confirmation pending"
+      },
+      "W9": {
+        "iteration": "743",
+        "disposition": "Implemented default-No for five consequential confirmations.",
+        "evidence": "Source/lint and existing GUI contracts; display acceptance pending"
+      },
+      "W10": {
+        "iteration": "742",
+        "disposition": "Addressed for artists whose ASCII representation is empty; blank Show/unidentified rather than bare date, existing mutation guard retained.",
+        "evidence": "Explicit non-Latin postprocess regression"
+      },
+      "W11": {
+        "iteration": "743",
+        "disposition": "Addressed: unlabelled new roots prefer proposed name; registry identity remains authoritative, mismatches reported.",
+        "evidence": "New unlabeled-root registration test; existing storage identity suite"
+      },
+      "W12": {
+        "iteration": "743",
+        "disposition": "Implemented first-line 120-character preload and no automatic path query; status gives count.",
+        "evidence": "Source/lint; native GUI acceptance pending"
+      },
+      "W13": {
+        "iteration": "743",
+        "disposition": "Addressed: disagreeing explicit and hidden aliases fail; no silent override; hidden alias alone still works.",
+        "evidence": "Shared resolver plus legacy search/research/duplicate tests"
+      },
+      "W14": {
+        "iteration": "743",
+        "disposition": "Addressed listed home aliases, config error codes, read-only research, Tag and duplicate previews. Duplicate preview deliberately lists candidates only (actual FLAC integrity gates still apply).",
+        "evidence": "CLI help/preview and no persistent writes tests"
+      },
+      "W15": {
+        "iteration": "742/743",
+        "disposition": "Corrected reviewed radio/artist lookup wording, public tag example, home precedence, recovery/reporting, CLI and current release markers. Existing historical requirements and evidence retained separately.",
+        "evidence": "Document version tests, source hygiene, v169 readiness, rendered requirements"
+      },
+      "W16": {
+        "iteration": "742/743",
+        "disposition": "Added targeted behavioral tests and made accent check mandatory. Native display/platform tests remain required.",
+        "evidence": "Build 742 and 743 behavior tests; full local regression"
+      }
     }
   }
 }

@@ -8,7 +8,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 
-from tlo_security import windows_directory_from_api
+from tlo_security import windows_directory_from_api, trusted_windows_tool
 from tlo_unc import unc_root, unc_label
 
 
@@ -202,13 +202,9 @@ def _trusted_native_powershell_executable() -> str:
     or malformed API result fails closed; physical disk affinity is optional.
     """
     try:
-        windows_dir = ntpath.normpath(windows_directory_from_api())
+        return trusted_windows_tool('powershell.exe', directory_provider=windows_directory_from_api)
     except (OSError, ValueError, TypeError):
         return ''
-    drive, tail = ntpath.splitdrive(windows_dir)
-    if not re.fullmatch(r'[a-zA-Z]:', drive) or not tail.startswith('\\'):
-        return ''
-    return ntpath.join(windows_dir, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 
 
 def _powershell_disk_number_for_drive(

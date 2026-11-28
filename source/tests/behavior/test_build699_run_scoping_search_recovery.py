@@ -60,7 +60,8 @@ def test_staging_recovery_dry_run_summary_includes_would_restore(monkeypatch, ca
     def fake_recover(path, *, dry_run, emit):
         assert path == "/some/destination"
         assert dry_run is True
-        return {"found": 2, "restored": 0, "conflicts": 1, "would_restore": 1}
+        return {"found": 2, "restored": 0, "conflicts": 1, "would_restore": 1, "cleaned": 2}
     monkeypatch.setattr(recovery, "recover_interrupted_stage_moves", fake_recover)
     assert reverse.main(["/some/destination", "--recover-staging", "--dry-run"]) == 2
-    assert "would restore: 1" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "would restore: 1" in output and "cleaned: 2" in output

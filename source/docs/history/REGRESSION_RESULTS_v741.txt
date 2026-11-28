@@ -1,0 +1,9 @@
+TLO v1.7 Build 741 — NOT RELEASE-ATTESTED
+Current local application regression: 3243 passed, 39 skipped, 1 deselected, 2 warnings, 8 subtests passed in 90.67s (0:01:30).
+Companion v169 regression: 194 passed, 14 skipped, 1 warning in 2.63s.
+Original affected four-pass test, storage identity and new archive sync tests: 29 passed.
+Before fix: deterministic Windows descriptor model reproduced OSError [Errno 9] Bad file descriptor.
+After fix: both new archive sync tests passed, including failure without publication or loss of prior metadata.
+Unmodified Process v169 readiness verifier, source hygiene and local Ruff lint: PASS.
+The one existing process-pool crash test is locally deselected because the execution environment disallows Unix-domain socket creation; prior separate attempt failed with PermissionError / EOFError. Test unchanged and remains required in applicable native CI.
+Native Windows/Linux/macOS, pinned lint, signing, MSI installation/uninstallation and release acceptance pending.

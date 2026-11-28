@@ -2,6 +2,7 @@ from tlo_version import VERSION as _TLO_CANONICAL_VERSION
 __version__ = _TLO_CANONICAL_VERSION
 import json
 import os
+from tlo_path_policy import is_ignorable_filesystem_artifact
 
 VIDEO_EXTENSIONS = {
     ".mp4",
@@ -20,37 +21,18 @@ VIDEO_EXTENSIONS = {
     ".3gp",
 }
 
-MEDIA_EXTENSIONS = {
-    ".flac",
-    ".shn",
-    ".shnf",
-    ".mp3",
-    ".wav",
-    ".m4a",
-    ".aac",
-    ".ogg",
-    ".oga",
-    ".opus",
-    ".aiff",
-    ".aif",
-    ".ape",
-    ".wv",
-    ".alac",
-    ".mp4",
-    ".m4v",
-    ".mkv",
-    ".avi",
-    ".mov",
-    ".wmv",
-    ".mpg",
-    ".mpeg",
-    ".vob",
-    ".ts",
-    ".m2ts",
-    ".webm",
-    ".flv",
-    ".3gp",
-}
+# Discovery includes all supported videos and recognized audio containers.
+TAG_WRITABLE = frozenset({".flac", ".mp3", ".wav", ".m4a", ".aac", ".ogg",
+                         ".oga", ".opus", ".aiff", ".aif", ".ape", ".wv", ".alac"})
+SHN_AUDIO = frozenset({".shn", ".shnf"})
+COUNTED_AUDIO = TAG_WRITABLE | SHN_AUDIO | {".wma", ".tta"}
+DISCOVERY = COUNTED_AUDIO | VIDEO_EXTENSIONS
+MEDIA_EXTENSIONS = DISCOVERY  # historical public name
+
+def has_media_extension(path_name: str, extensions=DISCOVERY) -> bool:
+    return (not is_ignorable_filesystem_artifact(path_name)
+            and os.path.splitext(str(path_name or ""))[1].lower() in extensions)
+
 
 
 MUSIC_DIR_MARKER_PREFIX = "__TLO_MUSIC_DIR__\t"
@@ -100,11 +82,11 @@ def is_media_file(path_name: str) -> bool:
     """Return True only for real files whose extension is inventoried media."""
     if not path_name or not os.path.isfile(path_name):
         return False
-    return os.path.splitext(path_name)[1].lower() in MEDIA_EXTENSIONS
+    return has_media_extension(path_name)
 
 
 def is_video_file(path_name: str) -> bool:
     """Return True only for real files whose extension is an inventoried video format."""
     if not path_name or not os.path.isfile(path_name):
         return False
-    return os.path.splitext(path_name)[1].lower() in VIDEO_EXTENSIONS
+    return has_media_extension(path_name, VIDEO_EXTENSIONS)

@@ -1,0 +1,9 @@
+TLO v1.7 Build 740 — NOT RELEASE-ATTESTED
+Local application regression: 3241 passed, 39 skipped, 1 deselected, 2 warnings, 8 subtests passed in 89.41s (0:01:29).
+Companion GitHub Build Process v169 regression: 194 passed, 14 skipped, 1 warning in 2.36s.
+Seven new remediation-evidence regression cases passed.
+Unmodified Process v169 release-readiness verifier: PASS (25 explicit dispositions).
+Source-local release hygiene and Ruff lint: PASS.
+One separately attempted existing process-pool crash test failed because this environment prohibits Unix-domain socket creation (PermissionError); deselected from the final local run only. The test is unchanged and remains required wherever applicable in native CI.
+Native acceptance, pinned CI lint, signing, release publication and MSI install/uninstall are not attested.
+See Regression_Test_Report.md for detail.

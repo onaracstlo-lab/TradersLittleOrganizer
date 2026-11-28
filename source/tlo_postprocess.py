@@ -38,12 +38,7 @@ FILENAME_RESERVE_CHARS = 10
 SETLIST_EXTENSION = ".txt"
 GENERATED_INFO_FILENAME = "info-gen.txt"
 
-MEDIA_EXTENSIONS_FOR_PLACEHOLDER_SETLIST = {
-    ".3gp", ".aac", ".aif", ".aiff", ".alac", ".ape", ".avi", ".flac",
-    ".flv", ".m2ts", ".m4a", ".m4v", ".mkv", ".mov", ".mp3", ".mp4",
-    ".mpeg", ".mpg", ".oga", ".ogg", ".opus", ".shn", ".shnf", ".ts",
-    ".vob", ".wav", ".webm", ".wmv", ".wv",
-}
+from tlo_media_rules import DISCOVERY as MEDIA_EXTENSIONS_FOR_PLACEHOLDER_SETLIST, has_media_extension
 
 POSTPROCESS_DIR_NAMES_TO_PRUNE = {
     "$recycle.bin",
@@ -753,7 +748,7 @@ def _iter_music_file_names_for_placeholder(main_dir_path: str, config=None, musi
             continue
         for filename in filenames:
             full_path = os.path.join(root_dir, filename)
-            if os.path.isfile(full_path) and os.path.splitext(filename)[1].lower() in MEDIA_EXTENSIONS_FOR_PLACEHOLDER_SETLIST:
+            if os.path.isfile(full_path) and has_media_extension(filename, MEDIA_EXTENSIONS_FOR_PLACEHOLDER_SETLIST):
                 matches.append((_placeholder_music_filename_sort_key(filename), filename))
     return [filename for _sort_key, filename in sorted(matches, key=lambda item: (item[0], item[1]))]
 
@@ -920,6 +915,10 @@ def _write_text_file(path_name: str, text: str) -> None:
 
 
 def _adjust_show_name_for_output(record: Dict[str, str]) -> str:
+    original_artist = (record.get("artist") or "").strip()
+    if original_artist and not standard_ascii_text(original_artist).strip():
+        record["show_name"] = ""
+        return ""
     for key in ("artist", "date", "venue", "location", "parentheticals", "album_name", "descriptor", "descriptor_source", "show_name"):
         if record.get(key):
             record[key] = standard_ascii_text(record.get(key, ""))
@@ -951,7 +950,8 @@ def _adjust_show_name_for_output(record: Dict[str, str]) -> str:
 
 def _record_has_blank_show(record: Dict[str, str]) -> bool:
     """Return True when a metadata record has no established SHOW_NAME."""
-    return not (record.get("show_name") or "").strip()
+    artist = (record.get("artist") or "").strip()
+    return not (record.get("show_name") or "").strip() or bool(artist and not standard_ascii_text(artist).strip())
 
 
 def _blank_show_reason(record: Dict[str, str]) -> str:
@@ -1157,12 +1157,16 @@ def _build_bootlist_row_piece_for_base(
         setlist_target = os.path.join(setlists_dir, setlist_name)
         if should_write_setlist:
             _write_text_file(setlist_target, setlist_text)
+        canonical_path = main_dir_path
+        if config is not None and getattr(config, "storage_identity_enabled", False):
+            from tlo_storage_identities import stored_path
+            canonical_path = stored_path(config.TLOHome, volume_label, main_dir_path)
         rows.append({
             "Show": show_name,
             "Setlist": setlist_name,
             "Volume": volume_label,
-            "Path": main_dir_path,
-            "VolumePath": _format_bootlist_volume_path(volume_label, main_dir_path),
+            "Path": canonical_path,
+            "VolumePath": _format_bootlist_volume_path(volume_label, canonical_path),
         })
 
     return rows, unidentified_paths
@@ -1627,11 +1631,15 @@ def _copy_delete_exact_replacement_scopes(config, records) -> List[Dict[str, str
         destination_key = normalize_path_for_compare(destination) if destination else ""
         vkey = volume_key(item.get("volume", ""))
         for record in records:
-            record_path = str(getattr(record, "main_dir_path", "") or "").strip()
+            record_path = str((record.get("main_dir_path", "") if isinstance(record, dict)
+                               else getattr(record, "main_dir_path", "")) or "").strip()
             if not record_path:
                 continue
             if destination_key and not path_is_same_or_under(record_path, destination):
                 continue
+            if getattr(config, "storage_identity_enabled", False):
+                from tlo_storage_identities import stored_path
+                record_path = stored_path(config.TLOHome, item.get("volume", ""), record_path)
             key = (vkey, normalize_path_for_compare(record_path))
             if key in seen:
                 continue
@@ -2019,6 +2027,11 @@ def postprocess_metadata_outputs(config) -> Dict[str, int | str]:
     elapsed = _record_postprocess_timing(timing_entries, "resolve existing bootlist and volume policy", stage_started)
     _postprocess_status(config, f"existing bootlist/volume policy complete: keep {len(existing_rows_to_keep)}, replace {len(existing_rows_to_replace)} ({_format_elapsed_seconds(elapsed)})")
 
+    if getattr(config, "storage_identity_enabled", False):
+        from tlo_inventory_guard import check_final_inventory_loss, archive_inventory_metadata
+        check_final_inventory_loss(config, existing_rows_to_replace, records)
+        if existing_rows_to_replace:
+            archive_inventory_metadata(config)
     _postprocess_status(config, "preparing setlists directory...")
     stage_started = time.monotonic()
     preserve_existing_setlists = bool(existing_rows_to_keep)
@@ -2036,8 +2049,16 @@ def postprocess_metadata_outputs(config) -> Dict[str, int | str]:
     _postprocess_status(config, f"exporting setlists and building bootlist rows complete: wrote/reused {len(rows)} row(s) ({_format_elapsed_seconds(elapsed)})")
 
     current_unidentified_paths = _dedupe_paths(metadata_unidentified_paths + row_unidentified_paths)
+    reconciliation_records = records
+    if getattr(config, "storage_identity_enabled", False):
+        from tlo_storage_identities import stored_path
+        reconciliation_records = [
+            dict(record, **{field: stored_path(config.TLOHome, record.get("volume_label", ""), record[field])
+                           for field in ("main_dir_path", "original_main_dir_path") if record.get(field)})
+            for record in records
+        ]
     reinventory_reconciliation = _build_reinventory_reconciliation(
-        config, existing_rows_to_replace, records, rows, current_unidentified_paths
+        config, existing_rows_to_replace, reconciliation_records, rows, current_unidentified_paths
     )
     reinventory_delta_log = _write_reinventory_delta_log(config.TLOHome, reinventory_reconciliation)
     if reinventory_reconciliation:

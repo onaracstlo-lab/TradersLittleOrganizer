@@ -1,4 +1,4 @@
-PyInstaller native build notes - TLO v1.7 Build 624
+PyInstaller native build notes - TLO v1.7 Build 739
 ==================================================
 
 TLO ships a restricted, source-built, audio-only FFmpeg 9.0.2 binary.
@@ -17,9 +17,9 @@ Build environments are pinned by requirements-build.txt. Install with
 --require-hashes and --only-binary=:all:. The platform runner uses CPython
 3.13.16, PyInstaller 6.22.3 and the source-hash-pinned FFmpeg build recipe.
 Native build receipts, validation, security scans, signing, and distribution
-are handled by the independently versioned GitHub Build Process v123.
+are handled by the independently versioned GitHub Build Process v169.
 
-Build 623 SHN-to-FLAC conversion relies on FFmpeg's pcm_s32le decoder/encoder
+SHN-to-FLAC conversion relies on FFmpeg's pcm_s32le decoder/encoder
 and raw PCM muxer, which are explicitly enabled by build_audio_ffmpeg.sh.
 If strict decoding, independent PCM verification, or native Trash fails,
 the converter retains the original SHN instead of destroying evidence.

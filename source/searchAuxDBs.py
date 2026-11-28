@@ -7,7 +7,6 @@ from tlo_version import VERSION as _TLO_CANONICAL_VERSION
 __version__ = _TLO_CANONICAL_VERSION
 
 import argparse
-import os
 import sqlite3
 import sys
 import tkinter as tk
@@ -20,7 +19,11 @@ from tkinter import scrolledtext
 from tlo_gui_shortcuts import install_global_ctrl_a
 from match_city import normalize as city_key
 from tlo_venue_matcher import key as venue_key
-from tlo_msi_install_mode import saved_msi_data_home_for_executable
+from tlo_path_inputs import resolve_tlo_home
+from tlo_artist_db import artist_search_variants, load_artist_matcher, lookup_artist_masters
+from types import SimpleNamespace
+from tlo_db_validation import DatabaseAccessError
+from tlo_startup_help import SETUP_HEADING, report_missing_tlo_home
 
 try:
     from tlo_version import DISPLAY_VERSION
@@ -64,14 +67,19 @@ class AuxiliarySearchApp:
         self._build_ui()
         self._bind_shortcuts()
         self.search_entry.focus_set()
+        from_clipboard = initial_find is None
         if initial_find is None:
             try:
                 initial_find = root.clipboard_get()
             except tk.TclError:
                 initial_find = ""
+        if from_clipboard:
+            initial_find = (initial_find.splitlines() or [""])[0][:120]
         if initial_find.strip():
             self.search_var.set(initial_find.strip())
-            root.after_idle(self.run_search)
+            term = initial_find.strip()
+            if not from_clipboard or not ("/" in term or "\\" in term or (len(term) > 1 and term[1] == ":")):
+                root.after_idle(self.run_search)
 
     @property
     def db_path(self) -> Path:
@@ -98,11 +106,9 @@ class AuxiliarySearchApp:
 
         choice_frame = tk.Frame(outer)
         choice_frame.pack(fill="x", pady=(0, 8))
-        # One shared variable: selecting another checkbox clears the previous
-        # one; clicking the selected checkbox cannot leave no database selected.
         for label in DATABASES:
-            tk.Checkbutton(choice_frame, text=label, variable=self.database_var,
-                           onvalue=label, offvalue=label).pack(side="left", padx=(0, 12))
+            tk.Radiobutton(choice_frame, text=label, variable=self.database_var,
+                           value=label).pack(side="left", padx=(0, 12))
 
         button_frame = tk.Frame(outer)
         button_frame.pack(fill="x", pady=(0, 8))
@@ -115,9 +121,8 @@ class AuxiliarySearchApp:
 
         tk.Label(outer, text="Result:").pack(anchor="w")
 
-        self.status_box = scrolledtext.ScrolledText(outer, height=6, wrap="word")
-        self.status_box.pack(fill="both", expand=True)
-        self.status_box.configure(state="disabled")
+        self.status_var = tk.StringVar(value="Ready")
+        tk.Label(outer, textvariable=self.status_var, anchor="w", wraplength=760).pack(fill="x")
 
         self.root.bind("<Return>", self._on_return)
         self.root.bind("<KP_Enter>", self._on_return)
@@ -135,10 +140,7 @@ class AuxiliarySearchApp:
         self.search_entry.bind("<KP_Delete>", self._delete_forward)
 
     def _set_status(self, text: str) -> None:
-        self.status_box.configure(state="normal")
-        self.status_box.delete("1.0", tk.END)
-        self.status_box.insert("1.0", text)
-        self.status_box.configure(state="disabled")
+        self.status_var.set(text)
 
     def _select_all(self, event: tk.Event) -> str:
         event.widget.selection_range(0, tk.END)
@@ -214,11 +216,6 @@ class AuxiliarySearchApp:
             self._set_status("enter a search term")
             return
 
-        if self.results_window is not None and self.results_window.winfo_exists():
-            self.results_window.destroy()
-            self.results_window = None
-            self.results_text_widget = None
-
         if not self.db_path.is_file():
             messagebox.showerror("Database not found", f"Database file not found:\n{self.db_path}")
             self._set_status("database not found")
@@ -230,16 +227,19 @@ class AuxiliarySearchApp:
                 blocks = self._format_match_blocks(raw_term, self._query_database(raw_term))
             else:
                 blocks = query_places(self.db_path, database, raw_term)
-        except sqlite3.Error as exc:
-            messagebox.showerror("Database error", f"SQLite query failed:\n{exc}")
+        except (sqlite3.Error, DatabaseAccessError, RuntimeError) as exc:
+            messagebox.showerror("Database error", f"Catalog query failed:\n{exc}")
             self._set_status("database error")
             return
 
         if not blocks:
-            self._set_status("no results")
+            if self.results_window is not None and self.results_window.winfo_exists():
+                self.results_window.withdraw()
+            hint = " (use City, ST/province/country abbreviation; try city alone)" if database == "City" else ""
+            self._set_status("no results" + hint)
             return
 
-        self._set_status("match found")
+        self._set_status("1 match found" if len(blocks) == 1 else f"{len(blocks)} matches found")
         self._show_results_window(blocks)
 
     def _query_database(self, raw_term: str) -> list[MatchRecord]:
@@ -269,7 +269,18 @@ class AuxiliarySearchApp:
             cursor = conn.cursor()
             self._validate_required_tables(cursor)
 
-            match_rows = cursor.execute(match_sql, (raw_term,)).fetchall()
+            # Exact artist/alias variants first, then the same compressed
+            # fallback as inventory. Fetch all matching DB master records.
+            rows = set()
+            for variant in artist_search_variants(raw_term):
+                rows.update(cursor.execute(match_sql, (variant,)).fetchall())
+            if not rows:
+                matcher = load_artist_matcher(SimpleNamespace(artist_sqlite_db_file=str(self.db_path)))
+                for name in lookup_artist_masters(raw_term, matcher, _allow_terminal_artist_suffix_fallback=False):
+                    rows.update(cursor.execute(
+                        "SELECT artist_id, master_name, source_row_number FROM artists WHERE master_name = ?",
+                        (name,)).fetchall())
+            match_rows = sorted(rows, key=lambda row: (row[1].casefold(), row[0]))
             matches: list[MatchRecord] = []
 
             for artist_id, master_name, source_row_number in match_rows:
@@ -348,6 +359,7 @@ class AuxiliarySearchApp:
             self.results_text_widget.pack(fill="both", expand=True)
             self.results_text_widget.configure(state="disabled")
         else:
+            self.results_window.title(f"{self.database_var.get()} DB Matches")
             self.results_window.deiconify()
             self.results_window.lift()
             self.results_window.focus_force()
@@ -360,7 +372,8 @@ class AuxiliarySearchApp:
 
 
 def read_only_database(path: Path) -> sqlite3.Connection:
-    return sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
+    from tlo_catalog_io import open_catalog_readonly
+    return open_catalog_readonly(path)
 
 
 def query_places(path: Path, database: str, term: str) -> list[str]:
@@ -411,38 +424,45 @@ def query_places(path: Path, database: str, term: str) -> list[str]:
 
 
 def default_tlohome() -> Path:
-    env_value = os.environ.get(TLOHOME_ENV_VAR, "").strip()
-    if env_value:
-        return Path(env_value).expanduser()
-    saved = saved_msi_data_home_for_executable()
-    if saved:
-        return Path(saved)
-    if getattr(sys, "frozen", False):
-        # Portable executable or macOS .app bundle.
-        executable = Path(sys.executable).resolve()
-        for parent in executable.parents:
-            if parent.name == "apps":
-                return parent.parent
-        return executable.parent
-    return Path.cwd()
+    return Path(resolve_tlo_home(app_name="searchAuxDBs", require_writable=False))
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Search TLOHome/TLO_DBs auxiliary databases.")
-    parser.add_argument("--TLOHome", default=None, help="Full path to TLOHome. Overrides the TLOHome environment variable.")
+class _GuiArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ValueError(message)
+
+
+def parse_args(argv=None) -> argparse.Namespace:
+    parser = _GuiArgumentParser(description="Search TLOHome/TLO_DBs auxiliary databases.")
+    parser.add_argument("--TLOHome", "--tlo-home", default="", help="Full path to TLOHome. Overrides the TLOHome environment variable.")
+    parser.add_argument("--myTLO", default="", help=argparse.SUPPRESS)
     parser.add_argument("--database", choices=DATABASES, default="Artist")
     parser.add_argument("--find", default=None, help="Initial search term; defaults to clipboard.")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> None:
-    args = parse_args()
-    tlohome = Path(args.TLOHome).expanduser() if args.TLOHome else default_tlohome()
-    db_dir = tlohome.resolve() / "TLO_DBs"
+def main(argv=None) -> int:
+    try:
+        args = parse_args(argv)
+        tlohome = resolve_tlo_home(args.TLOHome, args.myTLO, app_name="searchAuxDBs", require_writable=False)
+    except ValueError as exc:
+        if str(exc).startswith(SETUP_HEADING):
+            return report_missing_tlo_home("searchAuxDBs")
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            try:
+                messagebox.showerror("TLO Auxiliary Database Search", str(exc), parent=root)
+            finally:
+                root.destroy()
+        except tk.TclError:
+            print(f"Error: {exc}", file=sys.stderr)
+        return 2
     root = tk.Tk()
-    AuxiliarySearchApp(root, db_dir, args.database, args.find)
+    AuxiliarySearchApp(root, Path(tlohome) / "TLO_DBs", args.database, args.find)
     root.mainloop()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

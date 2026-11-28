@@ -53,7 +53,7 @@ def _app_stub(gui, *, lookup=True, upgrade=True):
     return app
 
 
-def test_upgrade_environment_presence_is_independent(monkeypatch):
+def test_upgrade_requires_valid_normal_key_without_duplicate_secret(monkeypatch):
     monkeypatch.delenv(sfm.ENV_API_KEY, raising=False)
     monkeypatch.delenv(sfm.ENV_UPGRADE_API_KEY, raising=False)
     assert sfm.api_key_available() is False
@@ -61,13 +61,13 @@ def test_upgrade_environment_presence_is_independent(monkeypatch):
 
     monkeypatch.setenv(sfm.ENV_API_KEY, "same-secret")
     assert sfm.api_key_available() is True
-    assert sfm.upgrade_api_key_available() is False
+    assert sfm.upgrade_api_key_available() is True
 
     monkeypatch.setenv(sfm.ENV_UPGRADE_API_KEY, "same-secret")
     assert sfm.upgrade_api_key_available() is True
 
 
-def test_gui_enables_lookup_but_greys_upgrade_when_upgrade_variable_missing(monkeypatch):
+def test_gui_enables_explicit_upgrade_without_legacy_variable(monkeypatch):
     gui = _load_gui()
     monkeypatch.setenv(sfm.ENV_API_KEY, "same-secret")
     monkeypatch.delenv(sfm.ENV_UPGRADE_API_KEY, raising=False)
@@ -76,11 +76,11 @@ def test_gui_enables_lookup_but_greys_upgrade_when_upgrade_variable_missing(monk
     gui.App._apply_setlistfm_key_availability(app)
 
     assert app.bool_vars["setlistfm_lookup"].get() is True
-    assert app.bool_vars["setlistfm_upgrade"].get() is False
+    assert app.bool_vars["setlistfm_upgrade"].get() is True
     assert app.checkbox_widgets["setlistfm_lookup"].state == "normal"
-    assert app.checkbox_widgets["setlistfm_upgrade"].state == "disabled"
+    assert app.checkbox_widgets["setlistfm_upgrade"].state == "normal"
     assert app._setlistfm_key_available is True
-    assert app._setlistfm_upgrade_key_available is False
+    assert app._setlistfm_upgrade_key_available is True
 
 
 def test_gui_enables_upgrade_only_when_both_variables_are_present(monkeypatch):
@@ -112,9 +112,11 @@ def test_gui_disables_both_when_normal_key_is_missing_even_if_upgrade_variable_e
     assert app.checkbox_widgets["setlistfm_upgrade"].state == "disabled"
 
 
-def test_upgrade_cli_validation_requires_second_environment_variable(monkeypatch):
+def test_upgrade_cli_validation_allows_explicit_opt_in_without_second_secret(monkeypatch):
     monkeypatch.setenv(sfm.ENV_API_KEY, "same-secret")
     monkeypatch.delenv(sfm.ENV_UPGRADE_API_KEY, raising=False)
+    validate_setlistfm_upgrade_environment({"setlistfm_lookup": True, "setlistfm_upgrade": True})
+    monkeypatch.setenv(sfm.ENV_UPGRADE_API_KEY, "different")
     with pytest.raises(ValueError, match="SETLISTFMUPGRADE_API_KEY"):
         validate_setlistfm_upgrade_environment({"setlistfm_lookup": True, "setlistfm_upgrade": True})
     assert "same setlist.fm API key" in SETLISTFM_UPGRADE_KEY_ERROR

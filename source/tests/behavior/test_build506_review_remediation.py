@@ -283,8 +283,8 @@ def test_build506_upgrade_status_explains_missing_and_mismatched_keys(tmp_path, 
     assert "SETLISTFM_API_KEY" in gui._setlistfm_upgrade_gate_message("missing-normal")
 
     monkeypatch.setenv(sfm.ENV_API_KEY, "normal")
-    assert sfm.upgrade_api_key_status() == "missing-upgrade"
-    assert "SETLISTFMUPGRADE_API_KEY" in gui._setlistfm_upgrade_gate_message("missing-upgrade")
+    assert sfm.upgrade_api_key_status() == "available"
+    assert not gui._setlistfm_upgrade_gate_message("available")
 
     monkeypatch.setenv(sfm.ENV_UPGRADE_API_KEY, "different")
     assert sfm.upgrade_api_key_status() == "mismatch"

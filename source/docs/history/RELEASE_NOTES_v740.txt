@@ -1,0 +1,3 @@
+TLO v1.7 Build 740 — source candidate
+Correct source-owned remediation evidence: match the packaged build number, keep the exact 25 Build 681 review dispositions, and preserve STORAGE736 and RENAME737 in supplemental_findings. Source hygiene now rejects stale identity, invalid/missing dispositions and contaminated finding namespaces. The independently versioned Process v169 gate is unchanged.
+Build 739 application behavior and all database masters unchanged. Process v169 unchanged. Native acceptance pending.

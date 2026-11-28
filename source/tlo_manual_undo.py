@@ -243,7 +243,8 @@ def _protect_windows_undo_key(path: str) -> None:
     if os.name != 'nt':
         return
     try:
-        who = subprocess.run(['whoami.exe', '/user', '/fo', 'csv', '/nh'],
+        from tlo_security import trusted_windows_tool
+        who = subprocess.run([trusted_windows_tool('whoami.exe'), '/user', '/fo', 'csv', '/nh'],
                              capture_output=True, text=True, timeout=15, check=True)
         found = re.findall(r'S-1-\d+(?:-\d+)+', who.stdout)
         if len(found) != 1:
@@ -253,7 +254,7 @@ def _protect_windows_undo_key(path: str) -> None:
             (os.path.dirname(path), [f'{sid}:(OI)(CI)F', '*S-1-5-18:(OI)(CI)F']),
             (path, [f'{sid}:F', '*S-1-5-18:F']),
         ):
-            result = subprocess.run(['icacls.exe', target, '/inheritance:r',
+            result = subprocess.run([trusted_windows_tool('icacls.exe'), target, '/inheritance:r',
                                      '/grant:r', *grants], capture_output=True,
                                     text=True, timeout=15, check=False)
             if result.returncode:

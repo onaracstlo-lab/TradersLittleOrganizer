@@ -123,11 +123,17 @@ def _ordinary_suffixes_preserved(source: str, target: str) -> bool:
 
 
 # A narrowly defined trading-directory convention, not a generic extension
-# remover. Bit-depth markers, source qualifiers, IDs and arbitrary titles must
-# still pass the independent preservation checks below.
+# remover. An alphanumeric alias must match an exact Artist DB entry.
+# The compact dotted source/ordinary-format convention (e.g. aud.flac16)
+# describes trading media, not performance identity. Do not strip arbitrary
+# identifiers, recording notes, higher-resolution designators or parentheticals.
+_PLAIN_MEDIA = r"(?:flac|shnf?|wav|mp3)"
+_SOURCE_MEDIA = r"(?:aud|sbd|sdb|matrix|fm|soundboard|audience)"
+_ORDINARY_MEDIA = r"(?:flac16|flac|shnf?|wav|mp3)"
 _SHORTHAND_LEAF = re.compile(
-    r"(?P<prefix>[A-Za-z]{1,4})(?P<date>(?:[0-9]{4}|[0-9]{2})-[0-9]{2}-[0-9]{2})"
-    r"(?:\.(?:flac|shnf?|wav|mp3))?", re.I
+    r"(?P<prefix>[A-Za-z][A-Za-z0-9]{0,3}?)"
+    r"(?P<date>(?:[0-9]{4}|[0-9]{2})-[0-9]{2}-[0-9]{2})"
+    rf"(?:\.(?P<tail>(?:{_SOURCE_MEDIA}\.)?{_ORDINARY_MEDIA}))?", re.I
 )
 
 
@@ -147,19 +153,21 @@ def _normalize_verified_trading_leaf(source: str, target: str, artist: str,
         selected_date = calendar_date.fromisoformat(date)
     except ValueError:
         return source
-    # Require the actual resolved date (not just numeric similarity), in the
-    # target as well as in the year-first shorthand.
     if date not in _FULL_DATE.findall(target):
         return source
     if match.group("date") not in (date, selected_date.strftime("%y-%m-%d")):
         return source
     prefix = match.group("prefix")
+    tail = match.group("tail") or ""
     if prefix.casefold() == verified_prefix.casefold():
         # The extraction pipeline established a unique Artist DB alias for
-        # the selected artist; substitution is lossless.
+        # the selected artist; the resolved date matches the original leaf.
+        # The entire tail has already matched the narrow technical grammar.
         artist_text = artist
-    elif prefix.casefold() in _words(artist):
-        # A literal complete artist word is already preserved in the target.
+    elif prefix.casefold() in _words(artist) and (
+            not tail or re.fullmatch(_PLAIN_MEDIA, tail, re.I)):
+        # Preserve the old literal-word exception for plain formats only.
+        # An alphanumeric alias or richer technical tail requires DB proof.
         artist_text = prefix
     else:
         return source
@@ -179,8 +187,8 @@ def safe_rename_target(source_leaf: str, candidate_leaf: str, *, artist: str = "
 
     Except for exact case and lossless undated Artist/Album separator repairs,
     requires a positively identified artist and a date. The normalized candidate
-    must retain all source identity words other than date spelling; no year or
-    source qualifier can be lost. A punctuation-only *removal* is not a reason
+    must retain all source identity words other than verified shorthand and
+    date spelling; known years and meaningful recording qualifiers remain protected. A punctuation-only *removal* is not a reason
     to rename a previously compliant folder again.
     """
     source = str(source_leaf or "").strip()

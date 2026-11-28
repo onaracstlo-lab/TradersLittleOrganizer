@@ -102,7 +102,7 @@ def test_current_msi_worker_prevents_implicit_signing_certificate_rotation():
 
 def test_windows_key_acl_uses_actual_current_sid_not_account_name():
     contents = (Path(__file__).resolve().parents[2] / 'tlo_manual_undo.py').read_text(encoding='utf-8')
-    assert "['whoami.exe', '/user', '/fo', 'csv', '/nh']" in contents
-    assert "'icacls.exe'" in contents
+    assert "[trusted_windows_tool('whoami.exe'), '/user', '/fo', 'csv', '/nh']" in contents
+    assert "trusted_windows_tool('icacls.exe')" in contents
     assert '/inheritance:r' in contents
     assert 'os.chmod' in contents  # POSIX retains 0700/0600 semantics

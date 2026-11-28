@@ -1,0 +1,8 @@
+TLO v1.7 Build 738 — NOT RELEASE-ATTESTED
+Source regression (Linux, Python 3.12.14, pytest pytest 9.2.0): 3228 passed, 39 skipped, 1 deselected, 2 warnings, 8 subtests passed in 87.06s (0:01:27)
+Companion Build Process v169: 194 passed, 14 skipped, 1 warning in 2.02s
+Local Ruff: PASS (ruff 0.17.6); native pinned Ruff remains mandatory.
+Current document version and catalog location/text contracts: PASS.
+Eleven new test cases passed. Full suite excludes test_process_pool_crash_retains_completed_groups (prior restricted environment prevents multiprocessing socket operations). 39 skips reflect unavailable Tk display, FLAC fixture encoder and native Windows-only behavior. Two warnings: pytest AnyIO deprecation and intentional duplicate ZIP test.
+DOCX and RTF were rendered; inspected changed requirements pages. Full native Windows/macOS/WSL, Authenticode, MSI upgrade/installer, UNC share and GUI acceptance NOT ATTESTED for Build 738.
+Three supplied SQLite databases unchanged; hosted v169 stages all four authoritative masters, including venues.txt from ArtistDB-Master. Source bundle only.

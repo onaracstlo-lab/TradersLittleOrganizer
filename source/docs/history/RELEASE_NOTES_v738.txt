@@ -1,0 +1,3 @@
+TLO v1.7 Build 738 — source candidate
+Correct Windows helper resolution; harden advisory lock and standalone recovery; ignore AppleDouble and TLO scratch, use explicit media roles; open SQLite read-only with UNC-safe URI; make venues.txt optional with valid SQLite; reconcile requirements/catalog and permanent cleanup docs.
+Build process v169 unchanged; native release acceptance pending.

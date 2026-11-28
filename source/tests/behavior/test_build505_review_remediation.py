@@ -225,7 +225,7 @@ def test_build505_review_documentation_and_packaging_cleanup():
     assert "BOM-marked UTF-16 and NUL-dominant BOM-less UTF-16 LE/BE must be recognized before UTF-8" in req
     assert "must be written explicitly as [Volume]" in req
     assert "Destination must not be the same path as a requested source" in req
-    assert "exactly the same API key value as SETLISTFM_API_KEY" in req
+    assert "optional legacy SETLISTFMUPGRADE_API_KEY or SETLISTFM_UPGRADE_API_KEY values, if present, must exactly match it" in req
     assert "Delete extra tags" not in req
 
     manual = (root / RA.MANUAL_FILENAME).read_text(encoding="utf-8", errors="ignore")

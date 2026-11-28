@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Artist followed by date, venue, or date. Multiple words may be quoted or supplied normally.",
     )
     parser.add_argument(
-        "--TLOHome",
+        "--TLOHome", "--tlo-home",
         dest="TLOHome",
         default="",
         metavar="DIR",
@@ -43,7 +43,7 @@ def main(argv=None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        tlo_home = resolve_tlo_home(args.TLOHome, args.myTLO, error_type=ResearchError, app_name="tlo-research")
+        tlo_home = resolve_tlo_home(args.TLOHome, args.myTLO, error_type=ResearchError, app_name="tlo-research", require_writable=False)
         output = research_logs(tlo_home, " ".join(args.query))
     except (ResearchError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

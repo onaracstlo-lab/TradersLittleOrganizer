@@ -1,0 +1,13 @@
+# Build 737 source-candidate regression report
+
+TLO v1.7 Build 737 — NOT RELEASE-ATTESTED
+Companion GitHub Build Process v169 (unchanged).
+Local Linux source regression (Python 3.12, pytest): 3217 passed, 39 skipped, 1 deselected, 1 warning, 8 subtests passed in 90.23s (0:01:30)
+Local companion build process regression: 194 passed, 14 skipped in 2.37s
+Ruff check --no-cache .: PASS (local lint; pinned hosted lint is not attested).
+Release hygiene and requirements/catalog consistency checks: PASS.
+Twenty new regression cases cover the reported Robert Walter's 20th Congress show, full selected setlist, real-folder rename with unchanged track names and file contents, repeat-run stability, Tag Copy, Copy/Delete, Add Shows, verified alphanumeric aliases, ordinary dotted trading media tails and rejection of unverified aliases, conflicting dates, unknown IDs, standalone source markers and higher-resolution or parenthetical recording information. Targeted regression: 43 passed, 1 deselected, 8 subtests passed.
+The full run deselected test_process_pool_crash_retains_completed_groups because the execution environment prevents its multiprocessing socket operations (PermissionError: Operation not permitted). Platform-specific, graphical-display, and unavailable audio-fixture tests account for the skips. The one warning is the deliberate duplicate ZIP filename fixture.
+Document validation: current Word requirements and RTF manual rendered; updated pages 59 and 36 respectively visually reviewed. Requirements CSV locators match the current DOCX. User manual, FAQ and normative requirements describe matching behavior and safeguards.
+All three SQLite masters verified byte-for-byte unchanged from Build 736. Authoritative ArtistDB-Master staging still supplies venues.txt. Build 736 storage identity protections retained unchanged.
+Native Windows/macOS/WSL acceptance, full hosted platform tests, signed MSI installation/uninstallation and release acceptance are NOT ATTESTED for Build 737. The rename guard is platform-independent Python; local tests do not certify native platform operation. Run the unchanged process v169 and retain all native release gates.

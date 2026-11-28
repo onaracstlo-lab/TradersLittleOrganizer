@@ -160,7 +160,9 @@ def test_main_uses_shared_tlohome_precedence_and_hidden_mytlo(tmp_path, monkeypa
         return 0
 
     monkeypatch.setattr(module, "delete_duplicate_copy_directories", fake_delete)
-    assert module.main(["--TLOHome", str(cli_home), "--myTLO", str(my_home), str(root)]) == 0
+    assert module.main(["--TLOHome", str(cli_home), "--myTLO", str(my_home), str(root)]) == 2
+    assert not seen
+    assert module.main(["--myTLO", str(my_home), str(root)]) == 0
     assert seen == {"search_root": str(root), "tlo_home": str(my_home)}
 
 

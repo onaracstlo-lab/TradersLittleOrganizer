@@ -152,6 +152,17 @@ def test_release_hygiene_catches_stale_documents_and_unused_test_imports(tmp_pat
     from tests import _release_artifacts as artifacts
     shutil.copy2(ROOT / artifacts.REQUIREMENTS_FILENAME, fake)
     shutil.copy2(ROOT / artifacts.MANUAL_FILENAME, fake)
+    # The source hygiene preflight now validates remediation evidence too.
+    # Keep that independent gate satisfied in this unused-import fixture.
+    import json
+    evidence = json.loads((ROOT / 'TLO_RELEASE_REMEDIATION.json').read_text(encoding='utf-8'))
+    shutil.copy2(ROOT / 'TLO_RELEASE_REMEDIATION.json', fake)
+    for record in evidence['findings'].values():
+        if record['status'] == 'fixed':
+            relative = record['test'].split('::', 1)[0]
+            target = fake / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / relative, target)
     bad = fake / 'tests' / 'test_bad.py'
     bad.write_text('import json\n\ndef test_ok():\n    assert True\n', encoding='utf-8')
     script = ROOT / 'tools' / 'check_release_hygiene.py'

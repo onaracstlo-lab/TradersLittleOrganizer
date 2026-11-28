@@ -224,9 +224,20 @@ def _remove_unidentified_show_path(tlo_home: str, matched_path: str) -> None:
 def _matching_bootlist_rows(tlo_home: str, original_path: str) -> List[Dict[str, str]]:
     """Match a physical Original to canonical bootlist rows without crossing volumes."""
     rows = read_bootlist(tlo_home)
-    target_path = normalize_path_for_compare(original_path)
+    from tlo_storage_identities import storage_name_and_path, registered_entry
+    if os.path.isfile(os.path.join(tlo_home, "storage-identities.json")):
+        name, canonical = storage_name_and_path(tlo_home, original_path)
+    else:
+        name, canonical = os_volume_label_for_path(original_path), original_path
+    target_path = normalize_path_for_compare(canonical)
     target_leaf = _portable_leaf(original_path)
-    target_volume = volume_key(os_volume_label_for_path(original_path))
+    target_volume = volume_key(name)
+    registered = registered_entry(tlo_home, name)
+    if not registered:
+        # Never allow a legacy blank or label-only lookup to select a managed
+        # inventory row belonging to a different registered root.
+        rows = [row for row in rows if not registered_entry(
+            tlo_home, parse_volume_path_value(row.get("VolumePath", ""))[0])]
 
     path_matches: List[Tuple[Dict[str, str], str]] = []
     for row in rows:
@@ -252,7 +263,7 @@ def _matching_bootlist_rows(tlo_home: str, original_path: str) -> List[Dict[str,
     # have a known, matching visible volume label.  Never use it to jump from a
     # supplied physical path to a same-named folder on another volume.
     leaf_matches: List[Dict[str, str]] = []
-    if target_volume and target_leaf:
+    if target_volume and target_leaf and not registered:
         for row in rows:
             row_volume, physical = parse_volume_path_value(row.get("VolumePath", ""))
             if volume_key(row_volume) == target_volume and _portable_leaf(physical) == target_leaf:
@@ -570,8 +581,13 @@ def apply_unidentified_manual_update(
     destination_parent, final_path = resolve_unidentified_destination(destination_path, new_leaf)
 
     old_rows = read_bootlist(config.TLOHome)
-    final_key = normalize_path_for_compare(final_path)
-    final_volume = volume_key(os_volume_label_for_path(final_path))
+    from tlo_storage_identities import storage_name_and_path
+    if os.path.isfile(os.path.join(config.TLOHome, "storage-identities.json")):
+        final_name, canonical_final = storage_name_and_path(config.TLOHome, final_path)
+    else:
+        final_name, canonical_final = os_volume_label_for_path(final_path), final_path
+    final_key = normalize_path_for_compare(canonical_final)
+    final_volume = volume_key(final_name)
     for row in old_rows:
         row_volume, physical = parse_volume_path_value(row.get("VolumePath", ""))
         same_path = normalize_path_for_compare(physical) == final_key
@@ -609,7 +625,7 @@ def apply_unidentified_manual_update(
         rows = list(old_rows)
         rows.append({
             "Show": new_leaf,
-            "VolumePath": format_volume_path(os_volume_label_for_path(final_path), final_path),
+            "VolumePath": format_volume_path(final_name, canonical_final),
         })
         write_bootlist(config.TLOHome, rows)
         _remove_unidentified_show_path(config.TLOHome, matched_unidentified)

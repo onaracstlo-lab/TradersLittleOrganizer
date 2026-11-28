@@ -8,6 +8,10 @@ import os
 from pathlib import Path
 import sqlite3
 import tempfile
+import sys
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 def validate(path: Path) -> None:
@@ -15,7 +19,8 @@ def validate(path: Path) -> None:
     if path.is_symlink() or not path.is_file() or path.stat().st_size < 4096:
         raise ValueError(f'Missing or unsafe cities.sqlite: {path}')
     try:
-        with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True)) as db:
+        from tlo_catalog_io import open_catalog_readonly
+        with closing(open_catalog_readonly(path)) as db:
             version = db.execute("SELECT value FROM metadata WHERE key='schema_version'").fetchone()
             if not version or version[0] != '1' or db.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
                 raise ValueError('cities.sqlite failed schema/integrity validation')
