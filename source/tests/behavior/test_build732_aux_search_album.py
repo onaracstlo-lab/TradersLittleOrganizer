@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import importlib.util
 import sqlite3
+from contextlib import closing
 import sys
 import tkinter as tk
 
@@ -118,7 +119,7 @@ def test_three_real_database_searches():
 
 def test_database_access_is_read_only(tmp_path):
     p = tmp_path / "catalog.sqlite"
-    with sqlite3.connect(p) as conn:
+    with closing(sqlite3.connect(p)) as conn, conn:
         conn.execute("create table sample (name text)")
     conn = aux.read_only_database(p)
     try:

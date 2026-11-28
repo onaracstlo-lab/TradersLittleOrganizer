@@ -1,7 +1,7 @@
 {
-  "build": 743,
+  "build": 746,
   "reviewed_baseline": 685,
-  "scope": "Build 743: Bound generic ancestor artist evidence to the selected root and prevent explicit dated artist text or existing tags from being replaced by container names; fold accent queries against the Artist DB; report non-Latin unrepresentable artists as unidentified; use the actual rename guard in Dry Run; lock mutating CLI Tag, GUI Tag and duplicate cleanup. Exclude TLO work/held-original directories from Tag Copy and Copy Requests; refuse Copy/Delete when held data is nested; retain duplicate-repair originals with source-relative provenance and log repairs; warn to re-inventory after moves; align home options, safe confirmation defaults, auxiliary search and CLI preview. Native acceptance pending.",
+  "scope": "Build 746: Close legacy storage-identity SQLite connections explicitly on success and failure, including test setup. Use the existing read-only catalog opener. Preserve log-owned identity, migration backups and reversal safeguards. Build Process v170 and database masters unchanged. Native acceptance pending.",
   "findings": {
     "H1": {
       "status": "fixed",
@@ -517,5 +517,22 @@
         "evidence": "Build 742 and 743 behavior tests; full local regression"
       }
     }
+  },
+  "git_staging_744": {
+    "baseline": 743,
+    "process": "v170",
+    "status": "source remediation; native acceptance pending",
+    "test": "Process v170 tests/test_process_v170_disposable_git_metadata.py"
+  },
+  "storage_log_745": {
+    "baseline": 744,
+    "status": "local source remediation; native acceptance pending",
+    "test": "tests/behavior/test_build745_storage_log_identity.py"
+  },
+  "storage_handle_746": {
+    "baseline": 745,
+    "native_failed_run": 46105172247,
+    "status": "local source remediation; native acceptance pending",
+    "test": "tests/behavior/test_build745_storage_log_identity.py::test_legacy_read_closes_connection_on_success_and_failure"
   }
 }

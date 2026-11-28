@@ -326,7 +326,7 @@ def reverse_folder_operations(
     verified = {}
     for op in operations:
         try:
-            if not check_folder_operation(plan.tlo_home, op.code, op.source, op.destination, verified):
+            if not check_folder_operation(plan.tlo_home, op.code, op.source, op.destination, verified, evidence_path=plan.log_path):
                 result.conflicts += 1
                 report(f"CONFLICT: logged storage identity cannot be verified; folders left untouched | {op.source} | {op.destination}")
                 continue

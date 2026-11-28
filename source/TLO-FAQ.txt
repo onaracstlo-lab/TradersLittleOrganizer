@@ -318,13 +318,16 @@ A: Main hamburger > Search > Artist, Cities or Venues opens searchAuxDBs using t
 
 
 Q: How do I manage storage identities?
-A: In Main, open the hamburger menu and choose Manage Storage Identities. Usually you just run Inventory and let TLO remember the folder. Register New identifies a different collection. Connect / Replace reconnects the same collection at a new location or links an older named inventory. Register Backup Copy identifies a separate copy of the selected collection. Separate Collection removes a backup relationship without deleting records. Select an inventory to see its last path and available disk/partition details. No external commands are needed.
+A: In Main, open the hamburger menu and choose Manage Storage Identities. Usually you just run Inventory and let TLO remember the folder. Register New identifies a different collection. Connect / Replace reconnects the same collection at a new location or links an older named inventory. Register Backup Copy identifies a separate copy of the selected collection. Separate Collection removes a backup relationship without deleting records. Select an inventory to see its last path, disk/partition IDs and last-seen time. The existing logs are the source of truth. No external commands are needed.
 
 Q: What if I connect a completely different collection at the same path or with the same drive label?
 A: The identification file and available disk/partition information help TLO distinguish the folders. It creates a separate inventory or stops for you to resolve a conflict. If a previously registered collection has lost or changed 25% or more of its performances, you must approve the replacement. New performances cannot hide missing old performances. Choose No when unsure. Previous metadata is saved under TLOHome/logs/inventory-history before replacement. This is not a backup of the music.
 
 Q: What is .tlo-root-id.json?
 A: It is a small identification file TLO creates in a writable inventory folder. Leave it in place. If the file is lost, use Connect / Replace to reconnect the same collection. If you copy an entire collection, use Manage Storage Identities to register the copy separately. If the folder is read-only and TLO cannot reliably identify its disk and partition, TLO will stop instead of guessing. Disk serial numbers may be unavailable on some hardware and network shares.
+
+Q: Where is drive and partition tracking maintained?
+A: The numbered groupsN.log, metaN.log and other scope log headers contain STORAGE_IDENTITY for verified roots or STORAGE_OBSERVATION for unregistered scopes. They record serial/alternate disk ID, partition GUID or geometry fallback, filesystem ID if available, and last seen. The existing logs/folderOperations.log retains registration and reversal evidence. Old storage-identities.json and folderOperationIdentities.sqlite files are migrated on a verified write and left untouched as recovery backups. TLO closes legacy SQLite connections after reading, including on error. Search/Research do not modify anything.
 
 Q: Do AppleDouble files count as tracks?
 A: No. OS sidecars and TLO scratch artifacts are ignored; audio and video have separate discovery and corruption roles. WMA/TTA are counted as audio but are not tag-writable.

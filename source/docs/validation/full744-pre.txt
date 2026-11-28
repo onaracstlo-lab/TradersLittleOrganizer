@@ -1,0 +1,150 @@
+..............................................s......................... [  2%]
+........................................................................ [  4%]
+........................................................................ [  6%]
+........................................................................ [  8%]
+........................................................................ [ 10%]
+........................................................................ [ 13%]
+........................................................................ [ 15%]
+........................................................................ [ 17%]
+........................................................................ [ 19%]
+.......................................s................................ [ 21%]
+........................................................................ [ 23%]
+........................................................................ [ 26%]
+...........s............................................................ [ 28%]
+........................................................................ [ 30%]
+..............................................................ss........ [ 32%]
+..s..........s.......................................................... [ 34%]
+........ssssssss........................................................ [ 36%]
+..........ssss...............s.....................................ss.s. [ 39%]
+.......s................................................................ [ 41%]
+........................................................................ [ 43%]
+........................................................................ [ 45%]
+.......................................................ssss..ss......... [ 47%]
+........................................................................ [ 50%]
+........................................................................ [ 52%]
+........................................................................ [ 54%]
+........................................................................ [ 56%]
+........................sF.............................................. [ 58%]
+....s................................................................... [ 60%]
+........................................................................ [ 63%]
+........................................................................ [ 65%]
+........................................................................ [ 67%]
+................................................................ [ 69%]
+...s..................ss................................................ [ 71%]
+........................................................................ [ 73%]
+......................................................................ss [ 75%]
+s....................................................................... [ 78%]
+........................................................................ [ 80%]
+........................................................................ [ 82%]
+........................................................................ [ 84%]
+........................................................................ [ 86%]
+........................................................................ [ 88%]
+...................................s.................................... [ 91%]
+...................................................F.................... [ 93%]
+........................................................................ [ 95%]
+........................................................................ [ 97%]
+........................................................................ [ 99%]
+.....                                                                    [100%]
+=================================== FAILURES ===================================
+_____ test_release_hygiene_catches_stale_documents_and_unused_test_imports _____
+
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-51/test_release_hygiene_catches_s0')
+
+    def test_release_hygiene_catches_stale_documents_and_unused_test_imports(tmp_path):
+        import shutil
+        import subprocess
+    
+        # Exercise the actual offline checker on a minimal fake source tree so it
+        # cannot pass merely by checking that a literal helper name exists.
+        fake = tmp_path / 'stage'
+        (fake / 'tests').mkdir(parents=True)
+        from tests import _release_artifacts as artifacts
+        shutil.copy2(ROOT / artifacts.REQUIREMENTS_FILENAME, fake)
+        shutil.copy2(ROOT / artifacts.MANUAL_FILENAME, fake)
+        # The source hygiene preflight now validates remediation evidence too.
+        # Keep that independent gate satisfied in this unused-import fixture.
+        import json
+        evidence = json.loads((ROOT / 'TLO_RELEASE_REMEDIATION.json').read_text(encoding='utf-8'))
+        shutil.copy2(ROOT / 'TLO_RELEASE_REMEDIATION.json', fake)
+        for record in evidence['findings'].values():
+            if record['status'] == 'fixed':
+                relative = record['test'].split('::', 1)[0]
+                target = fake / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / relative, target)
+        bad = fake / 'tests' / 'test_bad.py'
+        bad.write_text('import json\n\ndef test_ok():\n    assert True\n', encoding='utf-8')
+        script = ROOT / 'tools' / 'check_release_hygiene.py'
+        args = [sys.executable, str(script), '--source-root', str(fake), '--build-number', str(__import__('tlo_version').BUNDLE_BUILD)]
+        failed = subprocess.run(args, capture_output=True, text=True, check=False)
+        assert failed.returncode == 1 and 'possibly unused import json' in failed.stdout
+        bad.write_text('import json\n\ndef test_ok():\n    assert json.loads("true")\n', encoding='utf-8')
+        clean = subprocess.run(args, capture_output=True, text=True, check=False)
+>       assert clean.returncode == 0, clean.stdout + clean.stderr
+E       AssertionError: FAIL: manual keyword metadata references another build
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python', '/workspace/scratch..., '--build-number', '744'], returncode=1, stdout='FAIL: manual keyword metadata references another build\n', stderr='').returncode
+
+tests/behavior/test_build686_review_integrity.py:174: AssertionError
+____ test_release_source_has_one_current_report_set_without_stale_versions _____
+
+    def test_release_source_has_one_current_report_set_without_stale_versions():
+        for prefix in ("CHANGES", "BUILD_VERIFICATION", "REGRESSION_RESULTS",
+                       "SOURCE_BUNDLE_README", "SHA256SUMS"):
+            candidates = sorted(ROOT.glob(prefix + "_v[0-9]*.txt"))
+>           assert [p.name for p in candidates] == [f"{prefix}_{V.VERSION}.txt"]
+E           AssertionError: assert [] == ['SHA256SUMS_v744.txt']
+E             
+E             Right contains one more item: 'SHA256SUMS_v744.txt'
+E             Use -v to get more diff
+
+tests/contracts/test_build663_release_preflight.py:37: AssertionError
+=============================== warnings summary ===============================
+../../../../opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/anyio/pytest_plugin.py:14
+  /opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/anyio/pytest_plugin.py:14: PytestRemovedIn10Warning: _pytest.python.CallSpec2 has been renamed to CallSpec.
+  The CallSpec2 alias will be removed in pytest 10.
+  Update imports to use CallSpec instead.
+  See https://docs.pytest.org/en/stable/deprecations.html#callspec2-renamed
+    from _pytest.python import CallSpec2
+
+tests/behavior/test_build509_review_remediation.py::test_build509_zip_rejects_duplicate_ads_and_windows_device_names
+  /opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/zipfile/__init__.py:1625: UserWarning: Duplicate name: 'a.txt'
+    return self._open_to_write(zinfo, force_zip64=force_zip64)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/behavior/test_build407_artist_and_research_gui.py:102: Tk display unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/behavior/test_build501_review_remediation.py:83: Tk display is unavailable: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/behavior/test_build533_cleanup_batch_label_safety.py:60: native cmd.exe confirmation requires Windows
+SKIPPED [1] tests/behavior/test_build559_cleanup_windows_label_guard.py:94: cmd.exe and actual-volume verification require native Windows
+SKIPPED [1] tests/behavior/test_build559_cleanup_windows_label_guard.py:131: native Windows required
+SKIPPED [1] tests/behavior/test_build560_recycle_fail_closed.py:181: requires native Windows with real Recycle Bin
+SKIPPED [1] tests/behavior/test_build561_trusted_windows_powershell.py:73: Requires native Windows host
+SKIPPED [4] tests/behavior/test_build585_corruption_ffp.py:48: FLAC test-fixture encoder unavailable
+SKIPPED [1] tests/behavior/test_build585_corruption_ffp.py:54: FLAC test-fixture encoder unavailable
+SKIPPED [1] tests/behavior/test_build585_corruption_ffp.py:66: FLAC test-fixture encoder unavailable
+SKIPPED [1] tests/behavior/test_build585_corruption_ffp.py:75: FLAC test-fixture encoder unavailable
+SKIPPED [1] tests/behavior/test_build585_corruption_ffp.py:89: FLAC test-fixture encoder unavailable
+SKIPPED [2] tests/behavior/test_build595_review_vertical_scroll.py:32: No graphical display: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/behavior/test_build595_review_vertical_scroll.py:81: No graphical display: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/behavior/test_build595_review_vertical_scroll.py:102: No graphical display: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/behavior/test_build598_live_window_icons.py:87: No graphical display: no display name and no $DISPLAY environment variable
+SKIPPED [1] tests/behavior/test_build603_preferences.py:111: Tk display required
+SKIPPED [1] tests/behavior/test_build603_preferences.py:169: Tk display required
+SKIPPED [1] tests/behavior/test_build603_preferences.py:202: Tk display required
+SKIPPED [1] tests/behavior/test_build604_preferences_validation.py:112: Tk display required
+SKIPPED [4] tests/behavior/test_build638_preferences_editor.py:15: Tk display required
+SKIPPED [2] tests/behavior/test_build639_windows_path_drops.py:89: Tk display required
+SKIPPED [1] tests/behavior/test_build686_review_integrity.py:120: Tk display is required
+SKIPPED [1] tests/behavior/test_build696_windows_stage_recovery.py:60: native Win32 PID behavior
+SKIPPED [1] tests/behavior/test_build732_aux_search_album.py:158: Tk display required
+SKIPPED [1] tests/behavior/test_build735_powershell_home.py:50: Native Windows PowerShell acceptance
+SKIPPED [1] tests/behavior/test_build735_powershell_home.py:76: Native Windows PowerShell acceptance
+SKIPPED [1] tests/behavior/test_gui_behavior.py:43: A graphical display is required for Tkinter GUI behavior tests
+SKIPPED [1] tests/behavior/test_gui_behavior.py:72: A graphical display is required for Tkinter GUI behavior tests
+SKIPPED [1] tests/behavior/test_gui_behavior.py:88: A graphical display is required for Tkinter GUI behavior tests
+SKIPPED [1] tests/behavior/test_research_behavior.py:200: Tk display unavailable: no display name and no $DISPLAY environment variable
+FAILED tests/behavior/test_build686_review_integrity.py::test_release_hygiene_catches_stale_documents_and_unused_test_imports
+FAILED tests/contracts/test_build663_release_preflight.py::test_release_source_has_one_current_report_set_without_stale_versions
+2 failed, 3268 passed, 39 skipped, 1 deselected, 2 warnings, 8 subtests passed in 122.87s (0:02:02)

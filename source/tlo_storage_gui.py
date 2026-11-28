@@ -66,10 +66,10 @@ def manage_storage_identities(parent, home):
         item = roots.get(selected())
         if item:
             hardware = item.get("hardware", {})
-            serial = hardware.get("disk_serial", "Not available")
-            partition = hardware.get("partition_guid") or hardware.get("partition_offset") or "Not available"
+            serial = hardware.get("disk_serial") or hardware.get("disk_unique_id") or "Not available"
+            partition = hardware.get("partition_guid") or hardware.get("partition_offset") or hardware.get("partition_start_sector") or hardware.get("filesystem_uuid") or hardware.get("filesystem_serial") or "Not available"
             group = [r["name"] for r in roots.values() if r.get("collection_id") == item.get("collection_id") and r is not item]
-            detail.set(f"Drive model: {hardware.get('model', 'Not available')} | Serial: {serial}\n"
+            detail.set(f"Disk identifier: {serial} | Last seen: {item.get('last_seen', 'Not available')}\n"
                        f"Partition: {partition} | Related copies: {', '.join(group) or 'None'}")
         elif selected() in legacy:
             detail.set("Older inventory: select Connect / Replace and choose the original collection folder.")

@@ -325,6 +325,8 @@ def _search_paths_from_group_log(log_path: str) -> List[str]:
                 if line.startswith("SEARCH_PATH:"):
                     _add(line.split(":", 1)[1].strip())
                     continue
+                if line.startswith(("# STORAGE_IDENTITY: ", "# STORAGE_OBSERVATION: ")):
+                    continue
                 if line.startswith("#"):
                     for marker in ("for search paths:", "for search path:"):
                         if marker in line:

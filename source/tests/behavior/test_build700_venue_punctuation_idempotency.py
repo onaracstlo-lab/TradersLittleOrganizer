@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import shutil
 import sqlite3
+from contextlib import closing
 import subprocess
 import sys
 from pathlib import Path
@@ -21,7 +22,7 @@ FLAC_FIXTURE = ROOT / "tests" / "fixtures" / "build543_silence.flac"
 def _prepare_db(home: Path) -> None:
     db = home / "TLO_DBs"
     db.mkdir()
-    with sqlite3.connect(db / "artists.sqlite") as conn:
+    with closing(sqlite3.connect(db / "artists.sqlite")) as conn, conn:
         conn.executescript("""
         CREATE TABLE artists (artist_id INTEGER PRIMARY KEY, source_row_number INTEGER NOT NULL UNIQUE, master_name TEXT NOT NULL);
         CREATE TABLE aliases (alias_id INTEGER PRIMARY KEY, artist_id INTEGER NOT NULL, alias_text TEXT NOT NULL, alias_order INTEGER NOT NULL);
@@ -79,6 +80,14 @@ def test_four_inventory_passes_keep_folder_album_and_bootlist_identical(tmp_path
         boot = (home / "bootlist.csv").read_text(encoding="utf-8")
         assert boot.splitlines()[2].startswith(expected + "^")
         assert len(boot.splitlines()) == 3
+        from tlo_storage_identities import load_registry, IDENTITY_PREFIX, JOURNAL, REGISTRY, LEGACY_OPERATIONS
+        records = load_registry(str(home))
+        assert len(records) == 1 and next(iter(records.values()))["path"] == str(music)
+        assert any(IDENTITY_PREFIX in p.read_text(encoding="utf-8")
+                   for p in (home / "logs").glob("groups*.log"))
+        assert (home / "logs" / JOURNAL).is_file()
+        assert not (home / REGISTRY).exists()
+        assert not (home / "logs" / LEGACY_OPERATIONS).exists()
 
 
 def test_unlabeled_search_path_uses_os_identity_and_wrong_explicit_label_rejected(tmp_path: Path, monkeypatch):

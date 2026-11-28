@@ -1,7 +1,5 @@
-# Build 743 / GitHub Build Process v169
+# Build 746 / GitHub Build Process v170
 
-Cumulative follow-up for W1–W16; see detailed dispositions including limitations.
+Fix Build 745 Windows migration fixture unlink failure. Legacy SQLite connections now explicitly close after every read or error; fixture setup closes all database handles after transaction completion. Log-owned minimal storage identity, bootlist, root marker, migration backups, operation evidence and shipped database bytes are unchanged. Build Process v170 remains unchanged.
 
-Final cumulative local full application regression: 3270 passed, 39 skipped, 1 deselected, 2 warnings, 8 subtests passed in 124.71s. Focused follow-up: 102 passed, 2 display skips; new follow-up tests: 11 passed. Raw logs in docs/validation.
-
-Complete source candidate; not a runnable signed distribution. See remediation plan and regression report.
+Local application regression: 3282 passed, 39 skipped, 1 deselected, 2 warnings, 8 subtests passed in 123.34s (0:02:03). Process v170: 198 passed, 20 skipped. Ruff, source hygiene and independent release readiness passed. Native Windows retest, pinned CI, hardware and signed installer acceptance remain pending.

@@ -1,0 +1,22 @@
+TLO v1.7 Build 744 — NOT RELEASE-ATTESTED
+Companion TLO GitHub Build Process v170.
+Current source candidate; hosted acceptance is NOT ATTESTED for Build 744.
+Ruff lint: lint not attested for the full GitHub Actions run. Local lint results are in REGRESSION_RESULTS_v744.txt.
+
+Historical Build 532 / Build 613 evidence — PREVIOUS BUILDS ONLY:
+  Xvfb display (CI=1): previous standalone GUI tests were run under virtual display.
+  No display (DISPLAY and CI unset): standalone Build 532 GUI subset: 50 passed, 6 skipped.
+  Historical Build 613 full Linux CI job: 26 skipped (different population).
+  These counts are not the current full GitHub Actions run.
+
+Prior hosted failure: Build 716 run 45067649844 was FAILED (historical only). Details and subsequent publication history remain in docs/history/BUILD_VERIFICATION_v733.txt.
+
+Release gate: native Windows/Linux/macOS tests, pinned lint, scan, signing, MSI install/uninstall and release integrity checks remain mandatory. No source-local test attests a signed release.
+
+Build 734 GitHub Actions run 46074831272 FAILED after WiX built and Azure signed the MSI; the smoke test hit a read-only automatic variable HOME before native installation. Build 735 corrects both affected scripts. Full native installation/uninstallation remains a hard release gate.
+
+Build 739 local build preparation was blocked by the exact remediation-evidence mismatch and reserved namespace validation. Build 740 corrects source evidence and adds local preflight regression tests. See historical docs/history/REGRESSION_RESULTS_v740.txt. Native acceptance remains pending.
+
+Build 740 native Windows pre-signing regression FAILED after 1910 passed and 62 skipped, in test_four_inventory_passes_keep_folder_album_and_bootlist_identical after existing inventory rows were selected for replacement. Build 741 keeps the test and corrects the read-only archive fsync failure. Native acceptance remains pending.
+
+Build 743 local disposable staging encountered .git/objects Permission denied; Process v170 separates repository metadata and retries fresh stores. Native Windows acceptance for Build 744 is pending.

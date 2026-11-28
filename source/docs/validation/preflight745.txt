@@ -1,0 +1,3 @@
+All checks passed!
+PASS: Build 745 current documents/metadata, root version names and test import-use AST check; Ruff still required in native CI
+PASS: Build 745: current documents and 25 explicit dispositions checked; native CI is still required

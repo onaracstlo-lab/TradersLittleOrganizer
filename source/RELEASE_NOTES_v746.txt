@@ -1,0 +1,3 @@
+TLO v1.7 Build 746 — source candidate
+Close legacy storage-identity SQLite connections explicitly on success and failure, including test setup. Use the existing read-only catalog opener. Preserve log-owned identity, migration backups and reversal safeguards. Build Process v170 and database masters unchanged.
+Build 745 native Windows run 46105172247 failed before signing; Build 746 native acceptance pending.

@@ -224,8 +224,8 @@ def _remove_unidentified_show_path(tlo_home: str, matched_path: str) -> None:
 def _matching_bootlist_rows(tlo_home: str, original_path: str) -> List[Dict[str, str]]:
     """Match a physical Original to canonical bootlist rows without crossing volumes."""
     rows = read_bootlist(tlo_home)
-    from tlo_storage_identities import storage_name_and_path, registered_entry
-    if os.path.isfile(os.path.join(tlo_home, "storage-identities.json")):
+    from tlo_storage_identities import storage_name_and_path, registered_entry, has_storage_identities
+    if has_storage_identities(tlo_home):
         name, canonical = storage_name_and_path(tlo_home, original_path)
     else:
         name, canonical = os_volume_label_for_path(original_path), original_path
@@ -581,8 +581,8 @@ def apply_unidentified_manual_update(
     destination_parent, final_path = resolve_unidentified_destination(destination_path, new_leaf)
 
     old_rows = read_bootlist(config.TLOHome)
-    from tlo_storage_identities import storage_name_and_path
-    if os.path.isfile(os.path.join(config.TLOHome, "storage-identities.json")):
+    from tlo_storage_identities import storage_name_and_path, has_storage_identities
+    if has_storage_identities(config.TLOHome):
         final_name, canonical_final = storage_name_and_path(config.TLOHome, final_path)
     else:
         final_name, canonical_final = os_volume_label_for_path(final_path), final_path

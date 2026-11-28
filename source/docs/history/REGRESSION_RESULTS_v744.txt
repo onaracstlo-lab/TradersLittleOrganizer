@@ -1,0 +1,10 @@
+TLO v1.7 Build 744 — NOT RELEASE-ATTESTED
+
+Final full application regression: 3270 passed, 39 skipped, 1 deselected, 2 warnings, 8 subtests passed in 120.77s (0:02:00).
+Companion Process v170: 198 passed, 20 skipped, 1 warning in 3.04s.
+Local Ruff: PASS. Source hygiene: PASS. Process v170 release readiness: PASS.
+The initial application regression had two documentation/packaging failures: RTF keyword Build 743 and missing provisional checksum manifest. Corrected and reran the entire available suite, not just those tests. Initial process run found seven outdated version/helper source assertions; corrected those contracts. A subsequent real Git permission-denial regression identified the alternative diagnostic "insufficient permission for adding an object to repository database"; extended the access-only classifier and reran the process suite.
+
+Real Git tests: isolated source with binary icon and text; forced object-subdirectory write denial; recreated metadata, staged complete tree, committed and pushed only to a local bare remote; verified committed contents. All other application behavior and shipped catalog files unchanged from Build 743. Raw logs under docs/validation and in companion process validation.
+
+Local Python 3.12.14, pytest 9.2.0 and Ruff 0.17.6 differ from pinned hosted tool versions. The unchanged process-pool crash test was deselected only locally because the preceding build demonstrated a Unix-domain socket permission error. Native display, FLAC fixture encoder and Windows-specific tests remain skipped locally; all applicable hosted gates remain required. Native Windows PowerShell staging was not executable here; the six native helper scenarios are included but skipped. No GitHub run, signing, release, or installer acceptance is attested.

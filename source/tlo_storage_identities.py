@@ -1,8 +1,9 @@
 """Persistent inventory-root identity, independent of labels and mount paths.
 
-The registry is user data under TLOHome, not an installer-managed database.
-No media content is copied; the only file on a registered root is a small UUID
-marker. All writes are performed under the existing inventory operation lock.
+Existing text logs hold authoritative registration and operation evidence.
+Numbered log headers carry self-contained snapshots; the durable folderOperations.log
+keeps registrations after numbered logs are retired. The small root marker is
+a fallback when hardware information is incomplete.
 """
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ from tlo_version import VERSION as _TLO_CANONICAL_VERSION
 __version__ = _TLO_CANONICAL_VERSION
 
 import ctypes
+import copy
 import json
 import os
 import platform
@@ -20,6 +22,7 @@ import shutil
 import subprocess
 import tempfile
 import uuid
+from contextlib import closing
 from datetime import datetime
 from functools import lru_cache
 
@@ -34,7 +37,14 @@ from tlo_bootlist_volume_policy import (
 )
 
 MARKER = ".tlo-root-id.json"
-REGISTRY = "storage-identities.json"
+REGISTRY = "storage-identities.json"  # read-only legacy migration input
+JOURNAL = "folderOperations.log"
+LEGACY_OPERATIONS = "folderOperationIdentities.sqlite"
+IDENTITY_PREFIX = "# STORAGE_IDENTITY: "
+OBSERVATION_PREFIX = "# STORAGE_OBSERVATION: "
+ARCHIVED_PREFIX = "# STORAGE_ARCHIVED_IDENTITY: "
+OPERATION_PREFIX = "# STORAGE_OPERATION: "
+MIGRATED = "# STORAGE_LEGACY_MIGRATED: 1"
 SCHEMA = 1
 
 
@@ -43,7 +53,7 @@ class StorageIdentityError(RuntimeError):
 
 
 def _now():
-    return datetime.now().isoformat(timespec="seconds")
+    return datetime.now().isoformat(timespec="microseconds")
 
 
 def _uuid(value):
@@ -66,31 +76,255 @@ def _atomic_json(path, data):
             os.unlink(temp)
 
 
-def load_registry(home):
+def _journal_path(home):
+    return os.path.join(home, "logs", JOURNAL)
+
+
+def _signature(path):
+    try:
+        stat = os.stat(path)
+        return stat.st_mtime_ns, stat.st_size, stat.st_ino
+    except FileNotFoundError:
+        return None
+
+
+def _minimal_hardware(data):
+    """Keep only useful identification evidence and the present label/mount."""
+    keys = ("disk_serial", "disk_unique_id", "partition_guid", "partition_offset",
+            "partition_start_sector", "partition_size", "filesystem_uuid",
+            "filesystem_serial", "label", "mount", "kind")
+    result = {k: v for k, v in data.items() if k in keys and v not in (None, "")}
+    # A GUID is the preferred partition ID. Offset/start and size are the
+    # fallback only when the operating system cannot provide a GUID.
+    if result.get("partition_guid"):
+        for key in ("partition_offset", "partition_start_sector", "partition_size"):
+            result.pop(key, None)
+    return result
+
+
+def _minimal_entry(item):
+    entry = copy.deepcopy(item)
+    entry["hardware"] = _minimal_hardware(entry.get("hardware", {}))
+    for location in entry.get("previous_locations", []):
+        location["hardware"] = _minimal_hardware(location.get("hardware", {}))
+    return entry
+
+
+def _encode(prefix, value):
+    # JSON is single-line ASCII: metadata cannot forge a subsequent log record.
+    return prefix + json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True) + "\n"
+
+
+def _decode(line, prefix):
+    try:
+        value = json.loads(line[len(prefix):])
+    except (ValueError, TypeError) as exc:
+        raise StorageIdentityError("Invalid storage identity evidence in a TLO log. Restore the log from backup.") from exc
+    if not isinstance(value, dict):
+        raise StorageIdentityError("Invalid storage identity evidence in a TLO log.")
+    return value
+
+
+def _identity_record(line, prefix):
+    value = _decode(line, prefix)
+    ident, item = value.get("root_id"), value.get("entry")
+    if not isinstance(item, dict) or _uuid(ident) != ident:
+        raise StorageIdentityError("Invalid inventory identity in TLO log.")
+    if not all(isinstance(item.get(k), str) and item[k] for k in ("name", "path", "prefix", "volume_id", "collection_id")):
+        raise StorageIdentityError("Incomplete inventory identity in TLO log.")
+    return ident, _minimal_entry(item)
+
+
+@lru_cache(maxsize=16)
+def _journal_state(path, signature):
+    roots, archived, migrated = {}, {}, False
+    if signature is None:
+        return roots, archived, migrated
+    with open(path, encoding="utf-8", errors="surrogateescape") as src:
+        for line in src:
+            if line.startswith(IDENTITY_PREFIX):
+                ident, item = _identity_record(line, IDENTITY_PREFIX)
+                roots[ident] = item
+            elif line.startswith(ARCHIVED_PREFIX):
+                ident, item = _identity_record(line, ARCHIVED_PREFIX)
+                # Archive copies must never override an explicit registration.
+                if ident not in archived or item.get("last_seen", "") > archived[ident].get("last_seen", ""):
+                    archived[ident] = item
+            elif line.rstrip("\r\n") == MIGRATED:
+                migrated = True
+    return roots, archived, migrated
+
+
+def _token_logs(home):
+    from logging_lib import LOG_TOKEN_PATTERN
+    folder = os.path.join(home, "logs")
+    if not os.path.isdir(folder):
+        return []
+    return sorted(os.path.join(folder, name) for name in os.listdir(folder)
+                  if LOG_TOKEN_PATTERN.fullmatch(name) and os.path.isfile(os.path.join(folder, name)))
+
+
+def _header_identities(path):
+    with open(path, encoding="utf-8", errors="surrogateescape") as src:
+        for line in src:
+            if line.startswith(IDENTITY_PREFIX):
+                yield _identity_record(line, IDENTITY_PREFIX)
+            elif not (line.startswith(("#", "SEARCH_PATH:")) or not line.strip()):
+                break
+
+
+@lru_cache(maxsize=64)
+def _cached_headers(path, _signature_value):
+    return tuple(_header_identities(path))
+
+
+def _legacy_registry(home):
     try:
         with open(os.path.join(home, REGISTRY), encoding="utf-8") as src:
             data = json.load(src)
     except FileNotFoundError:
         return {}
     except (OSError, ValueError) as exc:
-        raise StorageIdentityError("Storage identity registry cannot be read. Restore it from a TLOHome backup.") from exc
+        raise StorageIdentityError("Legacy storage identity data cannot be read. Restore it from backup.") from exc
     if not isinstance(data, dict) or data.get("schema") != SCHEMA or not isinstance(data.get("roots"), dict):
-        raise StorageIdentityError("Unrecognized storage identity registry. Restore it from a TLOHome backup.")
-    roots = data["roots"]
+        raise StorageIdentityError("Unrecognized legacy storage identity data.")
+    return data["roots"]
+
+
+def load_registry(home):
+    """Read log-based identities; old files are migration inputs, never updated."""
+    path = _journal_path(home)
+    current, archived, migrated = _journal_state(path, _signature(path))
+    roots = {} if migrated else _legacy_registry(home)
+    legacy_ids = set(roots)
+    # Copies of standalone numbered logs can restore registrations in a new
+    # home. Once durable registrations exist, they are authoritative over old
+    # copies of numbered logs.
+    if not current:
+        for token_path in _token_logs(home):
+            for ident, item in _cached_headers(token_path, _signature(token_path)):
+                if ident in legacy_ids:
+                    continue  # verified legacy state takes precedence until migrated
+                old = roots.get(ident)
+                if old is not None and (old.get("generation", ident) != item.get("generation", ident)
+                                        or _conflict(old.get("hardware", {}), item.get("hardware", {}))):
+                    raise StorageIdentityError("Copied logs contain conflicting storage generations. Restore folderOperations.log before using them.")
+                if old is None or item.get("last_seen", "") > old.get("last_seen", ""):
+                    roots[ident] = item
+    for ident, item in archived.items():
+        roots.setdefault(ident, item)
+    roots.update(current)
     aliases = set()
     for key, item in roots.items():
         if _uuid(key) != key or not isinstance(item, dict) or not isinstance(item.get("name"), str) or not item["name"]:
-            raise StorageIdentityError("Invalid storage identity registry entry.")
+            raise StorageIdentityError("Invalid inventory identity in TLO logs.")
         if item["name"].casefold() in aliases:
-            raise StorageIdentityError("Duplicate inventory identity in registry.")
+            raise StorageIdentityError("Duplicate inventory identity in TLO logs.")
         aliases.add(item["name"].casefold())
-    return roots
+    return {key: _minimal_entry(item) for key, item in roots.items()}
+
+
+def _legacy_operation_records(home):
+    """Read legacy SQLite without creating or modifying it."""
+    path = os.path.join(home, "logs", LEGACY_OPERATIONS)
+    if not os.path.isfile(path):
+        return []
+    from tlo_catalog_io import open_catalog_readonly
+    # sqlite3.Connection.__exit__ completes a transaction but does not close
+    # the handle. Explicit close is required on success and failure (Windows).
+    with closing(open_catalog_readonly(path)) as connection:
+        return [{"code": code, "source": source, "destination": destination,
+                 "identities": json.loads(ids)}
+                for code, source, destination, ids in connection.execute(
+                    "SELECT code, source, destination, identities FROM operations")]
+
+
+def _append_journal(home, records):
+    """One atomic durable update; used only by the locked controlling process."""
+    if not records:
+        return
+    from logging_lib import ensure_logs_dir, _atomic_rewrite_log, _suspend_file_log_handlers
+    ensure_logs_dir(home)
+    path = _journal_path(home)
+    with _suspend_file_log_handlers(path):
+        try:
+            with open(path, encoding="utf-8", errors="surrogateescape", newline="") as src:
+                lines = src.readlines()
+        except FileNotFoundError:
+            lines = []
+        if lines and not lines[-1].endswith("\n"):
+            lines[-1] += "\n"
+        _atomic_rewrite_log(path, lines + records)
+    _journal_state.cache_clear()
+    _cached_headers.cache_clear()
+    _current_roots.cache_clear()
 
 
 def save_registry(home, roots):
-    os.makedirs(home, exist_ok=True)
-    _atomic_json(os.path.join(home, REGISTRY), {"schema": SCHEMA, "roots": roots})
-    _registry_lookup.cache_clear()
+    """Write registrations to the existing durable log and migrate legacy evidence once."""
+    path = _journal_path(home)
+    current, _archived, migrated = _journal_state(path, _signature(path))
+    lines = []
+    for ident, item in roots.items():
+        entry = _minimal_entry(item)
+        if current.get(ident) != entry:
+            lines.append(_encode(IDENTITY_PREFIX, {"root_id": ident, "entry": entry}))
+    if not migrated:
+        lines.extend(_encode(OPERATION_PREFIX, record) for record in _legacy_operation_records(home))
+        # The legacy originals remain untouched as recovery evidence, never as
+        # active stores after this atomic commit.
+        lines.append(MIGRATED + "\n")
+    _append_journal(home, lines)
+
+
+def has_storage_identities(home):
+    return bool(load_registry(home))
+
+
+def storage_log_header(home, path, volume_label="", *, refresh=True):
+    """Observe once when a real writable log scope opens, never during log reads.
+
+    Inventory workers use the already registered scope and write only their
+    numbered logs. Standalone controlling operations may refresh the durable
+    registration under the existing operation lock.
+    """
+    if not os.path.isdir(path):
+        return ""
+    info = _minimal_hardware(capture_storage(path))
+    roots = load_registry(home)
+    result = resolve_root(home, path, _info=info) if roots else None
+    if result:
+        ident, item = result
+        if refresh:
+            ident, item = resolve_root(home, path, register=True, _info=info)
+        else:
+            item = _minimal_entry(item)
+            item["hardware"] = {**item.get("hardware", {}), **info}
+            item["last_seen"] = _now()
+        return _encode(IDENTITY_PREFIX, {"root_id": ident, "entry": _minimal_entry(item)})
+    # Merely opening a tag or update scope never silently adopts an old
+    # collection. A same-path conflict is not a verified registration.
+    if any(_relative(path, item["path"]) is not None or
+           (volume_label and item["name"].casefold() == volume_label.casefold())
+           for item in roots.values()):
+        raise StorageIdentityError("Log scope does not match its registered storage. Reconnect or register the correct collection.")
+    return _encode(OBSERVATION_PREFIX, {"scope": os.path.abspath(path), "hardware": info, "last_seen": _now()})
+
+
+def merge_storage_headers(lines, new_line):
+    """Refresh a verified generation in place; retain conflicting/other scopes."""
+    if not new_line:
+        return list(lines)
+    def key(line):
+        if line.startswith(IDENTITY_PREFIX):
+            ident, item = _identity_record(line, IDENTITY_PREFIX)
+            return ("root", ident, item.get("generation", ident))
+        value = _decode(line, OBSERVATION_PREFIX)
+        hardware = value.get("hardware", {})
+        return ("observation", value.get("scope"), tuple(sorted((k, v) for k, v in hardware.items()
+                if k not in ("label", "mount"))))
+    fingerprint = key(new_line)
+    return [line for line in lines if key(line) != fingerprint] + [new_line]
 
 
 def _run(args, *, binary=False):
@@ -133,10 +367,7 @@ def _windows_info(path, wsl=False):
         f"$fs=$null; try {{ $fs=(Get-CimInstance Win32_LogicalDisk -Filter \"DeviceID='{letter}:'\").VolumeSerialNumber }} catch {{}}; "
         "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; "
         "[pscustomobject]@{filesystem_serial=$fs; disk_serial=$d.SerialNumber; disk_unique_id=$d.UniqueId; "
-        "disk_guid=$d.Guid; disk_signature=$d.Signature; model=$d.FriendlyName; "
-        "disk_size=$d.Size; partition_guid=$p.Guid; partition_offset=$p.Offset; "
-        "partition_size=$p.Size; partition_number=$p.PartitionNumber; "
-        "partition_style=[string]$d.PartitionStyle} | ConvertTo-Json -Compress"
+        "partition_guid=$p.Guid; partition_offset=$p.Offset; partition_size=$p.Size} | ConvertTo-Json -Compress"
     )
     try:
         result = json.loads(_run([ps, "-NoProfile", "-NonInteractive", "-Command", script]))
@@ -157,16 +388,15 @@ def _linux_info(path):
     source = source.split("[", 1)[0]
     try:
         rows = json.loads(_run(["lsblk", "-J", "-b", "-o",
-            "NAME,TYPE,PKNAME,SERIAL,WWN,MODEL,SIZE,PARTUUID,UUID,START", source]))["blockdevices"]
+            "NAME,TYPE,PKNAME,SERIAL,WWN,SIZE,PARTUUID,UUID,START", source]))["blockdevices"]
         part = rows[0]
         parent = part.get("pkname")
         disk = part
         if parent:
             disk = json.loads(_run(["lsblk", "-J", "-b", "-d", "-o",
-                "NAME,SERIAL,WWN,MODEL,SIZE", "/dev/" + parent]))["blockdevices"][0]
+                "NAME,SERIAL,WWN", "/dev/" + parent]))["blockdevices"][0]
         return _clean_fields({
             "disk_serial": disk.get("serial"), "disk_unique_id": disk.get("wwn"),
-            "model": disk.get("model"), "disk_size": disk.get("size"),
             "partition_guid": part.get("partuuid"), "filesystem_uuid": part.get("uuid"),
             "partition_start_sector": part.get("start"), "partition_size": part.get("size"),
         })
@@ -181,7 +411,6 @@ def _mac_info(path):
         disk = plistlib.loads(_run(["/usr/sbin/diskutil", "info", "-plist", whole], binary=True)) if whole else {}
         return _clean_fields({
             "disk_serial": disk.get("SerialNumber"), "disk_unique_id": disk.get("DiskUUID"),
-            "model": disk.get("MediaName"), "disk_size": disk.get("TotalSize"),
             "partition_guid": info.get("DiskUUID"), "filesystem_uuid": info.get("VolumeUUID"),
             "partition_offset": info.get("PartitionMapPartitionOffset"),
             "partition_size": info.get("TotalSize"),
@@ -205,7 +434,7 @@ def capture_storage(path):
         details = _mac_info(base)
     else:
         details = _linux_info(path)
-    return {**data, **details, "kind": "local"}
+    return _minimal_hardware({**data, **details, "kind": "local"})
 
 
 def _path_key(path):
@@ -233,9 +462,17 @@ def _same_value(a, b, key):
 def _conflict(a, b):
     # Missing hardware data isn't a contradiction. Never accept a known changed
     # partition/filesystem (e.g. a clone, reformat, or different partition).
-    return any(a.get(k) and b.get(k) and not _same_value(a, b, k) for k in (
+    if any(a.get(k) and b.get(k) and not _same_value(a, b, k) for k in (
         "disk_serial", "partition_guid", "filesystem_uuid", "filesystem_serial",
-    ))
+    )):
+        return True
+    if not _same_value(a, b, "disk_serial") and a.get("disk_unique_id") and b.get("disk_unique_id"):
+        if not _same_value(a, b, "disk_unique_id"):
+            return True
+    if not _same_value(a, b, "partition_guid"):
+        return any(a.get(k) and b.get(k) and not _same_value(a, b, k)
+                   for k in ("partition_offset", "partition_start_sector", "partition_size"))
+    return False
 
 
 def _strong_partition_match(a, b):
@@ -324,7 +561,7 @@ def resolve_root(home, path, *, register=False, legacy_name=None, replacement_id
     if not os.path.isdir(path):
         raise StorageIdentityError(f"Storage folder is not accessible: {path}")
     roots = load_registry(home)
-    info = capture_storage(path) if _info is None else _info
+    info = _minimal_hardware(capture_storage(path) if _info is None else _info)
     mount = info.get("mount") or path
     marked_root, marker = _find_marker(path, mount)
     marker_written = bool(marker)
@@ -431,7 +668,7 @@ def resolve_root(home, path, *, register=False, legacy_name=None, replacement_id
         old["generation"] = str(uuid.uuid4())
     same_partition = _strong_partition_match(old.get("hardware", {}), info)
     # Keep previously known hardware details when an enclosure or WSL hides them.
-    old["hardware"] = dict(info) if replacement_id else {**old.get("hardware", {}), **info}
+    old["hardware"] = _minimal_hardware(dict(info) if replacement_id else {**old.get("hardware", {}), **info})
     # Capture the physical partition separately; multiple registered roots on
     # the same partition share a volume ID when the OS provides enough evidence.
     if (replacement_id and not same_partition) or not old.get("volume_id"):
@@ -467,17 +704,23 @@ def register_inventory_root(home, path, confirm_legacy=None, suggested_name=""):
     return resolve_root(home, path, register=True, _info=info, suggested_name=suggested_name)
 
 
-@lru_cache(maxsize=8)
-def _registry_lookup(home, _mtime, _size):
-    return {item["name"].casefold(): item for item in load_registry(home).values()}
+@lru_cache(maxsize=16)
+def _current_roots(home, _journal_signature):
+    return load_registry(home)
+
+
+def _read_roots(home):
+    path = _journal_path(home)
+    signature = _signature(path)
+    current, _archived, migrated = _journal_state(path, signature)
+    if current and migrated:
+        return _current_roots(home, signature)
+    return load_registry(home)
 
 
 def registered_entry(home, name):
-    try:
-        stat = os.stat(os.path.join(home, REGISTRY))
-    except FileNotFoundError:
-        return None
-    return _registry_lookup(home, stat.st_mtime_ns, stat.st_size).get(str(name).casefold())
+    item = _root_record(_read_roots(home), name)[1]
+    return copy.deepcopy(item) if item is not None else None
 
 
 def stored_path(home, name, path, *, entry=None):
@@ -562,7 +805,7 @@ def storage_name_and_path(home, path):
 
 def folder_operation_roots(home, source, destination):
     """Identify registered endpoints of a logged folder operation, without probing disks per show."""
-    roots = load_registry(home)
+    roots = _read_roots(home)
     result = []
     for path in (source, destination):
         matches = [(ident, item) for ident, item in roots.items()
@@ -575,33 +818,74 @@ def folder_operation_roots(home, source, destination):
     return result
 
 
-def record_folder_operation(home, line):
-    """Keep identity evidence with the durable operation history, separate from token logs."""
+def folder_operation_key(line):
     match = re.fullmatch(r"(RENAME_COMPLIANTLY|TAG_COPY(?:_DELETE_(?:MOVE|COPY))?):\s+(.+?)\s+->\s+(.+)", line.strip(), re.I)
-    if not match or not os.path.isfile(os.path.join(home, REGISTRY)):
-        return
+    if not match:
+        return None
     code, source, destination = match.groups()
+    return code.upper(), _path_key(source), _path_key(destination)
+
+
+def operation_evidence_key(line):
+    record = _decode(line, OPERATION_PREFIX)
+    return record["code"], record["source"], record["destination"]
+
+
+def folder_operation_identity_line(home, line):
+    """Encode evidence adjacent to the operation in its existing tag log."""
+    key = folder_operation_key(line)
+    if not key:
+        return ""
+    code, source, destination = key
     ids = folder_operation_roots(home, source, destination)
     if not any(ids):
-        return
-    import sqlite3
-    with sqlite3.connect(os.path.join(home, "logs", "folderOperationIdentities.sqlite")) as db:
-        db.execute("CREATE TABLE IF NOT EXISTS operations (code TEXT, source TEXT, destination TEXT, identities TEXT, PRIMARY KEY(code,source,destination,identities))")
-        db.execute("INSERT OR IGNORE INTO operations VALUES (?,?,?,?)",
-                   (code.upper(), _path_key(source), _path_key(destination), json.dumps(ids)))
+        return ""
+    return _encode(OPERATION_PREFIX, {"code": code, "source": source,
+                   "destination": destination, "identities": ids})
 
 
-def check_folder_operation(home, code, source, destination, verified):
-    """Refuse to reverse unverified/reused registered paths. Legacy unregistered paths retain old behavior."""
-    import sqlite3
+def record_folder_operation(home, line):
+    """Compatibility entry point for operation records outside a token logger."""
+    evidence = folder_operation_identity_line(home, line)
+    if evidence:
+        _append_journal(home, [evidence])
+
+
+def _operation_evidence(home, extra_path=""):
+    records = {}
+    path = _journal_path(home)
+    _roots, _archived, migrated = _journal_state(path, _signature(path))
+    candidates = [_journal_path(home)] + [p for p in _token_logs(home)
+        if os.path.basename(p).startswith(("tag", "tags"))]
+    if extra_path:
+        candidates.append(extra_path)
+    def add(value):
+        key = (value["code"], value["source"], value["destination"])
+        ids = value["identities"]
+        if not isinstance(ids, list) or len(ids) != 2:
+            raise StorageIdentityError("Invalid storage operation evidence.")
+        bucket = records.setdefault(key, [])
+        if ids not in bucket:
+            bucket.append(ids)
+    for candidate in dict.fromkeys(candidates):
+        if os.path.isfile(candidate):
+            with open(candidate, encoding="utf-8", errors="surrogateescape") as src:
+                for line in src:
+                    if line.startswith(OPERATION_PREFIX):
+                        add(_decode(line, OPERATION_PREFIX))
+    if not migrated:
+        for record in _legacy_operation_records(home):
+            add(record)
+    return records
+
+
+def check_folder_operation(home, code, source, destination, verified, evidence_path=""):
+    """Refuse to reverse unverified/reused registered paths."""
     roots = folder_operation_roots(home, source, destination)
-    path = os.path.join(home, "logs", "folderOperationIdentities.sqlite")
-    evidence = []
-    if os.path.isfile(path):
-        with sqlite3.connect(path) as db:
-            evidence = [json.loads(row[0]) for row in db.execute(
-                "SELECT identities FROM operations WHERE code=? AND source=? AND destination=?",
-                (code.upper(), _path_key(source), _path_key(destination)))]
+    key = ("storage-operation-evidence", os.path.abspath(home), evidence_path)
+    if key not in verified:
+        verified[key] = _operation_evidence(home, evidence_path)
+    evidence = verified[key].get((code.upper(), _path_key(source), _path_key(destination)), [])
     if not evidence and not any(roots):
         return True
     if len(evidence) != 1 or evidence[0] != roots:

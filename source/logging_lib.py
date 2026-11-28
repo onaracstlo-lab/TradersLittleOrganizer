@@ -193,6 +193,7 @@ def delete_logs_for_tokens(tlo_home, tokens):
     """
     token_texts = _validated_log_tokens(tokens)
 
+    archive_folder_operations(tlo_home, token_texts)
     deleted = []
     logs_dir = logs_dir_for_home(tlo_home)
     for token_text in token_texts:
@@ -222,37 +223,50 @@ def archive_folder_operations(tlo_home, tokens, operation_lines=None):
     fails, abort the destructive log rewrite rather than silently lose undo data.
     """
     logs_dir = ensure_logs_dir(tlo_home)
+    from tlo_storage_identities import IDENTITY_PREFIX, ARCHIVED_PREFIX, OPERATION_PREFIX
     preserved = []
     if operation_lines is not None:
-        preserved = [line for line in operation_lines if _FOLDER_OPERATION_LINE.match(line.strip())]
+        for line in operation_lines:
+            if line.startswith(IDENTITY_PREFIX):
+                preserved.append(ARCHIVED_PREFIX + line[len(IDENTITY_PREFIX):])
+            elif line.startswith(OPERATION_PREFIX) or _FOLDER_OPERATION_LINE.match(line.strip()):
+                preserved.append(line)
     else:
         for token in _validated_log_tokens(tokens):
-            for prefix in ('tags', 'tag'):
+            for prefix in ('tags', 'tag', 'groups'):
                 original = _log_path_for_prefix(logs_dir, prefix, token)
                 if not os.path.isfile(original):
                     continue
                 with _suspend_file_log_handlers(original):
                     with open(original, 'r', encoding='utf-8', errors='surrogateescape') as stream:
-                        preserved.extend(line for line in stream
-                                         if _FOLDER_OPERATION_LINE.match(line.strip()))
+                        for line in stream:
+                            if prefix == "groups" and not (line.startswith(("#", "SEARCH_PATH:")) or not line.strip()):
+                                break
+                            if line.startswith(IDENTITY_PREFIX):
+                                preserved.append(ARCHIVED_PREFIX + line[len(IDENTITY_PREFIX):])
+                            elif line.startswith(OPERATION_PREFIX) or (
+                                    prefix != "groups" and _FOLDER_OPERATION_LINE.match(line.strip())):
+                                preserved.append(line)
     if not preserved:
         return 0
     destination = os.path.join(logs_dir, 'folderOperations.log')
-    try:
-        with open(destination, 'r', encoding='utf-8', errors='surrogateescape') as stream:
-            existing = set(stream.readlines())
-    except FileNotFoundError:
-        existing = set()
-    new_lines = []
-    for line in preserved:
-        if line not in existing:
-            existing.add(line)
-            new_lines.append(line)
-    if new_lines:
-        with open(destination, 'a', encoding='utf-8', errors='surrogateescape', newline='') as archive:
-            archive.writelines(new_lines)
-            archive.flush()
-            os.fsync(archive.fileno())
+    with _suspend_file_log_handlers(destination):
+        try:
+            with open(destination, 'r', encoding='utf-8', errors='surrogateescape', newline='') as stream:
+                original = stream.readlines()
+        except FileNotFoundError:
+            original = []
+        existing = {line.rstrip("\r\n") for line in original}
+        new_lines = []
+        for line in preserved:
+            key = line.rstrip("\r\n")
+            if key not in existing:
+                existing.add(key)
+                new_lines.append(key + "\n")
+        if new_lines:
+            if original and not original[-1].endswith("\n"):
+                original[-1] += "\n"
+            _atomic_rewrite_log(destination, original + new_lines)
     return len(new_lines)
 
 
@@ -450,7 +464,15 @@ def _prune_line_log(path_name, root_paths, *, archive_home=None):
             # Persist exactly the operations being removed, not the unrelated
             # surviving operations in another branch of the same volume.
             if archive_home is not None:
-                archive_folder_operations(archive_home, (), operation_lines=removed)
+                from tlo_storage_identities import (
+                    IDENTITY_PREFIX, OPERATION_PREFIX, folder_operation_key, operation_evidence_key,
+                )
+                keys = {key for line in removed if (key := folder_operation_key(line))}
+                evidence = [line for line in lines if line.startswith(OPERATION_PREFIX)
+                            and operation_evidence_key(line) in keys]
+                if keys:
+                    evidence.extend(line for line in lines if line.startswith(IDENTITY_PREFIX))
+                archive_folder_operations(archive_home, (), operation_lines=evidence + removed)
             out = [line for line in lines if not _line_mentions_pruned_path(line, root_paths)]
             _atomic_rewrite_log(path_name, out)
             return True
@@ -525,6 +547,9 @@ def _extract_existing_search_path_header(lines):
             values.append(stripped.split(":", 1)[1].strip())
             body_start = index + 1
             continue
+        if stripped.startswith(("# STORAGE_IDENTITY: ", "# STORAGE_OBSERVATION: ")):
+            body_start = index + 1
+            continue
         if stripped.startswith("#"):
             matched = False
             for marker in ("for search paths:", "for search path:"):
@@ -556,29 +581,27 @@ def _header_lines(prefix_name, search_paths):
     return lines
 
 
-def _ensure_appended_log_header(log_file, prefix_name, display_search_path):
-    """Ensure an append-mode log has a top header containing display_search_path."""
+def _ensure_appended_log_header(log_file, prefix_name, display_search_path, storage_header=""):
+    """Refresh the header atomically without discarding body or old identities."""
+    from tlo_storage_identities import IDENTITY_PREFIX, OBSERVATION_PREFIX, merge_storage_headers
     display_search_path = escape_structured_log_text(display_search_path)
-    try:
-        with open(log_file, "r", encoding="utf-8", errors="ignore") as infile:
-            lines = infile.readlines()
-    except OSError:
-        lines = []
-
-    existing_paths, body_start = _extract_existing_search_path_header(lines)
-    paths = _dedupe_preserve_order(existing_paths + [display_search_path])
-    body = lines[body_start:] if lines else []
-    if lines and body_start == 0 and existing_paths:
-        body = lines
-    new_lines = _header_lines(prefix_name, paths)
-    if body and (new_lines[-1].strip() or body[0].strip()):
-        new_lines.append("\n")
-    new_lines.extend(body)
-    try:
-        with open(log_file, "w", encoding="utf-8", newline="") as outfile:
-            outfile.writelines(new_lines)
-    except OSError:
-        pass
+    with _suspend_file_log_handlers(log_file):
+        try:
+            with open(log_file, "r", encoding="utf-8", errors="surrogateescape", newline="") as infile:
+                lines = infile.readlines()
+        except FileNotFoundError:
+            lines = []
+        existing_paths, body_start = _extract_existing_search_path_header(lines)
+        paths = _dedupe_preserve_order(existing_paths + [display_search_path])
+        old_storage = [line for line in lines[:body_start]
+                       if line.startswith((IDENTITY_PREFIX, OBSERVATION_PREFIX))]
+        body = lines[body_start:]
+        new_lines = _header_lines(prefix_name, paths)
+        new_lines.extend(merge_storage_headers(old_storage, storage_header))
+        if body and (new_lines[-1].strip() or body[0].strip()):
+            new_lines.append("\n")
+        new_lines.extend(body)
+        _atomic_rewrite_log(log_file, new_lines)
 
 
 @dataclass
@@ -678,7 +701,7 @@ class LogManager:
                 logger.removeHandler(handler)
                 handler.close()
 
-    def _switch_to_scope(self, scope_label, token, search_path, log_mode="w"):
+    def _switch_to_scope(self, scope_label, token, search_path, log_mode="w", storage_header=""):
         self._close_scope_handlers()
         if not str(log_mode or 'w').lower().startswith('a'):
             archive_folder_operations(self.tlo_home, [str(token or '')])
@@ -708,7 +731,7 @@ class LogManager:
         ]
         if append_mode:
             for log_file, prefix_name in prefix_by_attr:
-                _ensure_appended_log_header(log_file, prefix_name, search_path)
+                _ensure_appended_log_header(log_file, prefix_name, search_path, storage_header)
 
         self._dead_end_logger = self._configure_logger("deadEndLog", self.paths.dead_end, log_mode)
         self._duplicate_logger = self._configure_logger("duplicatesLog", self.paths.duplicate, log_mode)
@@ -729,15 +752,16 @@ class LogManager:
             self._tag_success_logger.info(_descriptive_header("tagSuccessLog", search_path))
             self._tag_error_logger.info(_descriptive_header("tagErrorLog", search_path))
 
-    def start_search_path(self, search_path, index=None, log_token=None, volume_label="", log_mode="w", display_full_path=False):
+    def start_search_path(self, search_path, index=None, log_token=None, volume_label="", log_mode="w", display_full_path=False, refresh_storage=True):
         self.search_counter = index or 0
         scope_label = sanitize_scope_label(search_path)
         token = str(log_token or self.search_counter or "0")
-        from tlo_storage_identities import stored_path
+        from tlo_storage_identities import stored_path, storage_log_header
+        storage_header = storage_log_header(self.tlo_home, search_path, volume_label, refresh=refresh_storage)
         canonical_path = stored_path(self.tlo_home, volume_label, search_path) if volume_label else search_path
         display_search_path = str(search_path) if display_full_path else format_log_volume_path(volume_label, canonical_path)
         append_mode = str(log_mode or "w").lower().startswith("a")
-        self._switch_to_scope(scope_label, token, display_search_path, log_mode=log_mode)
+        self._switch_to_scope(scope_label, token, display_search_path, log_mode=log_mode, storage_header=storage_header)
         if not append_mode:
             self.complete_paths("SEARCH_PATH: %s", display_search_path)
             self.groups("SEARCH_PATH: %s", display_search_path)
@@ -745,6 +769,12 @@ class LogManager:
             self.show_metadata("SEARCH_PATH: %s", display_search_path)
             self.tag_success("SEARCH_PATH: %s", display_search_path)
             self.tag_error("SEARCH_PATH: %s", display_search_path)
+            if storage_header:
+                for logger in (self._dead_end_logger, self._duplicate_logger,
+                               self._complete_paths_logger, self._groups_logger,
+                               self._conflicts_logger, self._show_metadata_logger,
+                               self._tag_success_logger, self._tag_error_logger):
+                    logger.info("%s", storage_header.rstrip("\n"))
 
     def _safe_log(self, logger, message, args=()):
         text = escape_structured_log_text(_format_logger_message(message, args))
@@ -769,9 +799,11 @@ class LogManager:
         self._safe_log(self._show_metadata_logger, message, args)
 
     def tag_success(self, message, *args):
+        from tlo_storage_identities import folder_operation_identity_line
+        evidence = folder_operation_identity_line(self.tlo_home, _format_logger_message(message, args))
+        if evidence:
+            self._tag_success_logger.info("%s", evidence.rstrip("\n"))
         self._safe_log(self._tag_success_logger, message, args)
-        from tlo_storage_identities import record_folder_operation
-        record_folder_operation(self.tlo_home, _format_logger_message(message, args))
 
     def tag_error(self, message, *args):
         text = escape_structured_log_text(_format_logger_message(message, args))
@@ -792,9 +824,7 @@ class LogManager:
             self.record_tag_reason_line(text)
             self._tag_error_logger.info("%s", text)
         else:
-            self._tag_success_logger.info("%s", text)
-            from tlo_storage_identities import record_folder_operation
-            record_folder_operation(self.tlo_home, _format_logger_message(message, args))
+            self.tag_success(message, *args)
 
 
 def setup_logging(config):

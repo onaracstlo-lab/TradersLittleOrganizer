@@ -1,0 +1,11 @@
+Build 745 / GitHub Actions run 46105172247 — FAILED (native Windows pre-signing regression).
+Selected hosted diagnostic lines from user-provided log; local cleanup paths and unrelated environment output omitted.
+
+Build and scan Windows  Run native Windows regression tests before signing      ﻿2026-11-28T03:58:49.2211716Z ##[group]Run python -m pytest -q -x --tb=short -ra -p no:cacheprovider
+Build and scan Windows  Run native Windows regression tests before signing      2026-11-28T04:02:57.9001238Z _ test_legacy_json_and_sqlite_migrate_exactly_once_without_touching_originals _
+Build and scan Windows  Run native Windows regression tests before signing      2026-11-28T04:02:57.9002755Z tests\behavior\test_build745_storage_log_identity.py:148: in test_legacy_json_and_sqlite_migrate_exactly_once_without_touching_originals
+Build and scan Windows  Run native Windows regression tests before signing      2026-11-28T04:02:57.9003875Z     db.unlink()
+Build and scan Windows  Run native Windows regression tests before signing      2026-11-28T04:02:57.9007968Z E   PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-4\\test_legacy_json_and_sqlite_mi0\\tlo\\logs\\folderOperationIdentities.sqlite'
+Build and scan Windows  Run native Windows regression tests before signing      2026-11-28T04:02:57.9106485Z FAILED tests/behavior/test_build745_storage_log_identity.py::test_legacy_json_and_sqlite_migrate_exactly_once_without_touching_originals - PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-4\\test_legacy_json_and_sqlite_mi0\\tlo\\logs\\folderOperationIdentities.sqlite'
+Build and scan Windows  Run native Windows regression tests before signing      2026-11-28T04:02:57.9110883Z 1 failed, 2340 passed, 75 skipped, 1 warning, 8 subtests passed in 247.59s (0:04:07)
+Build and scan Windows  Run native Windows regression tests before signing      2026-11-28T04:02:58.9736178Z ##[error]Process completed with exit code 1.

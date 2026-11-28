@@ -137,10 +137,14 @@ def archive_inventory_metadata(config):
         # close the underlying file before the Windows-compatible replace.
         with open(pending, "wb") as stream:
             with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as out:
-                for name in ("bootlist.csv", "setlist-index.json", "unidentifiedShows.txt", "artistsNotInDatabase.txt", "storage-identities.json"):
+                for name in ("bootlist.csv", "setlist-index.json", "unidentifiedShows.txt", "artistsNotInDatabase.txt"):
                     path = home / name
                     if path.is_file():
                         out.write(path, name)
+                # The durable identity and reversal trail is now an existing log.
+                journal = home / "logs" / "folderOperations.log"
+                if journal.is_file():
+                    out.write(journal, "logs/folderOperations.log")
                 folder = home / "setlists"
                 if folder.is_dir():
                     for path in folder.iterdir():
@@ -163,7 +167,7 @@ def restore_inventory_metadata(config):
         return
     home = Path(config.TLOHome)
     with zipfile.ZipFile(backup) as src:
-        # Only our explicitly enumerated files are restored. Storage registry
+        # Only our explicitly enumerated files are restored. Storage identity history
         # is not rolled back; it may include a valid new registration.
         managed = ("bootlist.csv", "setlist-index.json", "unidentifiedShows.txt", "artistsNotInDatabase.txt")
         names = set(src.namelist())

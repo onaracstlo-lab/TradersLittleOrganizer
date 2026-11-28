@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,7 +18,7 @@ FOLDER = "weather-report1975-10-07.146696.sbd.mee.flac1644"
 
 def _db_matcher(tmp_path: Path, monkeypatch) -> ArtistMatcher:
     database = tmp_path / "artists.sqlite"
-    with sqlite3.connect(database) as conn:
+    with closing(sqlite3.connect(database)) as conn, conn:
         conn.executescript("""
         CREATE TABLE artists (artist_id INTEGER PRIMARY KEY, master_name TEXT NOT NULL);
         CREATE TABLE terms (term_id INTEGER PRIMARY KEY, artist_id INTEGER NOT NULL,

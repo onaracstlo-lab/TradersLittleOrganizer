@@ -13,7 +13,7 @@ pytestmark=pytest.mark.contract
 def test_current_readme_contents_and_source_pointer():
     text=(ROOT/RA.SOURCE_README_FILENAME).read_text(encoding='utf-8')
     assert text.splitlines()[0].startswith(f'TLO Source Bundle v{V.BUNDLE_BUILD}')
-    assert 'Native GitHub Build Process: v169' in text
+    assert 'Native GitHub Build Process: v170' in text
     assert f'-bnumber {V.BUNDLE_BUILD}' in text and '-bnumber 672' not in text
     for name in ('SOURCE.txt','THIRD_PARTY_NOTICES.txt','LICENSE',
                  f'TLO_Inventory_Requirements_Working_v{V.BUNDLE_BUILD}.docx',

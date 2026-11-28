@@ -1,12 +1,14 @@
-# Regression results
+# Build 746 regression report
 
-TLO v1.7 Build 743 — NOT RELEASE-ATTESTED
+Historical native Windows run 46105172247 for Build 745 failed at the legacy SQLite fixture's db.unlink() (WinError 32). Stopped after 2340 passed, 75 skipped, one failure. Selected hosted diagnostics preserved in docs/validation/native745-run46105172247.txt.
 
-Final cumulative local full application regression: 3270 passed, 39 skipped, 1 deselected, 2 warnings, 8 subtests passed in 124.71s. Focused follow-up: 102 passed, 2 display skips; new follow-up tests: 11 passed. Raw logs in docs/validation.
-
-Companion Process v169 local regression: 194 passed, 14 skipped, 1 warning in 2.25s. Unmodified v169 readiness verifier: PASS. Source hygiene: PASS. Local Ruff 0.17.6: PASS. Local toolchain Python 3.12.14 / pytest 9.2.0 differs from required pinned CI toolchain.
-
-The one process-pool crash test failed before remediation on this environment because Unix-domain socket creation is restricted (PermissionError / EOFError); it is locally deselected subsequently, unchanged and required in applicable native CI. The remaining skips concern graphical display, native Windows and fixture FLAC encoder availability. Native Windows/Linux/macOS, pinned lint, scanning, signing, MSI installation/uninstallation and release acceptance remain mandatory.
-
-## Documentation
-115 rendered DOCX pages; 26 pixel-identical to Build 741 and 89 changed due to text reflow and version updates. Changed-page overview inspected, selected substantive pages inspected at full resolution. No redesign; native Word/RTF display not attested.
+Final local application regression: 3282 passed, 39 skipped, 1 deselected, 2 warnings, 8 subtests passed in 123.34s (0:02:03).
+- Full command: env -u XDG_DATA_HOME PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider -k 'not test_process_pool_crash_retains_completed_groups'
+- The single deselected test exercises process-pool crash recovery; earlier baseline verification established a Unix-domain socket permission error in the local sandbox. Test retained and required in native CI.
+- Reproduction before fix: 2 failures from retained actual SQLite connections after both successful and exceptional reads. After fix both pass, and existing fixture unlink/byte-preservation assertions are retained with explicit fixture handle closure.
+- Affected module regression: 70 passed, 1 display-dependent skip, 1 warning. Final storage-specific tests: 12 passed, 1 warning. Four real inventory passes remain covered.
+- SQLite read-only opener and deterministic close on all paths; fixture transactions still commit or roll back, then close. Five older direct SQLite context-manager test fixtures corrected, original tests retained.
+- Ruff: PASS. Source hygiene: PASS. Process v170 independent release readiness: PASS (all 25 review dispositions).
+- Companion process regression: 198 passed, 20 skipped, 1 warning (2.39 seconds).
+- Local Python 3.12.14, pytest 9.2.0, Ruff 0.17.6; not the pinned native environment (Python 3.13.16, pytest 9.1.1, Ruff 0.16.10).
+- Raw evidence: docs/validation/*746*.txt. Native hardware and Windows installer/signing acceptance pending. No native Windows rerun has occurred here.

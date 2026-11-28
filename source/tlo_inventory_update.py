@@ -1082,10 +1082,10 @@ def _add_bootlist_row_for_record(tlo_home: str, record_dict: Dict[str, str], cur
     if not show:
         raise InventoryUpdateError(f"Unable to create show name for {record_dict.get('main_dir_path') or folder_leaf}")
     rows = read_bootlist(tlo_home)
-    from tlo_storage_identities import storage_name_and_path, registered_entry
+    from tlo_storage_identities import storage_name_and_path, registered_entry, has_storage_identities
     label, root = _split_storage_designation(current_volume)
     volume_path = _format_add_shows_volume_path(current_volume, folder_leaf)
-    if root and os.path.isdir(root) and os.path.isfile(os.path.join(tlo_home, "storage-identities.json")):
+    if root and os.path.isdir(root) and has_storage_identities(tlo_home):
         label, canonical = storage_name_and_path(tlo_home, _join_storage_root(root, folder_leaf))
         if registered_entry(tlo_home, label):
             volume_path = _format_bootlist_volume_path(label, canonical)

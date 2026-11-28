@@ -195,7 +195,7 @@ def test_scope_registration_uses_fresh_tokens_before_reconciliation(setup, monke
     _, item = _register(home, root)
     _prior_rows(home, root, item)
     logs = home / "logs"
-    logs.mkdir()
+    logs.mkdir(exist_ok=True)
     original = logs / "groups1.log"
     original.write_text(f"SEARCH_PATH: [{item['name']}] {item['prefix']}\n", encoding="utf-8")
     config = SimpleNamespace(TLOHome=str(home), silent=True, storage_identity_enabled=True)
@@ -285,7 +285,7 @@ def test_mac_adapter_uses_partition_and_volume_uuid(monkeypatch):
 def test_reverse_fails_closed_on_replacement_storage(setup):
     home, disk, root, hardware = setup
     ident, _entry = _register(home, root)
-    (home / "logs").mkdir()
+    (home / "logs").mkdir(exist_ok=True)
     source, dest = root / "old", root / "new"
     dest.mkdir()
     storage.record_folder_operation(str(home), f"RENAME_COMPLIANTLY: {source} -> {dest}")

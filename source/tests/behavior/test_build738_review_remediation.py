@@ -3,6 +3,7 @@ import importlib.util
 import os
 from pathlib import Path, PureWindowsPath
 import sqlite3
+from contextlib import closing
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -94,7 +95,7 @@ def test_catalog_uri_and_readonly(tmp_path):
     unc = PureWindowsPath(r"\\nas\music\TLO DBs\cities#1.sqlite")
     assert catalog_readonly_uri(unc) == "file:////nas/music/TLO%20DBs/cities%231.sqlite?mode=ro"
     file = tmp_path / "catalog #1.sqlite"
-    with sqlite3.connect(file) as db:
+    with closing(sqlite3.connect(file)) as db, db:
         db.execute("CREATE TABLE sample (value TEXT)")
     db = open_catalog_readonly(file)
     try:

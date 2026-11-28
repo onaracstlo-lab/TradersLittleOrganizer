@@ -1,0 +1,15 @@
+TLO v1.7 Build 745 — SOURCE CANDIDATE / NOT RELEASE-ATTESTED
+Companion Build Process v170 (unchanged)
+
+Final local application regression: 3280 passed, 39 skipped, 1 deselected, 2 warnings, 8 subtests passed (122.39 seconds).
+- Full command: env -u XDG_DATA_HOME PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider -k 'not test_process_pool_crash_retains_completed_groups'
+- The single deselected test exercises process-pool crash recovery; the local sandbox denied the Unix-domain socket used by that test in earlier baseline verification. Test is retained and remains required on native CI.
+- Skips are environment/optional-platform dependent; see raw evidence. No native hardware or Windows installation/signing acceptance claimed.
+- Initial full run: 3277 passed, 1 failed, 39 skipped, 1 deselected, 8 subtests passed. The failure was source hygiene detecting a compiled artifact from a local syntax check; artifacts removed and final full run passed.
+- Targeted final regression: 26 passed, 1 display-dependent skip, 1 warning; covers four real inventory passes and final storage/reversal behavior.
+- Ten new Build 745 tests cover minimal hardware fields, log reopen, conflicts, unregistered observation, geometry fallback, migration, operation evidence, failure atomicity, copied generations, and archive newline handling.
+- Ruff: ALL CHECKS PASSED. Source hygiene: PASS. Process v170 independent release readiness: PASS (all 25 review dispositions).
+- Companion process regression: 198 passed, 20 skipped, 1 warning (3.41 seconds).
+- Local Python 3.12.14, pytest 9.2.0, Ruff 0.17.6; not the pinned native environment (Python 3.13.16, pytest 9.1.1, Ruff 0.16.10).
+- Raw application and process results: docs/validation/*745*.txt.
+Native Windows/WSL, Linux and macOS acceptance; hosted pinned tools, signed artifacts and MSI install/uninstall remain required.

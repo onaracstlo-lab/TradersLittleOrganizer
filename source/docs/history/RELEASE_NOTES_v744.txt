@@ -1,0 +1,3 @@
+TLO v1.7 Build 744 — source candidate
+Build Process v170 isolates disposable Git metadata and retries classified staging filesystem failures with new repositories. Application behavior and database masters are unchanged from Build 743.
+Native acceptance pending; no signed distribution or release claimed.

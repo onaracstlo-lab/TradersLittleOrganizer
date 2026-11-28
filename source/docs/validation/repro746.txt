@@ -1,0 +1,99 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_______ test_legacy_read_closes_connection_on_success_and_failure[False] _______
+
+setup = (PosixPath('/tmp/pytest-of-agent/pytest-72/test_legacy_read_closes_connec0/tlo'), PosixPath('/tmp/pytest-of-agent/pyte.../tmp/pytest-of-agent/pytest-72/test_legacy_read_closes_connec0/disk', 'kind': 'local', 'disk_serial': 'disk-123', ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3a33bc1a90>
+invalid_json = False
+
+    @pytest.mark.parametrize("invalid_json", [False, True])
+    def test_legacy_read_closes_connection_on_success_and_failure(setup, monkeypatch, invalid_json):
+        """Retain handles so POSIX also detects leaks that prevent Windows unlink."""
+        from contextlib import closing
+    
+        home, _disk, _root, _hardware = setup
+        directory = home / "logs"
+        directory.mkdir()
+        db = directory / storage.LEGACY_OPERATIONS
+        with closing(sqlite3.connect(db)) as conn, conn:
+            conn.execute("CREATE TABLE operations (code TEXT, source TEXT, destination TEXT, identities TEXT)")
+            conn.execute("INSERT INTO operations VALUES (?,?,?,?)",
+                         ("RENAME_COMPLIANTLY", "before", "after", "invalid" if invalid_json else "[]"))
+        original_connect = sqlite3.connect
+        opened = []
+    
+        def tracking_connect(*args, **kwargs):
+            connection = original_connect(*args, **kwargs)
+            opened.append(connection)
+            return connection
+    
+        monkeypatch.setattr(sqlite3, "connect", tracking_connect)
+        try:
+            if invalid_json:
+                with pytest.raises(json.JSONDecodeError):
+                    storage._legacy_operation_records(str(home))
+            else:
+                assert storage._legacy_operation_records(str(home)) == [
+                    {"code": "RENAME_COMPLIANTLY", "source": "before", "destination": "after", "identities": []}
+                ]
+            assert len(opened) == 1
+>           with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE ProgrammingError
+
+tests/behavior/test_build745_storage_log_identity.py:287: Failed
+_______ test_legacy_read_closes_connection_on_success_and_failure[True] ________
+
+setup = (PosixPath('/tmp/pytest-of-agent/pytest-72/test_legacy_read_closes_connec1/tlo'), PosixPath('/tmp/pytest-of-agent/pyte.../tmp/pytest-of-agent/pytest-72/test_legacy_read_closes_connec1/disk', 'kind': 'local', 'disk_serial': 'disk-123', ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3a33bd05c0>
+invalid_json = True
+
+    @pytest.mark.parametrize("invalid_json", [False, True])
+    def test_legacy_read_closes_connection_on_success_and_failure(setup, monkeypatch, invalid_json):
+        """Retain handles so POSIX also detects leaks that prevent Windows unlink."""
+        from contextlib import closing
+    
+        home, _disk, _root, _hardware = setup
+        directory = home / "logs"
+        directory.mkdir()
+        db = directory / storage.LEGACY_OPERATIONS
+        with closing(sqlite3.connect(db)) as conn, conn:
+            conn.execute("CREATE TABLE operations (code TEXT, source TEXT, destination TEXT, identities TEXT)")
+            conn.execute("INSERT INTO operations VALUES (?,?,?,?)",
+                         ("RENAME_COMPLIANTLY", "before", "after", "invalid" if invalid_json else "[]"))
+        original_connect = sqlite3.connect
+        opened = []
+    
+        def tracking_connect(*args, **kwargs):
+            connection = original_connect(*args, **kwargs)
+            opened.append(connection)
+            return connection
+    
+        monkeypatch.setattr(sqlite3, "connect", tracking_connect)
+        try:
+            if invalid_json:
+                with pytest.raises(json.JSONDecodeError):
+                    storage._legacy_operation_records(str(home))
+            else:
+                assert storage._legacy_operation_records(str(home)) == [
+                    {"code": "RENAME_COMPLIANTLY", "source": "before", "destination": "after", "identities": []}
+                ]
+            assert len(opened) == 1
+>           with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE ProgrammingError
+
+tests/behavior/test_build745_storage_log_identity.py:287: Failed
+=============================== warnings summary ===============================
+../../../../opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/anyio/pytest_plugin.py:14
+  /opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/anyio/pytest_plugin.py:14: PytestRemovedIn10Warning: _pytest.python.CallSpec2 has been renamed to CallSpec.
+  The CallSpec2 alias will be removed in pytest 10.
+  Update imports to use CallSpec instead.
+  See https://docs.pytest.org/en/stable/deprecations.html#callspec2-renamed
+    from _pytest.python import CallSpec2
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/behavior/test_build745_storage_log_identity.py::test_legacy_read_closes_connection_on_success_and_failure[False]
+FAILED tests/behavior/test_build745_storage_log_identity.py::test_legacy_read_closes_connection_on_success_and_failure[True]
+2 failed, 10 deselected, 1 warning in 0.22s

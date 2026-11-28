@@ -1,0 +1,3 @@
+TLO v1.7 Build 745 — source candidate
+Make existing inventory and folder-operation logs the storage identity source. Refresh minimal verified disk and partition identifiers on log write opens; migrate legacy JSON/SQLite evidence safely; preserve old logs, separate roots, and reversal safeguards.
+Build Process v170 unchanged; native acceptance pending.

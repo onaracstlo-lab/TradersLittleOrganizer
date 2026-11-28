@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 import shutil
 import sqlite3
+from contextlib import closing
 
 import pytest
 
@@ -20,7 +21,7 @@ DB = ROOT / 'TLO_DBs' / 'cities.sqlite'
 
 def test_valid_shipping_sqlite_has_proto_schema():
     assert DB.stat().st_size > 1_000_000
-    with sqlite3.connect(DB.as_uri() + '?mode=ro', uri=True) as conn:
+    with closing(sqlite3.connect(DB.as_uri() + '?mode=ro', uri=True)) as conn, conn:
         assert conn.execute("select value from metadata where key='schema_version'").fetchone()[0] == '1'
         assert conn.execute('pragma quick_check').fetchone()[0] == 'ok'
 

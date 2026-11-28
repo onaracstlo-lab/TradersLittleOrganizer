@@ -32,7 +32,7 @@ def run_search_path(config, path_name, slam_value, search_index, volume_label=""
     config.current_path_copy_destination = copy_destination if copy_mode == "copy" else ""
     config.current_path_copy_delete_destination = copy_destination if copy_mode == "copy-delete" else ""
     config.current_inventory_path = inventory_path or path_name
-    config.logs.start_search_path(config.current_inventory_path, search_index, log_token=config.current_log_token, volume_label=config.current_volume_label, log_mode=config.current_log_mode)
+    config.logs.start_search_path(config.current_inventory_path, search_index, log_token=config.current_log_token, volume_label=config.current_volume_label, log_mode=config.current_log_mode, refresh_storage=False)
 
     dry_run = bool(getattr(config, "dry_run", False))
     if dry_run:

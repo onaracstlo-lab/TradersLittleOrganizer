@@ -12,7 +12,7 @@ from zipfile import ZipFile
 import xml.etree.ElementTree as ET
 
 
-# The independently versioned release-readiness gate (Process v169) reserves
+# The independently versioned release-readiness gate (Process v170) reserves
 # this exact map for the Build 681 review. New reviews use separate sections.
 BUILD_681_FINDINGS = frozenset(
     ('H1', 'H2', 'H3')
